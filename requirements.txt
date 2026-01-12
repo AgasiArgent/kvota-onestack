@@ -1,0 +1,7 @@
+python-fasthtml>=0.12.0
+python-dotenv>=1.0.0
+supabase>=2.0.0
+pandas>=2.0.0
+openpyxl>=3.1.0
+weasyprint>=66.0
+num2words>=0.5.14
