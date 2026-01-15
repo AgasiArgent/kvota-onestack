@@ -156,12 +156,13 @@ App runs at http://localhost:5001
 - [x] Feature #71: Загрузка подписанного скана (2026-01-15) - Upload signed scan endpoint /spec-control/{spec_id}/upload-signed. Accepts PDF/JPG/PNG up to 10MB. Stores in Supabase Storage bucket 'specifications'. Updates signed_scan_url field. UI section added to spec edit page (visible when status is approved/signed). Migration 017 documents storage bucket setup.
 - [x] Feature #72: Кнопка подтверждения подписи (2026-01-15) - Confirm signature button and deal creation. Added 'Подтвердить подпись' button to spec edit page (visible when status=approved + signed_scan exists). POST /spec-control/{spec_id}/confirm-signature endpoint creates deal record with auto-generated deal_number (DEAL-YYYY-NNNN), updates spec status to 'signed', optionally transitions quote to deal_signed.
 - [x] Feature #73: Сервис спецификаций (2026-01-15) - Created services/specification_service.py with full CRUD operations: Specification dataclass with all 18 fields, SPEC_STATUSES/SPEC_STATUS_NAMES/SPEC_STATUS_COLORS/SPEC_TRANSITIONS constants, status helpers, create_specification(), get_specification(), get_specification_by_quote(), get_specifications_by_status(), get_all_specifications(), get_specifications_with_details(), count_specifications_by_status(), specification_exists_for_quote(), update_specification(), update_specification_status(), set_signed_scan_url(), delete_specification(), generate_specification_number(), get_specification_stats(), get_specifications_for_signing(), get_recently_signed_specifications().
+- [x] Feature #74: Создание спецификации из КП (2026-01-15) - Created create_specification_from_quote() function in specification_service.py with CreateSpecFromQuoteResult dataclass. Function fetches quote data, optionally uses specific version data, pre-fills 15+ specification fields from quote and calculation variables (proposal_idn, currency, exchange rate, payment terms, countries, legal entities, periods). Returns result with success flag, specification object, error message, and prefilled_fields dict. Updated services/__init__.py with exports.
 
 ### Next Up
-- Feature #74: Создание спецификации из КП (create_specification_from_quote function)
+- Feature #75: Сервис сделок (CRUD для таблицы deals)
 
 ### Progress
-- **73 of 88 features completed** (83%)
+- **74 of 88 features completed** (84%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

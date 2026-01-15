@@ -850,10 +850,11 @@
       "name": "Создание спецификации из КП",
       "description": "Функция create_specification_from_quote(quote_id, version_id)",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T23:00:00Z",
+      "completed_at": "2026-01-15T23:30:00Z",
+      "notes": "Created create_specification_from_quote() function in specification_service.py with CreateSpecFromQuoteResult dataclass. Function fetches quote data, optionally uses specific version data, pre-fills 15+ specification fields from quote and calculation variables (proposal_idn, currency, exchange rate, payment terms, countries, legal entities, periods). Returns result with success flag, specification object, error message, and prefilled_fields dict. Updated services/__init__.py with exports."
     },
     {
       "id": 75,

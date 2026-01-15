@@ -154,6 +154,7 @@ from .approval_service import (
 from .specification_service import (
     # Data class
     Specification,
+    CreateSpecFromQuoteResult,
     # Constants
     SPEC_STATUSES,
     SPEC_STATUS_NAMES,
@@ -166,6 +167,7 @@ from .specification_service import (
     get_allowed_spec_transitions,
     # Create operations
     create_specification,
+    create_specification_from_quote,  # Feature #74
     # Read operations
     get_specification,
     get_specification_by_quote,
@@ -472,4 +474,7 @@ __all__ = [
     "get_specification_stats",
     "get_specifications_for_signing",
     "get_recently_signed_specifications",
+    # Create from quote (Feature #74)
+    "CreateSpecFromQuoteResult",
+    "create_specification_from_quote",
 ]

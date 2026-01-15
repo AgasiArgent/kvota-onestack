@@ -810,3 +810,213 @@ def get_recently_signed_specifications(
     except Exception as e:
         print(f"Error getting recently signed specifications: {e}")
         return []
+
+
+# ============================================================================
+# Create Specification from Quote (Feature #74)
+# ============================================================================
+
+@dataclass
+class CreateSpecFromQuoteResult:
+    """Result of creating a specification from a quote."""
+    success: bool
+    specification: Optional[Specification] = None
+    error: Optional[str] = None
+    prefilled_fields: Optional[Dict[str, Any]] = None
+
+
+def create_specification_from_quote(
+    quote_id: str,
+    organization_id: str,
+    created_by: str,
+    version_id: Optional[str] = None,
+    additional_fields: Optional[Dict[str, Any]] = None
+) -> CreateSpecFromQuoteResult:
+    """
+    Create a new specification by extracting data from an existing quote.
+
+    This function fetches the quote data (and optionally a specific version),
+    extracts relevant fields, and creates a new specification in 'draft' status.
+
+    Args:
+        quote_id: UUID of the quote to create specification from
+        organization_id: UUID of the organization
+        created_by: UUID of the user creating the specification
+        version_id: Optional UUID of a specific quote version to use
+        additional_fields: Optional dict of additional spec fields to set
+
+    Returns:
+        CreateSpecFromQuoteResult with:
+        - success: bool indicating if creation succeeded
+        - specification: The created Specification object (if success)
+        - error: Error message (if failure)
+        - prefilled_fields: Dict showing which fields were prefilled from quote
+
+    Example:
+        result = create_specification_from_quote(
+            quote_id='abc-123',
+            organization_id='org-456',
+            created_by='user-789',
+            version_id='version-111',
+            additional_fields={'our_legal_entity': 'Company LLC'}
+        )
+        if result.success:
+            print(f"Created spec: {result.specification.id}")
+    """
+    supabase = get_supabase()
+
+    try:
+        # 1. Check if specification already exists for this quote
+        if specification_exists_for_quote(quote_id, organization_id):
+            return CreateSpecFromQuoteResult(
+                success=False,
+                error="Specification already exists for this quote"
+            )
+
+        # 2. Fetch quote with customer info
+        quote_result = supabase.table('quotes').select(
+            '*, customers(id, name, company_name, inn)'
+        ).eq('id', quote_id).eq('organization_id', organization_id).execute()
+
+        if not quote_result.data:
+            return CreateSpecFromQuoteResult(
+                success=False,
+                error="Quote not found or access denied"
+            )
+
+        quote = quote_result.data[0]
+        customer = quote.get('customers', {}) or {}
+
+        # 3. Fetch calculation variables for additional prefill data
+        vars_result = supabase.table('quote_calculation_variables').select(
+            'variables'
+        ).eq('quote_id', quote_id).execute()
+
+        calc_vars = vars_result.data[0].get('variables', {}) if vars_result.data else {}
+
+        # 4. If version_id specified, fetch version data
+        version_data = None
+        if version_id:
+            version_result = supabase.table('quote_versions').select(
+                'id, version, input_variables, currency_of_quote, seller_company, offer_sale_type, offer_incoterms'
+            ).eq('id', version_id).eq('quote_id', quote_id).execute()
+
+            if version_result.data:
+                version_data = version_result.data[0]
+                # Extract variables from version's input_variables
+                input_vars = version_data.get('input_variables', {})
+                if input_vars.get('variables'):
+                    calc_vars = input_vars.get('variables')
+
+        # 5. Build prefilled data from quote and calculation variables
+        prefilled_fields = {}
+
+        # Identification
+        prefilled_fields['proposal_idn'] = quote.get('idn_quote')
+        prefilled_fields['specification_number'] = generate_specification_number(organization_id)
+
+        # Currency and payment
+        prefilled_fields['specification_currency'] = (
+            version_data.get('currency_of_quote') if version_data
+            else quote.get('currency', 'USD')
+        )
+
+        # Extract exchange rate if available
+        if version_data and version_data.get('input_variables', {}).get('exchange_rate'):
+            rate_data = version_data['input_variables']['exchange_rate']
+            prefilled_fields['exchange_rate_to_ruble'] = rate_data.get('rate')
+
+        # Payment terms from calculation variables
+        if calc_vars.get('time_to_advance_on_receiving'):
+            prefilled_fields['client_payment_term_after_upd'] = int(calc_vars['time_to_advance_on_receiving'])
+
+        # Build client payment terms string from variables
+        payment_terms_parts = []
+        if calc_vars.get('advance_from_client'):
+            advance_pct = float(calc_vars.get('advance_from_client', 0))
+            if advance_pct > 0:
+                payment_terms_parts.append(f"{advance_pct:.0f}% аванс")
+            if advance_pct < 100:
+                remaining = 100 - advance_pct
+                payment_terms_parts.append(f"{remaining:.0f}% после доставки")
+        if payment_terms_parts:
+            prefilled_fields['client_payment_terms'] = ", ".join(payment_terms_parts)
+
+        # Origin and shipping from calculation variables
+        if calc_vars.get('supplier_country'):
+            prefilled_fields['cargo_pickup_country'] = calc_vars['supplier_country']
+
+        if calc_vars.get('delivery_city'):
+            prefilled_fields['delivery_city_russia'] = calc_vars['delivery_city']
+
+        # Legal entities
+        if customer.get('company_name'):
+            prefilled_fields['client_legal_entity'] = customer['company_name']
+        elif customer.get('name'):
+            prefilled_fields['client_legal_entity'] = customer['name']
+
+        # Seller company from calculation variables or version
+        if version_data and version_data.get('seller_company'):
+            prefilled_fields['our_legal_entity'] = version_data['seller_company']
+        elif calc_vars.get('seller_company'):
+            prefilled_fields['our_legal_entity'] = calc_vars['seller_company']
+
+        # Logistics period from delivery time
+        if calc_vars.get('delivery_time'):
+            delivery_days = int(calc_vars['delivery_time'])
+            prefilled_fields['logistics_period'] = f"{delivery_days} дней"
+
+        # Readiness period from production days if available
+        if calc_vars.get('production_days'):
+            prod_days = int(calc_vars['production_days'])
+            prefilled_fields['readiness_period'] = f"{prod_days} дней"
+
+        # 6. Merge additional fields (override prefilled)
+        if additional_fields:
+            prefilled_fields.update(additional_fields)
+
+        # 7. Create the specification
+        spec = create_specification(
+            quote_id=quote_id,
+            organization_id=organization_id,
+            created_by=created_by,
+            quote_version_id=version_id,
+            specification_number=prefilled_fields.get('specification_number'),
+            proposal_idn=prefilled_fields.get('proposal_idn'),
+            specification_currency=prefilled_fields.get('specification_currency'),
+            exchange_rate_to_ruble=prefilled_fields.get('exchange_rate_to_ruble'),
+            client_payment_term_after_upd=prefilled_fields.get('client_payment_term_after_upd'),
+            client_payment_terms=prefilled_fields.get('client_payment_terms'),
+            cargo_pickup_country=prefilled_fields.get('cargo_pickup_country'),
+            delivery_city_russia=prefilled_fields.get('delivery_city_russia'),
+            our_legal_entity=prefilled_fields.get('our_legal_entity'),
+            client_legal_entity=prefilled_fields.get('client_legal_entity'),
+            logistics_period=prefilled_fields.get('logistics_period'),
+            readiness_period=prefilled_fields.get('readiness_period'),
+            goods_shipment_country=prefilled_fields.get('goods_shipment_country'),
+            cargo_type=prefilled_fields.get('cargo_type'),
+            supplier_payment_country=prefilled_fields.get('supplier_payment_country'),
+            validity_period=prefilled_fields.get('validity_period'),
+            item_ind_sku=prefilled_fields.get('item_ind_sku'),
+            sign_date=prefilled_fields.get('sign_date'),
+            status='draft'
+        )
+
+        if spec:
+            return CreateSpecFromQuoteResult(
+                success=True,
+                specification=spec,
+                prefilled_fields=prefilled_fields
+            )
+        else:
+            return CreateSpecFromQuoteResult(
+                success=False,
+                error="Failed to create specification record"
+            )
+
+    except Exception as e:
+        print(f"Error creating specification from quote: {e}")
+        return CreateSpecFromQuoteResult(
+            success=False,
+            error=str(e)
+        )

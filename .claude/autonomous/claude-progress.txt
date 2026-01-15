@@ -1870,3 +1870,39 @@
   - services/specification_service.py (new file, ~650 lines)
   - services/__init__.py (added imports and exports)
 - Status: COMPLETE - Feature #73 done
+
+## Session 2026-01-15 - Feature #74: Создание спецификации из КП
+- Implemented create_specification_from_quote() function in specification_service.py
+- New dataclass: CreateSpecFromQuoteResult
+  - success: bool - whether creation succeeded
+  - specification: Optional[Specification] - created spec object
+  - error: Optional[str] - error message if failed
+  - prefilled_fields: Optional[Dict] - shows which fields were prefilled
+- Function workflow:
+  1. Check if specification already exists for quote (returns error if so)
+  2. Fetch quote with customer info
+  3. Fetch calculation variables from quote_calculation_variables table
+  4. If version_id specified, fetch version data and use its variables
+  5. Build prefilled data from quote and calculation variables:
+     - proposal_idn from quote idn_quote
+     - specification_number auto-generated
+     - specification_currency from version or quote
+     - exchange_rate_to_ruble from version input_variables
+     - client_payment_term_after_upd from time_to_advance_on_receiving
+     - client_payment_terms built from advance_from_client percentage
+     - cargo_pickup_country from supplier_country
+     - delivery_city_russia from delivery_city
+     - client_legal_entity from customer company_name/name
+     - our_legal_entity from seller_company
+     - logistics_period from delivery_time
+     - readiness_period from production_days
+  6. Merge any additional_fields passed by caller
+  7. Create specification using create_specification()
+- Updated services/__init__.py with new exports:
+  - CreateSpecFromQuoteResult dataclass
+  - create_specification_from_quote function
+- Syntax verified with python3 -m py_compile
+- Files changed:
+  - services/specification_service.py (added ~180 lines)
+  - services/__init__.py (added imports and exports)
+- Status: COMPLETE - Feature #74 done
