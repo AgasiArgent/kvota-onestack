@@ -2820,3 +2820,19 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 - Progress: 12/94 v3.0 features
 - Next: DB-013 (logistics fields)
 
+
+## Session 2026-01-15 - Feature DB-013: Extend quote_items with logistics fields
+- Created migration 030_extend_quote_items_logistics.sql
+- Added 4 logistics columns for multi-segment costs:
+  - logistics_supplier_to_hub (DECIMAL 15,2) - cost from supplier to hub
+  - logistics_hub_to_customs (DECIMAL 15,2) - cost from hub to customs
+  - logistics_customs_to_customer (DECIMAL 15,2) - cost from customs to customer
+  - logistics_total_days (INTEGER) - total logistics time
+- Added check constraints (non-negative costs, positive days)
+- Created helper functions:
+  - get_item_logistics_total(item_id) - sum of all logistics costs
+  - get_quote_logistics_summary(quote_id) - aggregated logistics for entire quote
+  - is_quote_logistics_complete(quote_id) - returns TRUE when all items have complete logistics
+- Created v_quote_items_logistics view for logistics workspace
+- Status: COMPLETE
+

@@ -122,8 +122,10 @@
       "name": "Extend quote_items with logistics fields",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days"
+      "passes": true,
+      "completed_at": "2026-01-15T18:30:00Z",
+      "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days",
+      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier→hub, hub→customs, customs→customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
     },
     {
       "id": "DB-014",
