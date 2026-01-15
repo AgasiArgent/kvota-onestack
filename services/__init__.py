@@ -25,6 +25,11 @@ from .role_service import (
     get_role_by_code,
     get_users_by_role,
     get_users_by_any_role,
+    # Route protection middleware
+    require_role,
+    require_any_role,
+    require_all_roles,
+    get_session_user_roles,
 )
 
 __all__ = [
@@ -55,4 +60,9 @@ __all__ = [
     "get_role_by_code",
     "get_users_by_role",
     "get_users_by_any_role",
+    # Route protection middleware
+    "require_role",
+    "require_any_role",
+    "require_all_roles",
+    "get_session_user_roles",
 ]

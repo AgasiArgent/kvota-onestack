@@ -488,3 +488,26 @@
   - services/role_service.py (updated)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #21: Middleware require_role
+- Implemented four route protection middleware functions in services/role_service.py:
+  - require_role(session, role_code) → checks for single role
+  - require_any_role(session, role_codes) → checks for any of multiple roles
+  - require_all_roles(session, role_codes) → checks for all specified roles
+  - get_session_user_roles(session) → convenience function to get user's roles
+- All middleware functions:
+  - Return RedirectResponse to /login if not logged in
+  - Return RedirectResponse to /unauthorized if missing required role(s)
+  - Return None if access is granted
+- Added /unauthorized route in main.py:
+  - Shows user-friendly "Access Denied" page
+  - Provides link back to dashboard
+- Follows FastHTML pattern: `if redirect := require_role(session, 'admin'): return redirect`
+- Full docstrings with usage examples
+- Updated services/__init__.py to export all new functions
+- Verified no syntax errors
+- Files changed:
+  - services/role_service.py (updated)
+  - services/__init__.py (updated)
+  - main.py (updated - added /unauthorized route)
+- Status: COMPLETE

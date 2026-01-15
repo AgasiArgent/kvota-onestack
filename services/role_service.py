@@ -11,7 +11,7 @@ Based on database tables:
 - user_roles: Junction table linking users to roles per organization
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 from dataclasses import dataclass
 from uuid import UUID
 from .database import get_supabase
@@ -408,3 +408,200 @@ def get_users_by_any_role(organization_id: str | UUID, role_codes: List[str]) ->
         result.append(item)
 
     return result
+
+
+# ============================================================================
+# ROUTE PROTECTION MIDDLEWARE
+# ============================================================================
+
+def require_role(session: dict, role_code: str) -> Optional[Any]:
+    """
+    Check if user has a specific role.
+
+    Use this function at the start of route handlers to protect routes.
+    Returns a RedirectResponse if user is not logged in or doesn't have required role.
+    Returns None if access is granted.
+
+    Args:
+        session: Session dict containing user info (from FastHTML)
+        role_code: Required role code (e.g., 'admin', 'sales', 'procurement')
+
+    Returns:
+        RedirectResponse to /login if not logged in
+        RedirectResponse to /unauthorized if logged in but missing role
+        None if user has the required role
+
+    Example:
+        @rt("/admin")
+        def get(session):
+            # Check if user is admin
+            if redirect := require_role(session, 'admin'):
+                return redirect
+            # User is admin, continue with route logic
+            return page_layout("Admin", ...)
+
+        @rt("/procurement")
+        def get(session):
+            if redirect := require_role(session, 'procurement'):
+                return redirect
+            # User is procurement manager
+            return page_layout("Procurement", ...)
+    """
+    # Import here to avoid circular imports
+    from starlette.responses import RedirectResponse
+
+    # Check if logged in
+    user = session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Get user and org IDs
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+
+    if not user_id or not org_id:
+        return RedirectResponse("/login", status_code=303)
+
+    # Check if user has the required role
+    if not has_role(user_id, org_id, role_code):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    return None
+
+
+def require_any_role(session: dict, role_codes: List[str]) -> Optional[Any]:
+    """
+    Check if user has any of the specified roles.
+
+    Use this function at the start of route handlers to protect routes
+    that can be accessed by multiple roles.
+
+    Args:
+        session: Session dict containing user info (from FastHTML)
+        role_codes: List of role codes that are allowed access
+
+    Returns:
+        RedirectResponse to /login if not logged in
+        RedirectResponse to /unauthorized if logged in but missing all roles
+        None if user has at least one of the required roles
+
+    Example:
+        @rt("/quotes/approve")
+        def get(session):
+            # Check if user can approve quotes (quote_controller or admin)
+            if redirect := require_any_role(session, ['quote_controller', 'admin']):
+                return redirect
+            # User has approval permission
+            return page_layout("Approve Quote", ...)
+
+        @rt("/reports")
+        def get(session):
+            # Multiple roles can view reports
+            if redirect := require_any_role(session, ['admin', 'finance', 'top_manager']):
+                return redirect
+            return page_layout("Reports", ...)
+    """
+    # Import here to avoid circular imports
+    from starlette.responses import RedirectResponse
+
+    # Check if logged in
+    user = session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Get user and org IDs
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+
+    if not user_id or not org_id:
+        return RedirectResponse("/login", status_code=303)
+
+    # Check if user has any of the required roles
+    if not has_any_role(user_id, org_id, role_codes):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    return None
+
+
+def require_all_roles(session: dict, role_codes: List[str]) -> Optional[Any]:
+    """
+    Check if user has ALL of the specified roles.
+
+    Use this function at the start of route handlers to protect routes
+    that require a combination of roles.
+
+    Args:
+        session: Session dict containing user info (from FastHTML)
+        role_codes: List of role codes that user must have ALL of
+
+    Returns:
+        RedirectResponse to /login if not logged in
+        RedirectResponse to /unauthorized if logged in but missing any role
+        None if user has all of the required roles
+
+    Example:
+        @rt("/super-admin")
+        def get(session):
+            # Check if user has both admin and finance roles
+            if redirect := require_all_roles(session, ['admin', 'finance']):
+                return redirect
+            # User has both roles
+            return page_layout("Super Admin", ...)
+    """
+    # Import here to avoid circular imports
+    from starlette.responses import RedirectResponse
+
+    # Check if logged in
+    user = session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Get user and org IDs
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+
+    if not user_id or not org_id:
+        return RedirectResponse("/login", status_code=303)
+
+    # Check if user has all of the required roles
+    if not has_all_roles(user_id, org_id, role_codes):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    return None
+
+
+def get_session_user_roles(session: dict) -> List[str]:
+    """
+    Get role codes for the current session user.
+
+    This is a convenience function to get the current user's roles
+    without having to extract user_id and org_id manually.
+
+    Args:
+        session: Session dict containing user info (from FastHTML)
+
+    Returns:
+        List of role code strings for the user, or empty list if not logged in
+
+    Example:
+        @rt("/dashboard")
+        def get(session):
+            roles = get_session_user_roles(session)
+            if 'admin' in roles:
+                # Show admin dashboard
+                pass
+            elif 'sales' in roles:
+                # Show sales dashboard
+                pass
+    """
+    user = session.get("user")
+    if not user:
+        return []
+
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+
+    if not user_id or not org_id:
+        return []
+
+    return get_user_role_codes(user_id, org_id)

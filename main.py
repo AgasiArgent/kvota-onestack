@@ -251,6 +251,24 @@ def get(session):
     return RedirectResponse("/login", status_code=303)
 
 
+@rt("/unauthorized")
+def get(session):
+    """Page shown when user doesn't have required role"""
+    return page_layout("Access Denied",
+        Div(
+            H1("🚫 Access Denied"),
+            P("You don't have permission to access this page."),
+            P("Contact your administrator if you believe this is an error."),
+            Div(
+                A("← Back to Dashboard", href="/dashboard", cls="button"),
+                style="margin-top: 1rem;"
+            ),
+            cls="card", style="max-width: 500px; margin: 2rem auto; text-align: center;"
+        ),
+        session=session
+    )
+
+
 # ============================================================================
 # DASHBOARD
 # ============================================================================

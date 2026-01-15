@@ -103,14 +103,15 @@ App runs at http://localhost:5001
 - [x] Feature #18: Role service - has_role, has_any_role, has_all_roles (2025-01-15)
 - [x] Feature #19: Role service - assign_role function (2025-01-15)
 - [x] Feature #20: Role service - remove_role function (2025-01-15)
+- [x] Feature #21: Middleware require_role (2025-01-15)
 
 ### Next Up
-- Feature #21: Middleware require_role (decorator for route protection)
+- Feature #22: Контекст пользователя с ролями (extend session with roles)
 
 ### Progress
-- **20 of 88 features completed** (23%)
+- **21 of 88 features completed** (24%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
-- **ROLE SERVICE IN PROGRESS** (features 17-20 done)
+- **ROLE SERVICE IN PROGRESS** (features 17-21 done)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -118,5 +119,8 @@ App runs at http://localhost:5001
 - Role service now includes:
   - get_user_roles, get_user_role_codes, get_all_roles, get_role_by_code
   - has_role, has_any_role, has_all_roles (role checking functions)
-  - assign_role (role assignment function)
-- Next: Complete role system services (features 20-22)
+  - assign_role, remove_role (role management functions)
+  - require_role, require_any_role, require_all_roles (route protection middleware)
+  - get_session_user_roles (convenience function)
+- Added /unauthorized route in main.py
+- Next: Extend session user context with roles (feature 22)
