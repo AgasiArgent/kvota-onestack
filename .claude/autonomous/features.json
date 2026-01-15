@@ -112,8 +112,10 @@
       "name": "Extend quote_items with supply chain columns",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Add supplier_id, buyer_company_id, pickup_location_id, procurement fields"
+      "passes": true,
+      "completed_at": "2026-01-15T18:20:00Z",
+      "description": "Add supplier_id, buyer_company_id, pickup_location_id, procurement fields",
+      "notes": "Created migration 029_extend_quote_items_supply_chain.sql with: item_idn, supplier_id FK, buyer_company_id FK, pickup_location_id FK, supplier_payment_terms, supplier_advance_percent, production_time_days, weight_kg, volume_m3. Added generate_item_idn() function, auto-generate trigger, regenerate_item_idns_for_quote() helper, get_item_supply_chain_summary() function."
     },
     {
       "id": "DB-013",
