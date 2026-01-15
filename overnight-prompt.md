@@ -124,3 +124,20 @@ tail -100 .claude/autonomous/claude-progress.txt
 v2.0 (88 features) was completed successfully on 2026-01-15.
 v3.0 adds 9 new features for supply chain entities and modifies existing features.
 Start with DB-001 (suppliers table) and work through sequentially.
+
+
+## Previous Context
+
+### Completed in this session:
+1. **DB-001** (suppliers table) - ✅ COMPLETE
+   - Created `migrations/018_create_suppliers_table.sql`
+   - External supplier companies with supplier_code, inn, kpp, contacts
+
+2. **DB-002** (buyer_companies table) - ✅ COMPLETE
+   - Created `migrations/019_create_buyer_companies_table.sql`
+   - Our legal entities for purchasing with company_code, inn, kpp, ogrn
+   - Director info for document signing
+
+### Progress:
+- v3.0 features complete: **2/94**
+- Next feature: **DB-003** (Verify seller_companies table exists)
