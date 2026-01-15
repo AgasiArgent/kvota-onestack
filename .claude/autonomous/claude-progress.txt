@@ -2764,3 +2764,27 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 **Progress:**
 - v3.0 features complete: **8/94**
 - **Next**: DB-009 (brand_procurement_assignments - rename existing brand_assignments)
+
+## Session 2026-01-15 - Feature DB-009: Create brand_procurement_assignments view
+
+**Background:**
+- The `brand_assignments` table (migration 003) already exists and serves the exact same purpose
+- To maintain spec naming consistency without breaking existing code, created a view alias
+
+**Migration file:** `migrations/026_create_brand_procurement_view.sql`
+
+**What was created:**
+1. **View `brand_procurement_assignments`** - aliases the existing `brand_assignments` table
+2. **Updatable view rules** - INSERT, UPDATE, DELETE rules to allow full CRUD through the view
+3. **Helper functions:**
+   - `get_procurement_manager_for_brand(org_id, brand)` - returns the user_id assigned to a brand
+   - `get_brands_for_procurement_manager(user_id)` - returns all brands assigned to a user
+   - `get_procurement_assignments_summary(org_id)` - returns admin summary of all assignments
+
+**Relationship between tables:**
+- `brand_assignments` (003) = `brand_procurement_assignments` (view) → assigns BRANDS to USERS (procurement managers)
+- `brand_supplier_assignments` (025) → links BRANDS to SUPPLIERS (external companies)
+
+**Progress:**
+- v3.0 features complete: **9/94**
+- **Next**: DB-010 (route_logistics_assignments - assign routes to logistics managers)

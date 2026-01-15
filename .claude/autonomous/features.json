@@ -82,8 +82,10 @@
       "name": "Create brand_procurement_assignments table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Assign brands to procurement managers"
+      "passes": true,
+      "completed_at": "2026-01-15T17:30:00Z",
+      "description": "Assign brands to procurement managers",
+      "notes": "Created migration 026_create_brand_procurement_view.sql - view alias for existing brand_assignments table (003) with helper functions: get_procurement_manager_for_brand(), get_brands_for_procurement_manager(), get_procurement_assignments_summary()"
     },
     {
       "id": "DB-010",
