@@ -1906,3 +1906,43 @@
   - services/specification_service.py (added ~180 lines)
   - services/__init__.py (added imports and exports)
 - Status: COMPLETE - Feature #74 done
+
+## Session 2026-01-15 - Feature #76: Создание сделки из спецификации
+
+### What was done
+- Created `create_deal_from_specification()` function in `services/deal_service.py`
+- Added `CreateDealFromSpecResult` dataclass to return structured result
+- Function performs complete workflow:
+  1. Validates no deal exists for specification
+  2. Fetches specification with quote and customer details
+  3. Validates spec status (must be approved or signed)
+  4. Requires signed_scan_url to be present
+  5. Extracts financial data (total_amount, currency from quote)
+  6. Generates deal_number using existing utility
+  7. Creates deal record in 'active' status
+  8. Optionally updates specification status to 'signed'
+- Updated `services/__init__.py` with exports:
+  - `CreateDealFromSpecResult`
+  - `create_deal_from_specification`
+
+### Files changed
+- `services/deal_service.py` - Added function and dataclass (140+ lines)
+- `services/__init__.py` - Added exports
+
+### Result structure
+```python
+CreateDealFromSpecResult(
+    success: bool,           # Whether creation succeeded
+    deal: Deal,             # Created Deal object (if success)
+    error: str,             # Error message (if failure)
+    specification_updated: bool,  # Whether spec status was updated
+    extracted_data: dict    # Data extracted from spec/quote
+)
+```
+
+### Notes
+- Mirrors pattern used in `create_specification_from_quote()` (Feature #74)
+- Validates spec must have signed scan before allowing deal creation
+- Automatically extracts total_amount and currency from quote
+- Generates deal number using `generate_deal_number()`
+- Status: COMPLETE

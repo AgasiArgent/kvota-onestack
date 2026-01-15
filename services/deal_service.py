@@ -913,3 +913,193 @@ def search_deals(
     except Exception as e:
         print(f"Error searching deals: {e}")
         return []
+
+
+# ============================================================================
+# Create Deal from Specification (Feature #76)
+# ============================================================================
+
+@dataclass
+class CreateDealFromSpecResult:
+    """Result of creating a deal from a specification."""
+    success: bool
+    deal: Optional[Deal] = None
+    error: Optional[str] = None
+    specification_updated: bool = False
+    extracted_data: Optional[Dict[str, Any]] = None
+
+
+def create_deal_from_specification(
+    specification_id: str,
+    organization_id: str,
+    created_by: str,
+    signed_at: Optional[date] = None,
+    update_spec_status: bool = True,
+    additional_fields: Optional[Dict[str, Any]] = None
+) -> CreateDealFromSpecResult:
+    """
+    Create a new deal from a signed specification.
+
+    This function fetches the specification and quote data, calculates the total
+    amount, generates a deal number, and creates the deal record. Optionally
+    updates the specification status to 'signed'.
+
+    Args:
+        specification_id: UUID of the specification to create deal from
+        organization_id: UUID of the organization
+        created_by: UUID of the user creating the deal
+        signed_at: Optional date when spec was signed (defaults to today)
+        update_spec_status: Whether to update spec status to 'signed' (default: True)
+        additional_fields: Optional dict of additional deal fields to set
+
+    Returns:
+        CreateDealFromSpecResult with:
+        - success: bool indicating if creation succeeded
+        - deal: The created Deal object (if success)
+        - error: Error message (if failure)
+        - specification_updated: Whether spec status was updated
+        - extracted_data: Dict showing data extracted from spec/quote
+
+    Example:
+        result = create_deal_from_specification(
+            specification_id='spec-123',
+            organization_id='org-456',
+            created_by='user-789',
+            signed_at=date.today()
+        )
+        if result.success:
+            print(f"Created deal: {result.deal.deal_number}")
+    """
+    supabase = get_supabase()
+
+    try:
+        # 1. Check if deal already exists for this specification
+        if deal_exists_for_specification(specification_id, organization_id):
+            return CreateDealFromSpecResult(
+                success=False,
+                error="Deal already exists for this specification"
+            )
+
+        # 2. Fetch specification with quote and customer details
+        spec_result = supabase.table('specifications').select(
+            '*, quotes(id, idn_quote, customer_name, total_amount, currency, organization_id, customers(name, company_name))'
+        ).eq('id', specification_id).eq('organization_id', organization_id).execute()
+
+        if not spec_result.data:
+            return CreateDealFromSpecResult(
+                success=False,
+                error="Specification not found or access denied"
+            )
+
+        spec = spec_result.data[0]
+        quote = spec.get('quotes', {}) or {}
+
+        # 3. Validate specification status (should be approved or already signed)
+        spec_status = spec.get('status')
+        if spec_status not in ['approved', 'signed']:
+            return CreateDealFromSpecResult(
+                success=False,
+                error=f"Specification must be approved or signed to create deal (current: {spec_status})"
+            )
+
+        # 4. Check for signed scan (required for creating deal)
+        if not spec.get('signed_scan_url'):
+            return CreateDealFromSpecResult(
+                success=False,
+                error="Signed scan must be uploaded before creating deal"
+            )
+
+        # 5. Extract data for deal creation
+        extracted_data = {}
+
+        # Quote ID
+        quote_id = spec.get('quote_id')
+        if not quote_id:
+            return CreateDealFromSpecResult(
+                success=False,
+                error="Specification has no linked quote"
+            )
+        extracted_data['quote_id'] = quote_id
+
+        # Generate deal number
+        deal_number = generate_deal_number(organization_id)
+        extracted_data['deal_number'] = deal_number
+
+        # Signed date (use provided, spec sign_date, or today)
+        if signed_at:
+            deal_signed_at = signed_at
+        elif spec.get('sign_date'):
+            deal_signed_at = datetime.strptime(spec['sign_date'], '%Y-%m-%d').date() if isinstance(spec['sign_date'], str) else spec['sign_date']
+        else:
+            deal_signed_at = date.today()
+        extracted_data['signed_at'] = deal_signed_at.isoformat()
+
+        # Total amount from quote
+        total_amount = float(quote.get('total_amount', 0)) if quote.get('total_amount') else 0.0
+        extracted_data['total_amount'] = total_amount
+
+        # Currency (prefer spec currency, fallback to quote)
+        currency = spec.get('specification_currency') or quote.get('currency', 'RUB')
+        extracted_data['currency'] = currency
+
+        # Customer info for context
+        customer = quote.get('customers', {}) or {}
+        extracted_data['customer_name'] = customer.get('company_name') or customer.get('name') or quote.get('customer_name', 'Unknown')
+
+        # 6. Apply additional fields
+        if additional_fields:
+            if 'total_amount' in additional_fields:
+                total_amount = float(additional_fields['total_amount'])
+            if 'currency' in additional_fields:
+                currency = additional_fields['currency']
+            if 'signed_at' in additional_fields:
+                deal_signed_at = additional_fields['signed_at']
+
+        # 7. Create the deal
+        deal = create_deal(
+            specification_id=specification_id,
+            quote_id=quote_id,
+            organization_id=organization_id,
+            deal_number=deal_number,
+            signed_at=deal_signed_at,
+            total_amount=total_amount,
+            currency=currency,
+            status='active',
+            created_by=created_by
+        )
+
+        if not deal:
+            return CreateDealFromSpecResult(
+                success=False,
+                error="Failed to create deal record",
+                extracted_data=extracted_data
+            )
+
+        # 8. Update specification status to 'signed' if requested
+        specification_updated = False
+        if update_spec_status and spec_status != 'signed':
+            try:
+                update_result = supabase.table('specifications').update({
+                    'status': 'signed',
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', specification_id).eq('organization_id', organization_id).execute()
+
+                if update_result.data:
+                    specification_updated = True
+            except Exception as e:
+                print(f"Warning: Failed to update specification status: {e}")
+                # Don't fail the whole operation if spec update fails
+
+        return CreateDealFromSpecResult(
+            success=True,
+            deal=deal,
+            specification_updated=specification_updated,
+            extracted_data=extracted_data
+        )
+
+    except Exception as e:
+        print(f"Error creating deal from specification: {e}")
+        return CreateDealFromSpecResult(
+            success=False,
+            error=str(e)
+        )

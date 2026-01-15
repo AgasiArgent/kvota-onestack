@@ -191,6 +191,7 @@ from .specification_service import (
 from .deal_service import (
     # Data class
     Deal,
+    CreateDealFromSpecResult,  # Feature #76
     # Constants
     DEAL_STATUSES,
     DEAL_STATUS_NAMES,
@@ -204,6 +205,7 @@ from .deal_service import (
     is_deal_terminal,
     # Create operations
     create_deal,
+    create_deal_from_specification,  # Feature #76
     # Read operations
     get_deal,
     get_deal_by_specification,
@@ -552,4 +554,7 @@ __all__ = [
     "get_recent_deals",
     "get_deals_by_date_range",
     "search_deals",
+    # Create deal from spec (Feature #76)
+    "CreateDealFromSpecResult",
+    "create_deal_from_specification",
 ]

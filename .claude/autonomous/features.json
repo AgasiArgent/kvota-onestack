@@ -874,10 +874,11 @@
       "name": "Создание сделки из спецификации",
       "description": "Функция create_deal_from_specification(specification_id)",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T09:00:00Z",
+      "completed_at": "2026-01-15T09:30:00Z",
+      "notes": "Created create_deal_from_specification() function in deal_service.py with CreateDealFromSpecResult dataclass. Function fetches specification with quote/customer details, validates spec status (approved/signed) and signed_scan, extracts financial data (total_amount, currency), generates deal_number, creates deal record in 'active' status, optionally updates spec status to 'signed'. Returns result with success flag, Deal object, error message, specification_updated flag, and extracted_data dict. Updated services/__init__.py with all exports."
     },
     {
       "id": 77,
