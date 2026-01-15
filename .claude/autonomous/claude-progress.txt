@@ -1467,3 +1467,29 @@
   - main.py (~25 lines added/modified)
 - Status: COMPLETE - Feature #60 done
 
+
+## Session 2026-01-15 - Feature #61: Inline-кнопка Отклонить (reject callback handler)
+- Implemented reject callback handler for Telegram inline buttons
+- New function in telegram_service.py (~155 lines):
+  - handle_reject_callback(telegram_id, quote_id) → ApprovalCallbackResult:
+    - Validates Telegram account is linked and verified
+    - Gets user's roles in the organization
+    - Checks user has top_manager or admin role
+    - Verifies quote is in pending_approval status
+    - Transitions quote to rejected status
+    - Uses default rejection comment: "Отклонено через Telegram. Для уточнения причины обратитесь к руководителю."
+    - Returns detailed result with success/error message
+- Updated main.py webhook handler (~10 lines):
+  - Added import for handle_reject_callback
+  - Added elif branch to handle "reject" callback action
+  - Calls handle_reject_callback and updates original Telegram message with result
+- Updated services/__init__.py:
+  - Added import and export for handle_reject_callback
+- send_callback_response() already handles rejected action (shows "❌ ОТКЛОНЕНО" header)
+- All syntax verified with py_compile
+- Files changed:
+  - services/telegram_service.py (~155 lines added)
+  - services/__init__.py (updated exports)
+  - main.py (~15 lines added/modified)
+- Status: COMPLETE - Feature #61 done
+

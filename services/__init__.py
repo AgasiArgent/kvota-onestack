@@ -172,6 +172,8 @@ from .telegram_service import (
     ApprovalCallbackResult,
     handle_approve_callback,
     send_callback_response,
+    # Reject callback handler (Feature #61)
+    handle_reject_callback,
 )
 
 __all__ = [
@@ -327,4 +329,6 @@ __all__ = [
     "ApprovalCallbackResult",
     "handle_approve_callback",
     "send_callback_response",
+    # Reject callback handler (Feature #61)
+    "handle_reject_callback",
 ]

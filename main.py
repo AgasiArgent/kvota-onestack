@@ -6304,6 +6304,8 @@ from services.telegram_service import (
     # Feature #60 imports
     handle_approve_callback,
     send_callback_response,
+    # Feature #61 imports
+    handle_reject_callback,
 )
 
 
@@ -6374,9 +6376,18 @@ async def telegram_webhook(request):
                     if message_id and result.telegram_id:
                         await send_callback_response(result.telegram_id, message_id, approve_result)
 
-                # Feature #61: Handle reject callback (to be implemented)
+                # Feature #61: Handle reject callback
                 elif callback_data.action == "reject":
-                    logger.info(f"Reject callback for quote {callback_data.quote_id} - not yet implemented")
+                    reject_result = await handle_reject_callback(
+                        telegram_id=result.telegram_id,
+                        quote_id=callback_data.quote_id
+                    )
+                    logger.info(f"Reject callback result: success={reject_result.success}, quote={reject_result.quote_idn}")
+
+                    # Get message_id from the original update to edit the message
+                    message_id = json_data.get("callback_query", {}).get("message", {}).get("message_id")
+                    if message_id and result.telegram_id:
+                        await send_callback_response(result.telegram_id, message_id, reject_result)
 
                 # Handle details callback - just log for now
                 elif callback_data.action == "details":

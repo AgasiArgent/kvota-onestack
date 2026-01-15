@@ -2638,3 +2638,160 @@ async def send_callback_response(
         except TelegramError as e2:
             logger.error(f"Failed to send callback response: {e2}")
             return False
+
+
+# ============================================================================
+# Reject Callback Handler (Feature #61)
+# ============================================================================
+
+async def handle_reject_callback(
+    telegram_id: int,
+    quote_id: str
+) -> ApprovalCallbackResult:
+    """Handle the 'reject' inline button callback from Telegram.
+
+    Feature #61: Inline-кнопка Отклонить (Callback handler для reject_{quote_id})
+
+    This function:
+    1. Checks if Telegram account is linked and verified
+    2. Gets the user's roles in the organization
+    3. Verifies they have top_manager or admin role
+    4. Checks the quote is in pending_approval status
+    5. Transitions the quote to rejected status
+
+    Note: Since Telegram inline buttons don't support input, we use a default
+    rejection comment. The quote can be further reviewed in the web interface.
+
+    Args:
+        telegram_id: Telegram user ID who pressed the button
+        quote_id: UUID of the quote to reject
+
+    Returns:
+        ApprovalCallbackResult with success status and details
+
+    Example:
+        >>> result = await handle_reject_callback(12345678, "quote-uuid")
+        >>> if result.success:
+        ...     print(f"Quote {result.quote_idn} rejected!")
+    """
+    from services.workflow_service import (
+        transition_quote_status,
+        WorkflowStatus,
+        get_quote_workflow_status
+    )
+    from services.role_service import get_user_role_codes
+
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="rejected",
+                error="Database connection error",
+                message="❌ Ошибка подключения к базе данных"
+            )
+
+        # Step 1: Check if Telegram account is linked
+        telegram_user = await get_telegram_user(telegram_id)
+        if not telegram_user:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="rejected",
+                error="Telegram account not linked",
+                message="❌ Ваш Telegram аккаунт не привязан к системе.\n\nИспользуйте /start для инструкций по привязке."
+            )
+
+        user_id = telegram_user.get("user_id")
+        logger.info(f"Reject callback: telegram_id={telegram_id}, user_id={user_id}, quote_id={quote_id}")
+
+        # Step 2: Get quote details to verify organization
+        quote_response = supabase.table("quotes").select(
+            "id, idn, organization_id, workflow_status, customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data or len(quote_response.data) == 0:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="rejected",
+                error="Quote not found",
+                message="❌ КП не найдено в системе"
+            )
+
+        quote = quote_response.data[0]
+        org_id = quote.get("organization_id")
+        quote_idn = quote.get("idn", "N/A")
+        current_status = quote.get("workflow_status")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        # Step 3: Check user's roles in the organization
+        user_roles = get_user_role_codes(user_id, org_id)
+
+        # Step 4: Verify user has top_manager or admin role
+        if not any(role in ["top_manager", "admin"] for role in user_roles):
+            logger.warning(f"User {user_id} tried to reject quote {quote_id} without permission. Roles: {user_roles}")
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="rejected",
+                error="Permission denied",
+                message="❌ У вас нет прав на отклонение КП.\n\nТребуется роль: топ-менеджер или администратор"
+            )
+
+        # Step 5: Check quote is in pending_approval status
+        if current_status != WorkflowStatus.PENDING_APPROVAL.value:
+            status_name = _get_status_name_ru(current_status)
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="rejected",
+                error=f"Invalid status: {current_status}",
+                message=f"❌ КП не может быть отклонено\n\nТекущий статус: {status_name}\n\nТребуется статус: Ожидает согласования"
+            )
+
+        # Step 6: Transition to rejected status
+        # Note: Rejection requires a comment per workflow rules,
+        # so we provide a default comment for Telegram rejections
+        result = transition_quote_status(
+            quote_id=quote_id,
+            to_status=WorkflowStatus.REJECTED,
+            actor_id=user_id,
+            actor_roles=user_roles,
+            comment="Отклонено через Telegram. Для уточнения причины обратитесь к руководителю."
+        )
+
+        if result.success:
+            logger.info(f"Quote {quote_id} rejected by user {user_id} via Telegram")
+            return ApprovalCallbackResult(
+                success=True,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="rejected",
+                message=f"❌ КП {quote_idn} отклонено\n\nКлиент: {customer_name}\n\nДля уточнения причины обратитесь к руководителю.",
+                new_status=WorkflowStatus.REJECTED.value
+            )
+        else:
+            logger.error(f"Failed to reject quote {quote_id}: {result.error_message}")
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="rejected",
+                error=result.error_message,
+                message=f"❌ Ошибка при отклонении КП\n\n{result.error_message}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error handling reject callback for quote {quote_id}: {e}")
+        return ApprovalCallbackResult(
+            success=False,
+            quote_id=quote_id,
+            action="rejected",
+            error=str(e),
+            message=f"❌ Произошла ошибка: {str(e)}"
+        )
