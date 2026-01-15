@@ -157,12 +157,13 @@ App runs at http://localhost:5001
 - [x] Feature #72: Кнопка подтверждения подписи (2026-01-15) - Confirm signature button and deal creation. Added 'Подтвердить подпись' button to spec edit page (visible when status=approved + signed_scan exists). POST /spec-control/{spec_id}/confirm-signature endpoint creates deal record with auto-generated deal_number (DEAL-YYYY-NNNN), updates spec status to 'signed', optionally transitions quote to deal_signed.
 - [x] Feature #73: Сервис спецификаций (2026-01-15) - Created services/specification_service.py with full CRUD operations: Specification dataclass with all 18 fields, SPEC_STATUSES/SPEC_STATUS_NAMES/SPEC_STATUS_COLORS/SPEC_TRANSITIONS constants, status helpers, create_specification(), get_specification(), get_specification_by_quote(), get_specifications_by_status(), get_all_specifications(), get_specifications_with_details(), count_specifications_by_status(), specification_exists_for_quote(), update_specification(), update_specification_status(), set_signed_scan_url(), delete_specification(), generate_specification_number(), get_specification_stats(), get_specifications_for_signing(), get_recently_signed_specifications().
 - [x] Feature #74: Создание спецификации из КП (2026-01-15) - Created create_specification_from_quote() function in specification_service.py with CreateSpecFromQuoteResult dataclass. Function fetches quote data, optionally uses specific version data, pre-fills 15+ specification fields from quote and calculation variables (proposal_idn, currency, exchange rate, payment terms, countries, legal entities, periods). Returns result with success flag, specification object, error message, and prefilled_fields dict. Updated services/__init__.py with exports.
+- [x] Feature #75: Сервис сделок (2026-01-15) - Created services/deal_service.py with full CRUD operations: Deal dataclass with all fields, DEAL_STATUSES/DEAL_STATUS_NAMES/DEAL_STATUS_COLORS/DEAL_TRANSITIONS constants, status helpers, create_deal(), get_deal(), get_deal_by_specification(), get_deal_by_quote(), get_deals_by_status(), get_all_deals(), get_deals_with_details(), count_deals_by_status(), deal_exists_for_specification(), deal_exists_for_quote(), update_deal(), update_deal_status(), complete_deal(), cancel_deal(), update_deal_amount(), delete_deal(), generate_deal_number(), get_deal_stats(), get_active_deals(), get_recent_deals(), get_deals_by_date_range(), search_deals(). Updated services/__init__.py with all exports.
 
 ### Next Up
-- Feature #75: Сервис сделок (CRUD для таблицы deals)
+- Feature #76: Создание сделки из спецификации (create_deal_from_specification)
 
 ### Progress
-- **74 of 88 features completed** (84%)
+- **75 of 88 features completed** (85%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

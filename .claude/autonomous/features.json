@@ -862,10 +862,11 @@
       "name": "Сервис сделок",
       "description": "CRUD для таблицы deals",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T08:20:00Z",
+      "completed_at": "2026-01-15T08:45:00Z",
+      "notes": "Created services/deal_service.py with full CRUD operations: Deal dataclass with all fields (id, specification_id, quote_id, organization_id, deal_number, signed_at, total_amount, currency, status, created_by, created_at, updated_at), DEAL_STATUSES/DEAL_STATUS_NAMES/DEAL_STATUS_COLORS/DEAL_TRANSITIONS constants, status helpers (get_deal_status_name, get_deal_status_color, can_transition_deal, get_allowed_deal_transitions, is_deal_terminal), create_deal(), get_deal(), get_deal_by_specification(), get_deal_by_quote(), get_deals_by_status(), get_all_deals(), get_deals_with_details(), count_deals_by_status(), deal_exists_for_specification(), deal_exists_for_quote(), update_deal(), update_deal_status(), complete_deal(), cancel_deal(), update_deal_amount(), delete_deal(), generate_deal_number(), get_deal_stats(), get_active_deals(), get_recent_deals(), get_deals_by_date_range(), search_deals(). Updated services/__init__.py with all exports."
     },
     {
       "id": 76,

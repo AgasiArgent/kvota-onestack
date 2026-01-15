@@ -188,6 +188,48 @@ from .specification_service import (
     get_specifications_for_signing,
     get_recently_signed_specifications,
 )
+from .deal_service import (
+    # Data class
+    Deal,
+    # Constants
+    DEAL_STATUSES,
+    DEAL_STATUS_NAMES,
+    DEAL_STATUS_COLORS,
+    DEAL_TRANSITIONS,
+    # Status helpers
+    get_deal_status_name,
+    get_deal_status_color,
+    can_transition_deal,
+    get_allowed_deal_transitions,
+    is_deal_terminal,
+    # Create operations
+    create_deal,
+    # Read operations
+    get_deal,
+    get_deal_by_specification,
+    get_deal_by_quote,
+    get_deals_by_status,
+    get_all_deals,
+    get_deals_with_details,
+    count_deals_by_status,
+    deal_exists_for_specification,
+    deal_exists_for_quote,
+    # Update operations
+    update_deal,
+    update_deal_status,
+    complete_deal,
+    cancel_deal,
+    update_deal_amount,
+    # Delete operations
+    delete_deal,
+    # Utility functions
+    generate_deal_number,
+    get_deal_stats,
+    get_active_deals,
+    get_recent_deals,
+    get_deals_by_date_range,
+    search_deals,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -477,4 +519,37 @@ __all__ = [
     # Create from quote (Feature #74)
     "CreateSpecFromQuoteResult",
     "create_specification_from_quote",
+    # Deal service (Feature #75)
+    "Deal",
+    "DEAL_STATUSES",
+    "DEAL_STATUS_NAMES",
+    "DEAL_STATUS_COLORS",
+    "DEAL_TRANSITIONS",
+    "get_deal_status_name",
+    "get_deal_status_color",
+    "can_transition_deal",
+    "get_allowed_deal_transitions",
+    "is_deal_terminal",
+    "create_deal",
+    "get_deal",
+    "get_deal_by_specification",
+    "get_deal_by_quote",
+    "get_deals_by_status",
+    "get_all_deals",
+    "get_deals_with_details",
+    "count_deals_by_status",
+    "deal_exists_for_specification",
+    "deal_exists_for_quote",
+    "update_deal",
+    "update_deal_status",
+    "complete_deal",
+    "cancel_deal",
+    "update_deal_amount",
+    "delete_deal",
+    "generate_deal_number",
+    "get_deal_stats",
+    "get_active_deals",
+    "get_recent_deals",
+    "get_deals_by_date_range",
+    "search_deals",
 ]
