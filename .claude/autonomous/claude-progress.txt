@@ -1,0 +1,55 @@
+# Claude Progress Log
+# Project: OneStack Workflow Extension
+# Created: 2025-01-14
+# Spec: .claude/autonomous/app_spec.xml
+
+## Project Overview
+
+Расширение существующей системы OneStack (расчёт коммерческих предложений)
+для поддержки многоролевого workflow с 9 ролями, уведомлениями через Telegram
+и финансовым учётом план-факт.
+
+**Текущее состояние:** Базовая система работает (КП, расчёт, экспорт)
+**Цель:** Полный бизнес-процесс от заявки до сделки
+
+## Features to Implement
+
+88 features total across 8 phases:
+1. Database Schema (16 features)
+2. Role System (6 features)
+3. Workflow Engine (10 features)
+4. Role-Specific UI - Procurement, Logistics, Customs, Quote Control (19 features)
+5. Telegram Bot (15 features)
+6. Specifications & Deals (10 features)
+7. Plan-Fact Finance (7 features)
+8. Admin & Polish (5 features)
+
+## Business Process Summary
+
+1. Sales Manager uploads quote request
+2. Procurement Manager(s) evaluate by brand
+3. Logistics + Customs work in parallel
+4. Sales Manager sets markup and terms
+5. Quote Controller (Zhanna) reviews
+6. Top Manager approves via Telegram (if needed)
+7. Client negotiation, versioning
+8. Spec Controller prepares specification
+9. Signature → Deal
+10. Finance tracks plan vs actual payments
+
+## Key Roles
+
+- sales: Менеджер по продажам
+- procurement: Менеджер по закупкам (по брендам)
+- logistics: Логист
+- customs: Менеджер ТО (Олег Князев)
+- quote_controller: Контроллер КП (Жанна)
+- spec_controller: Контроллер спецификаций
+- finance: Финансовый менеджер
+- top_manager: Топ-менеджер (согласования через Telegram)
+- admin: Администратор
+
+---
+## Sessions
+
+[Sessions will be logged below]

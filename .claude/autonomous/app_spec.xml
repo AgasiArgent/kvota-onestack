@@ -1,0 +1,876 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project_specification>
+  <project_name>OneStack Workflow Extension</project_name>
+  <version>2.0</version>
+  <created>2025-01-14</created>
+
+  <overview>
+    Расширение существующей системы OneStack для управления полным циклом
+    коммерческих предложений (КП) с многоролевым workflow, уведомлениями
+    через Telegram и финансовым учётом план-факт.
+
+    Текущая система: расчёт КП одним пользователем.
+    Целевая система: полный бизнес-процесс от заявки до сделки с участием
+    8 ролей и автоматическими уведомлениями.
+  </overview>
+
+  <technology_stack>
+    <backend>
+      <language>Python 3.14</language>
+      <framework>FastHTML + HTMX</framework>
+      <database>Supabase PostgreSQL</database>
+      <existing_code>main.py (2100+ lines), calculation_engine.py</existing_code>
+    </backend>
+    <integrations>
+      <telegram>python-telegram-bot для уведомлений и согласований</telegram>
+    </integrations>
+  </technology_stack>
+
+  <business_process>
+    <step number="1" name="request">
+      <actor>sales</actor>
+      <description>Менеджер по продажам загружает список товаров от клиента</description>
+      <actions>
+        - Создание КП (quote) со статусом draft
+        - Загрузка товаров (quote_items)
+        - Отправка на оценку закупок
+      </actions>
+      <next_status>pending_procurement</next_status>
+    </step>
+
+    <step number="2" name="procurement">
+      <actor>procurement</actor>
+      <description>Менеджер по закупкам оценивает позиции по своим брендам</description>
+      <actions>
+        - Получает уведомление в Telegram
+        - Скачивает список позиций по своим брендам
+        - Заполняет: цена, страна/город поставщика, вес
+        - Заполняет: срок производства, наша компания-плательщик
+        - Заполняет: % аванса поставщику, условия оплаты поставщику
+        - Загружает данные в систему
+      </actions>
+      <trigger>Все бренды в КП оценены</trigger>
+      <next_status>pending_logistics, pending_customs (параллельно)</next_status>
+    </step>
+
+    <step number="3a" name="logistics">
+      <actor>logistics</actor>
+      <description>Логист рассчитывает стоимость доставки</description>
+      <actions>
+        - Получает уведомление в Telegram
+        - Заполняет стоимость логистики по сегментам:
+          * От поставщика до хаба
+          * От хаба до таможни
+          * От таможни до клиента
+        - Указывает срок на логистику
+      </actions>
+      <next_status>pending_sales_review (когда и logistics и customs готовы)</next_status>
+    </step>
+
+    <step number="3b" name="customs">
+      <actor>customs</actor>
+      <description>Менеджер ТО (Олег Князев) заполняет таможенные данные</description>
+      <actions>
+        - Получает уведомление в Telegram
+        - Заполняет коды ТН ВЭД для каждой позиции
+        - Указывает пошлины и доп. расходы на таможне
+      </actions>
+      <next_status>pending_sales_review (когда и logistics и customs готовы)</next_status>
+    </step>
+
+    <step number="4" name="sales_review">
+      <actor>sales</actor>
+      <description>Менеджер по продажам формирует КП</description>
+      <actions>
+        - Видит полную себестоимость и сроки
+        - Выбирает наценку
+        - Выбирает условия оплаты с клиентом (отсрочки, разбивка)
+        - Видит preview итоговых цен
+        - Отправляет на проверку контроллеру КП
+      </actions>
+      <next_status>pending_quote_control</next_status>
+    </step>
+
+    <step number="5" name="quote_control">
+      <actor>quote_controller</actor>
+      <description>Жанна проверяет КП перед отправкой клиенту</description>
+      <checks>
+        <check name="deal_type">Тип сделки (поставка/транзит) - разная наценка</check>
+        <check name="incoterms">Базис поставки (чаще DDP)</check>
+        <check name="currency">Валюта КП, корректность конвертации</check>
+        <check name="payment_terms">Условия расчётов с клиентом</check>
+        <check name="supplier_advance">Размер аванса поставщику</check>
+        <check name="purchase_prices">Корректность закупочных цен, НДС</check>
+        <check name="logistics_cost">Корректность логистики (не из головы)</check>
+        <check name="min_markup">Минимальные наценки</check>
+        <check name="lpr_reward">Вознаграждения ЛПРа</check>
+        <check name="forex_risk">% курсовой разницы</check>
+      </checks>
+      <actions>
+        - Возврат на доработку менеджеру по продажам
+        - ИЛИ отправка на согласование топ-менеджеру (если нужно)
+        - ИЛИ одобрение
+      </actions>
+      <approval_triggers>
+        - Валюта КП = рубли
+        - Условия не 100% предоплата
+        - Наценка ниже минимума
+        - Есть вознаграждение ЛПРа
+      </approval_triggers>
+      <next_status>pending_approval ИЛИ approved</next_status>
+    </step>
+
+    <step number="6" name="top_manager_approval">
+      <actor>top_manager</actor>
+      <description>Согласование топ-менеджером через Telegram</description>
+      <actions>
+        - Получает уведомление в Telegram с деталями
+        - Нажимает "Согласовать" или "Отклонить"
+        - Может добавить комментарий
+      </actions>
+      <next_status>approved ИЛИ rejected</next_status>
+    </step>
+
+    <step number="7" name="client_negotiation">
+      <actor>sales</actor>
+      <description>Торговля с клиентом, версии КП</description>
+      <actions>
+        - Отправка КП клиенту
+        - Создание версий (v1, v2, v3...)
+        - Выбор финальной версии
+        - Запрос на генерацию спецификации
+      </actions>
+      <next_status>pending_spec_control</next_status>
+    </step>
+
+    <step number="8" name="spec_control">
+      <actor>spec_controller</actor>
+      <description>Контроллер спецификаций проверяет и вводит данные</description>
+      <fields>
+        <field name="proposalIdn" type="String">IDN КП</field>
+        <field name="itemIndSku" type="String">IDN-SKU</field>
+        <field name="specificationNumber" type="String">Номер спецификации</field>
+        <field name="signDate" type="DateTime">Дата подписания</field>
+        <field name="validityPeriod" type="String">Срок действия</field>
+        <field name="specificationCurrency" type="String">Валюта спецификации</field>
+        <field name="exchangeRateToRuble" type="Float">Курс к рублю</field>
+        <field name="clientPaymentTermAfterUPD" type="Int">Срок оплаты после УПД</field>
+        <field name="clientPaymentTerms" type="String">Условия оплаты клиента</field>
+        <field name="cargoPickupCountry" type="String">Страна забора груза</field>
+        <field name="readinessPeriod" type="String">Срок готовности</field>
+        <field name="goodsShipmentCountry" type="String">Страна товара к отгрузке</field>
+        <field name="deliveryCityInRussia" type="String">Город доставки в РФ</field>
+        <field name="cargoType" type="String">Тип груза</field>
+        <field name="logisticsPeriod" type="String">Срок на логистику</field>
+        <field name="ourLegalEntity" type="String">Наше юридическое лицо</field>
+        <field name="clientLegalEntity" type="String">Юридическое лицо клиента</field>
+        <field name="supplierPaymentCountry" type="String">Страна оплаты поставщику</field>
+      </fields>
+      <actions>
+        - Проверка и ввод данных
+        - Генерация PDF спецификации
+        - Отправка клиенту
+      </actions>
+      <next_status>pending_signature</next_status>
+    </step>
+
+    <step number="9" name="signature">
+      <actor>sales</actor>
+      <description>Подписание спецификации</description>
+      <actions>
+        - Получение подписанного скана от клиента
+        - Загрузка скана в систему
+        - Проверка соответствия (человек или AI)
+        - Перевод в статус "Сделка"
+      </actions>
+      <next_status>deal</next_status>
+    </step>
+
+    <step number="10" name="plan_fact">
+      <actor>finance</actor>
+      <description>Ведение план-факта по сделке</description>
+      <actions>
+        - Создание плановых платежей на основе условий сделки
+        - Регистрация фактических платежей
+        - Отслеживание отклонений
+      </actions>
+      <payment_types>
+        - Платежи от клиента (несколько траншей)
+        - Платежи поставщику
+        - Платежи за логистику
+        - Платежи за таможню
+        - Налоги
+        - Комиссия финагента
+        - Прочие расходы из себестоимости
+      </payment_types>
+    </step>
+  </business_process>
+
+  <roles>
+    <role code="sales" name="Менеджер по продажам">
+      <permissions>
+        - Создание КП
+        - Редактирование своих КП
+        - Просмотр своих КП и сделок
+        - Выбор наценки и условий клиента
+        - Загрузка сканов подписей
+      </permissions>
+    </role>
+
+    <role code="procurement" name="Менеджер по закупкам">
+      <permissions>
+        - Просмотр КП с назначенными брендами
+        - Редактирование закупочных данных
+        - Скачивание списков для оценки
+      </permissions>
+    </role>
+
+    <role code="logistics" name="Логист">
+      <permissions>
+        - Просмотр КП на этапе логистики
+        - Редактирование данных логистики
+      </permissions>
+    </role>
+
+    <role code="customs" name="Менеджер ТО">
+      <permissions>
+        - Просмотр КП на этапе таможни
+        - Редактирование таможенных данных
+        - Согласование пошлин
+      </permissions>
+    </role>
+
+    <role code="quote_controller" name="Контроллер КП">
+      <permissions>
+        - Просмотр КП на проверке
+        - Возврат на доработку
+        - Отправка на согласование
+        - Одобрение КП
+      </permissions>
+    </role>
+
+    <role code="spec_controller" name="Контроллер спецификаций">
+      <permissions>
+        - Просмотр спецификаций на проверке
+        - Ввод данных спецификации
+        - Генерация PDF
+        - Проверка подписей
+      </permissions>
+    </role>
+
+    <role code="finance" name="Финансовый менеджер">
+      <permissions>
+        - Просмотр всех сделок
+        - Ведение план-факта
+        - Регистрация платежей
+      </permissions>
+    </role>
+
+    <role code="top_manager" name="Топ-менеджер">
+      <permissions>
+        - Согласование через Telegram
+        - Просмотр всех КП и сделок
+        - Отчёты и аналитика
+      </permissions>
+    </role>
+
+    <role code="admin" name="Администратор">
+      <permissions>
+        - Управление пользователями
+        - Назначение ролей
+        - Назначение брендов менеджерам
+        - Настройки системы
+      </permissions>
+    </role>
+  </roles>
+
+  <database_schema>
+    <existing_tables>
+      <table name="organizations">Организации (уже есть)</table>
+      <table name="organization_members">Участники организаций (уже есть)</table>
+      <table name="customers">Клиенты (уже есть)</table>
+      <table name="quotes">КП (уже есть, расширяем)</table>
+      <table name="quote_items">Позиции КП (уже есть, расширяем)</table>
+      <table name="quote_versions">Версии КП (уже есть)</table>
+      <table name="quote_calculation_variables">Переменные расчёта (уже есть)</table>
+      <table name="quote_calculation_results">Результаты расчёта (уже есть)</table>
+      <table name="quote_calculation_summaries">Сводка расчёта (уже есть)</table>
+    </existing_tables>
+
+    <new_tables>
+      <table name="roles">
+        <description>Справочник ролей</description>
+        <fields>
+          - id: UUID PK
+          - code: String UNIQUE (sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin)
+          - name: String (человекочитаемое название)
+          - description: String
+          - created_at: DateTime
+        </fields>
+      </table>
+
+      <table name="user_roles">
+        <description>Роли пользователей</description>
+        <fields>
+          - id: UUID PK
+          - user_id: UUID FK → auth.users
+          - organization_id: UUID FK → organizations
+          - role_id: UUID FK → roles
+          - created_at: DateTime
+          - created_by: UUID FK → auth.users
+        </fields>
+        <constraints>UNIQUE(user_id, organization_id, role_id)</constraints>
+      </table>
+
+      <table name="brand_assignments">
+        <description>Назначение брендов менеджерам по закупкам</description>
+        <fields>
+          - id: UUID PK
+          - organization_id: UUID FK → organizations
+          - brand: String (название бренда)
+          - user_id: UUID FK → auth.users (менеджер по закупкам)
+          - created_at: DateTime
+          - created_by: UUID FK → auth.users
+        </fields>
+        <constraints>UNIQUE(organization_id, brand)</constraints>
+      </table>
+
+      <table name="workflow_transitions">
+        <description>Аудит-лог всех переходов статусов</description>
+        <fields>
+          - id: UUID PK
+          - quote_id: UUID FK → quotes
+          - from_status: String
+          - to_status: String
+          - actor_id: UUID FK → auth.users
+          - actor_role: String
+          - comment: Text (причина перехода)
+          - created_at: DateTime
+        </fields>
+      </table>
+
+      <table name="approvals">
+        <description>Запросы на согласование</description>
+        <fields>
+          - id: UUID PK
+          - quote_id: UUID FK → quotes
+          - requested_by: UUID FK → auth.users
+          - approver_id: UUID FK → auth.users
+          - approval_type: String (top_manager, customs, etc.)
+          - reason: Text (почему требуется согласование)
+          - status: String (pending, approved, rejected)
+          - decision_comment: Text
+          - requested_at: DateTime
+          - decided_at: DateTime
+        </fields>
+      </table>
+
+      <table name="specifications">
+        <description>Данные спецификации (расширение quote_versions)</description>
+        <fields>
+          - id: UUID PK
+          - quote_id: UUID FK → quotes
+          - quote_version_id: UUID FK → quote_versions
+          - specification_number: String
+          - proposal_idn: String
+          - item_ind_sku: String
+          - sign_date: Date
+          - validity_period: String
+          - specification_currency: String
+          - exchange_rate_to_ruble: Decimal
+          - client_payment_term_after_upd: Int
+          - client_payment_terms: String
+          - cargo_pickup_country: String
+          - readiness_period: String
+          - goods_shipment_country: String
+          - delivery_city_russia: String
+          - cargo_type: String
+          - logistics_period: String
+          - our_legal_entity: String
+          - client_legal_entity: String
+          - supplier_payment_country: String
+          - signed_scan_url: String (URL скана подписанной спецификации)
+          - status: String (draft, pending_review, approved, signed)
+          - created_by: UUID FK → auth.users
+          - created_at: DateTime
+          - updated_at: DateTime
+        </fields>
+      </table>
+
+      <table name="deals">
+        <description>Сделки (подписанные спецификации)</description>
+        <fields>
+          - id: UUID PK
+          - specification_id: UUID FK → specifications
+          - quote_id: UUID FK → quotes
+          - deal_number: String
+          - signed_at: Date
+          - total_amount: Decimal
+          - currency: String
+          - status: String (active, completed, cancelled)
+          - created_at: DateTime
+          - updated_at: DateTime
+        </fields>
+      </table>
+
+      <table name="plan_fact_categories">
+        <description>Справочник категорий платежей</description>
+        <fields>
+          - id: UUID PK
+          - code: String UNIQUE (client_payment, supplier_payment, logistics, customs, tax, finance_commission, other)
+          - name: String
+          - is_income: Boolean (true = доход, false = расход)
+          - created_at: DateTime
+        </fields>
+      </table>
+
+      <table name="plan_fact_items">
+        <description>Записи план-факта</description>
+        <fields>
+          - id: UUID PK
+          - deal_id: UUID FK → deals
+          - category_id: UUID FK → plan_fact_categories
+          - description: String
+          - planned_amount: Decimal
+          - planned_currency: String
+          - planned_date: Date
+          - actual_amount: Decimal (null если ещё не оплачено)
+          - actual_currency: String
+          - actual_date: Date
+          - actual_exchange_rate: Decimal (курс на дату платежа)
+          - variance_amount: Decimal (отклонение в рублях)
+          - payment_document: String (номер платёжки)
+          - notes: Text
+          - created_by: UUID FK → auth.users
+          - created_at: DateTime
+          - updated_at: DateTime
+        </fields>
+      </table>
+
+      <table name="telegram_users">
+        <description>Связь Telegram с пользователями системы</description>
+        <fields>
+          - id: UUID PK
+          - user_id: UUID FK → auth.users
+          - telegram_id: BigInt UNIQUE
+          - telegram_username: String
+          - is_verified: Boolean
+          - verification_code: String
+          - created_at: DateTime
+          - verified_at: DateTime
+        </fields>
+      </table>
+
+      <table name="notifications">
+        <description>История уведомлений</description>
+        <fields>
+          - id: UUID PK
+          - user_id: UUID FK → auth.users
+          - quote_id: UUID FK → quotes (nullable)
+          - deal_id: UUID FK → deals (nullable)
+          - type: String (task_assigned, approval_required, status_changed, etc.)
+          - title: String
+          - message: Text
+          - channel: String (telegram, email, in_app)
+          - status: String (pending, sent, delivered, read, failed)
+          - telegram_message_id: BigInt (для обновления сообщений)
+          - sent_at: DateTime
+          - read_at: DateTime
+          - created_at: DateTime
+        </fields>
+      </table>
+    </new_tables>
+
+    <quote_extensions>
+      <description>Расширение существующей таблицы quotes</description>
+      <new_fields>
+        - workflow_status: String (см. статусы ниже)
+        - deal_type: String (supply, transit)
+        - assigned_procurement_users: UUID[] (менеджеры по закупкам)
+        - assigned_logistics_user: UUID
+        - assigned_customs_user: UUID
+        - procurement_completed_at: DateTime
+        - logistics_completed_at: DateTime
+        - customs_completed_at: DateTime
+        - current_version_id: UUID FK → quote_versions (выбранная версия для спецификации)
+      </new_fields>
+    </quote_extensions>
+
+    <quote_items_extensions>
+      <description>Расширение существующей таблицы quote_items</description>
+      <new_fields>
+        - brand: String (уже есть)
+        - assigned_procurement_user: UUID (менеджер по этому бренду)
+        - procurement_status: String (pending, completed)
+        - procurement_completed_at: DateTime
+        - procurement_completed_by: UUID
+        - hs_code: String (код ТН ВЭД)
+        - customs_duty: Decimal (пошлина)
+        - customs_extra: Decimal (доп. расходы таможни)
+      </new_fields>
+    </quote_items_extensions>
+
+    <workflow_statuses>
+      <status code="draft">Черновик</status>
+      <status code="pending_procurement">Ожидает оценки закупок</status>
+      <status code="pending_logistics">Ожидает логистики</status>
+      <status code="pending_customs">Ожидает таможни</status>
+      <status code="pending_sales_review">Ожидает менеджера продаж</status>
+      <status code="pending_quote_control">Ожидает проверки КП</status>
+      <status code="pending_approval">Ожидает согласования</status>
+      <status code="approved">Одобрено</status>
+      <status code="sent_to_client">Отправлено клиенту</status>
+      <status code="client_negotiation">Торги с клиентом</status>
+      <status code="pending_spec_control">Ожидает проверки спецификации</status>
+      <status code="pending_signature">Ожидает подписания</status>
+      <status code="deal">Сделка</status>
+      <status code="rejected">Отклонено</status>
+      <status code="cancelled">Отменено</status>
+    </workflow_statuses>
+  </database_schema>
+
+  <telegram_bot>
+    <description>Telegram-бот для уведомлений и согласований</description>
+
+    <commands>
+      <command name="/start">Начало, привязка аккаунта по коду верификации</command>
+      <command name="/status">Мои текущие задачи</command>
+      <command name="/help">Справка</command>
+    </commands>
+
+    <notification_types>
+      <type code="task_assigned">
+        <description>Новая задача назначена</description>
+        <template>
+          📋 Новая задача
+          КП: {quote_idn}
+          Клиент: {customer_name}
+          Действие: {action_required}
+          [Открыть в системе]
+        </template>
+      </type>
+
+      <type code="approval_required">
+        <description>Требуется согласование (для топ-менеджера)</description>
+        <template>
+          🔔 Требуется согласование
+          КП: {quote_idn}
+          Клиент: {customer_name}
+          Сумма: {total_amount}
+          Причина: {approval_reason}
+
+          Детали:
+          - Наценка: {markup}%
+          - Условия: {payment_terms}
+
+          [✅ Согласовать] [❌ Отклонить]
+        </template>
+        <inline_buttons>
+          - approve: Согласовать
+          - reject: Отклонить
+          - details: Подробнее
+        </inline_buttons>
+      </type>
+
+      <type code="status_changed">
+        <description>Статус изменился</description>
+        <template>
+          📝 Статус изменён
+          КП: {quote_idn}
+          Новый статус: {new_status}
+          Изменил: {actor_name}
+        </template>
+      </type>
+
+      <type code="returned_for_revision">
+        <description>Возвращено на доработку</description>
+        <template>
+          ⚠️ Возвращено на доработку
+          КП: {quote_idn}
+          Причина: {comment}
+          Вернул: {actor_name}
+        </template>
+      </type>
+    </notification_types>
+
+    <callback_handlers>
+      <handler prefix="approve_">Обработка согласования</handler>
+      <handler prefix="reject_">Обработка отклонения</handler>
+      <handler prefix="details_">Показать детали КП</handler>
+    </callback_handlers>
+  </telegram_bot>
+
+  <ui_screens>
+    <screen name="dashboard" path="/dashboard">
+      <description>Главная страница с задачами по ролям</description>
+      <components>
+        - Карточки статистики (мои задачи, ожидают меня, завершено сегодня)
+        - Список задач отфильтрованный по роли
+        - Быстрые действия
+      </components>
+    </screen>
+
+    <screen name="quote_workflow" path="/quotes/{id}/workflow">
+      <description>Страница КП с workflow</description>
+      <components>
+        - Прогресс-бар workflow (визуализация этапов)
+        - Текущий статус и ответственный
+        - Форма для ввода данных (зависит от роли)
+        - История переходов (аудит-лог)
+        - Кнопки действий (отправить дальше, вернуть, согласовать)
+      </components>
+    </screen>
+
+    <screen name="procurement_view" path="/procurement">
+      <description>Рабочая зона менеджера по закупкам</description>
+      <components>
+        - Список КП с моими брендами
+        - Фильтр по статусу
+        - Массовое скачивание для оценки
+        - Форма загрузки цен
+      </components>
+    </screen>
+
+    <screen name="logistics_view" path="/logistics">
+      <description>Рабочая зона логиста</description>
+      <components>
+        - Список КП на этапе логистики
+        - Форма ввода стоимости доставки по сегментам
+        - Калькулятор логистики
+      </components>
+    </screen>
+
+    <screen name="customs_view" path="/customs">
+      <description>Рабочая зона менеджера ТО</description>
+      <components>
+        - Список КП на этапе таможни
+        - Форма ввода кодов ТН ВЭД
+        - Справочник кодов
+        - Калькулятор пошлин
+      </components>
+    </screen>
+
+    <screen name="quote_control_view" path="/quote-control">
+      <description>Рабочая зона контроллера КП (Жанна)</description>
+      <components>
+        - Список КП на проверке
+        - Чек-лист проверки (все пункты)
+        - Форма возврата с комментарием
+        - Кнопка отправки на согласование
+        - Кнопка одобрения
+      </components>
+    </screen>
+
+    <screen name="spec_control_view" path="/spec-control">
+      <description>Рабочая зона контроллера спецификаций</description>
+      <components>
+        - Список спецификаций на проверке
+        - Форма ввода всех полей спецификации
+        - Preview PDF
+        - Загрузка подписанного скана
+        - Сравнение скана с оригиналом
+      </components>
+    </screen>
+
+    <screen name="finance_view" path="/finance">
+      <description>Рабочая зона финансового менеджера</description>
+      <components>
+        - Список активных сделок
+        - План-факт таблица по сделке
+        - Форма регистрации платежа
+        - Отчёт отклонений
+        - Сводка по периоду
+      </components>
+    </screen>
+
+    <screen name="admin_users" path="/admin/users">
+      <description>Управление пользователями</description>
+      <components>
+        - Список пользователей
+        - Назначение ролей
+        - Привязка Telegram
+      </components>
+    </screen>
+
+    <screen name="admin_brands" path="/admin/brands">
+      <description>Назначение брендов</description>
+      <components>
+        - Список брендов
+        - Назначение менеджера по закупкам
+        - Импорт брендов из КП
+      </components>
+    </screen>
+
+    <screen name="settings_telegram" path="/settings/telegram">
+      <description>Настройка Telegram-уведомлений</description>
+      <components>
+        - Код верификации для привязки
+        - Статус привязки
+        - Настройки типов уведомлений
+      </components>
+    </screen>
+  </ui_screens>
+
+  <api_endpoints>
+    <category name="workflow">
+      <endpoint method="POST" path="/api/quotes/{id}/submit-to-procurement">Отправить на оценку закупок</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/complete-procurement">Завершить оценку закупок</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/complete-logistics">Завершить логистику</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/complete-customs">Завершить таможню</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/submit-to-control">Отправить на проверку КП</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/return-for-revision">Вернуть на доработку</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/request-approval">Запросить согласование</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/approve">Одобрить</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/reject">Отклонить</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/send-to-client">Отправить клиенту</endpoint>
+      <endpoint method="POST" path="/api/quotes/{id}/request-specification">Запросить спецификацию</endpoint>
+    </category>
+
+    <category name="specifications">
+      <endpoint method="GET" path="/api/specifications">Список спецификаций</endpoint>
+      <endpoint method="GET" path="/api/specifications/{id}">Детали спецификации</endpoint>
+      <endpoint method="PUT" path="/api/specifications/{id}">Обновить данные спецификации</endpoint>
+      <endpoint method="POST" path="/api/specifications/{id}/generate-pdf">Сгенерировать PDF</endpoint>
+      <endpoint method="POST" path="/api/specifications/{id}/upload-signed">Загрузить подписанный скан</endpoint>
+      <endpoint method="POST" path="/api/specifications/{id}/confirm-signature">Подтвердить подпись</endpoint>
+    </category>
+
+    <category name="deals">
+      <endpoint method="GET" path="/api/deals">Список сделок</endpoint>
+      <endpoint method="GET" path="/api/deals/{id}">Детали сделки</endpoint>
+      <endpoint method="GET" path="/api/deals/{id}/plan-fact">План-факт по сделке</endpoint>
+    </category>
+
+    <category name="plan_fact">
+      <endpoint method="GET" path="/api/plan-fact">Все записи план-факта</endpoint>
+      <endpoint method="POST" path="/api/plan-fact">Создать плановый платёж</endpoint>
+      <endpoint method="PUT" path="/api/plan-fact/{id}">Обновить запись</endpoint>
+      <endpoint method="POST" path="/api/plan-fact/{id}/register-actual">Зарегистрировать факт</endpoint>
+    </category>
+
+    <category name="admin">
+      <endpoint method="GET" path="/api/admin/users">Список пользователей</endpoint>
+      <endpoint method="POST" path="/api/admin/users/{id}/roles">Назначить роль</endpoint>
+      <endpoint method="DELETE" path="/api/admin/users/{id}/roles/{role_id}">Удалить роль</endpoint>
+      <endpoint method="GET" path="/api/admin/brands">Список брендов</endpoint>
+      <endpoint method="POST" path="/api/admin/brands">Создать назначение бренда</endpoint>
+      <endpoint method="PUT" path="/api/admin/brands/{id}">Изменить назначение</endpoint>
+      <endpoint method="DELETE" path="/api/admin/brands/{id}">Удалить назначение</endpoint>
+    </category>
+
+    <category name="telegram">
+      <endpoint method="POST" path="/api/telegram/webhook">Webhook для Telegram-бота</endpoint>
+      <endpoint method="GET" path="/api/telegram/verification-code">Получить код верификации</endpoint>
+      <endpoint method="POST" path="/api/telegram/verify">Подтвердить привязку</endpoint>
+    </category>
+
+    <category name="notifications">
+      <endpoint method="GET" path="/api/notifications">Мои уведомления</endpoint>
+      <endpoint method="POST" path="/api/notifications/{id}/read">Отметить прочитанным</endpoint>
+    </category>
+  </api_endpoints>
+
+  <implementation_phases>
+    <phase number="1" name="Database Schema">
+      <description>Создание новых таблиц и расширение существующих</description>
+      <tasks>
+        - Создать SQL миграции для всех новых таблиц
+        - Добавить новые поля в quotes и quote_items
+        - Заполнить справочники (roles, plan_fact_categories)
+        - Настроить RLS политики
+      </tasks>
+    </phase>
+
+    <phase number="2" name="Role System">
+      <description>Система ролей и авторизации</description>
+      <tasks>
+        - Сервис управления ролями
+        - Middleware проверки прав
+        - UI назначения ролей (админ)
+        - Фильтрация данных по ролям
+      </tasks>
+    </phase>
+
+    <phase number="3" name="Workflow Engine">
+      <description>Движок workflow</description>
+      <tasks>
+        - Сервис переходов статусов
+        - Валидация переходов (кто может куда)
+        - Автоматические переходы (logistics + customs → sales_review)
+        - Аудит-лог переходов
+      </tasks>
+    </phase>
+
+    <phase number="4" name="Role-Specific Views">
+      <description>Рабочие зоны для каждой роли</description>
+      <tasks>
+        - Procurement view (закупки)
+        - Logistics view (логистика)
+        - Customs view (таможня)
+        - Quote control view (Жанна)
+        - Spec control view (спецификации)
+        - Finance view (план-факт)
+      </tasks>
+    </phase>
+
+    <phase number="5" name="Telegram Bot">
+      <description>Telegram-бот для уведомлений</description>
+      <tasks>
+        - Настройка бота (BotFather)
+        - Webhook endpoint
+        - Привязка аккаунтов
+        - Уведомления о задачах
+        - Inline-кнопки согласования
+      </tasks>
+    </phase>
+
+    <phase number="6" name="Specifications">
+      <description>Система спецификаций</description>
+      <tasks>
+        - Форма ввода данных спецификации
+        - Расширенная генерация PDF
+        - Загрузка и хранение сканов
+        - Проверка соответствия (опционально AI)
+      </tasks>
+    </phase>
+
+    <phase number="7" name="Plan-Fact">
+      <description>Финансовый регистр план-факт</description>
+      <tasks>
+        - Автогенерация плановых платежей из сделки
+        - Форма регистрации фактических платежей
+        - Расчёт отклонений
+        - Отчёты
+      </tasks>
+    </phase>
+
+    <phase number="8" name="Polish">
+      <description>Доработка и тестирование</description>
+      <tasks>
+        - E2E тестирование workflow
+        - Оптимизация производительности
+        - Исправление багов
+        - Документация
+      </tasks>
+    </phase>
+  </implementation_phases>
+
+  <feature_count>~85 features</feature_count>
+
+  <success_criteria>
+    <functionality>
+      - Полный workflow от заявки до сделки работает
+      - Все роли имеют свои рабочие зоны
+      - Уведомления приходят в Telegram
+      - Согласования работают через Telegram
+      - План-факт ведётся по каждой сделке
+      - Все изменения логируются
+    </functionality>
+    <technical>
+      - Нет регрессий в существующем функционале
+      - RLS настроен для всех таблиц
+      - Время отклика < 2 сек
+      - Тесты покрывают критические пути
+    </technical>
+  </success_criteria>
+</project_specification>
