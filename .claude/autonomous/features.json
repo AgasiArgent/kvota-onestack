@@ -422,8 +422,10 @@
       "name": "Approval request creation",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Create approval request with reason detection"
+      "passes": true,
+      "completed_at": "2026-01-16T00:00:00Z",
+      "description": "Create approval request with reason detection",
+      "notes": "Implementation already exists in approval_service.py. request_approval() function (Feature #65) performs complete workflow: validates quote status (pending_quote_control), transitions to pending_approval, creates Approval records for all top_manager/admin users, sends Telegram notifications. ApprovalRequestResult dataclass captures success, quote_id, approvals_created, notifications_sent. create_approval() handles individual approval creation. create_approvals_for_role() creates for all users with specified role. Created tests/test_approval_service.py with 28 passing tests including dataclass tests, validation tests, create operations tests, import verification, service integration tests."
     },
     {
       "id": "WF-005",
