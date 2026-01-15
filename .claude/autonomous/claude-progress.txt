@@ -2113,3 +2113,30 @@ CreateDealFromSpecResult(
 - Error handling with detailed error messages
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #83: Расчёт отклонений
+
+### What was done
+- Verified that variance calculation is already implemented at the database level
+- Found existing database trigger `calculate_plan_fact_variance()` in migration 009
+- Confirmed UI already displays variance in /finance/{deal_id} page
+
+### Implementation details (already in place)
+- Database trigger `calculate_plan_fact_variance()` in migration 009:
+  - Fires on INSERT or UPDATE on plan_fact_items table
+  - When actual_amount and actual_date are set:
+    - If currency is RUB: variance = actual_amount - planned_amount
+    - If foreign currency with exchange_rate: variance = (actual_amount * exchange_rate) - planned_amount
+  - Sets variance_amount to NULL when actual payment is cleared
+- UI in main.py /finance/{deal_id}:
+  - Displays variance per item with color coding
+  - Red color for overspend (positive variance on expenses, negative on income)
+  - Green color for savings (negative variance on expenses, positive on income)
+  - Shows total variance in summary section
+
+### Files verified
+- `migrations/009_create_plan_fact_items_table.sql` - Trigger definition (lines 170-198)
+- `main.py` - Variance display in finance UI (lines ~8520-8690)
+- `services/plan_fact_service.py` - record_actual_payment() uses trigger (lines 663-710)
+
+### Status: COMPLETE (was already implemented)

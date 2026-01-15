@@ -955,13 +955,14 @@
     {
       "id": 83,
       "category": "plan_fact",
-      "name": "\u0420\u0430\u0441\u0447\u0451\u0442 \u043e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u0438\u0439",
-      "description": "\u0412\u044b\u0447\u0438\u0441\u043b\u0435\u043d\u0438\u0435 variance_amount \u043f\u0440\u0438 \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438 \u0444\u0430\u043a\u0442\u0430",
+      "name": "Расчёт отклонений",
+      "description": "Вычисление variance_amount при регистрации факта",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T09:00:00.000000",
+      "completed_at": "2026-01-15T09:10:00.000000",
+      "notes": "Already implemented in migration 009: database trigger 'calculate_plan_fact_variance()' automatically computes variance_amount = actual - planned (or with exchange rate conversion for foreign currencies). UI in /finance/{deal_id} displays variance per item with color coding (red for overspend, green for savings) and total variance in summary."
     },
     {
       "id": 84,
