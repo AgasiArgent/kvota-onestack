@@ -14370,6 +14370,779 @@ def get(contract_id: str, session):
 
 
 # ============================================================================
+# UI-010: Locations Directory Page
+# ============================================================================
+
+@rt("/locations")
+def get(session, q: str = "", country: str = "", type_filter: str = "", status: str = ""):
+    """
+    Locations directory page with search and filters.
+
+    Locations are pickup/delivery points used in quote_items (pickup_location_id).
+    Includes hubs (logistics centers) and customs clearance points.
+
+    Query Parameters:
+        q: Search query (matches code, city, country)
+        country: Filter by country
+        type_filter: Filter by type ("hub", "customs", or "" for all)
+        status: Filter by status ("active", "inactive", or "" for all)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin, logistics, customs, procurement can view locations
+    if not user_has_any_role(session, ["admin", "logistics", "customs", "procurement"]):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра справочника локаций."),
+                P("Требуется одна из ролей: admin, logistics, customs, procurement"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import location service functions
+    from services.location_service import (
+        get_all_locations, search_locations, get_unique_countries, get_location_stats
+    )
+
+    # Get locations based on filters
+    try:
+        # Determine hub/customs filters
+        is_hub = True if type_filter == "hub" else None
+        is_customs = True if type_filter == "customs" else None
+        is_active = None
+        if status == "active":
+            is_active = True
+        elif status == "inactive":
+            is_active = False
+
+        if q and q.strip():
+            # Use search if query provided
+            locations = search_locations(
+                organization_id=org_id,
+                query=q.strip(),
+                is_hub_only=(type_filter == "hub"),
+                is_customs_only=(type_filter == "customs"),
+                limit=100
+            )
+            # Filter by country and status after search if needed
+            if country:
+                locations = [loc for loc in locations if loc.country == country]
+            if is_active is not None:
+                locations = [loc for loc in locations if loc.is_active == is_active]
+        else:
+            # Get all with filters
+            locations = get_all_locations(
+                organization_id=org_id,
+                is_active=is_active,
+                is_hub=is_hub,
+                is_customs_point=is_customs,
+                limit=100
+            )
+            # Filter by country if specified
+            if country:
+                locations = [loc for loc in locations if loc.country == country]
+
+        # Get stats for summary
+        stats = get_location_stats(organization_id=org_id)
+
+        # Get unique countries for filter dropdown
+        countries = get_unique_countries(organization_id=org_id)
+
+    except Exception as e:
+        print(f"Error loading locations: {e}")
+        locations = []
+        stats = {"total": 0, "active": 0, "inactive": 0, "hubs": 0, "customs_points": 0}
+        countries = []
+
+    # Status options for filter
+    status_options = [
+        Option("Все", value="", selected=(status == "")),
+        Option("Активные", value="active", selected=(status == "active")),
+        Option("Неактивные", value="inactive", selected=(status == "inactive")),
+    ]
+
+    # Type options for filter
+    type_options = [
+        Option("Все типы", value="", selected=(type_filter == "")),
+        Option("Хабы", value="hub", selected=(type_filter == "hub")),
+        Option("Таможенные пункты", value="customs", selected=(type_filter == "customs")),
+    ]
+
+    # Country options for filter
+    country_options = [Option("Все страны", value="", selected=(country == ""))]
+    for c in countries:
+        country_options.append(Option(c, value=c, selected=(country == c)))
+
+    # Build location rows
+    location_rows = []
+    for loc in locations:
+        status_class = "status-approved" if loc.is_active else "status-rejected"
+        status_text = "Активна" if loc.is_active else "Неактивна"
+
+        # Type badges
+        type_badges = []
+        if loc.is_hub:
+            type_badges.append(Span("🏭 Хаб", cls="badge badge-primary", style="margin-right: 0.25rem;"))
+        if loc.is_customs_point:
+            type_badges.append(Span("🛃 Таможня", cls="badge badge-info", style="margin-right: 0.25rem;"))
+
+        location_rows.append(
+            Tr(
+                Td(
+                    Strong(loc.code) if loc.code else "—",
+                    style="font-family: monospace;"
+                ),
+                Td(loc.city or "—"),
+                Td(loc.country),
+                Td(*type_badges if type_badges else ["—"]),
+                Td(loc.address[:50] + "..." if loc.address and len(loc.address) > 50 else (loc.address or "—")),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/locations/{loc.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/locations/{loc.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    return page_layout("Справочник локаций",
+        # Header
+        Div(
+            H1("📍 Справочник локаций"),
+            A("+ Добавить локацию", href="/locations/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Локации — это точки получения и доставки товаров. ",
+            "Используются в позициях КП (pickup_location_id). ",
+            "🏭 Хабы — логистические центры, 🛃 Таможня — пункты растаможки.",
+            cls="alert alert-info"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value", style="color: green;"),
+                Div("Активных"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("hubs", 0)), cls="stat-value", style="color: blue;"),
+                Div("Хабов"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("customs_points", 0)), cls="stat-value", style="color: orange;"),
+                Div("Таможенных"),
+                cls="stat-card card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filter form
+        Div(
+            Form(
+                Div(
+                    Label(
+                        "Поиск:",
+                        Input(type="text", name="q", value=q, placeholder="Код, город или страна..."),
+                    ),
+                    Label(
+                        "Страна:",
+                        Select(*country_options, name="country"),
+                    ),
+                    Label(
+                        "Тип:",
+                        Select(*type_options, name="type_filter"),
+                    ),
+                    Label(
+                        "Статус:",
+                        Select(*status_options, name="status"),
+                    ),
+                    Button("Найти", type="submit"),
+                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+                ),
+                method="get",
+                action="/locations"
+            ),
+            cls="card"
+        ),
+
+        # Locations table
+        Div(
+            Table(
+                Thead(
+                    Tr(
+                        Th("Код"),
+                        Th("Город"),
+                        Th("Страна"),
+                        Th("Тип"),
+                        Th("Адрес"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*location_rows) if location_rows else Tbody(
+                    Tr(Td("Локации не найдены. ", A("Добавьте первую локацию", href="/locations/new"), " или ", A("загрузите стандартные", href="/locations/seed"), ".", colspan="7", style="text-align: center; color: #666;"))
+                )
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/locations/{location_id}")
+def get(location_id: str, session):
+    """Location detail view page."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "logistics", "customs", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра данной страницы.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.location_service import get_location
+
+    location = get_location(location_id)
+    if not location:
+        return page_layout("Не найдено",
+            Div("Локация не найдена.", cls="alert alert-error"),
+            A("← К списку локаций", href="/locations", role="button"),
+            session=session
+        )
+
+    status_class = "status-approved" if location.is_active else "status-rejected"
+    status_text = "Активна" if location.is_active else "Неактивна"
+
+    # Type badges
+    type_badges = []
+    if location.is_hub:
+        type_badges.append(Span("🏭 Логистический хаб", cls="badge badge-primary", style="margin-right: 0.5rem;"))
+    if location.is_customs_point:
+        type_badges.append(Span("🛃 Таможенный пункт", cls="badge badge-info"))
+
+    display_name = location.display_name or f"{location.code or ''} - {location.city or ''}, {location.country}".strip(" -,")
+
+    return page_layout(f"Локация: {display_name}",
+        # Header with actions
+        Div(
+            H1(f"📍 {display_name}"),
+            Div(
+                A("✏️ Редактировать", href=f"/locations/{location_id}/edit", role="button"),
+                A("← К списку", href="/locations", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Status and type badges
+        Div(
+            Span(status_text, cls=f"status-badge {status_class}"),
+            " ",
+            *type_badges,
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Main info card
+        Div(
+            H3("📋 Основная информация"),
+            Div(
+                Div(
+                    Div(Strong("Код"), style="color: #666; font-size: 0.9em;"),
+                    Div(location.code or "—", style="font-family: monospace; font-size: 1.2em;"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Город"), style="color: #666; font-size: 0.9em;"),
+                    Div(location.city or "—"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Страна"), style="color: #666; font-size: 0.9em;"),
+                    Div(location.country),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Адрес"), style="color: #666; font-size: 0.9em;"),
+                    Div(location.address or "—"),
+                    cls="info-item"
+                ),
+                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Type flags card
+        Div(
+            H3("🏷️ Классификация"),
+            Div(
+                Div(
+                    Div(Strong("Логистический хаб"), style="color: #666; font-size: 0.9em;"),
+                    Div("✅ Да" if location.is_hub else "❌ Нет"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Таможенный пункт"), style="color: #666; font-size: 0.9em;"),
+                    Div("✅ Да" if location.is_customs_point else "❌ Нет"),
+                    cls="info-item"
+                ),
+                cls="info-grid", style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Notes card (if has notes)
+        Div(
+            H3("📝 Примечания"),
+            P(location.notes or "Нет примечаний"),
+            cls="card"
+        ) if location.notes else "",
+
+        session=session
+    )
+
+
+def _location_form(location=None, error=None, session=None):
+    """Helper function to render location create/edit form."""
+    is_edit = location is not None
+    title = f"Редактирование: {location.display_name or location.city or location.country}" if is_edit else "Новая локация"
+    action_url = f"/locations/{location.id}/edit" if is_edit else "/locations/new"
+
+    return page_layout(title,
+        # Header
+        Div(
+            H1(f"📍 {title}"),
+            cls="card"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Локация — это точка получения или доставки товаров. ",
+            "Код (2-5 букв) используется для быстрого поиска. ",
+            "Отметьте как хаб или таможенный пункт при необходимости.",
+            cls="alert alert-info"
+        ),
+
+        # Error message
+        Div(f"❌ {error}", cls="alert alert-error") if error else "",
+
+        # Form
+        Div(
+            Form(
+                # Basic information
+                H3("Основная информация"),
+                Div(
+                    Label("Код (2-5 букв)",
+                        Input(
+                            name="code",
+                            value=location.code if location else "",
+                            placeholder="MSK",
+                            pattern="[A-Za-z]{2,5}",
+                            title="2-5 латинских букв",
+                            maxlength="5",
+                            style="text-transform: uppercase;"
+                        ),
+                        Small("Необязательно. Например: MSK, SPB, SH, GZ", style="color: #666;"),
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+                Div(
+                    Label("Страна *",
+                        Input(
+                            name="country",
+                            value=location.country if location else "Россия",
+                            placeholder="Россия",
+                            required=True
+                        ),
+                    ),
+                    Label("Город",
+                        Input(
+                            name="city",
+                            value=location.city if location else "",
+                            placeholder="Москва"
+                        ),
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                ),
+                Div(
+                    Label("Адрес (полный)",
+                        Textarea(
+                            location.address if location else "",
+                            name="address",
+                            placeholder="ул. Примерная, д. 1, склад №5",
+                            rows="2"
+                        ),
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+
+                # Classification
+                H3("Классификация", style="margin-top: 1.5rem;"),
+                Div(
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_hub",
+                            value="1",
+                            checked=location.is_hub if location else False
+                        ),
+                        " 🏭 Логистический хаб",
+                        Br(),
+                        Small("Центр консолидации и отправки грузов", style="color: #666;"),
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+                Div(
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_customs_point",
+                            value="1",
+                            checked=location.is_customs_point if location else False
+                        ),
+                        " 🛃 Таможенный пункт",
+                        Br(),
+                        Small("Пункт таможенного оформления", style="color: #666;"),
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+
+                # Notes
+                H3("Примечания", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Заметки",
+                        Textarea(
+                            location.notes if location else "",
+                            name="notes",
+                            placeholder="Дополнительная информация о локации...",
+                            rows="3"
+                        ),
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+
+                # Status (edit only)
+                Div(
+                    H3("Статус", style="margin-top: 1.5rem;"),
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_active",
+                            value="1",
+                            checked=location.is_active if location else True
+                        ),
+                        " Активна",
+                    ),
+                    style="margin-bottom: 1rem;"
+                ) if is_edit else "",
+
+                # Submit buttons
+                Div(
+                    Button("💾 Сохранить", type="submit"),
+                    " ",
+                    A("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", role="button", cls="secondary"),
+                    cls="form-actions", style="margin-top: 1.5rem;"
+                ),
+
+                method="post",
+                action=action_url
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/locations/new")
+def get(session):
+    """Show form to create a new location."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin or logistics can create locations
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания локаций. Требуется роль: admin или logistics", cls="alert alert-error"),
+            session=session
+        )
+
+    return _location_form(session=session)
+
+
+@rt("/locations/new")
+def post(
+    country: str,
+    code: str = "",
+    city: str = "",
+    address: str = "",
+    is_hub: str = "",
+    is_customs_point: str = "",
+    notes: str = "",
+    session=None
+):
+    """Handle location creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания локаций.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.location_service import create_location, validate_location_code, validate_country
+
+    # Normalize code to uppercase
+    code = code.strip().upper() if code else ""
+
+    # Validate country
+    if not validate_country(country):
+        return _location_form(error="Страна обязательна для заполнения", session=session)
+
+    # Validate code format if provided
+    if code and not validate_location_code(code):
+        return _location_form(
+            error="Код локации должен состоять из 2-5 заглавных латинских букв (например, MSK, SPB, SH)",
+            session=session
+        )
+
+    try:
+        location = create_location(
+            organization_id=org_id,
+            country=country.strip(),
+            city=city.strip() if city else None,
+            code=code if code else None,
+            address=address.strip() if address else None,
+            is_hub=bool(is_hub),
+            is_customs_point=bool(is_customs_point),
+            is_active=True,
+            notes=notes.strip() if notes else None,
+            created_by=user_id,
+        )
+
+        if location:
+            return RedirectResponse(f"/locations/{location.id}", status_code=303)
+        else:
+            return _location_form(
+                error="Локация с таким кодом уже существует или произошла ошибка",
+                session=session
+            )
+
+    except ValueError as e:
+        return _location_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating location: {e}")
+        return _location_form(error=f"Ошибка при создании: {e}", session=session)
+
+
+@rt("/locations/{location_id}/edit")
+def get(location_id: str, session):
+    """Show form to edit an existing location."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin or logistics can edit locations
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования локаций.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.location_service import get_location
+
+    location = get_location(location_id)
+
+    if not location:
+        return page_layout("Локация не найдена",
+            Div("Запрашиваемая локация не существует.", cls="alert alert-error"),
+            A("← К списку локаций", href="/locations", role="button"),
+            session=session
+        )
+
+    return _location_form(location=location, session=session)
+
+
+@rt("/locations/{location_id}/edit")
+def post(
+    location_id: str,
+    country: str,
+    code: str = "",
+    city: str = "",
+    address: str = "",
+    is_hub: str = "",
+    is_customs_point: str = "",
+    notes: str = "",
+    is_active: str = "",
+    session=None
+):
+    """Handle location edit form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования локаций.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.location_service import (
+        get_location, update_location, validate_location_code, validate_country
+    )
+
+    location = get_location(location_id)
+    if not location:
+        return page_layout("Локация не найдена",
+            Div("Запрашиваемая локация не существует.", cls="alert alert-error"),
+            A("← К списку локаций", href="/locations", role="button"),
+            session=session
+        )
+
+    # Normalize code to uppercase
+    code = code.strip().upper() if code else ""
+
+    # Validate country
+    if not validate_country(country):
+        return _location_form(location=location, error="Страна обязательна для заполнения", session=session)
+
+    # Validate code format if provided
+    if code and not validate_location_code(code):
+        return _location_form(
+            location=location,
+            error="Код локации должен состоять из 2-5 заглавных латинских букв (например, MSK, SPB, SH)",
+            session=session
+        )
+
+    try:
+        updated = update_location(
+            location_id=location_id,
+            country=country.strip(),
+            city=city.strip() if city else None,
+            code=code if code else None,
+            address=address.strip() if address else None,
+            is_hub=bool(is_hub),
+            is_customs_point=bool(is_customs_point),
+            is_active=bool(is_active),
+            notes=notes.strip() if notes else None,
+        )
+
+        if updated:
+            return RedirectResponse(f"/locations/{location_id}", status_code=303)
+        else:
+            return _location_form(
+                location=location,
+                error="Не удалось обновить локацию. Возможно, код уже используется другой локацией.",
+                session=session
+            )
+
+    except ValueError as e:
+        return _location_form(location=location, error=str(e), session=session)
+    except Exception as e:
+        print(f"Error updating location: {e}")
+        return _location_form(location=location, error=f"Ошибка при обновлении: {e}", session=session)
+
+
+@rt("/locations/{location_id}/delete")
+def post(location_id: str, session):
+    """Handle location deletion (soft delete - deactivate)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only can delete
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("Только администратор может удалять локации.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.location_service import deactivate_location
+
+    result = deactivate_location(location_id)
+
+    if result:
+        return RedirectResponse("/locations", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            Div("Не удалось деактивировать локацию.", cls="alert alert-error"),
+            A("← К списку локаций", href="/locations", role="button"),
+            session=session
+        )
+
+
+@rt("/locations/seed")
+def get(session):
+    """Seed default locations for the organization."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only can seed
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("Только администратор может загружать стандартные локации.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.location_service import seed_default_locations
+
+    try:
+        count = seed_default_locations(organization_id=org_id, created_by=user_id)
+
+        return page_layout("Локации загружены",
+            Div(
+                H1("✅ Стандартные локации загружены"),
+                P(f"Создано локаций: {count}"),
+                P("Локации включают основные города Китая, России, Казахстана, Турции и Европы."),
+                A("← К списку локаций", href="/locations", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    except Exception as e:
+        print(f"Error seeding locations: {e}")
+        return page_layout("Ошибка",
+            Div(f"Ошибка при загрузке локаций: {e}", cls="alert alert-error"),
+            A("← К списку локаций", href="/locations", role="button"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

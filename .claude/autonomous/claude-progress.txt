@@ -3227,3 +3227,21 @@ This is different from brand_assignments/brand_procurement_assignments which ass
     - Permission: admin role only
     - Redirect on success to company detail page
 
+
+2026-01-15 20:20:07 - UI-010: Locations Directory Page
+==========================================================
+Created complete locations management UI:
+- GET /locations - List page with search, country filter, type filter (hub/customs), status filter
+- GET /locations/{id} - Detail view with location info, classification badges
+- GET /locations/new + POST - Create new location form
+- GET /locations/{id}/edit + POST - Edit existing location
+- POST /locations/{id}/delete - Soft delete (deactivate)
+- GET /locations/seed - Seed default locations for organization
+
+Features:
+- Stats cards: total, active, hubs, customs points
+- Type badges: 🏭 Хаб, 🛃 Таможня
+- Permissions: admin, logistics, customs, procurement can view; admin/logistics can create/edit
+- Empty state shows links to add first or seed defaults
+- Russian UI labels throughout
+
