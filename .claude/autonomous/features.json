@@ -202,8 +202,10 @@
       "name": "Create deals table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Track completed deals linked to specifications"
+      "passes": true,
+      "completed_at": "2026-01-15T19:50:00Z",
+      "description": "Track completed deals linked to specifications",
+      "notes": "VERIFIED: Table existed from migration 007. Created migration 037_extend_deals_v3.sql with v3.0 helper functions: create_deal_from_specification(), get_deal_details(), get_deals_summary(), get_deals_list(), complete_deal(), cancel_deal(). Added v_deals_list view with full context."
     },
     {
       "id": "DB-022",

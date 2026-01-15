@@ -2979,3 +2979,21 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - get_specification_signatory(spec_id) - gets signatory from customer_contacts.is_signatory
 - View: v_specifications_list with quote, contract, customer details
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-021: Verify/extend deals table for v3.0
+- Table already existed in migration 007_create_deals_table.sql with all required columns:
+  - id, organization_id, specification_id, quote_id (FKs)
+  - deal_number, signed_at, total_amount, currency, status
+  - RLS policies for organization isolation
+  - generate_deal_number() function
+- v3.0 additions in migration 037_extend_deals_v3.sql:
+  - Verification that table exists and has required columns
+  - create_deal_from_specification(spec_id, signed_at?, created_by?) - creates deal with workflow update
+  - get_deal_details(deal_id) - comprehensive deal info with related entities
+  - get_deals_summary(org_id) - statistics: total, active, completed, cancelled, amounts by currency
+  - get_deals_list(org_id, status?, customer_id?, from/to_date?, limit, offset) - filtered list
+  - complete_deal(deal_id, completed_by?) - marks deal completed, updates quote workflow
+  - cancel_deal(deal_id, reason?, cancelled_by?) - cancels deal, updates quote workflow
+- View: v_deals_list with full context (specification, quote, customer, seller_company, plan-fact summary)
+- Status: COMPLETE
