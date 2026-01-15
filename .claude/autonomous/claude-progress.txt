@@ -149,3 +149,38 @@
 - Added trigger to automatically set decided_at when status changes from pending
 - Files changed: migrations/005_create_approvals_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #6: Создать таблицу specifications
+- Created SQL migration: `migrations/006_create_specifications_table.sql`
+- Table structure with all 18+ fields from spec_controller:
+  - id (UUID PK)
+  - quote_id (UUID FK -> quotes, CASCADE DELETE)
+  - quote_version_id (UUID FK -> quote_versions, SET NULL on delete)
+  - organization_id (UUID FK -> organizations, CASCADE DELETE)
+  - specification_number, proposal_idn, item_ind_sku (identification fields)
+  - sign_date (DATE), validity_period (VARCHAR)
+  - specification_currency, exchange_rate_to_ruble (currency fields)
+  - client_payment_term_after_upd (INTEGER), client_payment_terms (TEXT)
+  - cargo_pickup_country, readiness_period, goods_shipment_country (origin fields)
+  - delivery_city_russia, cargo_type, logistics_period (delivery fields)
+  - our_legal_entity, client_legal_entity (legal entities)
+  - supplier_payment_country
+  - signed_scan_url (TEXT for storing signed document URL)
+  - status (VARCHAR with CHECK: draft, pending_review, approved, signed)
+  - created_by, created_at, updated_at (audit fields)
+- Indexes created:
+  - quote_id - for finding specifications by quote
+  - organization_id - for org-scoped queries
+  - status - for filtering by status
+  - created_at DESC - for time-ordered listing
+  - specification_number - for lookups by number
+  - (organization_id, status) composite - for org-scoped status filtering
+- RLS policies:
+  - Users can view specifications in their organization
+  - Users can insert specifications in their organization
+  - Users can update specifications in their organization
+  - Only admins can delete specifications
+- Added trigger for automatic updated_at timestamp
+- All columns documented with COMMENT statements
+- Files changed: migrations/006_create_specifications_table.sql (new)
+- Status: COMPLETE
