@@ -11712,6 +11712,410 @@ def get(supplier_id: str, session):
 
 
 # ============================================================================
+# SUPPLIER FORM - CREATE/EDIT (Feature UI-002)
+# ============================================================================
+
+def _supplier_form(supplier=None, error=None, session=None):
+    """
+    Render supplier create/edit form.
+
+    Args:
+        supplier: Existing Supplier object for edit mode, None for create mode
+        error: Error message to display
+        session: Session object for page layout
+    """
+    is_edit = supplier is not None
+    title = "Редактирование поставщика" if is_edit else "Новый поставщик"
+    action_url = f"/suppliers/{supplier.id}/edit" if is_edit else "/suppliers/new"
+
+    return page_layout(title,
+        # Error alert
+        Div(error, cls="alert alert-error") if error else "",
+
+        H1(f"{'✏️' if is_edit else '➕'} {title}"),
+
+        Div(
+            Form(
+                # Main info section
+                H3("Основная информация"),
+                Div(
+                    Label("Код поставщика *",
+                        Input(
+                            name="supplier_code",
+                            value=supplier.supplier_code if supplier else "",
+                            placeholder="ABC",
+                            required=True,
+                            maxlength="3",
+                            pattern="[A-Z]{3}",
+                            title="3 заглавные латинские буквы",
+                            style="text-transform: uppercase; font-family: monospace; font-weight: bold;"
+                        ),
+                        Small("3 заглавные латинские буквы (например: CMT, RAR)", style="color: #666; display: block;")
+                    ),
+                    Label("Название компании *",
+                        Input(
+                            name="name",
+                            value=supplier.name if supplier else "",
+                            placeholder="China Manufacturing Ltd",
+                            required=True
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Location section
+                H3("Локация", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Страна",
+                        Input(
+                            name="country",
+                            value=supplier.country if supplier else "",
+                            placeholder="Китай"
+                        )
+                    ),
+                    Label("Город",
+                        Input(
+                            name="city",
+                            value=supplier.city if supplier else "",
+                            placeholder="Гуанчжоу"
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Legal info (Russian suppliers)
+                H3("Юридические данные (для российских поставщиков)", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("ИНН",
+                        Input(
+                            name="inn",
+                            value=supplier.inn if supplier else "",
+                            placeholder="1234567890",
+                            pattern="\\d{10}(\\d{2})?",
+                            title="10 или 12 цифр"
+                        ),
+                        Small("10 цифр для юрлиц, 12 для ИП", style="color: #666; display: block;")
+                    ),
+                    Label("КПП",
+                        Input(
+                            name="kpp",
+                            value=supplier.kpp if supplier else "",
+                            placeholder="123456789",
+                            pattern="\\d{9}",
+                            title="9 цифр"
+                        ),
+                        Small("9 цифр", style="color: #666; display: block;")
+                    ),
+                    cls="form-row"
+                ),
+
+                # Contact info section
+                H3("Контактная информация", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Контактное лицо",
+                        Input(
+                            name="contact_person",
+                            value=supplier.contact_person if supplier else "",
+                            placeholder="Иван Иванов"
+                        )
+                    ),
+                    Label("Email",
+                        Input(
+                            name="contact_email",
+                            type="email",
+                            value=supplier.contact_email if supplier else "",
+                            placeholder="contact@supplier.com"
+                        )
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("Телефон",
+                        Input(
+                            name="contact_phone",
+                            value=supplier.contact_phone if supplier else "",
+                            placeholder="+7 999 123 4567"
+                        )
+                    ),
+                    Div(cls="form-placeholder"),  # Empty placeholder for alignment
+                    cls="form-row"
+                ),
+
+                # Payment terms section
+                H3("Условия работы", style="margin-top: 1.5rem;"),
+                Label("Условия оплаты по умолчанию",
+                    Textarea(
+                        supplier.default_payment_terms if supplier else "",
+                        name="default_payment_terms",
+                        placeholder="50% предоплата, 50% по готовности",
+                        rows="3"
+                    )
+                ),
+
+                # Status (for edit mode)
+                Div(
+                    H3("Статус", style="margin-top: 1.5rem;"),
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_active",
+                            checked=supplier.is_active if supplier else True,
+                            value="true"
+                        ),
+                        " Активный поставщик",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
+                    Small("Неактивные поставщики не отображаются в выпадающих списках", style="color: #666;"),
+                ) if is_edit else "",
+
+                # Form actions
+                Div(
+                    Button("💾 Сохранить", type="submit"),
+                    A("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", role="button", cls="secondary"),
+                    cls="form-actions", style="margin-top: 1.5rem;"
+                ),
+
+                method="post",
+                action=action_url
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/suppliers/new")
+def get(session):
+    """Show form to create a new supplier."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    return _supplier_form(session=session)
+
+
+@rt("/suppliers/new")
+def post(
+    supplier_code: str,
+    name: str,
+    country: str = "",
+    city: str = "",
+    inn: str = "",
+    kpp: str = "",
+    contact_person: str = "",
+    contact_email: str = "",
+    contact_phone: str = "",
+    default_payment_terms: str = "",
+    session=None
+):
+    """Handle supplier creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.supplier_service import create_supplier, validate_supplier_code
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _supplier_form(
+            error="Код поставщика должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    try:
+        supplier = create_supplier(
+            organization_id=org_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or None,
+            city=city.strip() or None,
+            inn=inn.strip() or None,
+            kpp=kpp.strip() or None,
+            contact_person=contact_person.strip() or None,
+            contact_email=contact_email.strip() or None,
+            contact_phone=contact_phone.strip() or None,
+            default_payment_terms=default_payment_terms.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if supplier:
+            return RedirectResponse(f"/suppliers/{supplier.id}", status_code=303)
+        else:
+            return _supplier_form(
+                error="Поставщик с таким кодом уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _supplier_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating supplier: {e}")
+        return _supplier_form(error=f"Ошибка при создании: {e}", session=session)
+
+
+@rt("/suppliers/{supplier_id}/edit")
+def get(supplier_id: str, session):
+    """Show form to edit an existing supplier."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.supplier_service import get_supplier
+
+    supplier = get_supplier(supplier_id)
+
+    if not supplier:
+        return page_layout("Поставщик не найден",
+            Div("Запрашиваемый поставщик не существует.", cls="alert alert-error"),
+            A("← К списку поставщиков", href="/suppliers", role="button"),
+            session=session
+        )
+
+    return _supplier_form(supplier=supplier, session=session)
+
+
+@rt("/suppliers/{supplier_id}/edit")
+def post(
+    supplier_id: str,
+    supplier_code: str,
+    name: str,
+    country: str = "",
+    city: str = "",
+    inn: str = "",
+    kpp: str = "",
+    contact_person: str = "",
+    contact_email: str = "",
+    contact_phone: str = "",
+    default_payment_terms: str = "",
+    is_active: str = "",
+    session=None
+):
+    """Handle supplier edit form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.supplier_service import get_supplier, update_supplier, validate_supplier_code
+
+    # Get current supplier for error display
+    supplier = get_supplier(supplier_id)
+    if not supplier:
+        return page_layout("Поставщик не найден",
+            Div("Запрашиваемый поставщик не существует.", cls="alert alert-error"),
+            session=session
+        )
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _supplier_form(
+            supplier=supplier,
+            error="Код поставщика должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    try:
+        # is_active is "true" if checkbox is checked, "" if not
+        is_active_bool = is_active == "true"
+
+        updated_supplier = update_supplier(
+            supplier_id=supplier_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or None,
+            city=city.strip() or None,
+            inn=inn.strip() or None,
+            kpp=kpp.strip() or None,
+            contact_person=contact_person.strip() or None,
+            contact_email=contact_email.strip() or None,
+            contact_phone=contact_phone.strip() or None,
+            default_payment_terms=default_payment_terms.strip() or None,
+            is_active=is_active_bool,
+        )
+
+        if updated_supplier:
+            return RedirectResponse(f"/suppliers/{supplier_id}", status_code=303)
+        else:
+            return _supplier_form(
+                supplier=supplier,
+                error="Ошибка при обновлении поставщика",
+                session=session
+            )
+
+    except ValueError as e:
+        return _supplier_form(supplier=supplier, error=str(e), session=session)
+    except Exception as e:
+        print(f"Error updating supplier: {e}")
+        return _supplier_form(supplier=supplier, error=f"Ошибка при обновлении: {e}", session=session)
+
+
+@rt("/suppliers/{supplier_id}/delete")
+def post(supplier_id: str, session):
+    """Handle supplier deletion (deactivation)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - only admin can delete
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("Только администратор может удалять поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.supplier_service import deactivate_supplier
+
+    result = deactivate_supplier(supplier_id)
+
+    if result:
+        return RedirectResponse("/suppliers", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            Div("Не удалось деактивировать поставщика.", cls="alert alert-error"),
+            A("← К списку поставщиков", href="/suppliers", role="button"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

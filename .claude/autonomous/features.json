@@ -518,8 +518,10 @@
       "name": "Supplier form (create/edit)",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Form with all supplier fields"
+      "passes": true,
+      "description": "Form with all supplier fields",
+      "completed_at": "2026-01-15T19:53:35.244854",
+      "notes": "Implemented in main.py:\n- _supplier_form() helper function for rendering create/edit forms\n- GET /suppliers/new - Create form page\n- POST /suppliers/new - Handle creation\n- GET /suppliers/{id}/edit - Edit form page\n- POST /suppliers/{id}/edit - Handle update\n- POST /suppliers/{id}/delete - Soft delete (deactivate)\n- Form sections: Main info, Location, Legal (INN/KPP), Contact, Payment terms, Status\n- Validation: supplier_code format (3 uppercase letters), INN/KPP patterns\n- Permission check: admin or procurement role required\n- Russian UI labels, error handling, redirect on success"
     },
     {
       "id": "UI-003",
