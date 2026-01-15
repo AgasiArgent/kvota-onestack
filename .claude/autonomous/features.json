@@ -389,10 +389,10 @@
       "name": "Форма ввода закупочных данных",
       "description": "Цена, страна/город, вес, срок производства, условия оплаты поставщику",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T12:00:00Z",
+      "completed_at": "2025-01-15T12:30:00Z"
     },
     {
       "id": 36,

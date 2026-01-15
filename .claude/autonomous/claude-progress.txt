@@ -778,3 +778,45 @@
 - Files changed:
   - main.py (updated /procurement route - added ~120 lines)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #35: Форма ввода закупочных данных
+- Created new migration: migrations/016_add_procurement_data_fields.sql
+  - Added new columns to quote_items table:
+    - supplier_city (VARCHAR 255) - city of supplier
+    - production_time_days (INTEGER) - lead time in days
+    - supplier_payment_terms (TEXT) - payment terms with supplier
+    - payer_company (VARCHAR 255) - our legal entity for payment
+    - advance_to_supplier_percent (DECIMAL 5,2) - advance % to supplier
+    - procurement_notes (TEXT) - notes from procurement manager
+  - Added check constraint for advance percentage (0-100)
+- Created /procurement/{quote_id} GET route for procurement detail page:
+  - Displays quote header with customer name and workflow status
+  - Shows progress bar for completed/total items
+  - Filters items to only show user's assigned brands
+  - Each item displays as a card with:
+    - Brand name and product code header
+    - Status badge (evaluated vs pending)
+    - Editable fields: price, weight, supplier country/city
+    - Editable fields: production time, payer company, advance %, payment terms
+    - Notes textarea for additional info
+  - Form validation: price is required, all other fields optional
+  - Editing disabled when quote is not in draft/pending_procurement status
+  - Action buttons: Save (saves data) and Complete (marks items as completed)
+- Created /procurement/{quote_id} POST handler:
+  - Validates user has procurement/admin role
+  - Verifies quote is in correct workflow status for editing
+  - Filters items by user's assigned brands (security)
+  - Updates all procurement fields for each item
+  - If action=complete, marks procurement_status=completed with timestamp
+- UI features:
+  - Russian labels for all form fields
+  - Dropdown selects for country and payer company
+  - Progress bar shows completion status
+  - Warning banner when quote is not editable
+  - Form submission redirects back to detail page
+- Files changed:
+  - migrations/016_add_procurement_data_fields.sql (new - ~55 lines)
+  - main.py (added ~400 lines)
+    - Added GET /procurement/{quote_id} route
+    - Added POST /procurement/{quote_id} handler
+- Status: COMPLETE

@@ -3001,6 +3001,415 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# PROCUREMENT DETAIL PAGE (Feature #35)
+# ============================================================================
+
+@rt("/procurement/{quote_id}")
+def get(quote_id: str, session):
+    """
+    Procurement detail page - form for entering procurement data for items.
+
+    Feature #35: Форма ввода закупочных данных
+    - Shows items belonging to user's assigned brands
+    - Allows editing: price, supplier country/city, weight, production time,
+      payer company, advance %, payment terms
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    quote = quote_result.data
+    if not quote:
+        return page_layout("Not Found",
+            Div(
+                H1("КП не найдено"),
+                P("КП не существует или у вас нет доступа."),
+                A("Назад к списку", href="/procurement", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    # Get user's assigned brands
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get all items for this quote
+    items_result = supabase.table("quote_items") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    all_items = items_result.data or []
+
+    # Filter items for my brands
+    my_items = [item for item in all_items
+                if item.get("brand", "").lower() in my_brands_lower]
+
+    # Calculate progress
+    total_items = len(my_items)
+    completed_items = len([i for i in my_items if i.get("procurement_status") == "completed"])
+
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if quote is in the right status for editing
+    can_edit = workflow_status in ["pending_procurement", "draft"]
+
+    # Build item rows for the form
+    def item_row(item, index):
+        item_id = item["id"]
+        brand = item.get("brand", "—")
+        name = item.get("name", "")
+        product_code = item.get("product_code", "")
+        quantity = item.get("quantity", 1)
+        is_completed = item.get("procurement_status") == "completed"
+
+        # Current values
+        base_price = item.get("base_price_vat", "")
+        weight = item.get("weight_in_kg", "")
+        supplier_country = item.get("supplier_country", "")
+        supplier_city = item.get("supplier_city", "")
+        production_time = item.get("production_time_days", "")
+        payer_company = item.get("payer_company", "")
+        advance_percent = item.get("advance_to_supplier_percent", 100)
+        payment_terms = item.get("supplier_payment_terms", "")
+        notes = item.get("procurement_notes", "")
+
+        # Status badge
+        status_style = "background: #dcfce7; color: #166534;" if is_completed else "background: #fef3c7; color: #92400e;"
+        status_text = "✓ Оценено" if is_completed else "⏳ Ожидает"
+
+        return Div(
+            # Item header with status
+            Div(
+                Div(
+                    Span(brand, style="font-weight: 600; font-size: 1.1rem;"),
+                    Span(f" / {product_code}" if product_code else "", style="color: #666;"),
+                    style="flex: 1;"
+                ),
+                Span(status_text, style=f"display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; {status_style}"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+            ),
+
+            # Product info (read-only)
+            Div(
+                Div(f"Наименование: {name}", style="flex: 1;") if name else None,
+                Div(f"Количество: {quantity} шт.", style="font-weight: 500;"),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: #666;"
+            ) if name else None,
+
+            # Editable fields in grid
+            Div(
+                # Row 1: Price, Weight, Country, City
+                Label("Цена за ед. (с НДС) *",
+                    Input(name=f"base_price_vat_{item_id}", type="number", step="0.01", min="0",
+                          value=str(base_price) if base_price else "",
+                          placeholder="1500.00", required=True if can_edit else False,
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                Label("Вес, кг",
+                    Input(name=f"weight_in_kg_{item_id}", type="number", step="0.001", min="0",
+                          value=str(weight) if weight else "",
+                          placeholder="0.5",
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                Label("Страна поставщика",
+                    Select(
+                        Option("— Выберите —", value=""),
+                        Option("Китай", value="Китай", selected=(supplier_country == "Китай")),
+                        Option("Турция", value="Турция", selected=(supplier_country == "Турция")),
+                        Option("Россия", value="Россия", selected=(supplier_country == "Россия")),
+                        Option("Германия", value="Германия", selected=(supplier_country == "Германия")),
+                        Option("Италия", value="Италия", selected=(supplier_country == "Италия")),
+                        Option("Корея", value="Корея", selected=(supplier_country == "Корея")),
+                        Option("Тайвань", value="Тайвань", selected=(supplier_country == "Тайвань")),
+                        Option("Индия", value="Индия", selected=(supplier_country == "Индия")),
+                        Option("США", value="США", selected=(supplier_country == "США")),
+                        Option("Другое", value="other", selected=(supplier_country and supplier_country not in ["Китай", "Турция", "Россия", "Германия", "Италия", "Корея", "Тайвань", "Индия", "США"])),
+                        name=f"supplier_country_{item_id}",
+                        disabled=not can_edit
+                    ),
+                    style="flex: 1;"
+                ),
+                Label("Город поставщика",
+                    Input(name=f"supplier_city_{item_id}", type="text",
+                          value=supplier_city or "",
+                          placeholder="Шанхай",
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+            ),
+
+            # Row 2: Production time, Payer company, Advance %, Payment terms
+            Div(
+                Label("Срок пр-ва, дней",
+                    Input(name=f"production_time_days_{item_id}", type="number", min="0",
+                          value=str(production_time) if production_time else "",
+                          placeholder="30",
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                Label("Компания-плательщик",
+                    Select(
+                        Option("— Выберите —", value=""),
+                        Option("ООО Квота", value="ООО Квота", selected=(payer_company == "ООО Квота")),
+                        Option("ООО Квота Групп", value="ООО Квота Групп", selected=(payer_company == "ООО Квота Групп")),
+                        Option("ИП Иванов", value="ИП Иванов", selected=(payer_company == "ИП Иванов")),
+                        name=f"payer_company_{item_id}",
+                        disabled=not can_edit
+                    ),
+                    style="flex: 1;"
+                ),
+                Label("Аванс поставщику, %",
+                    Input(name=f"advance_to_supplier_percent_{item_id}", type="number", min="0", max="100",
+                          value=str(advance_percent) if advance_percent is not None else "100",
+                          placeholder="100",
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                Label("Условия оплаты поставщику",
+                    Input(name=f"supplier_payment_terms_{item_id}", type="text",
+                          value=payment_terms or "",
+                          placeholder="30% аванс, 70% до отгрузки",
+                          disabled=not can_edit),
+                    style="flex: 1;"
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+            ),
+
+            # Notes field
+            Label("Примечания",
+                Textarea(notes or "", name=f"procurement_notes_{item_id}",
+                         placeholder="Дополнительная информация о позиции...",
+                         style="width: 100%; min-height: 60px;",
+                         disabled=not can_edit)
+            ),
+
+            # Hidden field for item ID
+            Input(type="hidden", name=f"item_id_{index}", value=item_id),
+
+            cls="card",
+            style=f"border-left: 4px solid {'#22c55e' if is_completed else '#f59e0b'}; margin-bottom: 1rem;",
+            id=f"item-{item_id}"
+        )
+
+    # Build the page
+    return page_layout(f"Закупки — {quote.get('idn_quote', 'КП')}",
+        # Breadcrumbs
+        Div(
+            A("← Назад к списку", href="/procurement"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Header
+        Div(
+            H1(f"Оценка КП: {quote.get('idn_quote', f'#{quote_id[:8]}')}"),
+            Div(
+                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem;"),
+                workflow_status_badge(workflow_status),
+            ),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Progress card
+        Div(
+            H3("Прогресс оценки"),
+            Div(
+                Div(f"{completed_items}/{total_items} позиций", style="margin-bottom: 0.5rem;"),
+                Div(
+                    Div(style=f"width: {(completed_items/total_items*100) if total_items > 0 else 0}%; height: 100%; background: #22c55e;"),
+                    style="width: 100%; height: 12px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;"
+                ),
+            ),
+            cls="card"
+        ),
+
+        # Warning if not in correct status
+        Div(
+            P(f"⚠️ КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}». "
+              "Редактирование недоступно.", style="color: #b45309; margin: 0;"),
+            cls="card",
+            style="background: #fffbeb;"
+        ) if not can_edit else None,
+
+        # Form with items
+        Form(
+            # Hidden field with quote_id
+            Input(type="hidden", name="quote_id", value=quote_id),
+            Input(type="hidden", name="item_count", value=str(len(my_items))),
+
+            # Items section
+            Div(
+                H2(f"Мои позиции ({len(my_items)})"),
+                P("Заполните данные для каждой позиции:", style="color: #666; margin-bottom: 1rem;") if can_edit else None,
+                *[item_row(item, idx) for idx, item in enumerate(my_items)],
+            ) if my_items else Div(
+                P("Нет позиций с вашими брендами в этом КП.", style="color: #666;"),
+                cls="card"
+            ),
+
+            # Action buttons
+            Div(
+                Button("💾 Сохранить данные", type="submit", name="action", value="save",
+                       style="margin-right: 1rem;") if can_edit else None,
+                Button("✓ Завершить оценку", type="submit", name="action", value="complete",
+                       style="background: #16a34a;") if can_edit and total_items > 0 else None,
+                A("Отмена", href="/procurement", role="button", cls="secondary",
+                  style="margin-left: auto;"),
+                style="display: flex; align-items: center; margin-top: 1rem;"
+            ),
+
+            method="post",
+            action=f"/procurement/{quote_id}"
+        ),
+
+        session=session
+    )
+
+
+@rt("/procurement/{quote_id}")
+def post(quote_id: str, session, action: str = "save", **kwargs):
+    """
+    Save procurement data for quote items.
+
+    Feature #35: Handler for saving procurement form data
+    - Saves all procurement fields for each item
+    - Can mark items as complete
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and is accessible
+    quote_result = supabase.table("quotes") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    quote = quote_result.data
+    if not quote:
+        return RedirectResponse("/procurement", status_code=303)
+
+    # Check workflow status allows editing
+    workflow_status = quote.get("workflow_status", "draft")
+    if workflow_status not in ["pending_procurement", "draft"]:
+        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+
+    # Get user's assigned brands to filter items
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get items count from form
+    item_count = int(kwargs.get("item_count", 0))
+
+    # Process each item from the form
+    updated_items = 0
+    for idx in range(item_count):
+        item_id = kwargs.get(f"item_id_{idx}")
+        if not item_id:
+            continue
+
+        # Verify this item belongs to user's brands
+        item_result = supabase.table("quote_items") \
+            .select("id, brand") \
+            .eq("id", item_id) \
+            .eq("quote_id", quote_id) \
+            .single() \
+            .execute()
+
+        item = item_result.data
+        if not item or item.get("brand", "").lower() not in my_brands_lower:
+            continue
+
+        # Build update data
+        update_data = {}
+
+        # Get values from form (using item_id suffix)
+        base_price = kwargs.get(f"base_price_vat_{item_id}")
+        if base_price:
+            update_data["base_price_vat"] = float(base_price)
+
+        weight = kwargs.get(f"weight_in_kg_{item_id}")
+        if weight:
+            update_data["weight_in_kg"] = float(weight)
+
+        supplier_country = kwargs.get(f"supplier_country_{item_id}")
+        if supplier_country:
+            update_data["supplier_country"] = supplier_country
+
+        supplier_city = kwargs.get(f"supplier_city_{item_id}")
+        update_data["supplier_city"] = supplier_city or None
+
+        production_time = kwargs.get(f"production_time_days_{item_id}")
+        if production_time:
+            update_data["production_time_days"] = int(production_time)
+
+        payer_company = kwargs.get(f"payer_company_{item_id}")
+        update_data["payer_company"] = payer_company or None
+
+        advance_percent = kwargs.get(f"advance_to_supplier_percent_{item_id}")
+        if advance_percent:
+            update_data["advance_to_supplier_percent"] = float(advance_percent)
+
+        payment_terms = kwargs.get(f"supplier_payment_terms_{item_id}")
+        update_data["supplier_payment_terms"] = payment_terms or None
+
+        notes = kwargs.get(f"procurement_notes_{item_id}")
+        update_data["procurement_notes"] = notes or None
+
+        # If completing, mark procurement status
+        if action == "complete":
+            update_data["procurement_status"] = "completed"
+            update_data["procurement_completed_at"] = datetime.utcnow().isoformat()
+            update_data["procurement_completed_by"] = user_id
+
+        # Update the item
+        if update_data:
+            supabase.table("quote_items") \
+                .update(update_data) \
+                .eq("id", item_id) \
+                .execute()
+            updated_items += 1
+
+    # Redirect back to the procurement detail page
+    return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
