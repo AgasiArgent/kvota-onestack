@@ -2795,3 +2795,406 @@ async def handle_reject_callback(
             error=str(e),
             message=f"❌ Произошла ошибка: {str(e)}"
         )
+
+
+# ============================================================================
+# Status Changed Notification (Feature #62)
+# ============================================================================
+
+@dataclass
+class StatusChangedNotification:
+    """Data for status_changed notification."""
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    old_status: str  # Previous workflow status
+    new_status: str  # New workflow status
+    old_status_name: str  # Human-readable previous status
+    new_status_name: str  # Human-readable new status
+    actor_name: str  # Who made the change
+    comment: Optional[str] = None  # Optional transition comment
+
+
+async def send_status_changed_notification(
+    user_id: str,
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    old_status: str,
+    new_status: str,
+    actor_name: str,
+    comment: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send a status_changed notification to a user via Telegram.
+
+    Feature #62: Уведомление status_changed (notification when quote status changes)
+
+    This function:
+    1. Gets the user's Telegram ID (if linked)
+    2. Formats the notification message with old and new status
+    3. Sends via Telegram with "Open in system" button
+    4. Records the notification in the database
+
+    Args:
+        user_id: UUID of the user to notify
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier (e.g., "КП-2025-001")
+        customer_name: Customer name
+        old_status: Previous workflow status code
+        new_status: New workflow status code
+        actor_name: Name of the person who made the change
+        comment: Optional transition comment
+
+    Returns:
+        Dict with:
+        - success: bool
+        - telegram_sent: bool - Whether Telegram message was sent
+        - notification_id: str - ID of recorded notification
+        - error: str - Error message if failed
+
+    Example:
+        >>> result = await send_status_changed_notification(
+        ...     user_id="user-uuid",
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     old_status="pending_quote_control",
+        ...     new_status="approved",
+        ...     actor_name="Иванов И.И."
+        ... )
+        >>> if result["success"]:
+        ...     print("Notification sent!")
+    """
+    # Get human-readable status names
+    old_status_name = _get_status_name_ru(old_status)
+    new_status_name = _get_status_name_ru(new_status)
+
+    # Build notification content
+    title = "Статус изменён"
+    quote_url = f"{APP_BASE_URL}/quotes/{quote_id}"
+
+    # Format the Telegram message using the template
+    telegram_message = format_notification(
+        NotificationType.STATUS_CHANGED,
+        quote_idn=quote_idn,
+        new_status=new_status_name,
+        actor_name=actor_name,
+        quote_url=quote_url
+    )
+
+    # Add comment if provided
+    if comment:
+        telegram_message += f"\n💬 _Комментарий:_ {comment}"
+
+    # Try to send via Telegram
+    telegram_sent = False
+    telegram_error = None
+    telegram_id = await get_user_telegram_id(user_id)
+
+    if telegram_id:
+        try:
+            # Use send_notification which adds the "Open in system" button
+            message_id = await send_notification(
+                telegram_id=telegram_id,
+                notification_type=NotificationType.STATUS_CHANGED,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                customer_name=customer_name,
+                new_status=new_status_name,
+                actor_name=actor_name
+            )
+            telegram_sent = message_id is not None
+            if not telegram_sent:
+                telegram_error = "Failed to send message"
+        except Exception as e:
+            telegram_error = str(e)
+            logger.error(f"Error sending status_changed notification to {user_id}: {e}")
+    else:
+        telegram_error = "User has no linked Telegram account"
+        logger.info(f"User {user_id} has no linked Telegram - notification will be in-app only")
+
+    # Record the notification in the database
+    db_message = f"{quote_idn} - {customer_name}\n{old_status_name} → {new_status_name}"
+    if comment:
+        db_message += f"\nКомментарий: {comment}"
+
+    notification_id = record_notification(
+        user_id=user_id,
+        notification_type="status_changed",
+        title=title,
+        message=db_message,
+        channel="telegram" if telegram_sent else "in_app",
+        quote_id=quote_id,
+        sent=telegram_sent,
+        error_message=telegram_error if not telegram_sent else None
+    )
+
+    return {
+        "success": True,  # Notification recorded even if Telegram failed
+        "telegram_sent": telegram_sent,
+        "notification_id": notification_id,
+        "telegram_id": telegram_id,
+        "error": telegram_error
+    }
+
+
+async def notify_quote_creator_of_status_change(
+    quote_id: str,
+    old_status: str,
+    new_status: str,
+    actor_id: str,
+    actor_name: Optional[str] = None,
+    comment: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send status_changed notification to the quote creator.
+
+    This is the main convenience function for status change notifications.
+    It fetches quote details from DB and notifies the creator.
+
+    Args:
+        quote_id: UUID of the quote
+        old_status: Previous workflow status code
+        new_status: New workflow status code
+        actor_id: UUID of the user who made the change
+        actor_name: Optional name of actor (fetched from DB if not provided)
+        comment: Optional transition comment
+
+    Returns:
+        Dict with notification result
+
+    Example:
+        >>> result = await notify_quote_creator_of_status_change(
+        ...     quote_id="quote-uuid",
+        ...     old_status="pending_quote_control",
+        ...     new_status="approved",
+        ...     actor_id="actor-uuid"
+        ... )
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "success": False,
+                "error": "Database connection error"
+            }
+
+        # Get quote details including creator
+        quote_response = supabase.table("quotes").select(
+            "id, idn, created_by, organization_id, customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data:
+            logger.warning(f"Quote {quote_id} not found for status change notification")
+            return {
+                "success": False,
+                "error": "Quote not found"
+            }
+
+        quote = quote_response.data[0]
+        quote_idn = quote.get("idn", "N/A")
+        creator_id = quote.get("created_by")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        # Don't notify the actor themselves (they know they made the change)
+        if creator_id == actor_id:
+            logger.info(f"Skipping status change notification - actor is the creator")
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "Actor is the creator"
+            }
+
+        # Get actor name if not provided
+        if not actor_name:
+            actor_response = supabase.table("organization_members").select(
+                "full_name"
+            ).eq("user_id", actor_id).execute()
+
+            if actor_response.data:
+                actor_name = actor_response.data[0].get("full_name", "Пользователь")
+            else:
+                actor_name = "Пользователь"
+
+        # Send the notification
+        return await send_status_changed_notification(
+            user_id=creator_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            customer_name=customer_name,
+            old_status=old_status,
+            new_status=new_status,
+            actor_name=actor_name,
+            comment=comment
+        )
+
+    except Exception as e:
+        logger.error(f"Error notifying creator of status change for quote {quote_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+async def notify_assigned_users_of_status_change(
+    quote_id: str,
+    old_status: str,
+    new_status: str,
+    actor_id: str,
+    actor_name: Optional[str] = None,
+    comment: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send status_changed notifications to all assigned users on a quote.
+
+    This notifies:
+    - Quote creator
+    - Assigned procurement users
+    - Assigned logistics user
+    - Assigned customs user
+
+    Skips the actor (they don't need to be notified of their own action).
+
+    Args:
+        quote_id: UUID of the quote
+        old_status: Previous workflow status code
+        new_status: New workflow status code
+        actor_id: UUID of the user who made the change
+        actor_name: Optional name of actor
+        comment: Optional transition comment
+
+    Returns:
+        Dict with:
+        - total: int - Total users to notify
+        - sent: int - Successfully sent via Telegram
+        - failed: int - Failed to send
+        - skipped: int - Skipped (e.g., actor themselves)
+        - results: list - Individual results for each user
+
+    Example:
+        >>> result = await notify_assigned_users_of_status_change(
+        ...     quote_id="quote-uuid",
+        ...     old_status="pending_logistics",
+        ...     new_status="pending_sales_review",
+        ...     actor_id="actor-uuid"
+        ... )
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "total": 0,
+                "sent": 0,
+                "failed": 0,
+                "skipped": 0,
+                "error": "Database connection error"
+            }
+
+        # Get quote details with all assigned users
+        quote_response = supabase.table("quotes").select(
+            "id, idn, created_by, organization_id, "
+            "assigned_procurement_users, assigned_logistics_user, assigned_customs_user, "
+            "customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data:
+            logger.warning(f"Quote {quote_id} not found for status change notifications")
+            return {
+                "total": 0,
+                "sent": 0,
+                "failed": 0,
+                "skipped": 0,
+                "error": "Quote not found"
+            }
+
+        quote = quote_response.data[0]
+        quote_idn = quote.get("idn", "N/A")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        # Collect all user IDs to notify (excluding actor)
+        user_ids_to_notify = set()
+
+        # Add creator
+        creator_id = quote.get("created_by")
+        if creator_id and creator_id != actor_id:
+            user_ids_to_notify.add(creator_id)
+
+        # Add procurement users
+        procurement_users = quote.get("assigned_procurement_users") or []
+        for user_id in procurement_users:
+            if user_id and user_id != actor_id:
+                user_ids_to_notify.add(user_id)
+
+        # Add logistics user
+        logistics_user = quote.get("assigned_logistics_user")
+        if logistics_user and logistics_user != actor_id:
+            user_ids_to_notify.add(logistics_user)
+
+        # Add customs user
+        customs_user = quote.get("assigned_customs_user")
+        if customs_user and customs_user != actor_id:
+            user_ids_to_notify.add(customs_user)
+
+        if not user_ids_to_notify:
+            logger.info(f"No users to notify for status change on quote {quote_id}")
+            return {
+                "total": 0,
+                "sent": 0,
+                "failed": 0,
+                "skipped": 1,  # Actor was the only one
+                "results": []
+            }
+
+        # Get actor name if not provided
+        if not actor_name:
+            actor_response = supabase.table("organization_members").select(
+                "full_name"
+            ).eq("user_id", actor_id).execute()
+
+            if actor_response.data:
+                actor_name = actor_response.data[0].get("full_name", "Пользователь")
+            else:
+                actor_name = "Пользователь"
+
+        # Send notifications to all users
+        results = []
+        sent_count = 0
+        failed_count = 0
+
+        for user_id in user_ids_to_notify:
+            result = await send_status_changed_notification(
+                user_id=user_id,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                customer_name=customer_name,
+                old_status=old_status,
+                new_status=new_status,
+                actor_name=actor_name,
+                comment=comment
+            )
+            results.append({
+                "user_id": user_id,
+                **result
+            })
+            if result.get("telegram_sent"):
+                sent_count += 1
+            elif result.get("success"):
+                failed_count += 1  # In-app notification recorded
+
+        return {
+            "total": len(user_ids_to_notify),
+            "sent": sent_count,
+            "failed": failed_count,
+            "skipped": 1 if actor_id in [creator_id, logistics_user, customs_user] or actor_id in procurement_users else 0,
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"Error notifying assigned users of status change for quote {quote_id}: {e}")
+        return {
+            "total": 0,
+            "sent": 0,
+            "failed": 0,
+            "skipped": 0,
+            "error": str(e)
+        }

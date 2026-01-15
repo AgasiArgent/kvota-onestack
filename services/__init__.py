@@ -174,6 +174,11 @@ from .telegram_service import (
     send_callback_response,
     # Reject callback handler (Feature #61)
     handle_reject_callback,
+    # Status changed notification (Feature #62)
+    StatusChangedNotification,
+    send_status_changed_notification,
+    notify_quote_creator_of_status_change,
+    notify_assigned_users_of_status_change,
 )
 
 __all__ = [
@@ -331,4 +336,9 @@ __all__ = [
     "send_callback_response",
     # Reject callback handler (Feature #61)
     "handle_reject_callback",
+    # Status changed notification (Feature #62)
+    "StatusChangedNotification",
+    "send_status_changed_notification",
+    "notify_quote_creator_of_status_change",
+    "notify_assigned_users_of_status_change",
 ]

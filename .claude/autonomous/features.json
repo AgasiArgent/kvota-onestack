@@ -706,10 +706,11 @@
       "name": "Уведомление status_changed",
       "description": "Уведомление об изменении статуса",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T09:00:00Z",
+      "completed_at": "2026-01-15T09:30:00Z",
+      "notes": "Implemented status_changed notification functionality: StatusChangedNotification dataclass, send_status_changed_notification() for sending to individual users, notify_quote_creator_of_status_change() for notifying quote creator, and notify_assigned_users_of_status_change() for notifying all assigned users (creator, procurement, logistics, customs). Skips actor from notification (they made the change). Records in DB and sends via Telegram if linked."
     },
     {
       "id": 63,

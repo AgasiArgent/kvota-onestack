@@ -1493,3 +1493,34 @@
   - main.py (~15 lines added/modified)
 - Status: COMPLETE - Feature #61 done
 
+
+## Session 2026-01-15 - Feature #62: Уведомление status_changed (notification when quote status changes)
+- Implemented status_changed notification functionality in telegram_service.py
+- New dataclass:
+  - StatusChangedNotification: quote_id, quote_idn, customer_name, old_status, new_status, old_status_name, new_status_name, actor_name, comment
+- New functions (~400 lines):
+  - send_status_changed_notification(user_id, quote_id, quote_idn, customer_name, old_status, new_status, actor_name, comment):
+    - Gets user's Telegram ID if linked
+    - Formats notification with old→new status transition
+    - Sends via Telegram with "Open in system" button
+    - Records notification in database (telegram or in_app channel)
+    - Returns success status, telegram_sent flag, notification_id
+  - notify_quote_creator_of_status_change(quote_id, old_status, new_status, actor_id, actor_name, comment):
+    - Convenience function that fetches quote details from DB
+    - Notifies the quote creator of status changes
+    - Skips notification if actor is the creator (they know they made the change)
+    - Auto-fetches actor name from DB if not provided
+  - notify_assigned_users_of_status_change(quote_id, old_status, new_status, actor_id, actor_name, comment):
+    - Notifies ALL assigned users on a quote: creator, procurement users, logistics user, customs user
+    - Excludes the actor from notification list
+    - Returns total/sent/failed/skipped counts with detailed results
+- Uses existing _get_status_name_ru() for human-readable status names
+- Uses existing send_notification() which adds inline keyboard button
+- Uses existing record_notification() for database storage
+- Updated services/__init__.py to export all new functions
+- Verified imports work correctly
+- Files changed:
+  - services/telegram_service.py (~400 lines added)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #62 done
+
