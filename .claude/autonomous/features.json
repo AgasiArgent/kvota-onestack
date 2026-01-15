@@ -20,7 +20,8 @@
       "name": "Create buyer_companies table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-01-15T17:00:00Z",
       "description": "Create buyer_companies table (our legal entities for purchasing)"
     },
     {

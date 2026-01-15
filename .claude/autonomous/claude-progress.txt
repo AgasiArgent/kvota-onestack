@@ -2541,3 +2541,36 @@ CREATE TABLE suppliers (
 **Status:** COMPLETE
 **Next:** DB-002 (buyer_companies table)
 
+
+## Session 2026-01-15 - Feature DB-002: Create buyer_companies table
+
+**What was done:**
+- Created migration `migrations/019_create_buyer_companies_table.sql`
+- Table is for our legal entities used for purchasing from suppliers
+- Level: ITEM (each quote_item can have its own buyer_company_id)
+
+**Schema:**
+```sql
+CREATE TABLE buyer_companies (
+    id UUID PK,
+    organization_id UUID FK,
+    name VARCHAR(255),
+    company_code VARCHAR(3),  -- 3-letter code (e.g., CMT, ZAK)
+    country,
+    inn, kpp, ogrn,
+    registration_address,
+    general_director_name,
+    general_director_position DEFAULT 'Генеральный директор',
+    is_active, created_at, updated_at, created_by
+);
+```
+
+**Features:**
+- Unique company_code per organization
+- RLS policies for organization isolation
+- Only admin/finance can create/update
+- Indexes for name, inn, active status queries
+- Trigger for updated_at timestamp
+
+**Status:** COMPLETE
+**Next:** DB-003 (Verify seller_companies table exists)
