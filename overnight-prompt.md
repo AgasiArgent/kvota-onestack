@@ -163,12 +163,13 @@ App runs at http://localhost:5001
 - [x] Feature #78: Список активных сделок (2026-01-15) - Already in #77: deals list shows active/completed/cancelled with status badges, amounts, dates, action buttons.
 - [x] Feature #79: Таблица план-факт по сделке (2026-01-15) - Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items grouped by category with color coding and status indicators.
 - [x] Feature #80: Форма регистрации платежа (2026-01-15) - Created /finance/{deal_id}/plan-fact/{item_id} GET/POST routes. GET shows planned data card (category, amount, date, status) and actual data form (amount, currency, exchange rate, date, payment document, notes). POST validates and updates plan_fact_items with actual payment data. Database trigger calculates variance automatically.
+- [x] Feature #81: Сервис план-факта (2026-01-15) - Created services/plan_fact_service.py with full CRUD: PlanFactCategory and PlanFactItem dataclasses, category functions, create/read/update/delete operations for plan_fact_items, summary and statistics (get_deal_plan_fact_summary, get_items_grouped_by_category, get_upcoming_payments, get_payments_for_period), validation functions. Updated services/__init__.py with 35+ exports.
 
 ### Next Up
-- Feature #81: Сервис план-факта (CRUD for plan_fact_items)
+- Feature #82: Автогенерация плановых платежей (create plan_fact_items from deal conditions)
 
 ### Progress
-- **80 of 88 features completed** (91%)
+- **81 of 88 features completed** (92%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

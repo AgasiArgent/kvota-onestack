@@ -934,10 +934,11 @@
       "name": "Сервис план-факта",
       "description": "CRUD для plan_fact_items",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T13:00:00Z",
+      "completed_at": "2026-01-15T13:30:00Z",
+      "notes": "Created services/plan_fact_service.py with full CRUD operations: PlanFactCategory and PlanFactItem dataclasses, category functions (get_all_categories, get_category, get_category_by_code, get_income_categories, get_expense_categories), create operations (create_plan_fact_item, create_plan_fact_item_with_category_code, bulk_create_plan_fact_items), read operations (get_plan_fact_item, get_plan_fact_items_for_deal, get_plan_fact_items_by_category, get_unpaid_items_for_deal, get_paid_items_for_deal, get_overdue_items_for_deal, count_items_for_deal), update operations (update_plan_fact_item, record_actual_payment, clear_actual_payment, update_planned_payment), delete operations (delete_plan_fact_item, delete_all_items_for_deal), summary and statistics (get_deal_plan_fact_summary, get_items_grouped_by_category, get_upcoming_payments, get_payments_for_period), validation (validate_item_for_payment, validate_deal_plan_fact). Updated services/__init__.py with all exports."
     },
     {
       "id": 82,

@@ -2007,3 +2007,55 @@ CreateDealFromSpecResult(
 - Full validation chain: login → role check → org access → deal access → item validation
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #81: Сервис план-факта
+
+### What was done
+- Created `services/plan_fact_service.py` with full CRUD operations for plan_fact_items
+- Added data classes:
+  - `PlanFactCategory` - represents payment categories (income/expense)
+  - `PlanFactItem` - represents individual plan-fact entries with planned and actual data
+- Category functions:
+  - `get_all_categories()` - all categories ordered by sort_order
+  - `get_category()`, `get_category_by_code()` - lookup by id/code
+  - `get_income_categories()`, `get_expense_categories()` - filtered lists
+- Create operations:
+  - `create_plan_fact_item()` - create item with category_id
+  - `create_plan_fact_item_with_category_code()` - create with category code lookup
+  - `bulk_create_plan_fact_items()` - batch creation with category_id or category_code
+- Read operations:
+  - `get_plan_fact_item()` - single item by id
+  - `get_plan_fact_items_for_deal()` - all items for deal (with optional category details)
+  - `get_plan_fact_items_by_category()` - items filtered by category
+  - `get_unpaid_items_for_deal()`, `get_paid_items_for_deal()` - payment status filters
+  - `get_overdue_items_for_deal()` - unpaid items past planned date
+  - `count_items_for_deal()` - counts by status (total, paid, unpaid, overdue)
+- Update operations:
+  - `update_plan_fact_item()` - generic update with kwargs
+  - `record_actual_payment()` - record payment with automatic variance calculation
+  - `clear_actual_payment()` - revert item to unpaid status
+  - `update_planned_payment()` - modify planned amount/date/currency
+- Delete operations:
+  - `delete_plan_fact_item()` - single item
+  - `delete_all_items_for_deal()` - cleanup all items for deal
+- Summary and statistics:
+  - `get_deal_plan_fact_summary()` - complete summary with planned/actual income/expense/margin
+  - `get_items_grouped_by_category()` - items organized by category code
+  - `get_upcoming_payments()` - payments due within N days
+  - `get_payments_for_period()` - payments in date range
+- Validation:
+  - `validate_item_for_payment()` - check if item can have payment recorded
+  - `validate_deal_plan_fact()` - validate deal's plan-fact data completeness
+
+### Files changed
+- `services/plan_fact_service.py` - NEW (850+ lines)
+- `services/__init__.py` - Added 35+ exports
+
+### Technical notes
+- Follows same patterns as deal_service.py and specification_service.py
+- Uses database trigger `calculate_plan_fact_variance()` for automatic variance calculation
+- Supports both category_id and category_code for flexibility
+- `PlanFactItem.is_paid` property for convenient status check
+- Summary calculations handle Decimal types properly
+
+### Status: COMPLETE

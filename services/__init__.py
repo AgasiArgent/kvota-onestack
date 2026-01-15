@@ -232,6 +232,45 @@ from .deal_service import (
     get_deals_by_date_range,
     search_deals,
 )
+from .plan_fact_service import (
+    # Data classes
+    PlanFactCategory,
+    PlanFactItem,
+    # Category functions
+    get_all_categories,
+    get_category,
+    get_category_by_code,
+    get_income_categories,
+    get_expense_categories,
+    # Create operations
+    create_plan_fact_item,
+    create_plan_fact_item_with_category_code,
+    bulk_create_plan_fact_items,
+    # Read operations
+    get_plan_fact_item,
+    get_plan_fact_items_for_deal,
+    get_plan_fact_items_by_category,
+    get_unpaid_items_for_deal,
+    get_paid_items_for_deal,
+    get_overdue_items_for_deal,
+    count_items_for_deal,
+    # Update operations
+    update_plan_fact_item,
+    record_actual_payment,
+    clear_actual_payment,
+    update_planned_payment,
+    # Delete operations
+    delete_plan_fact_item,
+    delete_all_items_for_deal,
+    # Summary and statistics
+    get_deal_plan_fact_summary,
+    get_items_grouped_by_category,
+    get_upcoming_payments,
+    get_payments_for_period,
+    # Validation
+    validate_item_for_payment,
+    validate_deal_plan_fact,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -557,4 +596,41 @@ __all__ = [
     # Create deal from spec (Feature #76)
     "CreateDealFromSpecResult",
     "create_deal_from_specification",
+    # Plan-fact service (Feature #81)
+    "PlanFactCategory",
+    "PlanFactItem",
+    # Category functions
+    "get_all_categories",
+    "get_category",
+    "get_category_by_code",
+    "get_income_categories",
+    "get_expense_categories",
+    # Plan-fact create operations
+    "create_plan_fact_item",
+    "create_plan_fact_item_with_category_code",
+    "bulk_create_plan_fact_items",
+    # Plan-fact read operations
+    "get_plan_fact_item",
+    "get_plan_fact_items_for_deal",
+    "get_plan_fact_items_by_category",
+    "get_unpaid_items_for_deal",
+    "get_paid_items_for_deal",
+    "get_overdue_items_for_deal",
+    "count_items_for_deal",
+    # Plan-fact update operations
+    "update_plan_fact_item",
+    "record_actual_payment",
+    "clear_actual_payment",
+    "update_planned_payment",
+    # Plan-fact delete operations
+    "delete_plan_fact_item",
+    "delete_all_items_for_deal",
+    # Plan-fact summary and statistics
+    "get_deal_plan_fact_summary",
+    "get_items_grouped_by_category",
+    "get_upcoming_payments",
+    "get_payments_for_period",
+    # Plan-fact validation
+    "validate_item_for_payment",
+    "validate_deal_plan_fact",
 ]
