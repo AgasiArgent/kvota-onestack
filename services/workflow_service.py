@@ -1755,3 +1755,469 @@ def get_parallel_stages_status(quote_id: str) -> Dict:
         "both_completed": logistics_completed_at is not None and customs_completed_at is not None,
         "current_status": quote.get("workflow_status")
     }
+
+
+# =============================================================================
+# PROCUREMENT ASSIGNMENT FUNCTIONS (Feature #29)
+# =============================================================================
+# Auto-assign procurement users when transitioning to pending_procurement
+# Based on brand assignments in the brand_assignments table
+
+
+def get_procurement_users_for_quote(quote_id: str) -> Dict[str, str]:
+    """
+    Get procurement users assigned to brands in a quote.
+
+    This function:
+    1. Gets all unique brands from quote_items
+    2. Looks up procurement managers assigned to each brand
+    3. Returns a mapping of brand -> user_id
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict mapping brand names to assigned user IDs
+        Only includes brands that have assigned procurement managers
+
+    Example:
+        >>> brand_users = get_procurement_users_for_quote(quote_id)
+        >>> print(brand_users)
+        {'Siemens': 'user-uuid-1', 'ABB': 'user-uuid-2'}
+    """
+    supabase = get_supabase()
+
+    # Get quote's organization_id and unique brands from items
+    try:
+        # First get the organization_id from the quote
+        quote_response = supabase.table("quotes") \
+            .select("organization_id") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+
+        if not quote_response.data:
+            return {}
+
+        org_id = quote_response.data.get("organization_id")
+        if not org_id:
+            return {}
+
+        # Get all unique brands from quote items
+        items_response = supabase.table("quote_items") \
+            .select("brand") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        if not items_response.data:
+            return {}
+
+        # Extract unique brands (case-insensitive)
+        brands = set()
+        for item in items_response.data:
+            brand = item.get("brand")
+            if brand:
+                brands.add(brand.strip())
+
+        if not brands:
+            return {}
+
+        # Get brand assignments for these brands
+        assignments_response = supabase.table("brand_assignments") \
+            .select("brand, user_id") \
+            .eq("organization_id", org_id) \
+            .execute()
+
+        if not assignments_response.data:
+            return {}
+
+        # Build mapping (case-insensitive match)
+        brand_to_user = {}
+        for assignment in assignments_response.data:
+            assigned_brand = assignment.get("brand", "").strip().lower()
+            user_id = assignment.get("user_id")
+            for brand in brands:
+                if brand.lower() == assigned_brand:
+                    brand_to_user[brand] = user_id
+
+        return brand_to_user
+
+    except Exception as e:
+        return {}
+
+
+def assign_procurement_users_to_quote(quote_id: str) -> Dict:
+    """
+    Auto-assign procurement users to a quote based on brands.
+
+    This function:
+    1. Gets all brands from quote_items
+    2. Looks up procurement managers for each brand
+    3. Assigns users to individual quote_items
+    4. Collects unique user IDs for quote-level assignment
+    5. Updates quote.assigned_procurement_users array
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict with:
+        - success: bool
+        - assigned_users: list of user IDs assigned
+        - assigned_items: count of items with assignments
+        - unassigned_brands: list of brands without managers
+        - error_message: error if failed
+
+    Example:
+        >>> result = assign_procurement_users_to_quote(quote_id)
+        >>> if result["success"]:
+        ...     print(f"Assigned {len(result['assigned_users'])} procurement managers")
+    """
+    supabase = get_supabase()
+
+    try:
+        # Get quote info
+        quote_response = supabase.table("quotes") \
+            .select("id, organization_id") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+
+        if not quote_response.data:
+            return {
+                "success": False,
+                "error_message": f"Quote not found: {quote_id}",
+                "assigned_users": [],
+                "assigned_items": 0,
+                "unassigned_brands": []
+            }
+
+        org_id = quote_response.data.get("organization_id")
+
+        # Get quote items with their brands
+        items_response = supabase.table("quote_items") \
+            .select("id, brand") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        if not items_response.data:
+            return {
+                "success": True,
+                "error_message": None,
+                "assigned_users": [],
+                "assigned_items": 0,
+                "unassigned_brands": []
+            }
+
+        # Get all brand assignments for this org
+        assignments_response = supabase.table("brand_assignments") \
+            .select("brand, user_id") \
+            .eq("organization_id", org_id) \
+            .execute()
+
+        # Build case-insensitive brand -> user mapping
+        brand_to_user = {}
+        if assignments_response.data:
+            for a in assignments_response.data:
+                brand = a.get("brand", "").strip().lower()
+                brand_to_user[brand] = a.get("user_id")
+
+        # Assign users to items and collect stats
+        assigned_user_ids = set()
+        assigned_items_count = 0
+        unassigned_brands = set()
+
+        for item in items_response.data:
+            item_id = item.get("id")
+            brand = item.get("brand", "").strip()
+
+            if not brand:
+                continue
+
+            user_id = brand_to_user.get(brand.lower())
+
+            if user_id:
+                # Update the item with assigned procurement user
+                supabase.table("quote_items") \
+                    .update({
+                        "assigned_procurement_user": user_id,
+                        "procurement_status": "pending"
+                    }) \
+                    .eq("id", item_id) \
+                    .execute()
+
+                assigned_user_ids.add(user_id)
+                assigned_items_count += 1
+            else:
+                unassigned_brands.add(brand)
+
+        # Update quote with array of assigned procurement users
+        assigned_users_list = list(assigned_user_ids)
+
+        if assigned_users_list:
+            supabase.table("quotes") \
+                .update({"assigned_procurement_users": assigned_users_list}) \
+                .eq("id", quote_id) \
+                .execute()
+
+        return {
+            "success": True,
+            "error_message": None,
+            "assigned_users": assigned_users_list,
+            "assigned_items": assigned_items_count,
+            "unassigned_brands": list(unassigned_brands)
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error_message": str(e),
+            "assigned_users": [],
+            "assigned_items": 0,
+            "unassigned_brands": []
+        }
+
+
+def transition_to_pending_procurement(
+    quote_id: str,
+    actor_id: str,
+    actor_roles: List[str],
+    comment: Optional[str] = None
+) -> TransitionResult:
+    """
+    Transition a quote to pending_procurement status with auto-assignment.
+
+    This is a specialized transition function that:
+    1. Validates the transition is allowed
+    2. Auto-assigns procurement users based on brands
+    3. Updates quote status to pending_procurement
+    4. Logs the transition
+
+    This should be called instead of generic transition_quote_status() when
+    moving to pending_procurement to ensure procurement users are assigned.
+
+    Args:
+        quote_id: UUID of the quote
+        actor_id: UUID of the user performing the transition
+        actor_roles: List of role codes the actor has
+        comment: Optional comment for the transition
+
+    Returns:
+        TransitionResult with additional info about assignments
+
+    Example:
+        >>> result = transition_to_pending_procurement(
+        ...     quote_id="quote-uuid",
+        ...     actor_id="user-uuid",
+        ...     actor_roles=["sales"]
+        ... )
+        >>> if result.success:
+        ...     print("Transitioned to pending_procurement")
+    """
+    supabase = get_supabase()
+
+    # First, get current status and validate
+    try:
+        quote_response = supabase.table("quotes") \
+            .select("id, workflow_status, organization_id") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    if not quote_response.data:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    current_status = quote_response.data.get("workflow_status", "draft")
+
+    # Validate the transition
+    allowed, error = can_transition(
+        current_status,
+        WorkflowStatus.PENDING_PROCUREMENT,
+        actor_roles
+    )
+
+    if not allowed:
+        return TransitionResult(
+            success=False,
+            error_message=error,
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Auto-assign procurement users BEFORE transitioning
+    assignment_result = assign_procurement_users_to_quote(quote_id)
+
+    if not assignment_result["success"]:
+        return TransitionResult(
+            success=False,
+            error_message=f"Failed to assign procurement users: {assignment_result['error_message']}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Build comment with assignment info
+    auto_comment_parts = []
+    if assignment_result["assigned_users"]:
+        auto_comment_parts.append(
+            f"Назначено {len(assignment_result['assigned_users'])} менеджеров по закупкам"
+        )
+    if assignment_result["unassigned_brands"]:
+        auto_comment_parts.append(
+            f"Бренды без назначения: {', '.join(assignment_result['unassigned_brands'])}"
+        )
+
+    auto_comment = ". ".join(auto_comment_parts)
+    full_comment = f"{comment}. {auto_comment}" if comment else auto_comment
+
+    # Now perform the actual status transition
+    try:
+        update_response = supabase.table("quotes") \
+            .update({
+                "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+                "procurement_completed_at": None  # Reset in case of re-evaluation
+            }) \
+            .eq("id", quote_id) \
+            .execute()
+
+        if not update_response.data:
+            return TransitionResult(
+                success=False,
+                error_message="Failed to update quote status",
+                quote_id=quote_id,
+                from_status=current_status
+            )
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Database error: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Log the transition
+    actor_role = "sales" if "sales" in actor_roles else "admin"
+    try:
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": current_status,
+            "to_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "comment": full_comment if full_comment else None
+        }
+
+        log_response = supabase.table("workflow_transitions") \
+            .insert(transition_data) \
+            .execute()
+
+        transition_id = None
+        if log_response.data and len(log_response.data) > 0:
+            transition_id = log_response.data[0].get("id")
+
+    except Exception:
+        transition_id = None  # Non-critical
+
+    return TransitionResult(
+        success=True,
+        error_message=None,
+        quote_id=quote_id,
+        from_status=current_status,
+        to_status=WorkflowStatus.PENDING_PROCUREMENT.value,
+        transition_id=transition_id
+    )
+
+
+def get_quote_procurement_status(quote_id: str) -> Dict:
+    """
+    Get detailed procurement status for a quote.
+
+    Returns information about:
+    - Assigned procurement users
+    - Items by brand and their status
+    - Overall completion percentage
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict with procurement status details
+
+    Example:
+        >>> status = get_quote_procurement_status(quote_id)
+        >>> print(f"Completion: {status['completion_percent']}%")
+    """
+    supabase = get_supabase()
+
+    try:
+        # Get quote info
+        quote_response = supabase.table("quotes") \
+            .select("assigned_procurement_users, procurement_completed_at, workflow_status") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+
+        if not quote_response.data:
+            return {"error": "Quote not found"}
+
+        quote = quote_response.data
+
+        # Get items with procurement status
+        items_response = supabase.table("quote_items") \
+            .select("id, brand, assigned_procurement_user, procurement_status") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        items = items_response.data or []
+
+        # Calculate stats
+        total_items = len(items)
+        completed_items = sum(1 for i in items if i.get("procurement_status") == "completed")
+        pending_items = sum(1 for i in items if i.get("procurement_status") == "pending")
+        in_progress_items = sum(1 for i in items if i.get("procurement_status") == "in_progress")
+
+        # Group by brand
+        brands_status = {}
+        for item in items:
+            brand = item.get("brand", "Unknown")
+            if brand not in brands_status:
+                brands_status[brand] = {
+                    "total": 0,
+                    "completed": 0,
+                    "pending": 0,
+                    "assigned_user": item.get("assigned_procurement_user")
+                }
+            brands_status[brand]["total"] += 1
+            status = item.get("procurement_status", "pending")
+            if status == "completed":
+                brands_status[brand]["completed"] += 1
+            else:
+                brands_status[brand]["pending"] += 1
+
+        completion_percent = round(completed_items / total_items * 100, 1) if total_items > 0 else 0
+
+        return {
+            "quote_id": quote_id,
+            "workflow_status": quote.get("workflow_status"),
+            "assigned_procurement_users": quote.get("assigned_procurement_users", []),
+            "procurement_completed_at": quote.get("procurement_completed_at"),
+            "total_items": total_items,
+            "completed_items": completed_items,
+            "pending_items": pending_items,
+            "in_progress_items": in_progress_items,
+            "completion_percent": completion_percent,
+            "is_complete": completed_items == total_items and total_items > 0,
+            "brands_status": brands_status
+        }
+
+    except Exception as e:
+        return {"error": str(e)}

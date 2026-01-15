@@ -654,3 +654,40 @@
   - services/workflow_service.py (updated - added ~420 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #29: Назначение исполнителей при переходе
+- Implemented auto-assignment of procurement users when transitioning to pending_procurement
+- New functions in workflow_service.py:
+  - get_procurement_users_for_quote(quote_id) → Dict[str, str]
+    - Gets all unique brands from quote_items
+    - Looks up procurement managers assigned to each brand
+    - Returns mapping: brand → user_id
+    - Case-insensitive brand matching
+  - assign_procurement_users_to_quote(quote_id) → Dict
+    - Gets brands from quote_items
+    - Looks up procurement managers in brand_assignments table
+    - Updates each quote_item with assigned_procurement_user
+    - Collects unique users and updates quote.assigned_procurement_users array
+    - Returns: success, assigned_users, assigned_items, unassigned_brands
+  - transition_to_pending_procurement(quote_id, actor_id, actor_roles, comment)
+    - Specialized transition function for draft → pending_procurement
+    - Validates transition is allowed
+    - Auto-assigns procurement users BEFORE transitioning
+    - Updates quote status
+    - Logs transition with assignment info in comment
+    - Returns TransitionResult
+  - get_quote_procurement_status(quote_id) → Dict
+    - Returns detailed procurement status for a quote
+    - Includes: assigned_users, total/completed/pending items, completion_percent
+    - Groups by brand with per-brand status
+- Integration notes:
+  - Should call transition_to_pending_procurement() instead of generic transition_quote_status()
+    when moving to pending_procurement status
+  - Auto-assignment happens on transition, not on item creation
+  - Database trigger (from Feature #13) handles individual item assignment on brand change
+- Updated services/__init__.py to export all new functions
+- Verified imports successfully in venv
+- Files changed:
+  - services/workflow_service.py (updated - added ~460 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

@@ -111,15 +111,16 @@ App runs at http://localhost:5001
 - [x] Feature #26: Валидация перехода статуса (2025-01-15) - Already in Feature #25
 - [x] Feature #27: Логирование переходов (2025-01-15) - Already in Feature #25
 - [x] Feature #28: Автопереход logistics+customs → sales_review (2025-01-15)
+- [x] Feature #29: Назначение исполнителей при переходе (2025-01-15)
 
 ### Next Up
-- Feature #29: Назначение исполнителей при переходе
+- Feature #30: Сервис назначений брендов
 
 ### Progress
-- **28 of 88 features completed** (32%)
+- **29 of 88 features completed** (33%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
-- **WORKFLOW ENGINE IN PROGRESS** (features 23-28 done, 4 more to go: 29-32)
+- **WORKFLOW ENGINE IN PROGRESS** (features 23-29 done, 3 more to go: 30-32)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -146,12 +147,17 @@ App runs at http://localhost:5001
     - get_quote_workflow_status() - Get current status of a quote
     - get_quote_transition_history() - Get audit log of transitions
     - get_available_transitions_for_quote() - Get available transitions for UI
-  - **NEW (Feature #28)**: Auto-transition functions:
+  - Auto-transition functions (Feature #28):
     - check_and_auto_transition_to_sales_review() - Auto-transition when both stages complete
     - complete_logistics() - Mark logistics complete and trigger auto-check
     - complete_customs() - Mark customs complete and trigger auto-check
     - get_parallel_stages_status() - Get completion status of parallel stages
+  - **NEW (Feature #29)**: Procurement assignment functions:
+    - get_procurement_users_for_quote() - Get brand → user mapping
+    - assign_procurement_users_to_quote() - Auto-assign users to items and quote
+    - transition_to_pending_procurement() - Specialized transition with auto-assignment
+    - get_quote_procurement_status() - Get detailed procurement status
 - Added /unauthorized route in main.py
 - Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
 - Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
-- Next: Feature #29 - Auto-assign procurement users by brand when entering pending_procurement
+- Next: Feature #30 - CRUD service for brand_assignments table

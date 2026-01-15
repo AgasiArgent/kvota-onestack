@@ -76,6 +76,11 @@ from .workflow_service import (
     complete_logistics,
     complete_customs,
     get_parallel_stages_status,
+    # Procurement assignment functions (Feature #29)
+    get_procurement_users_for_quote,
+    assign_procurement_users_to_quote,
+    transition_to_pending_procurement,
+    get_quote_procurement_status,
 )
 
 __all__ = [
@@ -152,4 +157,9 @@ __all__ = [
     "complete_logistics",
     "complete_customs",
     "get_parallel_stages_status",
+    # Procurement assignment functions (Feature #29)
+    "get_procurement_users_for_quote",
+    "assign_procurement_users_to_quote",
+    "transition_to_pending_procurement",
+    "get_quote_procurement_status",
 ]
