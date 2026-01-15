@@ -3256,3 +3256,11 @@ Features:
   - Detail page shows items table and payments table
   - Russian localization
 
+
+2026-01-15 20:28:16 - UI-013 (Supplier invoice detail page) - COMPLETE (already implemented in UI-012)
+  - GET /supplier-invoices/{id} shows full detail view
+  - Items table with description, quantity, unit price, total
+  - Payments table with date, type, amount, payer, document
+  - Add payment button
+  - Status badge, overdue indicator
+

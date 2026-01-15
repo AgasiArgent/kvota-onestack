@@ -629,8 +629,10 @@
       "name": "Supplier invoice detail page",
       "category": "frontend",
       "priority": 2,
-      "passes": false,
-      "description": "Invoice with items and payments"
+      "passes": true,
+      "description": "Invoice with items and payments",
+      "completed_at": "2026-01-15T20:28:11.745083",
+      "notes": "Already implemented as part of UI-012:\n- GET /supplier-invoices/{id} shows full invoice detail with:\n  - Main info section (invoice number, supplier, dates)\n  - Financial summary (total, paid, remaining amounts with color coding)\n  - Items table (if items exist) showing description, quantity, unit price, total\n  - Payments table showing date, type, amount, payer, document, notes\n  - Add payment button linking to payment form\n  - Notes section\n  - Edit and add payment action buttons\n- Status badge with color coding\n- Overdue indicator\n- Organization access verification"
     },
     {
       "id": "UI-014",
