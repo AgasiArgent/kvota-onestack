@@ -146,12 +146,13 @@ App runs at http://localhost:5001
 - [x] Feature #61: Inline-кнопка Отклонить (2026-01-15) - handle_reject_callback() validates user, transitions quote to rejected, updates Telegram message
 - [x] Feature #62: Уведомление status_changed (2026-01-15) - StatusChangedNotification dataclass, send_status_changed_notification(), notify_quote_creator_of_status_change(), notify_assigned_users_of_status_change()
 - [x] Feature #63: Уведомление returned_for_revision (2026-01-15) - ReturnedForRevisionNotification dataclass, send_returned_for_revision_notification(), notify_creator_of_return(), integrated into /quote-control/{quote_id}/return handler
+- [x] Feature #64: Сервис согласований (2026-01-15) - approval_service.py with full CRUD: Approval dataclass, create_approval, create_approvals_for_role, get_approval, get_approval_by_quote, get_approvals_for_quote, get_pending_approval_for_quote, get_pending_approvals_for_user, get_approvals_requested_by, get_approvals_with_details, count_pending_approvals, update_approval_status, approve_quote_approval, reject_quote_approval, cancel_pending_approvals_for_quote, has_pending_approval, get_latest_approval_decision, get_approval_stats_for_user
 
 ### Next Up
-- Feature #64: Сервис согласований (CRUD for approvals table)
+- Feature #65: Создание запроса на согласование (request_approval function)
 
 ### Progress
-- **63 of 88 features completed** (71%)
+- **64 of 88 features completed** (73%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

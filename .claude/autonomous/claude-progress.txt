@@ -1558,3 +1558,38 @@
   - main.py (~15 lines added for notification integration)
 - Status: COMPLETE - Feature #63 done
 
+
+## Session 2026-01-15 - Feature #64: Сервис согласований (CRUD for approvals table)
+- Created services/approval_service.py with complete CRUD operations (~400 lines)
+- Data class:
+  - Approval: id, quote_id, requested_by, approver_id, approval_type, reason, status, decision_comment, requested_at, decided_at
+  - from_dict() class method for creating from database row
+- Create operations:
+  - create_approval() - Creates single approval request
+  - create_approvals_for_role() - Creates approvals for all users with specified roles (top_manager, admin)
+- Read operations:
+  - get_approval() - Get single approval by ID
+  - get_approval_by_quote() - Get most recent approval for quote, optionally filtered by status
+  - get_approvals_for_quote() - Get all approvals for a quote
+  - get_pending_approval_for_quote() - Get pending approval for quote (if any)
+  - get_pending_approvals_for_user() - Get all pending approvals a user needs to review
+  - get_approvals_requested_by() - Get all approvals requested by a user
+  - get_approvals_with_details() - Get approvals with joined quote details
+  - count_pending_approvals() - Count pending approvals for a user
+- Update operations:
+  - update_approval_status() - Update status to approved/rejected
+  - approve_quote_approval() - Convenience function to approve
+  - reject_quote_approval() - Convenience function to reject
+- Delete operations:
+  - cancel_pending_approvals_for_quote() - Cancel all pending approvals when quote is edited
+- Utility functions:
+  - has_pending_approval() - Check if quote has pending approvals
+  - get_latest_approval_decision() - Get most recent decision for quote
+  - get_approval_stats_for_user() - Get approval statistics (pending/approved/rejected counts)
+- Updated services/__init__.py with all 18 new exports
+- All syntax verified with py_compile
+- Imports verified working in venv
+- Files changed:
+  - services/approval_service.py (new - ~400 lines)
+  - services/__init__.py (updated - added approval service imports and exports)
+- Status: COMPLETE - Feature #64 done

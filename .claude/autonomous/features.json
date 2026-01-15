@@ -730,10 +730,11 @@
       "name": "Сервис согласований",
       "description": "CRUD для таблицы approvals",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T11:00:00Z",
+      "completed_at": "2026-01-15T11:30:00Z",
+      "notes": "Created approval_service.py with full CRUD operations: Approval dataclass, create_approval(), create_approvals_for_role(), get_approval(), get_approval_by_quote(), get_approvals_for_quote(), get_pending_approval_for_quote(), get_pending_approvals_for_user(), get_approvals_requested_by(), get_approvals_with_details(), count_pending_approvals(), update_approval_status(), approve_quote_approval(), reject_quote_approval(), cancel_pending_approvals_for_quote(), has_pending_approval(), get_latest_approval_decision(), get_approval_stats_for_user(). Updated services/__init__.py with all exports."
     },
     {
       "id": 65,

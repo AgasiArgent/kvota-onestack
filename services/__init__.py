@@ -113,6 +113,32 @@ from .workflow_service import (
     transition_to_pending_procurement,
     get_quote_procurement_status,
 )
+from .approval_service import (
+    # Data class
+    Approval,
+    # Create operations
+    create_approval,
+    create_approvals_for_role,
+    # Read operations
+    get_approval,
+    get_approval_by_quote,
+    get_approvals_for_quote,
+    get_pending_approval_for_quote,
+    get_pending_approvals_for_user,
+    get_approvals_requested_by,
+    get_approvals_with_details,
+    count_pending_approvals,
+    # Update operations
+    update_approval_status,
+    approve_quote_approval,
+    reject_quote_approval,
+    # Delete operations
+    cancel_pending_approvals_for_quote,
+    # Utility functions
+    has_pending_approval,
+    get_latest_approval_decision,
+    get_approval_stats_for_user,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -349,4 +375,23 @@ __all__ = [
     "ReturnedForRevisionNotification",
     "send_returned_for_revision_notification",
     "notify_creator_of_return",
+    # Approval service (Feature #64)
+    "Approval",
+    "create_approval",
+    "create_approvals_for_role",
+    "get_approval",
+    "get_approval_by_quote",
+    "get_approvals_for_quote",
+    "get_pending_approval_for_quote",
+    "get_pending_approvals_for_user",
+    "get_approvals_requested_by",
+    "get_approvals_with_details",
+    "count_pending_approvals",
+    "update_approval_status",
+    "approve_quote_approval",
+    "reject_quote_approval",
+    "cancel_pending_approvals_for_quote",
+    "has_pending_approval",
+    "get_latest_approval_decision",
+    "get_approval_stats_for_user",
 ]
