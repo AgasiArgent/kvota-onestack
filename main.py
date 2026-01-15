@@ -2738,11 +2738,12 @@ def workflow_status_badge(status_str: str):
 
 
 @rt("/procurement")
-def get(session):
+def get(session, status_filter: str = None):
     """
     Procurement workspace - shows quotes with items having brands assigned to current user.
 
     Feature #33: Basic procurement page structure
+    Feature #34: Filtered list with my brands, status filter, and item details
     """
     redirect = require_login(session)
     if redirect:
@@ -2760,23 +2761,32 @@ def get(session):
 
     # Get brands assigned to this user
     my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]  # For case-insensitive matching
 
     # Get quotes that have items with brands assigned to this user
-    # This is done in two steps:
-    # 1. Get quote_item ids with my brands
-    # 2. Get quotes that contain those items
+    # Enhanced: Also get item details for each quote
 
-    quotes_with_my_brands = []
+    quotes_with_details = []
 
     if my_brands:
-        # Query quote_items with my brands in this organization's quotes
-        # First get quote IDs that have items with my brands
+        # Query quote_items with my brands - get more details
         items_result = supabase.table("quote_items") \
-            .select("quote_id, brand") \
-            .in_("brand", my_brands) \
+            .select("id, quote_id, brand, procurement_status, quantity, name") \
             .execute()
 
-        quote_ids_with_my_brands = list(set([item["quote_id"] for item in (items_result.data or [])]))
+        # Filter items for my brands (case-insensitive)
+        my_items = [item for item in (items_result.data or [])
+                    if item.get("brand", "").lower() in my_brands_lower]
+
+        # Group items by quote_id
+        items_by_quote = {}
+        for item in my_items:
+            qid = item["quote_id"]
+            if qid not in items_by_quote:
+                items_by_quote[qid] = []
+            items_by_quote[qid].append(item)
+
+        quote_ids_with_my_brands = list(items_by_quote.keys())
 
         if quote_ids_with_my_brands:
             # Get full quote data for those quotes
@@ -2787,34 +2797,121 @@ def get(session):
                 .order("created_at", desc=True) \
                 .execute()
 
-            quotes_with_my_brands = quotes_result.data or []
+            # Enrich quotes with item details
+            for q in (quotes_result.data or []):
+                q_items = items_by_quote.get(q["id"], [])
+                # Calculate item stats
+                total_items = len(q_items)
+                completed_items = len([i for i in q_items if i.get("procurement_status") == "completed"])
+                pending_items = total_items - completed_items
+                # Get unique brands in this quote from my assignments
+                brands_in_quote = list(set([i.get("brand", "") for i in q_items]))
 
-    # Separate quotes by workflow status
-    pending_quotes = [q for q in quotes_with_my_brands
+                quotes_with_details.append({
+                    **q,
+                    "my_items": q_items,
+                    "my_items_total": total_items,
+                    "my_items_completed": completed_items,
+                    "my_items_pending": pending_items,
+                    "my_brands_in_quote": brands_in_quote
+                })
+
+    # Apply status filter if provided
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    # Separate quotes by workflow status for default view
+    pending_quotes = [q for q in quotes_with_details
                       if q.get("workflow_status") == "pending_procurement"]
-    other_quotes = [q for q in quotes_with_my_brands
+    other_quotes = [q for q in quotes_with_details
                     if q.get("workflow_status") != "pending_procurement"]
 
-    # Build the table rows
-    def quote_row(q):
+    # Count stats
+    all_quotes_count = len(quotes_with_details)
+    pending_count = len(pending_quotes)
+    in_progress_count = len([q for q in quotes_with_details
+                             if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_sales_review"]])
+    completed_count = len([q for q in quotes_with_details
+                           if q.get("workflow_status") in ["approved", "deal", "sent_to_client"]])
+
+    # Build the table rows with enhanced item details
+    def quote_row(q, show_work_button=True):
         customer_name = "—"
         if q.get("customers"):
             customer_name = q["customers"].get("name", "—")
 
         workflow_status = q.get("workflow_status") or q.get("status", "draft")
 
+        # Item progress display
+        my_total = q.get("my_items_total", 0)
+        my_completed = q.get("my_items_completed", 0)
+        brands_list = q.get("my_brands_in_quote", [])
+
+        # Progress bar for items
+        progress_pct = int((my_completed / my_total * 100) if my_total > 0 else 0)
+        progress_bar = Div(
+            Div(style=f"width: {progress_pct}%; height: 100%; background: #22c55e;"),
+            style="width: 60px; height: 8px; background: #e5e7eb; border-radius: 4px; display: inline-block; margin-right: 0.5rem; overflow: hidden;",
+            title=f"{my_completed}/{my_total} позиций оценено"
+        )
+
+        items_info = Span(
+            progress_bar,
+            f"{my_completed}/{my_total}",
+            style="font-size: 0.875rem; color: #666;"
+        )
+
+        # Brands display (truncate if many)
+        brands_display = ", ".join(brands_list[:3])
+        if len(brands_list) > 3:
+            brands_display += f" +{len(brands_list) - 3}"
+
         return Tr(
-            Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+            Td(
+                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
+                Div(brands_display, style="font-size: 0.75rem; color: #888; margin-top: 2px;")
+            ),
             Td(customer_name),
             Td(workflow_status_badge(workflow_status)),
+            Td(items_info),
             Td(format_money(q.get("total_amount"))),
             Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
             Td(
-                A("View", href=f"/quotes/{q['id']}", style="margin-right: 0.5rem;"),
-                A("Work", href=f"/procurement/{q['id']}", role="button", style="font-size: 0.875rem; padding: 0.25rem 0.5rem;")
-                if workflow_status == "pending_procurement" else ""
+                A("Открыть", href=f"/procurement/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and workflow_status == "pending_procurement" else
+                A("Просмотр", href=f"/quotes/{q['id']}", style="font-size: 0.875rem;")
             )
         )
+
+    # Status filter options for procurement perspective
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_procurement", "🔶 Ожидают оценки"),
+        ("pending_logistics", "📦 На логистике"),
+        ("pending_customs", "🛃 На таможне"),
+        ("pending_sales_review", "👤 У менеджера продаж"),
+        ("pending_quote_control", "✓ На проверке"),
+        ("approved", "✅ Одобрено"),
+        ("deal", "💼 Сделка"),
+    ]
+
+    # Status filter form
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/procurement",
+        style="margin-bottom: 1rem;"
+    )
 
     return page_layout("Procurement Workspace",
         # Header
@@ -2834,8 +2931,14 @@ def get(session):
         # Stats
         Div(
             Div(
-                Div(str(len(pending_quotes)), cls="stat-value"),
+                Div(str(pending_count), cls="stat-value"),
                 Div("Ожидает оценки"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(in_progress_count), cls="stat-value"),
+                Div("В работе"),
                 cls="card stat-card"
             ),
             Div(
@@ -2844,38 +2947,54 @@ def get(session):
                 cls="card stat-card"
             ),
             Div(
-                Div(str(len(quotes_with_my_brands)), cls="stat-value"),
+                Div(str(all_quotes_count), cls="stat-value"),
                 Div("Всего КП"),
                 cls="card stat-card"
             ),
             cls="stats-grid"
         ),
 
-        # Pending quotes (requiring my attention)
+        # Status filter
+        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
+
+        # Show filtered view if filter is active
         Div(
-            H2("Ожидают оценки"),
-            P("КП на этапе закупок с моими брендами", style="color: #666; margin-bottom: 1rem;"),
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
             Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=True) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        # Default view: Pending quotes (requiring my attention) - only when no filter
+        Div(
+            H2("🔶 Ожидают оценки"),
+            P("КП на этапе закупок с моими брендами — требуется моя работа", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
                     *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="6", style="text-align: center; color: #666;")))
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
             ),
             cls="card"
-        ),
+        ) if not status_filter or status_filter == "all" else None,
 
-        # Other quotes with my brands
+        # Other quotes with my brands - only when no filter
         Div(
-            H2("Другие КП с моими брендами"),
+            H2("📋 Другие КП с моими брендами"),
             P("КП на других этапах workflow", style="color: #666; margin-bottom: 1rem;"),
             Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
-                    *[quote_row(q) for q in other_quotes]
-                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="6", style="text-align: center; color: #666;")))
+                    *[quote_row(q, show_work_button=False) for q in other_quotes]
+                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
             ),
             cls="card"
-        ) if other_quotes else None,
+        ) if (not status_filter or status_filter == "all") and other_quotes else None,
 
         session=session
     )

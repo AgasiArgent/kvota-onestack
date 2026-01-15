@@ -759,3 +759,22 @@
     - Added /procurement route
     - Updated nav_bar() to include role-based links
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #34: Список КП с моими брендами
+- Enhanced procurement page with status filtering dropdown
+- Added per-quote item details:
+  - Shows count of user's items in each quote (e.g., "3/5 позиций оценено")
+  - Progress bar visualization for item completion
+  - List of brands from user's assignments present in each quote
+- Status filter options: All, Pending, Logistics, Customs, Sales Review, Quote Control, Approved, Deal
+- Improved quote row display:
+  - Quote number with link + brands list below
+  - "Мои позиции" column with progress bar and count
+  - "Открыть" button for pending_procurement status
+  - "Просмотр" link for other statuses
+- Case-insensitive brand matching for reliability
+- Stats now show: pending count, in_progress count, brands count, total quotes
+- Pending items card highlighted with left border when > 0
+- Files changed:
+  - main.py (updated /procurement route - added ~120 lines)
+- Status: COMPLETE

@@ -116,12 +116,13 @@ App runs at http://localhost:5001
 - [x] Feature #31: Получение менеджера по бренду (2025-01-15)
 - [x] Feature #32: Получение брендов менеджера (2025-01-15)
 - [x] Feature #33: Страница /procurement (2025-01-15)
+- [x] Feature #34: Список КП с моими брендами (2025-01-15)
 
 ### Next Up
-- Feature #34: Список КП с моими брендами
+- Feature #35: Форма ввода закупочных данных
 
 ### Progress
-- **33 of 88 features completed** (38%)
+- **34 of 88 features completed** (39%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)

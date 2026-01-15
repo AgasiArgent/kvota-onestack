@@ -378,10 +378,10 @@
       "name": "Список КП с моими брендами",
       "description": "Фильтрованный список КП где есть позиции с моими брендами",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T06:15:00Z",
+      "completed_at": "2025-01-15T06:30:00Z"
     },
     {
       "id": 35,
