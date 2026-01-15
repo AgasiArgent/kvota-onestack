@@ -498,8 +498,10 @@
       "name": "Plan-fact actual payment registration",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Register actual payments with variance calculation"
+      "passes": true,
+      "completed_at": "2026-01-15T21:00:00Z",
+      "description": "Register actual payments with variance calculation",
+      "notes": "Implemented in services/plan_fact_service.py with: RegisterPaymentResult dataclass, validation functions (validate_payment_amount, validate_payment_date, validate_payment_currency, validate_payment_document, validate_payment_data), register_payment_for_item() main function with comprehensive validation/variance calculation, register_partial_payment() for partial payments, bulk_register_payments() for batch operations, get_payment_registration_preview() for UI pre-fill, get_variance_summary() for post-payment analysis. Constants: SUPPORTED_PAYMENT_CURRENCIES, MIN/MAX_EXCHANGE_RATE, SIGNIFICANT_VARIANCE_THRESHOLD, MAX_OVERPAYMENT_RATIO. Tests: tests/test_payment_registration.py with 62 passing tests."
     },
     {
       "id": "UI-001",

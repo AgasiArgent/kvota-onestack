@@ -236,7 +236,8 @@ from .plan_fact_service import (
     # Data classes
     PlanFactCategory,
     PlanFactItem,
-    GeneratePlanFactResult,  # Feature #82
+    GeneratePlanFactResult,  # Feature #82 (DEAL-002)
+    RegisterPaymentResult,  # Feature DEAL-003
     # Category functions
     get_all_categories,
     get_category,
@@ -271,10 +272,22 @@ from .plan_fact_service import (
     # Validation
     validate_item_for_payment,
     validate_deal_plan_fact,
-    # Auto-generation functions (Feature #82)
+    # Auto-generation functions (Feature DEAL-002)
     generate_plan_fact_from_deal,
     regenerate_plan_fact_for_deal,
     get_plan_fact_generation_preview,
+    # Actual payment registration (Feature DEAL-003)
+    SUPPORTED_PAYMENT_CURRENCIES,
+    validate_payment_amount,
+    validate_payment_date,
+    validate_payment_currency,
+    validate_payment_document,
+    validate_payment_data,
+    register_payment_for_item,
+    register_partial_payment,
+    bulk_register_payments,
+    get_payment_registration_preview,
+    get_variance_summary,
 )
 from .idn_service import (
     # Data classes (Feature #IDN-001, #IDN-002)
@@ -1095,11 +1108,24 @@ __all__ = [
     # Plan-fact validation
     "validate_item_for_payment",
     "validate_deal_plan_fact",
-    # Auto-generation functions (Feature #82)
+    # Auto-generation functions (Feature DEAL-002)
     "GeneratePlanFactResult",
     "generate_plan_fact_from_deal",
     "regenerate_plan_fact_for_deal",
     "get_plan_fact_generation_preview",
+    # Actual payment registration (Feature DEAL-003)
+    "RegisterPaymentResult",
+    "SUPPORTED_PAYMENT_CURRENCIES",
+    "validate_payment_amount",
+    "validate_payment_date",
+    "validate_payment_currency",
+    "validate_payment_document",
+    "validate_payment_data",
+    "register_payment_for_item",
+    "register_partial_payment",
+    "bulk_register_payments",
+    "get_payment_registration_preview",
+    "get_variance_summary",
     # IDN service (Feature #IDN-001, #IDN-002)
     "ParsedQuoteIDN",
     "ParsedItemIDN",
