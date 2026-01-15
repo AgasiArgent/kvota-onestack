@@ -715,3 +715,20 @@
   - services/brand_service.py (new - ~580 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Features #31 & #32: Brand query convenience functions
+- Added two convenience functions to services/brand_service.py:
+  - get_procurement_manager(org_id, brand) → user_id (Feature #31)
+    - Returns user_id directly (not full BrandAssignment object)
+    - Uses get_brand_assignment_by_brand() internally
+    - Returns None if brand is not assigned
+  - get_assigned_brands(user_id, org_id) → List[str] (Feature #32)
+    - Returns sorted list of brand names only
+    - Uses get_user_brand_assignments() internally
+- Updated services/__init__.py to export both functions
+- These complete the "brands" category of features (30-32)
+- **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
+- Files changed:
+  - services/brand_service.py (updated - added ~50 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

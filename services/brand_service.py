@@ -562,6 +562,55 @@ def delete_all_user_assignments(
 
 
 # =============================================================================
+# Convenience Functions (Features #31, #32)
+# =============================================================================
+
+def get_procurement_manager(organization_id: str, brand: str) -> Optional[str]:
+    """
+    Get the procurement manager user ID for a specific brand.
+
+    Feature #31: Simple function to get manager ID by brand name.
+
+    Args:
+        organization_id: Organization UUID
+        brand: Brand name to look up (case-insensitive)
+
+    Returns:
+        User ID of the assigned procurement manager, or None if not assigned
+
+    Example:
+        manager_id = get_procurement_manager("org-uuid", "BOSCH")
+        if manager_id:
+            print(f"BOSCH is managed by user {manager_id}")
+        else:
+            print("BOSCH has no assigned manager")
+    """
+    assignment = get_brand_assignment_by_brand(organization_id, brand)
+    return assignment.user_id if assignment else None
+
+
+def get_assigned_brands(user_id: str, organization_id: str) -> List[str]:
+    """
+    Get list of brand names assigned to a user in an organization.
+
+    Feature #32: Simple function to get just brand names (not full objects).
+
+    Args:
+        user_id: User UUID
+        organization_id: Organization UUID
+
+    Returns:
+        Sorted list of brand names assigned to this user
+
+    Example:
+        my_brands = get_assigned_brands("user-uuid", "org-uuid")
+        # Returns: ["ABB", "BOSCH", "SIEMENS"]
+    """
+    assignments = get_user_brand_assignments(user_id, organization_id)
+    return sorted([a.brand for a in assignments])
+
+
+# =============================================================================
 # Utility Functions
 # =============================================================================
 

@@ -52,6 +52,9 @@ from .brand_service import (
     delete_brand_assignment,
     delete_brand_assignment_by_brand,
     delete_all_user_assignments,
+    # Convenience functions (Features #31, #32)
+    get_procurement_manager,
+    get_assigned_brands,
     # Utility functions
     get_unique_brands_in_org,
     get_unassigned_brands,
@@ -158,6 +161,8 @@ __all__ = [
     "delete_brand_assignment",
     "delete_brand_assignment_by_brand",
     "delete_all_user_assignments",
+    "get_procurement_manager",
+    "get_assigned_brands",
     "get_unique_brands_in_org",
     "get_unassigned_brands",
     "get_brand_manager_mapping",
