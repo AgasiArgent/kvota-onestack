@@ -922,10 +922,11 @@
       "name": "Форма регистрации платежа",
       "description": "Ввод фактического платежа",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T12:00:00Z",
+      "completed_at": "2026-01-15T12:30:00Z",
+      "notes": "Created payment registration form at /finance/{deal_id}/plan-fact/{item_id}. GET shows form with planned data card (category, amount, date, status) and actual data form (amount, currency, exchange rate, date, payment document, notes). POST validates and updates plan_fact_items with actual payment data. Database trigger automatically calculates variance. Full validation for role (finance/admin), organization access, and data integrity."
     },
     {
       "id": 81,

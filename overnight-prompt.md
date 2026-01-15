@@ -162,12 +162,13 @@ App runs at http://localhost:5001
 - [x] Feature #77: Страница /finance (2026-01-15) - Created /finance route for finance manager workspace. Shows deal statistics (active, completed, total amounts), status filter buttons, deals table with spec/customer joins. Added "Финансы" link to nav_bar for finance/admin roles.
 - [x] Feature #78: Список активных сделок (2026-01-15) - Already in #77: deals list shows active/completed/cancelled with status badges, amounts, dates, action buttons.
 - [x] Feature #79: Таблица план-факт по сделке (2026-01-15) - Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items grouped by category with color coding and status indicators.
+- [x] Feature #80: Форма регистрации платежа (2026-01-15) - Created /finance/{deal_id}/plan-fact/{item_id} GET/POST routes. GET shows planned data card (category, amount, date, status) and actual data form (amount, currency, exchange rate, date, payment document, notes). POST validates and updates plan_fact_items with actual payment data. Database trigger calculates variance automatically.
 
 ### Next Up
-- Feature #80: Форма регистрации платежа (Payment registration form)
+- Feature #81: Сервис план-факта (CRUD for plan_fact_items)
 
 ### Progress
-- **79 of 88 features completed** (90%)
+- **80 of 88 features completed** (91%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

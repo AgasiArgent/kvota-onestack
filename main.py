@@ -8708,6 +8708,415 @@ def get(session, deal_id: str):
 
 
 # ============================================================================
+# PAYMENT REGISTRATION FORM (Feature #80)
+# ============================================================================
+
+@rt("/finance/{deal_id}/plan-fact/{item_id}")
+def get(session, deal_id: str, item_id: str):
+    """
+    Payment registration form - allows registering actual payment for a plan_fact_item.
+
+    Feature #80: Форма регистрации платежа
+
+    This form allows finance users to:
+    1. View planned payment details
+    2. Enter actual payment information (amount, date, currency, exchange rate)
+    3. Add payment document reference and notes
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch the plan_fact_item with category info
+    try:
+        item_result = supabase.table("plan_fact_items").select(
+            "id, deal_id, category_id, description, "
+            "planned_amount, planned_currency, planned_date, "
+            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
+            "variance_amount, payment_document, notes, created_at, "
+            "plan_fact_categories(id, code, name, is_income)"
+        ).eq("id", item_id).single().execute()
+
+        item = item_result.data
+        if not item:
+            return page_layout("Ошибка",
+                H1("Платёж не найден"),
+                P(f"Запись план-факта с ID {item_id} не найдена."),
+                A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+                session=session
+            )
+    except Exception as e:
+        print(f"Error fetching plan_fact_item: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка загрузки"),
+            P(f"Не удалось загрузить запись: {str(e)}"),
+            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            session=session
+        )
+
+    # Verify item belongs to the deal
+    if str(item.get("deal_id")) != str(deal_id):
+        return page_layout("Ошибка",
+            H1("Неверный запрос"),
+            P("Запись план-факта не относится к указанной сделке."),
+            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            session=session
+        )
+
+    # Fetch deal info for header
+    try:
+        deal_result = supabase.table("deals").select(
+            "id, deal_number, organization_id"
+        ).eq("id", deal_id).single().execute()
+
+        deal = deal_result.data
+        if not deal or str(deal.get("organization_id")) != str(org_id):
+            return page_layout("Ошибка",
+                H1("Сделка не найдена"),
+                P("Сделка не найдена или у вас нет доступа."),
+                A("← Назад к финансам", href="/finance", role="button"),
+                session=session
+            )
+    except Exception as e:
+        print(f"Error fetching deal: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка загрузки"),
+            P(f"Не удалось загрузить сделку: {str(e)}"),
+            A("← Назад к финансам", href="/finance", role="button"),
+            session=session
+        )
+
+    deal_number = deal.get("deal_number", "-")
+
+    # Extract item info
+    category = item.get("plan_fact_categories", {}) or {}
+    category_name = category.get("name", "Прочее")
+    is_income = category.get("is_income", False)
+    description = item.get("description", "") or ""
+
+    planned_amount = float(item.get("planned_amount", 0) or 0)
+    planned_currency = item.get("planned_currency", "RUB")
+    planned_date = item.get("planned_date", "")[:10] if item.get("planned_date") else ""
+
+    # Existing actual values (for editing)
+    actual_amount = item.get("actual_amount")
+    actual_currency = item.get("actual_currency") or planned_currency
+    actual_date = item.get("actual_date", "")[:10] if item.get("actual_date") else ""
+    actual_exchange_rate = item.get("actual_exchange_rate") or ""
+    payment_document = item.get("payment_document", "") or ""
+    notes = item.get("notes", "") or ""
+
+    # Status indicator
+    is_paid = actual_amount is not None
+    status_label = "✓ Оплачено" if is_paid else "○ Ожидает оплаты"
+    status_color = "#10b981" if is_paid else "#f59e0b"
+
+    # Category badge
+    category_color = "#10b981" if is_income else "#6366f1"
+    category_type = "Доход" if is_income else "Расход"
+
+    return page_layout(f"Регистрация платежа — {deal_number}",
+        # Header with back button
+        Div(
+            A(f"← Назад к сделке {deal_number}", href=f"/finance/{deal_id}",
+              style="color: #6b7280; text-decoration: none;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Page header
+        H1("Регистрация платежа", style="margin-bottom: 1rem;"),
+
+        # Planned payment info card
+        Div(
+            H3("Плановые данные", style="margin-top: 0;"),
+            Table(
+                Tr(
+                    Td(Strong("Категория:"), style="width: 180px;"),
+                    Td(
+                        Span(category_name, style=f"color: {category_color}; font-weight: 600;"),
+                        Span(f" ({category_type})", style="color: #666; font-size: 0.875rem;")
+                    )
+                ),
+                Tr(Td(Strong("Описание:")), Td(description or "-")),
+                Tr(
+                    Td(Strong("Плановая сумма:")),
+                    Td(f"{planned_amount:,.2f} {planned_currency}", style="font-weight: 600;")
+                ),
+                Tr(Td(Strong("Плановая дата:")), Td(planned_date or "-")),
+                Tr(
+                    Td(Strong("Статус:")),
+                    Td(Span(status_label, style=f"color: {status_color}; font-weight: 500;"))
+                ),
+            ),
+            style="padding: 1rem; background: #f9fafb; border-radius: 8px; margin-bottom: 1.5rem;"
+        ),
+
+        # Actual payment form
+        Form(
+            H3("Фактические данные", style="margin-top: 0;"),
+
+            # Hidden fields
+            Input(type="hidden", name="deal_id", value=deal_id),
+            Input(type="hidden", name="item_id", value=item_id),
+
+            # Actual amount
+            Div(
+                Label("Фактическая сумма *", fr="actual_amount"),
+                Input(
+                    type="number",
+                    name="actual_amount",
+                    id="actual_amount",
+                    value=str(actual_amount) if actual_amount is not None else "",
+                    step="0.01",
+                    min="0",
+                    required=True,
+                    placeholder=f"Плановая: {planned_amount:,.2f}"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Actual currency and exchange rate (side by side)
+            Div(
+                Div(
+                    Label("Валюта", fr="actual_currency"),
+                    Select(
+                        Option("RUB - Рубли", value="RUB", selected=(actual_currency == "RUB")),
+                        Option("USD - Доллары США", value="USD", selected=(actual_currency == "USD")),
+                        Option("EUR - Евро", value="EUR", selected=(actual_currency == "EUR")),
+                        Option("CNY - Юани", value="CNY", selected=(actual_currency == "CNY")),
+                        name="actual_currency",
+                        id="actual_currency"
+                    ),
+                    style="flex: 1; margin-right: 1rem;"
+                ),
+                Div(
+                    Label("Курс к рублю", fr="actual_exchange_rate"),
+                    Input(
+                        type="number",
+                        name="actual_exchange_rate",
+                        id="actual_exchange_rate",
+                        value=str(actual_exchange_rate) if actual_exchange_rate else "",
+                        step="0.0001",
+                        min="0",
+                        placeholder="Для валюты, отличной от RUB"
+                    ),
+                    Small("Оставьте пустым для RUB. Для валют введите курс на дату платежа.",
+                          style="display: block; color: #666; margin-top: 0.25rem;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; flex-wrap: wrap; margin-bottom: 1rem;"
+            ),
+
+            # Actual date
+            Div(
+                Label("Дата платежа *", fr="actual_date"),
+                Input(
+                    type="date",
+                    name="actual_date",
+                    id="actual_date",
+                    value=actual_date or "",
+                    required=True
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Payment document
+            Div(
+                Label("Номер платёжного документа", fr="payment_document"),
+                Input(
+                    type="text",
+                    name="payment_document",
+                    id="payment_document",
+                    value=payment_document,
+                    placeholder="№ п/п, номер счёта и т.д."
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Notes
+            Div(
+                Label("Примечания", fr="notes"),
+                Textarea(
+                    notes,
+                    name="notes",
+                    id="notes",
+                    rows="3",
+                    placeholder="Дополнительная информация о платеже..."
+                ),
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Submit buttons
+            Div(
+                Button("Сохранить платёж", type="submit",
+                       style="background: #10b981; margin-right: 0.5rem;"),
+                A("Отмена", href=f"/finance/{deal_id}", role="button",
+                  style="background: #6b7280;"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+
+            action=f"/finance/{deal_id}/plan-fact/{item_id}",
+            method="POST",
+            style="padding: 1rem; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;"
+        ),
+
+        # Help text
+        Div(
+            H4("Подсказка", style="margin-top: 1.5rem; margin-bottom: 0.5rem;"),
+            P("При сохранении система автоматически рассчитает отклонение от плана.",
+              style="color: #666; font-size: 0.875rem; margin: 0;"),
+            P("Отклонение = Фактическая сумма (в рублях) - Плановая сумма.",
+              style="color: #666; font-size: 0.875rem; margin: 0;"),
+            style="padding: 0.75rem; background: #fef3c7; border-radius: 6px; border: 1px solid #fcd34d;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/finance/{deal_id}/plan-fact/{item_id}")
+def post(session, deal_id: str, item_id: str,
+         actual_amount: str = None,
+         actual_currency: str = "RUB",
+         actual_exchange_rate: str = None,
+         actual_date: str = None,
+         payment_document: str = None,
+         notes: str = None):
+    """
+    Handle payment registration form submission.
+
+    Feature #80: Форма регистрации платежа (POST handler)
+
+    Updates the plan_fact_item with actual payment data.
+    The database trigger automatically calculates variance.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Validate required fields
+    if not actual_amount or not actual_date:
+        return page_layout("Ошибка",
+            H1("Ошибка валидации"),
+            P("Сумма и дата платежа обязательны для заполнения."),
+            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            session=session
+        )
+
+    # Validate the item exists and belongs to the deal in user's org
+    try:
+        # First verify the deal belongs to user's org
+        deal_result = supabase.table("deals").select(
+            "id, deal_number, organization_id"
+        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+
+        if not deal_result.data:
+            return page_layout("Ошибка",
+                H1("Доступ запрещён"),
+                P("Сделка не найдена или у вас нет доступа."),
+                A("← Назад к финансам", href="/finance", role="button"),
+                session=session
+            )
+
+        # Verify item belongs to the deal
+        item_result = supabase.table("plan_fact_items").select(
+            "id, deal_id"
+        ).eq("id", item_id).eq("deal_id", deal_id).single().execute()
+
+        if not item_result.data:
+            return page_layout("Ошибка",
+                H1("Запись не найдена"),
+                P("Запись план-факта не найдена или не относится к указанной сделке."),
+                A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+                session=session
+            )
+    except Exception as e:
+        print(f"Error validating item: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось проверить запись: {str(e)}"),
+            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            session=session
+        )
+
+    # Prepare update data
+    try:
+        actual_amount_val = float(actual_amount)
+    except ValueError:
+        return page_layout("Ошибка",
+            H1("Ошибка валидации"),
+            P("Некорректное значение суммы."),
+            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            session=session
+        )
+
+    update_data = {
+        "actual_amount": actual_amount_val,
+        "actual_currency": actual_currency,
+        "actual_date": actual_date,
+        "payment_document": payment_document.strip() if payment_document else None,
+        "notes": notes.strip() if notes else None,
+    }
+
+    # Handle exchange rate
+    if actual_exchange_rate and actual_exchange_rate.strip():
+        try:
+            update_data["actual_exchange_rate"] = float(actual_exchange_rate)
+        except ValueError:
+            return page_layout("Ошибка",
+                H1("Ошибка валидации"),
+                P("Некорректное значение курса валюты."),
+                A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+                session=session
+            )
+    else:
+        # For RUB, set exchange rate to 1
+        if actual_currency == "RUB":
+            update_data["actual_exchange_rate"] = 1.0
+        else:
+            update_data["actual_exchange_rate"] = None
+
+    # Update the plan_fact_item
+    try:
+        result = supabase.table("plan_fact_items").update(update_data).eq("id", item_id).execute()
+
+        if not result.data:
+            raise Exception("No data returned from update")
+
+        # Redirect back to deal page with success
+        return RedirectResponse(f"/finance/{deal_id}?payment_registered=1", status_code=303)
+
+    except Exception as e:
+        print(f"Error updating plan_fact_item: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка сохранения"),
+            P(f"Не удалось сохранить платёж: {str(e)}"),
+            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

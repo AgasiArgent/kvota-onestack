@@ -1978,3 +1978,32 @@ CreateDealFromSpecResult(
 - Ready for Feature #79: Plan-fact table per deal
 
 ### Status: COMPLETE - Features #77 and #78 done
+
+## Session 2026-01-15 - Feature #80: Форма регистрации платежа
+
+### What was done
+- Created payment registration form at `/finance/{deal_id}/plan-fact/{item_id}`
+- GET route shows:
+  - Planned data card: category, description, planned amount/currency/date, current status
+  - Actual data form: amount, currency, exchange rate, date, payment document, notes
+  - Color-coded category (green for income, purple for expense)
+  - Help text explaining variance calculation
+- POST route:
+  - Validates user role (finance/admin) and organization access
+  - Validates required fields (amount, date)
+  - Updates plan_fact_items with actual payment data
+  - Database trigger automatically calculates variance
+  - Redirects to deal page on success
+
+### Files changed
+- `main.py`:
+  - Added GET `/finance/{deal_id}/plan-fact/{item_id}` route (~160 lines)
+  - Added POST handler for payment registration (~115 lines)
+
+### Technical notes
+- Form supports multiple currencies (RUB, USD, EUR, CNY)
+- Exchange rate field is required for non-RUB currencies
+- Uses existing database trigger `calculate_plan_fact_variance()` for variance calculation
+- Full validation chain: login → role check → org access → deal access → item validation
+
+### Status: COMPLETE
