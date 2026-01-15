@@ -1,0 +1,50 @@
+{
+  "version": "1.0",
+  "created": "2025-01-15",
+  "project": "OneStack Workflow Extension",
+
+  "config": {
+    "max_iterations": 10,
+    "max_fix_attempts": 5,
+    "test_command": "source venv/bin/activate && pytest tests/ -v --tb=short 2>&1",
+    "severity_order": ["critical", "high", "medium", "low"],
+    "protected_files": [
+      "calculation_engine.py",
+      "calculation_models.py"
+    ],
+    "protected_files_note": "NEVER modify these files - calc engine is frozen and verified against Excel reference"
+  },
+
+  "test_categories": [
+    {
+      "name": "unit_services",
+      "description": "Unit tests for service layer (role_service, workflow_service, etc.)",
+      "pattern": "tests/test_services*.py",
+      "priority": 1
+    },
+    {
+      "name": "api_endpoints",
+      "description": "API endpoint tests (routes, authentication, authorization)",
+      "pattern": "tests/test_api*.py",
+      "priority": 2
+    },
+    {
+      "name": "integration",
+      "description": "Integration tests (database, end-to-end flows)",
+      "pattern": "tests/test_integration*.py",
+      "priority": 3
+    },
+    {
+      "name": "ui",
+      "description": "UI tests (browser-based, visual regression)",
+      "pattern": "tests/test_ui*.py",
+      "priority": 4
+    }
+  ],
+
+  "exit_conditions": {
+    "success": "All tests pass with 0 failures",
+    "timeout": "Iteration count exceeds max_iterations",
+    "stuck": "Same bug fails to fix after max_fix_attempts attempts"
+  }
+}

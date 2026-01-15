@@ -36,7 +36,7 @@ from services.brand_service import get_assigned_brands
 from services.workflow_service import (
     WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
     check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs,
-    transition_quote_status, get_quote_transition_history
+    transition_quote_status, get_quote_transition_history, transition_to_pending_procurement
 )
 
 # Import approval service (Feature #65, #86)
@@ -421,9 +421,11 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 quote_info = a.get('quotes', {}) or {}
                 # Handle both 'idn' and 'idn_quote' field names
                 quote_idn = quote_info.get('idn_quote') or quote_info.get('idn') or f"#{a.get('quote_id', '')[:8]}"
+                # Get customer name from nested customers relationship
+                customer_name = quote_info.get('customers', {}).get('name', '—') if quote_info.get('customers') else '—'
                 approval_rows.append(Tr(
                     Td(quote_idn),
-                    Td(quote_info.get('customer_name', '—')),
+                    Td(customer_name),
                     Td(format_money(quote_info.get('total_amount'))),
                     Td(a.get('requested_at', '')[:10] if a.get('requested_at') else '—'),
                     Td(
@@ -1103,8 +1105,18 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
         quote_num = (count_result.count or 0) + 1
         idn_quote = f"Q-{datetime.now().strftime('%Y%m')}-{quote_num:04d}"
 
+        # Get customer name for title
+        customer_result = supabase.table("customers") \
+            .select("name") \
+            .eq("id", customer_id) \
+            .single() \
+            .execute()
+        customer_name = customer_result.data.get("name", "Unknown") if customer_result.data else "Unknown"
+        title = f"Quote for {customer_name}"
+
         result = supabase.table("quotes").insert({
             "idn_quote": idn_quote,
+            "title": title,
             "customer_id": customer_id,
             "organization_id": user["org_id"],
             "currency": currency,
@@ -1165,11 +1177,13 @@ def get(quote_id: str, session):
 
     items = items_result.data or []
 
+    workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
+
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         Div(
             Div(
                 H1(f"Quote {quote.get('idn_quote', '')}"),
-                status_badge(quote.get("status", "draft")),
+                workflow_status_badge(workflow_status),
                 style="display: flex; align-items: center; gap: 1rem;"
             ),
             Div(
@@ -1233,6 +1247,104 @@ def get(quote_id: str, session):
             cls="card"
         ) if quote.get("total_amount") else None,
 
+        # Workflow Actions (for draft quotes with items)
+        Div(
+            H3("Workflow"),
+            Form(
+                Button("📤 Submit for Procurement", type="submit",
+                       style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                P("Send quote to procurement for supplier pricing.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                method="post",
+                action=f"/quotes/{quote_id}/submit-procurement"
+            ),
+            cls="card", style="border-left: 4px solid #16a34a;"
+        ) if workflow_status == "draft" and items else None,
+
+        # Workflow Actions (for pending_sales_review - submit for Quote Control)
+        Div(
+            H3("Workflow"),
+            Form(
+                Button("📋 Submit for Quote Control", type="submit",
+                       style="background: #ec4899; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                method="post",
+                action=f"/quotes/{quote_id}/submit-quote-control"
+            ),
+            cls="card", style="border-left: 4px solid #ec4899;"
+        ) if workflow_status == "pending_sales_review" else None,
+
+        # Workflow Actions (for pending_approval - Top Manager approval)
+        Div(
+            H3("⏳ Согласование"),
+            P("Этот КП требует вашего одобрения.", style="margin-bottom: 1rem;"),
+            Form(
+                Div(
+                    Label("Комментарий (необязательно):", for_="approval_comment"),
+                    Input(type="text", name="comment", id="approval_comment",
+                          placeholder="Ваш комментарий...", style="width: 100%; margin-bottom: 1rem;"),
+                ),
+                Div(
+                    Button("✅ Одобрить", type="submit", name="action", value="approve",
+                           style="background: #16a34a; color: white; margin-right: 1rem;"),
+                    Button("❌ Отклонить", type="submit", name="action", value="reject",
+                           style="background: #dc2626; color: white;"),
+                ),
+                method="post",
+                action=f"/quotes/{quote_id}/manager-decision"
+            ),
+            cls="card", style="border-left: 4px solid #f59e0b;"
+        ) if workflow_status == "pending_approval" and user_has_any_role(session, ["top_manager", "admin"]) else None,
+
+        # Workflow Actions (for approved quotes - Send to Client)
+        Div(
+            H3("Workflow"),
+            Form(
+                Button("📧 Send to Client", type="submit",
+                       style="background: #0891b2; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                P("Send approved quote to the client.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                method="post",
+                action=f"/quotes/{quote_id}/send-to-client"
+            ),
+            cls="card", style="border-left: 4px solid #0891b2;"
+        ) if workflow_status == "approved" and user_has_any_role(session, ["sales", "admin"]) else None,
+
+        # Workflow Actions (for sent_to_client - Start Negotiation or Accept)
+        Div(
+            H3("Workflow"),
+            P("Client has received the quote. What's next?", style="margin-bottom: 1rem;"),
+            Div(
+                Form(
+                    Button("🤝 Start Negotiation", type="submit",
+                           style="background: #14b8a6; color: white; margin-right: 1rem;"),
+                    method="post",
+                    action=f"/quotes/{quote_id}/start-negotiation",
+                    style="display: inline;"
+                ),
+                Form(
+                    Button("✅ Client Accepted - Submit for Spec", type="submit",
+                           style="background: #16a34a; color: white;"),
+                    method="post",
+                    action=f"/quotes/{quote_id}/submit-spec-control",
+                    style="display: inline;"
+                ),
+            ),
+            cls="card", style="border-left: 4px solid #14b8a6;"
+        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
+
+        # Workflow Actions (for client_negotiation - Accept Version)
+        Div(
+            H3("Workflow"),
+            P("Negotiation in progress. When client accepts a version:", style="margin-bottom: 1rem;"),
+            Form(
+                Button("✅ Client Accepted Version - Submit for Spec", type="submit",
+                       style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                P("Proceed to specification preparation.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                method="post",
+                action=f"/quotes/{quote_id}/submit-spec-control"
+            ),
+            cls="card", style="border-left: 4px solid #16a34a;"
+        ) if workflow_status == "client_negotiation" and user_has_any_role(session, ["sales", "admin"]) else None,
+
         # Actions section
         Div(
             H3("Actions"),
@@ -1252,6 +1364,227 @@ def get(quote_id: str, session):
         A("← Back to Quotes", href="/quotes", style="display: inline-block; margin-top: 1rem;"),
         session=session
     )
+
+
+# ============================================================================
+# SUBMIT QUOTE FOR PROCUREMENT
+# ============================================================================
+
+@rt("/quotes/{quote_id}/submit-procurement")
+def post(quote_id: str, session):
+    """Submit a draft quote for procurement evaluation."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    # Use the workflow service to transition to pending_procurement
+    result = transition_to_pending_procurement(
+        quote_id=quote_id,
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Submitted by sales for procurement evaluation"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error submitting quote: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# SUBMIT QUOTE FOR QUOTE CONTROL
+# ============================================================================
+
+@rt("/quotes/{quote_id}/submit-quote-control")
+def post(quote_id: str, session):
+    """Submit a quote from pending_sales_review to pending_quote_control."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    # Use the workflow service to transition to pending_quote_control
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status="pending_quote_control",
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Submitted by sales for quote control review"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error submitting quote: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# MANAGER APPROVAL/REJECTION
+# ============================================================================
+
+@rt("/quotes/{quote_id}/manager-decision")
+def post(quote_id: str, session, action: str = "", comment: str = ""):
+    """Top manager approves or rejects a quote."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    # Check role
+    if not user_has_any_role(session, ["top_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    if action == "approve":
+        to_status = "approved"
+        comment = comment or "Одобрено топ-менеджером"
+    elif action == "reject":
+        to_status = "rejected"
+        if not comment:
+            return page_layout("Error",
+                Div("Для отклонения необходимо указать причину.", cls="alert alert-error"),
+                A("← Back to Quote", href=f"/quotes/{quote_id}"),
+                session=session
+            )
+    else:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+
+    # Use the workflow service to transition
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=to_status,
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment=comment
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# SEND TO CLIENT
+# ============================================================================
+
+@rt("/quotes/{quote_id}/send-to-client")
+def post(quote_id: str, session):
+    """Send approved quote to client."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status="sent_to_client",
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Quote sent to client"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# START NEGOTIATION
+# ============================================================================
+
+@rt("/quotes/{quote_id}/start-negotiation")
+def post(quote_id: str, session):
+    """Start client negotiation."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status="client_negotiation",
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Client negotiation started"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# SUBMIT FOR SPEC CONTROL
+# ============================================================================
+
+@rt("/quotes/{quote_id}/submit-spec-control")
+def post(quote_id: str, session):
+    """Submit quote for specification control."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status="pending_spec_control",
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Client accepted, submitted for specification"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
 
 
 # ============================================================================
@@ -3737,12 +4070,12 @@ def get(session, status_filter: str = None):
     if my_brands:
         # Query quote_items with my brands - get more details
         items_result = supabase.table("quote_items") \
-            .select("id, quote_id, brand, procurement_status, quantity, name") \
+            .select("id, quote_id, brand, procurement_status, quantity, product_name") \
             .execute()
 
         # Filter items for my brands (case-insensitive)
         my_items = [item for item in (items_result.data or [])
-                    if item.get("brand", "").lower() in my_brands_lower]
+                    if (item.get("brand") or "").lower() in my_brands_lower]
 
         # Group items by quote_id
         items_by_quote = {}
@@ -4302,7 +4635,7 @@ def get(quote_id: str, session):
 
 
 @rt("/procurement/{quote_id}")
-def post(quote_id: str, session, action: str = "save", **kwargs):
+async def post(quote_id: str, session, request):
     """
     Save procurement data for quote items.
 
@@ -4322,10 +4655,15 @@ def post(quote_id: str, session, action: str = "save", **kwargs):
     if not user_has_any_role(session, ["procurement", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    # Get form data
+    form_data = await request.form()
+    action = form_data.get("action", "save")
+
     supabase = get_supabase()
 
     # Verify quote exists and is accessible
     quote_result = supabase.table("quotes") \
+        .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
@@ -4345,12 +4683,12 @@ def post(quote_id: str, session, action: str = "save", **kwargs):
     my_brands_lower = [b.lower() for b in my_brands]
 
     # Get items count from form
-    item_count = int(kwargs.get("item_count", 0))
+    item_count = int(form_data.get("item_count", 0))
 
     # Process each item from the form
     updated_items = 0
     for idx in range(item_count):
-        item_id = kwargs.get(f"item_id_{idx}")
+        item_id = form_data.get(f"item_id_{idx}")
         if not item_id:
             continue
 
@@ -4363,43 +4701,43 @@ def post(quote_id: str, session, action: str = "save", **kwargs):
             .execute()
 
         item = item_result.data
-        if not item or item.get("brand", "").lower() not in my_brands_lower:
+        if not item or (item.get("brand") or "").lower() not in my_brands_lower:
             continue
 
         # Build update data
         update_data = {}
 
         # Get values from form (using item_id suffix)
-        base_price = kwargs.get(f"base_price_vat_{item_id}")
+        base_price = form_data.get(f"base_price_vat_{item_id}")
         if base_price:
             update_data["base_price_vat"] = float(base_price)
 
-        weight = kwargs.get(f"weight_in_kg_{item_id}")
+        weight = form_data.get(f"weight_in_kg_{item_id}")
         if weight:
             update_data["weight_in_kg"] = float(weight)
 
-        supplier_country = kwargs.get(f"supplier_country_{item_id}")
+        supplier_country = form_data.get(f"supplier_country_{item_id}")
         if supplier_country:
             update_data["supplier_country"] = supplier_country
 
-        supplier_city = kwargs.get(f"supplier_city_{item_id}")
+        supplier_city = form_data.get(f"supplier_city_{item_id}")
         update_data["supplier_city"] = supplier_city or None
 
-        production_time = kwargs.get(f"production_time_days_{item_id}")
+        production_time = form_data.get(f"production_time_days_{item_id}")
         if production_time:
             update_data["production_time_days"] = int(production_time)
 
-        payer_company = kwargs.get(f"payer_company_{item_id}")
+        payer_company = form_data.get(f"payer_company_{item_id}")
         update_data["payer_company"] = payer_company or None
 
-        advance_percent = kwargs.get(f"advance_to_supplier_percent_{item_id}")
+        advance_percent = form_data.get(f"advance_to_supplier_percent_{item_id}")
         if advance_percent:
             update_data["advance_to_supplier_percent"] = float(advance_percent)
 
-        payment_terms = kwargs.get(f"supplier_payment_terms_{item_id}")
+        payment_terms = form_data.get(f"supplier_payment_terms_{item_id}")
         update_data["supplier_payment_terms"] = payment_terms or None
 
-        notes = kwargs.get(f"procurement_notes_{item_id}")
+        notes = form_data.get(f"procurement_notes_{item_id}")
         update_data["procurement_notes"] = notes or None
 
         # If completing, mark procurement status
@@ -4791,7 +5129,7 @@ def get(session, quote_id: str):
 
     # Fetch quote items for summary
     items_result = supabase.table("quote_items") \
-        .select("id, brand, article_number, name, quantity, unit, base_price, weight, supplier_country") \
+        .select("id, brand, product_code, product_name, quantity, unit, base_price_vat, weight_in_kg, supplier_country") \
         .eq("quote_id", quote_id) \
         .execute()
 
@@ -4804,7 +5142,7 @@ def get(session, quote_id: str):
 
     # Calculate summary stats
     total_items = len(items)
-    total_weight = sum(float(item.get("weight", 0) or 0) for item in items)
+    total_weight = sum(float(item.get("weight_in_kg", 0) or 0) for item in items)
     unique_countries = set(item.get("supplier_country", "Unknown") for item in items)
 
     # Build items summary table
@@ -4820,10 +5158,10 @@ def get(session, quote_id: str):
         Tbody(
             *[Tr(
                 Td(item.get("brand", "—")),
-                Td(item.get("article_number", "—")),
-                Td(item.get("name", "—")[:40] + "..." if len(item.get("name", "")) > 40 else item.get("name", "—")),
+                Td(item.get("product_code", "—")),
+                Td(item.get("product_name", "—")[:40] + "..." if len(item.get("product_name", "") or "") > 40 else item.get("product_name", "—")),
                 Td(str(item.get("quantity", 0))),
-                Td(str(item.get("weight", "—"))),
+                Td(str(item.get("weight_in_kg", "—"))),
                 Td(item.get("supplier_country", "—"))
             ) for item in items[:20]]  # Show first 20 items
         ),
@@ -5112,7 +5450,6 @@ def post(session, quote_id: str,
         supabase.table("quote_calculation_variables") \
             .insert({
                 "quote_id": quote_id,
-                "organization_id": org_id,
                 "variables": updated_vars
             }) \
             .execute()
@@ -5390,7 +5727,7 @@ def get(session, quote_id: str):
 
     # Fetch quote items
     items_result = supabase.table("quote_items") \
-        .select("id, brand, article_number, name, quantity, unit, base_price, weight, supplier_country, hs_code, customs_duty, customs_extra") \
+        .select("id, brand, product_code, product_name, quantity, unit, base_price_vat, weight_in_kg, supplier_country, hs_code, customs_duty, customs_extra") \
         .eq("quote_id", quote_id) \
         .order("created_at") \
         .execute()
@@ -5415,9 +5752,9 @@ def get(session, quote_id: str):
             Td(str(index + 1)),
             Td(
                 Div(item.get("brand", "—"), style="font-weight: 500;"),
-                Div(item.get("article_number", ""), style="font-size: 0.75rem; color: #666;")
+                Div(item.get("product_code", ""), style="font-size: 0.75rem; color: #666;")
             ),
-            Td(item.get("name", "—")[:40] + "..." if len(item.get("name", "")) > 40 else item.get("name", "—")),
+            Td((item.get("product_name", "") or "—")[:40] + "..." if len(item.get("product_name", "") or "") > 40 else (item.get("product_name", "") or "—")),
             Td(f"{item.get('quantity', 0)} {item.get('unit', 'шт')}"),
             Td(item.get("supplier_country", "—")),
             Td(
@@ -5614,7 +5951,7 @@ def get(session, quote_id: str):
 
 
 @rt("/customs/{quote_id}")
-def post(session, quote_id: str, action: str = "save", customs_notes: str = "", **kwargs):
+async def post(session, quote_id: str, request):
     """
     Save customs data for all items and optionally mark customs as complete.
 
@@ -5624,6 +5961,11 @@ def post(session, quote_id: str, action: str = "save", customs_notes: str = "", 
     redirect = require_login(session)
     if redirect:
         return redirect
+
+    # Get form data
+    form_data = await request.form()
+    action = form_data.get("action", "save")
+    customs_notes = form_data.get("customs_notes", "")
 
     user = session["user"]
     user_id = user["id"]
@@ -5671,9 +6013,9 @@ def post(session, quote_id: str, action: str = "save", customs_notes: str = "", 
     # Update customs data for each item
     for item in items:
         item_id = item["id"]
-        hs_code = kwargs.get(f"hs_code_{item_id}", "")
-        customs_duty = kwargs.get(f"customs_duty_{item_id}", "0")
-        customs_extra = kwargs.get(f"customs_extra_{item_id}", "0")
+        hs_code = form_data.get(f"hs_code_{item_id}", "")
+        customs_duty = form_data.get(f"customs_duty_{item_id}", "0")
+        customs_extra = form_data.get(f"customs_extra_{item_id}", "0")
 
         # Update item
         supabase.table("quote_items") \
@@ -5962,7 +6304,7 @@ def get(session, quote_id: str):
 
     # Get the quote
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name, idn_customer)") \
+        .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -6334,7 +6676,7 @@ def get(session, quote_id: str):
 
     # Get the quote
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name, idn_customer)") \
+        .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -6550,7 +6892,7 @@ def get(session, quote_id: str):
 
     # Get the quote
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name, idn_customer)") \
+        .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -6713,7 +7055,7 @@ def post(session, quote_id: str, comment: str = ""):
 
     # Verify quote exists and belongs to this org
     quote_result = supabase.table("quotes") \
-        .select("workflow_status, idn_quote, customer_name, total_amount, currency") \
+        .select("workflow_status, idn_quote, total_amount, currency, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -6728,7 +7070,7 @@ def post(session, quote_id: str, comment: str = ""):
 
     quote = quote_result.data[0]
     idn_quote = quote.get("idn_quote", "")
-    customer_name = quote.get("customer_name", "")
+    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
     total_amount = quote.get("total_amount")
 
     # Use the new request_approval function (Feature #65)
@@ -6805,7 +7147,7 @@ def get(session, quote_id: str):
 
     # Get the quote
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name, idn_customer)") \
+        .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()

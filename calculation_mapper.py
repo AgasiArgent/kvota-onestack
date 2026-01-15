@@ -95,6 +95,14 @@ SUPPLIER_COUNTRY_MAPPING = {
     "Poland": "Польша",
     "UAE": "ОАЭ",
     "Other": "Прочие",
+
+    # Additional EU countries (map to EU cross-border)
+    "Германия": "ЕС (между странами ЕС)",
+    "Germany": "ЕС (между странами ЕС)",
+
+    # Non-EU countries (map to Other)
+    "США": "Прочие",
+    "USA": "Прочие",
 }
 
 

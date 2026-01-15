@@ -1,0 +1,12 @@
+{
+  "session_id": null,
+  "started_at": null,
+  "bugs": [],
+  "summary": {
+    "total_found": 0,
+    "resolved": 0,
+    "stuck": 0,
+    "recurring_bugs": []
+  },
+  "history": []
+}
