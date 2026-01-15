@@ -451,6 +451,51 @@ from .customer_service import (
     get_customer_for_idn,
     get_signatory_for_specification,
 )
+from .customer_contract_service import (
+    # Data class (Feature #API-005)
+    CustomerContract,
+    # Constants
+    CONTRACT_STATUSES,
+    CONTRACT_STATUS_NAMES,
+    CONTRACT_STATUS_COLORS,
+    # Validation functions
+    validate_contract_number,
+    validate_contract_status,
+    # Status helpers
+    get_contract_status_name,
+    get_contract_status_color,
+    is_contract_active,
+    # Create operations
+    create_contract,
+    # Read operations
+    get_contract,
+    get_contract_with_customer,
+    get_contract_by_number,
+    get_contracts_for_customer,
+    get_active_contracts_for_customer,
+    get_all_contracts,
+    get_contracts_with_customer_names,
+    count_contracts,
+    search_contracts as search_customer_contracts,
+    contract_exists,
+    # Update operations
+    update_contract,
+    suspend_contract,
+    terminate_contract,
+    activate_contract as activate_customer_contract,
+    # Specification numbering
+    get_next_specification_number,
+    get_current_specification_number,
+    reset_specification_number,
+    # Delete operations
+    delete_contract,
+    # Utility functions
+    get_contract_stats,
+    get_contract_display_name,
+    format_contract_for_dropdown,
+    get_contracts_for_dropdown,
+    get_contract_for_specification,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -956,4 +1001,38 @@ __all__ = [
     "get_customer_for_document",
     "get_customer_for_idn",
     "get_signatory_for_specification",
+    # Customer contract service (Feature #API-005)
+    "CustomerContract",
+    "CONTRACT_STATUSES",
+    "CONTRACT_STATUS_NAMES",
+    "CONTRACT_STATUS_COLORS",
+    "validate_contract_number",
+    "validate_contract_status",
+    "get_contract_status_name",
+    "get_contract_status_color",
+    "is_contract_active",
+    "create_contract",
+    "get_contract",
+    "get_contract_with_customer",
+    "get_contract_by_number",
+    "get_contracts_for_customer",
+    "get_active_contracts_for_customer",
+    "get_all_contracts",
+    "get_contracts_with_customer_names",
+    "count_contracts",
+    "search_customer_contracts",
+    "contract_exists",
+    "update_contract",
+    "suspend_contract",
+    "terminate_contract",
+    "activate_customer_contract",
+    "get_next_specification_number",
+    "get_current_specification_number",
+    "reset_specification_number",
+    "delete_contract",
+    "get_contract_stats",
+    "get_contract_display_name",
+    "format_contract_for_dropdown",
+    "get_contracts_for_dropdown",
+    "get_contract_for_specification",
 ]

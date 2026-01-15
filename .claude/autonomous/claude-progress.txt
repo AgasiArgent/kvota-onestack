@@ -3113,3 +3113,19 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - Edge cases (special characters, boundaries)
 - All 30 tests pass
 - Status: COMPLETE
+
+---
+2026-01-15T18:53:44 - Completed API-005 (Customer Contracts CRUD API)
+- Created services/customer_contract_service.py with:
+  - CustomerContract dataclass
+  - Constants: CONTRACT_STATUSES, CONTRACT_STATUS_NAMES, CONTRACT_STATUS_COLORS
+  - Validation: validate_contract_number(), validate_contract_status()
+  - Status helpers: get_contract_status_name(), get_contract_status_color(), is_contract_active()
+  - CRUD operations: create/get/update/delete contracts
+  - Contract queries: get_contracts_for_customer, get_active_contracts_for_customer, etc.
+  - Specification numbering: get_next_specification_number(), reset_specification_number()
+  - Utility: get_contract_stats(), format_contract_for_dropdown(), get_contract_for_specification()
+- Updated services/__init__.py with all exports
+- Created tests/test_customer_contract_service.py with 44 tests (all passing)
+- Updated features.json: API-005 passes=true
+

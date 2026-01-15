@@ -322,8 +322,10 @@
       "name": "CRUD API for customer_contracts",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Manage supply contracts"
+      "passes": true,
+      "completed_at": "2026-01-15T19:30:00Z",
+      "description": "Manage supply contracts",
+      "notes": "Created services/customer_contract_service.py with: CustomerContract dataclass, CONTRACT_STATUSES/STATUS_NAMES/STATUS_COLORS constants, validation functions (validate_contract_number, validate_contract_status), status helpers (get_contract_status_name, get_contract_status_color, is_contract_active), CRUD operations (create_contract, get_contract, get_contract_with_customer, get_contract_by_number, get_contracts_for_customer, get_active_contracts_for_customer, get_all_contracts, get_contracts_with_customer_names, count_contracts, search_contracts, contract_exists, update_contract, suspend_contract, terminate_contract, activate_contract, delete_contract), specification numbering (get_next_specification_number, get_current_specification_number, reset_specification_number), utility functions (get_contract_stats, get_contract_display_name, format_contract_for_dropdown, get_contracts_for_dropdown, get_contract_for_specification). Updated services/__init__.py with all exports. Tests in tests/test_customer_contract_service.py with 44 passing tests."
     },
     {
       "id": "API-006",
