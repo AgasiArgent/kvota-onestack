@@ -1086,3 +1086,32 @@
     - Added GET /quote-control/{quote_id}/return route
     - Added POST /quote-control/{quote_id}/return handler
 - Status: COMPLETE - Feature #49 done
+
+
+## Session 2025-01-15 - Feature #50: Кнопка отправки на согласование
+- Created /quote-control/{quote_id}/request-approval GET route:
+  - Shows form for quote_controller to request top manager approval
+  - Requires quote_controller or admin role
+  - Only available when quote is in pending_quote_control status
+  - Auto-detects approval reasons (RUB currency, <100% prepayment, low markup, LPR reward)
+  - Pre-fills comment textarea with detected reasons
+  - Shows info banner about the approval process
+  - Shows detected reasons card with yellow background
+- Created /quote-control/{quote_id}/request-approval POST handler:
+  - Validates user role (quote_controller/admin)
+  - Validates comment is provided (required for this transition)
+  - Uses transition_quote_status() to move from PENDING_QUOTE_CONTROL to PENDING_APPROVAL
+  - Shows success page with confirmation and comment
+  - Shows error page if transition fails
+- UI features:
+  - Russian labels
+  - Blue info banner about approval process
+  - Yellow card showing detected approval reasons
+  - Required textarea with auto-filled reasons
+  - Submit button styled with blue color (neutral action)
+  - Cancel link
+- Files changed:
+  - main.py (~180 lines added):
+    - Added GET /quote-control/{quote_id}/request-approval route
+    - Added POST /quote-control/{quote_id}/request-approval handler
+- Status: COMPLETE - Feature #50 done

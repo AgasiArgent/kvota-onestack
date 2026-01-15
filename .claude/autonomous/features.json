@@ -565,10 +565,11 @@
       "name": "Кнопка отправки на согласование",
       "description": "Запрос согласования топ-менеджера с причиной",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T18:35:00Z",
+      "completed_at": "2025-01-15T19:00:00Z",
+      "notes": "Created /quote-control/{quote_id}/request-approval GET route for form and POST handler. Auto-detects approval reasons, pre-fills comment. Transitions to PENDING_APPROVAL."
     },
     {
       "id": 51,

@@ -132,12 +132,13 @@ App runs at http://localhost:5001
 - [x] Feature #47: Список КП на проверке (2025-01-15) - In #46
 - [x] Feature #48: Чек-лист проверки КП (2025-01-15)
 - [x] Feature #49: Форма возврата на доработку (2025-01-15)
+- [x] Feature #50: Кнопка отправки на согласование (2025-01-15)
 
 ### Next Up
-- Feature #50: Кнопка отправки на согласование (send for approval button)
+- Feature #51: Кнопка одобрения КП (approve quote button)
 
 ### Progress
-- **49 of 88 features completed** (56%)
+- **50 of 88 features completed** (57%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
