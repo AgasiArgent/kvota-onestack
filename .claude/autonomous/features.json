@@ -222,8 +222,10 @@
       "name": "Create plan_fact_items table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Track planned vs actual payments with variance"
+      "passes": true,
+      "completed_at": "2026-01-15T20:15:00Z",
+      "description": "Track planned vs actual payments with variance",
+      "notes": "Created migration 039_create_plan_fact_items_table.sql with: deal_id/category_id FKs, planned/actual amounts with currencies, auto-variance calculation (amount + percent), status tracking (planned/partial/completed/cancelled/overdue), payment documentation. Triggers: timestamp update, variance calculation, overdue check. Helper functions: create_plan_fact_item(), register_plan_fact_payment(), cancel_plan_fact_item(), get_deal_plan_fact_summary(), get_plan_fact_items(), generate_plan_fact_from_deal(), mark_plan_fact_items_overdue(). View: v_plan_fact_items_full. RLS policies for organization isolation."
     },
     {
       "id": "DB-024",

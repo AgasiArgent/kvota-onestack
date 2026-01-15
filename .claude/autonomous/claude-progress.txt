@@ -3017,3 +3017,33 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - get_deal_category_stats(deal_id) - Get plan-fact stats by category
 - RLS: All authenticated users can read, only service_role can modify
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-023: Create plan_fact_items table
+- Purpose: Track planned vs actual payments for deals (finance role's main workspace)
+- Created migration 039_create_plan_fact_items_table.sql
+- Table columns:
+  - id, deal_id (FK to deals), category_id (FK to plan_fact_categories)
+  - description, notes for context
+  - Planned: planned_amount, planned_currency, planned_date
+  - Actual: actual_amount, actual_currency, actual_date, actual_exchange_rate
+  - Auto-calculated: variance_amount, variance_percent (triggers)
+  - Payment docs: payment_document, bank_account_id
+  - Status: planned/partial/completed/cancelled/overdue
+  - Audit: created_by, created_at, updated_at, cancelled_at/by, cancellation_reason
+- Indexes for deal_id, category_id, status, dates, overdue items
+- Triggers:
+  - tr_plan_fact_items_update_timestamp - auto-update updated_at
+  - tr_plan_fact_items_calculate_variance - auto-calc variance when actual is set
+  - tr_plan_fact_items_check_overdue - auto-mark overdue items
+- RLS policies: Organization isolation via deals→quotes→organization_id chain
+- Helper functions:
+  - create_plan_fact_item(deal_id, category_code, description, amount, currency, date) - Create planned item
+  - register_plan_fact_payment(item_id, amount, currency, date, exchange_rate, doc, bank) - Register actual payment
+  - cancel_plan_fact_item(item_id, reason, cancelled_by) - Cancel an item
+  - get_deal_plan_fact_summary(deal_id) - Dashboard stats (planned/actual income/expenses, profit, variance, counts)
+  - get_plan_fact_items(deal_id, status?, category?) - List items with filters
+  - generate_plan_fact_from_deal(deal_id) - Auto-generate items from deal terms
+  - mark_plan_fact_items_overdue() - Batch job to mark overdue items
+- View: v_plan_fact_items_full with category, deal, quote, customer context
+- Status: COMPLETE
