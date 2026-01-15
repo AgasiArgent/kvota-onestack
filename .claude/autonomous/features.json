@@ -102,8 +102,10 @@
       "name": "Extend quotes table with new columns",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Add idn, seller_company_id, workflow_status, deal_type, assigned users, timestamps"
+      "passes": true,
+      "completed_at": "2026-01-15T18:10:00Z",
+      "description": "Add idn, seller_company_id, workflow_status, deal_type, assigned users, timestamps",
+      "notes": "Created migration 028_extend_quotes_v3.sql adding idn (VARCHAR 100), seller_company_id (UUID FK). Added generate_quote_idn() function with IDN format SELLER-INN-YEAR-SEQ. Added auto-generate trigger. Organizations table extended with idn_counters JSONB. Note: workflow_status, deal_type already added in v2.0 migration 012."
     },
     {
       "id": "DB-012",
