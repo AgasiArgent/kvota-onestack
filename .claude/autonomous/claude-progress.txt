@@ -3146,3 +3146,41 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 - Created tests/test_brand_supplier_assignment_service.py with 24 passing tests
 - Updated services/__init__.py with all exports
 - Updated features.json: API-008 passes=true
+
+---
+2026-01-15T20:00:00 - Completed API-009 (Route assignments API)
+- Created services/route_logistics_assignment_service.py with:
+  - RouteLogisticsAssignment dataclass with route_pattern, user_id, origin/destination parsing
+  - Validation functions: validate_route_pattern(), parse_route_pattern(), build_route_pattern(), normalize_route_pattern()
+  - CRUD operations: create, get, get_by_pattern, update, delete
+  - Route matching functions:
+    - match_route_to_logistics_manager() - uses DB RPC function with Python fallback
+    - get_logistics_manager_for_locations() - convenience wrapper for origin/destination
+    - find_matching_routes() - finds all patterns matching a given route
+  - Query functions: get_assignments_for_user, get_all_route_logistics_assignments, count, get_unique_route_patterns, get_unique_origins, get_unique_destinations, assignment_exists
+  - Bulk operations: bulk_create_route_logistics_assignments
+  - Update: update_route_logistics_assignment, reassign_route_to_user
+  - Delete: delete by id, by pattern, delete_all_assignments_for_user
+  - Utility functions:
+    - get_route_user_mapping() - dict mapping pattern to user_id
+    - get_routes_count_by_user() - stats per user
+    - get_route_logistics_assignment_stats() - overall statistics
+    - get_route_assignments_summary() - grouped by user with pattern lists
+    - format_route_assignment_for_display() - human-readable format
+    - get_routes_for_dropdown() - HTMX dropdown options
+    - check_route_coverage() - check which routes have managers
+    - get_uncovered_routes() - find routes without coverage
+- Pattern matching supports:
+  - Exact routes: "Китай-Москва"
+  - Wildcard origin: "*-Москва" (all to Moscow)
+  - Wildcard destination: "Китай-*" (all from China)
+  - Priority: fewer wildcards (more specific) first, then longer patterns
+- Updated services/__init__.py with all exports
+- Created tests/test_route_logistics_assignment_service.py with 35 passing tests:
+  - DataClass tests
+  - Validation tests (valid/invalid patterns)
+  - Parse/Build/Normalize tests
+  - Pattern examples and edge cases
+  - Integration documentation tests
+- Status: COMPLETE
+

@@ -362,8 +362,10 @@
       "name": "Route assignments API",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Manage route-logistics assignments"
+      "passes": true,
+      "completed_at": "2026-01-15T20:00:00Z",
+      "description": "Manage route-logistics assignments",
+      "notes": "Created services/route_logistics_assignment_service.py with: RouteLogisticsAssignment dataclass, validation functions (validate_route_pattern, parse_route_pattern, build_route_pattern, normalize_route_pattern), CRUD operations (create/get/update/delete), route matching functions (match_route_to_logistics_manager using DB RPC with Python fallback, get_logistics_manager_for_locations, find_matching_routes), query functions (get_assignments_for_user, get_all_route_logistics_assignments, count_route_logistics_assignments, get_unique_route_patterns, get_unique_origins, get_unique_destinations), utility functions (get_route_user_mapping, get_routes_count_by_user, get_route_logistics_assignment_stats, get_route_assignments_summary, format_route_assignment_for_display, get_routes_for_dropdown, check_route_coverage, get_uncovered_routes). Updated services/__init__.py with all exports. Tests in tests/test_route_logistics_assignment_service.py with 35 passing tests."
     },
     {
       "id": "API-010",

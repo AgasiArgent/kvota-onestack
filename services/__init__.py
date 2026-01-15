@@ -570,6 +570,48 @@ from .brand_supplier_assignment_service import (
     format_brand_supplier_for_display,
     get_suppliers_for_brand_dropdown,
 )
+from .route_logistics_assignment_service import (
+    # Data class (Feature #API-009)
+    RouteLogisticsAssignment,
+    # Validation functions
+    validate_route_pattern,
+    parse_route_pattern,
+    build_route_pattern,
+    normalize_route_pattern,
+    # Create operations
+    create_route_logistics_assignment,
+    bulk_create_route_logistics_assignments,
+    # Read operations
+    get_route_logistics_assignment,
+    get_route_logistics_assignment_by_pattern,
+    get_assignments_for_user,
+    get_all_route_logistics_assignments,
+    count_route_logistics_assignments,
+    get_unique_route_patterns,
+    get_unique_origins,
+    get_unique_destinations,
+    assignment_exists,
+    # Route matching functions
+    match_route_to_logistics_manager,
+    get_logistics_manager_for_locations,
+    find_matching_routes,
+    # Update operations
+    update_route_logistics_assignment,
+    reassign_route_to_user,
+    # Delete operations
+    delete_route_logistics_assignment,
+    delete_route_logistics_assignment_by_pattern,
+    delete_all_assignments_for_user,
+    # Utility functions
+    get_route_user_mapping,
+    get_routes_count_by_user,
+    get_route_logistics_assignment_stats,
+    get_route_assignments_summary,
+    format_route_assignment_for_display,
+    get_routes_for_dropdown,
+    check_route_coverage,
+    get_uncovered_routes,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -1166,4 +1208,37 @@ __all__ = [
     "get_brand_supplier_assignment_stats",
     "format_brand_supplier_for_display",
     "get_suppliers_for_brand_dropdown",
+    # Route logistics assignment service (Feature #API-009)
+    "RouteLogisticsAssignment",
+    "validate_route_pattern",
+    "parse_route_pattern",
+    "build_route_pattern",
+    "normalize_route_pattern",
+    "create_route_logistics_assignment",
+    "bulk_create_route_logistics_assignments",
+    "get_route_logistics_assignment",
+    "get_route_logistics_assignment_by_pattern",
+    "get_assignments_for_user",
+    "get_all_route_logistics_assignments",
+    "count_route_logistics_assignments",
+    "get_unique_route_patterns",
+    "get_unique_origins",
+    "get_unique_destinations",
+    "assignment_exists",
+    "match_route_to_logistics_manager",
+    "get_logistics_manager_for_locations",
+    "find_matching_routes",
+    "update_route_logistics_assignment",
+    "reassign_route_to_user",
+    "delete_route_logistics_assignment",
+    "delete_route_logistics_assignment_by_pattern",
+    "delete_all_assignments_for_user",
+    "get_route_user_mapping",
+    "get_routes_count_by_user",
+    "get_route_logistics_assignment_stats",
+    "get_route_assignments_summary",
+    "format_route_assignment_for_display",
+    "get_routes_for_dropdown",
+    "check_route_coverage",
+    "get_uncovered_routes",
 ]
