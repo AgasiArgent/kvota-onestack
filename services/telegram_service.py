@@ -1720,3 +1720,395 @@ async def handle_status_command(telegram_id: int) -> bool:
     except TelegramError as e:
         logger.error(f"Failed to send /status response: {e}")
         return False
+
+
+# ============================================================================
+# Task Assigned Notification (Feature #58)
+# ============================================================================
+
+@dataclass
+class TaskAssignedNotification:
+    """Data for task_assigned notification."""
+    user_id: str
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    action_required: str
+    role: str  # e.g., "procurement", "logistics", "customs", etc.
+
+
+async def get_user_telegram_id(user_id: str) -> Optional[int]:
+    """Get the Telegram ID for a user if they have linked their account.
+
+    Args:
+        user_id: UUID of the system user
+
+    Returns:
+        Telegram ID if linked and verified, None otherwise
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return None
+
+        response = supabase.table("telegram_users").select(
+            "telegram_id"
+        ).eq("user_id", user_id).eq("is_verified", True).execute()
+
+        if response.data and len(response.data) > 0:
+            telegram_id = response.data[0].get("telegram_id")
+            if telegram_id and telegram_id != 0:
+                return telegram_id
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting Telegram ID for user {user_id}: {e}")
+        return None
+
+
+def record_notification(
+    user_id: str,
+    notification_type: str,
+    title: str,
+    message: str,
+    channel: str = "telegram",
+    quote_id: Optional[str] = None,
+    deal_id: Optional[str] = None,
+    sent: bool = True,
+    error_message: Optional[str] = None
+) -> Optional[str]:
+    """Record a notification in the notifications table.
+
+    Args:
+        user_id: UUID of the recipient
+        notification_type: Type of notification (e.g., "task_assigned")
+        title: Short notification title
+        message: Full notification message
+        channel: Notification channel ("telegram", "email", "in_app")
+        quote_id: Optional quote ID
+        deal_id: Optional deal ID
+        sent: Whether the notification was sent successfully
+        error_message: Error message if sending failed
+
+    Returns:
+        UUID of the created notification record, or None if failed
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return None
+
+        data = {
+            "user_id": user_id,
+            "type": notification_type,
+            "title": title,
+            "message": message,
+            "channel": channel,
+            "sent": sent,
+            "read": False
+        }
+
+        if quote_id:
+            data["quote_id"] = quote_id
+        if deal_id:
+            data["deal_id"] = deal_id
+        if error_message:
+            data["error_message"] = error_message
+
+        response = supabase.table("notifications").insert(data).execute()
+
+        if response.data and len(response.data) > 0:
+            return response.data[0].get("id")
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error recording notification: {e}")
+        return None
+
+
+def _get_action_required_for_status(status: str) -> str:
+    """Get action required description based on status.
+
+    Args:
+        status: Workflow status code
+
+    Returns:
+        Russian description of required action
+    """
+    actions = {
+        "pending_procurement": "Оценить закупочные цены",
+        "pending_logistics": "Рассчитать логистику",
+        "pending_customs": "Рассчитать таможенные платежи",
+        "pending_sales_review": "Проверить и доработать КП",
+        "pending_quote_control": "Проверить и согласовать КП",
+        "pending_approval": "Согласовать КП",
+        "pending_spec_control": "Подготовить спецификацию",
+        "pending_signature": "Получить подпись клиента",
+    }
+    return actions.get(status, "Обработать задачу")
+
+
+async def send_task_assigned_notification(
+    user_id: str,
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    new_status: str,
+    action_required: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send a task_assigned notification to a user via Telegram.
+
+    Feature #58: Отправка уведомления task_assigned
+
+    This function:
+    1. Gets the user's Telegram ID (if linked)
+    2. Formats the notification message
+    3. Sends via Telegram with "Open in system" button
+    4. Records the notification in the database
+
+    Args:
+        user_id: UUID of the user to notify
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier (e.g., "КП-2025-001")
+        customer_name: Customer name
+        new_status: The new workflow status
+        action_required: Optional custom action text (defaults to status-based text)
+
+    Returns:
+        Dict with:
+        - success: bool
+        - telegram_sent: bool - Whether Telegram message was sent
+        - notification_id: str - ID of recorded notification
+        - error: str - Error message if failed
+
+    Example:
+        >>> result = await send_task_assigned_notification(
+        ...     user_id="user-uuid",
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     new_status="pending_procurement"
+        ... )
+        >>> if result["success"]:
+        ...     print("Notification sent!")
+    """
+    # Determine action required
+    action = action_required or _get_action_required_for_status(new_status)
+
+    # Build notification content
+    title = "Новая задача"
+    quote_url = f"{APP_BASE_URL}/quotes/{quote_id}"
+
+    # Format the Telegram message
+    telegram_message = format_notification(
+        NotificationType.TASK_ASSIGNED,
+        quote_idn=quote_idn,
+        customer_name=customer_name,
+        action_required=action,
+        quote_url=quote_url
+    )
+
+    # Try to send via Telegram
+    telegram_sent = False
+    telegram_error = None
+
+    telegram_id = await get_user_telegram_id(user_id)
+
+    if telegram_id:
+        try:
+            message_id = await send_notification(
+                telegram_id=telegram_id,
+                notification_type=NotificationType.TASK_ASSIGNED,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                customer_name=customer_name,
+                action_required=action
+            )
+            telegram_sent = message_id is not None
+            if not telegram_sent:
+                telegram_error = "Failed to send message"
+        except Exception as e:
+            telegram_error = str(e)
+            logger.error(f"Error sending Telegram notification to {user_id}: {e}")
+    else:
+        telegram_error = "User has no linked Telegram account"
+        logger.info(f"User {user_id} has no linked Telegram - notification will be in-app only")
+
+    # Record the notification in the database
+    notification_id = record_notification(
+        user_id=user_id,
+        notification_type="task_assigned",
+        title=title,
+        message=f"{quote_idn} - {customer_name}\n{action}",
+        channel="telegram" if telegram_sent else "in_app",
+        quote_id=quote_id,
+        sent=telegram_sent,
+        error_message=telegram_error if not telegram_sent else None
+    )
+
+    return {
+        "success": True,  # Notification recorded even if Telegram failed
+        "telegram_sent": telegram_sent,
+        "notification_id": notification_id,
+        "telegram_id": telegram_id,
+        "error": telegram_error
+    }
+
+
+async def notify_users_of_task_assignment(
+    user_ids: List[str],
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    new_status: str
+) -> Dict[str, Any]:
+    """Send task_assigned notifications to multiple users.
+
+    Convenience function for notifying multiple users about a task.
+    Used when a quote transitions to a status that assigns work to users.
+
+    Args:
+        user_ids: List of user UUIDs to notify
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier
+        customer_name: Customer name
+        new_status: The new workflow status
+
+    Returns:
+        Dict with:
+        - total: int - Total users
+        - sent: int - Successfully sent via Telegram
+        - failed: int - Failed to send
+        - results: list - Individual results for each user
+
+    Example:
+        >>> result = await notify_users_of_task_assignment(
+        ...     user_ids=["user1", "user2"],
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     new_status="pending_procurement"
+        ... )
+        >>> print(f"Sent to {result['sent']} of {result['total']} users")
+    """
+    results = []
+    sent_count = 0
+    failed_count = 0
+
+    for user_id in user_ids:
+        result = await send_task_assigned_notification(
+            user_id=user_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            customer_name=customer_name,
+            new_status=new_status
+        )
+        results.append({
+            "user_id": user_id,
+            **result
+        })
+        if result.get("telegram_sent"):
+            sent_count += 1
+        else:
+            failed_count += 1
+
+    return {
+        "total": len(user_ids),
+        "sent": sent_count,
+        "failed": failed_count,
+        "results": results
+    }
+
+
+async def notify_role_users_of_task(
+    organization_id: str,
+    role_codes: List[str],
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    new_status: str
+) -> Dict[str, Any]:
+    """Send task_assigned notifications to all users with specific roles.
+
+    Used when a quote transitions to a status where all users with certain
+    roles should be notified (e.g., logistics, customs, quote_controller).
+
+    Args:
+        organization_id: UUID of the organization
+        role_codes: List of role codes to notify (e.g., ["logistics", "admin"])
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier
+        customer_name: Customer name
+        new_status: The new workflow status
+
+    Returns:
+        Dict with notification results
+
+    Example:
+        >>> result = await notify_role_users_of_task(
+        ...     organization_id="org-uuid",
+        ...     role_codes=["logistics"],
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     new_status="pending_logistics"
+        ... )
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "total": 0,
+                "sent": 0,
+                "failed": 0,
+                "error": "Database connection error"
+            }
+
+        # Get all users with the specified roles in this organization
+        user_ids = set()
+
+        for role_code in role_codes:
+            # Get role ID
+            role_response = supabase.table("roles").select("id").eq("code", role_code).execute()
+            if not role_response.data:
+                continue
+
+            role_id = role_response.data[0].get("id")
+
+            # Get users with this role
+            users_response = supabase.table("user_roles").select(
+                "user_id"
+            ).eq("organization_id", organization_id).eq("role_id", role_id).execute()
+
+            if users_response.data:
+                for u in users_response.data:
+                    user_ids.add(u.get("user_id"))
+
+        if not user_ids:
+            logger.info(f"No users found with roles {role_codes} in org {organization_id}")
+            return {
+                "total": 0,
+                "sent": 0,
+                "failed": 0,
+                "error": None
+            }
+
+        # Send notifications to all found users
+        return await notify_users_of_task_assignment(
+            user_ids=list(user_ids),
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            customer_name=customer_name,
+            new_status=new_status
+        )
+
+    except Exception as e:
+        logger.error(f"Error notifying role users: {e}")
+        return {
+            "total": 0,
+            "sent": 0,
+            "failed": 0,
+            "error": str(e)
+        }

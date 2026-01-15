@@ -658,10 +658,11 @@
       "name": "Отправка уведомления task_assigned",
       "description": "Уведомление о новой задаче",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T13:00:00Z",
+      "completed_at": "2026-01-15T13:30:00Z",
+      "notes": "Created send_task_assigned_notification() and related functions. Records notifications in DB, sends via Telegram if user has linked account. Added notify_users_of_task_assignment() for multiple users and notify_role_users_of_task() for role-based notifications."
     },
     {
       "id": 59,

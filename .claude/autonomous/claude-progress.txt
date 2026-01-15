@@ -1376,3 +1376,37 @@
   - services/telegram_service.py (~350 lines added)
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #57 done
+
+
+## Session 2025-01-15 - Feature #58: Отправка уведомления task_assigned
+- Implemented task_assigned notification functionality:
+  - get_user_telegram_id(user_id) → Optional[int]:
+    - Gets Telegram ID for user if linked and verified
+  - record_notification(user_id, type, title, message, ...) → Optional[str]:
+    - Records notification in notifications table
+    - Supports telegram, email, in_app channels
+    - Tracks sent status and error messages
+  - _get_action_required_for_status(status) → str:
+    - Maps workflow status to Russian action description
+    - Supports: pending_procurement, pending_logistics, pending_customs, etc.
+  - send_task_assigned_notification(user_id, quote_id, ...) → Dict:
+    - Main function for sending task notifications
+    - Gets user's Telegram ID (if linked)
+    - Sends via Telegram with "Open in system" button
+    - Records notification in database
+    - Returns success status, telegram_sent flag, notification_id
+  - notify_users_of_task_assignment(user_ids, quote_id, ...) → Dict:
+    - Convenience function for notifying multiple users
+    - Returns total, sent, failed counts
+  - notify_role_users_of_task(org_id, role_codes, quote_id, ...) → Dict:
+    - Notifies all users with specific roles in an organization
+    - Used when transitioning to statuses that assign work by role
+- Updated services/__init__.py exports:
+  - TaskAssignedNotification, get_user_telegram_id, record_notification
+  - send_task_assigned_notification, notify_users_of_task_assignment
+  - notify_role_users_of_task
+- All syntax verified with py_compile
+- Files changed:
+  - services/telegram_service.py (~300 lines added)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #58 done

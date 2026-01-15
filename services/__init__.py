@@ -157,6 +157,13 @@ from .telegram_service import (
     UserTask,
     get_user_tasks,
     handle_status_command,
+    # Task assigned notification (Feature #58)
+    TaskAssignedNotification,
+    get_user_telegram_id,
+    record_notification,
+    send_task_assigned_notification,
+    notify_users_of_task_assignment,
+    notify_role_users_of_task,
 )
 
 __all__ = [
@@ -297,4 +304,11 @@ __all__ = [
     "UserTask",
     "get_user_tasks",
     "handle_status_command",
+    # Task assigned notification (Feature #58)
+    "TaskAssignedNotification",
+    "get_user_telegram_id",
+    "record_notification",
+    "send_task_assigned_notification",
+    "notify_users_of_task_assignment",
+    "notify_role_users_of_task",
 ]
