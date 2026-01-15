@@ -553,10 +553,11 @@
       "name": "Форма возврата на доработку",
       "description": "Комментарий и кнопка возврата",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T18:00:00Z",
+      "completed_at": "2025-01-15T18:30:00Z",
+      "notes": "Created /quote-control/{quote_id}/return GET route for return form and POST handler. Form requires comment, uses transition_quote_status to move to PENDING_SALES_REVIEW."
     },
     {
       "id": 50,

@@ -35,7 +35,8 @@ from services.brand_service import get_assigned_brands
 # Import workflow service for status display
 from services.workflow_service import (
     WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
-    check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs
+    check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs,
+    transition_quote_status
 )
 
 # Import calculation engine
@@ -5326,6 +5327,201 @@ def get(session, quote_id: str):
 
         session=session
     )
+
+
+# ============================================================================
+# QUOTE CONTROL - RETURN FOR REVISION FORM (Feature #49)
+# ============================================================================
+
+@rt("/quote-control/{quote_id}/return")
+def get(session, quote_id: str):
+    """
+    Return for Revision form - shows a form for quote_controller to return a quote
+    back to sales manager with a comment explaining what needs to be fixed.
+
+    Feature #49: Форма возврата на доработку
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name, idn_customer)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("Quote Not Found",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← Вернуться к списку", href="/quote-control"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if quote is in correct status
+    if workflow_status != "pending_quote_control":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}' и не может быть возвращено на доработку."),
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}"),
+            session=session
+        )
+
+    customer_name = quote.get("customers", {}).get("name", "—")
+    idn_quote = quote.get("idn_quote", "")
+
+    return page_layout(f"Возврат на доработку - {idn_quote}",
+        # Header
+        Div(
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
+            H1(f"↩ Возврат КП {idn_quote} на доработку"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Info banner
+        Div(
+            "⚠ Внимание: КП будет возвращено менеджеру по продажам для внесения исправлений.",
+            style="background: #fef3c7; color: #92400e; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
+        ),
+
+        # Form
+        Form(
+            Div(
+                H3("Причина возврата", style="margin-bottom: 0.5rem;"),
+                P("Укажите, что необходимо исправить в КП. Это сообщение увидит менеджер по продажам.",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    id="comment",
+                    placeholder="Опишите, какие именно данные требуют исправления:\n- Неверная наценка\n- Ошибки в логистике\n- Некорректные условия оплаты\n- и т.д.",
+                    required=True,
+                    style="width: 100%; min-height: 150px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button(
+                    "↩ Вернуть на доработку",
+                    type="submit",
+                    style="background: #f59e0b; border-color: #f59e0b; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                ),
+                A("Отмена", href=f"/quote-control/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
+                style="display: flex; align-items: center;"
+            ),
+
+            action=f"/quote-control/{quote_id}/return",
+            method="post",
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quote-control/{quote_id}/return")
+def post(session, quote_id: str, comment: str = ""):
+    """
+    Handle the return for revision form submission.
+    Transitions the quote from PENDING_QUOTE_CONTROL to PENDING_SALES_REVIEW.
+
+    Feature #49: Форма возврата на доработку - POST handler
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Get user's role codes for the transition
+    user_roles = get_user_roles_from_session(session)
+
+    # Validate comment is provided
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка возврата"),
+            P("Необходимо указать причину возврата КП на доработку."),
+            A("← Вернуться к форме", href=f"/quote-control/{quote_id}/return"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to this org
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← Вернуться к списку", href="/quote-control"),
+            session=session
+        )
+
+    current_status = quote_result.data[0].get("workflow_status", "draft")
+
+    # Check if quote is in correct status
+    if current_status != "pending_quote_control":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}' и не может быть возвращено на доработку."),
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}"),
+            session=session
+        )
+
+    # Perform the workflow transition
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_SALES_REVIEW,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=comment.strip()
+    )
+
+    if result.success:
+        # Redirect to quote control list with success message
+        return page_layout("Успешно",
+            H1("✓ КП возвращено на доработку"),
+            P(f"КП было успешно возвращено менеджеру по продажам."),
+            P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
+            A("← Вернуться к списку КП", href="/quote-control", role="button"),
+            session=session
+        )
+    else:
+        # Show error
+        return page_layout("Ошибка",
+            H1("Ошибка возврата"),
+            P(f"Не удалось вернуть КП на доработку: {result.error_message}"),
+            A("← Вернуться к форме", href=f"/quote-control/{quote_id}/return"),
+            session=session
+        )
 
 
 # ============================================================================

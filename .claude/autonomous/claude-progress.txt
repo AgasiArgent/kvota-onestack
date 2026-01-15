@@ -1057,3 +1057,32 @@
 - Files changed:
   - main.py (~280 lines added): /quote-control/{quote_id} route
 - Status: COMPLETE - Feature #48 done
+
+
+## Session 2025-01-15 - Feature #49: Форма возврата на доработку
+- Created /quote-control/{quote_id}/return GET route:
+  - Shows form for quote_controller to return quote to sales manager
+  - Requires quote_controller or admin role
+  - Only available when quote is in pending_quote_control status
+  - Displays warning banner about returning to sales
+  - Required textarea for comment explaining what needs to be fixed
+  - Cancel link back to quote review page
+- Created /quote-control/{quote_id}/return POST handler:
+  - Validates user role (quote_controller/admin)
+  - Validates comment is provided (required for this transition)
+  - Uses transition_quote_status() to move from PENDING_QUOTE_CONTROL to PENDING_SALES_REVIEW
+  - Shows success page with confirmation and comment
+  - Shows error page if transition fails
+- Added transition_quote_status to imports from workflow_service
+- UI features:
+  - Russian labels
+  - Warning banner about return
+  - Required textarea with placeholder instructions
+  - Submit button styled with orange color (warning action)
+  - Cancel link
+- Files changed:
+  - main.py (~130 lines added):
+    - Added transition_quote_status to imports
+    - Added GET /quote-control/{quote_id}/return route
+    - Added POST /quote-control/{quote_id}/return handler
+- Status: COMPLETE - Feature #49 done
