@@ -130,12 +130,13 @@ App runs at http://localhost:5001
 - [x] Feature #45: Кнопка завершения таможни (2025-01-15) - In #44
 - [x] Feature #46: Страница /quote-control (2025-01-15)
 - [x] Feature #47: Список КП на проверке (2025-01-15) - In #46
+- [x] Feature #48: Чек-лист проверки КП (2025-01-15)
 
 ### Next Up
-- Feature #48: Чек-лист проверки КП (quote control checklist)
+- Feature #49: Форма возврата на доработку (return for revision form)
 
 ### Progress
-- **47 of 88 features completed** (53%)
+- **48 of 88 features completed** (55%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)

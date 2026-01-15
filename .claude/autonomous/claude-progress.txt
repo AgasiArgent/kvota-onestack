@@ -1026,3 +1026,34 @@
     - Added /quote-control route
 - Status: COMPLETE - 2 features done (46, 47)
 
+
+## Session 2025-01-15 - Feature #48: Чек-лист проверки КП
+- Created /quote-control/{quote_id} route for quote control detail view
+- Implemented full 10-item checklist from spec:
+  1. Тип сделки (поставка/транзит)
+  2. Базис поставки (Incoterms)
+  3. Валюта КП, корректность конвертации
+  4. Условия расчётов с клиентом
+  5. Размер аванса поставщику
+  6. Корректность закупочных цен, НДС
+  7. Корректность логистики
+  8. Минимальные наценки
+  9. Вознаграждения ЛПРа
+  10. % курсовой разницы
+- Each checklist item shows:
+  - Name and description
+  - Current value from quote/calculation data
+  - Color-coded status (ok=green, warning=yellow, error=red, info=blue)
+  - Additional details/notes
+- Auto-detection of approval requirements (from spec):
+  - RUB currency → requires approval
+  - <100% prepayment → requires approval
+  - Markup below minimum → requires approval
+  - LPR reward present → requires approval
+- Shows approval requirements banner when any triggers are met
+- Status banners for different workflow states
+- Action buttons (return for revision, approve/request approval)
+- Links back to quote list and quote editor
+- Files changed:
+  - main.py (~280 lines added): /quote-control/{quote_id} route
+- Status: COMPLETE - Feature #48 done

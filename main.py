@@ -4951,6 +4951,384 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# QUOTE CONTROL DETAIL VIEW (Feature #48)
+# ============================================================================
+
+@rt("/quote-control/{quote_id}")
+def get(session, quote_id: str):
+    """
+    Quote Control detail view - shows checklist for reviewing a specific quote.
+
+    Feature #48: Checklist for quote_controller (Жанна) to verify all aspects of the quote.
+
+    Checklist items from spec:
+    1. Тип сделки (поставка/транзит) - разная наценка
+    2. Базис поставки (чаще DDP)
+    3. Валюта КП, корректность конвертации
+    4. Условия расчётов с клиентом
+    5. Размер аванса поставщику
+    6. Корректность закупочных цен, НДС
+    7. Корректность логистики (не из головы)
+    8. Минимальные наценки
+    9. Вознаграждения ЛПРа
+    10. % курсовой разницы
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name, idn_customer)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("Quote Not Found",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← Вернуться к списку", href="/quote-control"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Get quote items
+    items_result = supabase.table("quote_items") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    items = items_result.data or []
+
+    # Get calculation variables
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    calc_vars = vars_result.data[0]["variables"] if vars_result.data else {}
+
+    # Get calculation summary
+    summary_result = supabase.table("quote_calculation_summaries") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    summary = summary_result.data[0] if summary_result.data else {}
+
+    # Determine if editing is allowed
+    can_edit = workflow_status == "pending_quote_control"
+
+    # Extract values for checklist verification
+    deal_type = quote.get("deal_type") or calc_vars.get("offer_sale_type", "")
+    incoterms = calc_vars.get("offer_incoterms", "")
+    currency = quote.get("currency", "USD")
+    markup = float(calc_vars.get("markup", 0) or 0)
+    supplier_advance = float(calc_vars.get("supplier_advance", 0) or 0)
+    exchange_rate = float(calc_vars.get("exchange_rate", 1.0) or 1.0)
+    forex_risk = float(calc_vars.get("forex_risk_percent", 0) or 0)
+    lpr_reward = float(calc_vars.get("lpr_reward", 0) or calc_vars.get("decision_maker_reward", 0) or 0)
+
+    # Payment terms
+    payment_terms = calc_vars.get("client_payment_terms", "")
+    prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
+
+    # Logistics costs
+    logistics_supplier_hub = float(calc_vars.get("logistics_supplier_hub", 0) or 0)
+    logistics_hub_customs = float(calc_vars.get("logistics_hub_customs", 0) or 0)
+    logistics_customs_client = float(calc_vars.get("logistics_customs_client", 0) or 0)
+    total_logistics = logistics_supplier_hub + logistics_hub_customs + logistics_customs_client
+
+    # Min markup thresholds (these would typically come from settings)
+    min_markup_supply = 12  # %
+    min_markup_transit = 8   # %
+
+    # Approval triggers (from spec):
+    # - Валюта КП = рубли
+    # - Условия не 100% предоплата
+    # - Наценка ниже минимума
+    # - Есть вознаграждение ЛПРа
+    needs_approval_reasons = []
+    if currency == "RUB":
+        needs_approval_reasons.append("Валюта КП = рубли")
+    if prepayment < 100:
+        needs_approval_reasons.append(f"Не 100% предоплата ({prepayment}%)")
+    if deal_type == "supply" and markup < min_markup_supply:
+        needs_approval_reasons.append(f"Наценка ({markup}%) ниже минимума для поставки ({min_markup_supply}%)")
+    elif deal_type == "transit" and markup < min_markup_transit:
+        needs_approval_reasons.append(f"Наценка ({markup}%) ниже минимума для транзита ({min_markup_transit}%)")
+    if lpr_reward > 0:
+        needs_approval_reasons.append(f"Есть вознаграждение ЛПРа ({lpr_reward})")
+
+    needs_approval = len(needs_approval_reasons) > 0
+
+    # Build checklist items with auto-detected status
+    def checklist_item(name, description, value, status="info", details=None):
+        """Create a checklist item with status indicator."""
+        status_colors = {
+            "ok": ("#dcfce7", "#166534", "✓"),
+            "warning": ("#fef3c7", "#92400e", "⚠"),
+            "error": ("#fee2e2", "#991b1b", "✗"),
+            "info": ("#dbeafe", "#1e40af", "ℹ"),
+        }
+        bg, text_color, icon = status_colors.get(status, status_colors["info"])
+
+        return Div(
+            Div(
+                Span(icon, style=f"color: {text_color}; font-weight: bold; margin-right: 0.5rem;"),
+                Strong(name),
+                style="display: flex; align-items: center;"
+            ),
+            P(description, style="color: #666; font-size: 0.875rem; margin: 0.25rem 0;"),
+            Div(
+                Strong(str(value) if value else "—"),
+                style=f"padding: 0.5rem; background: {bg}; border-radius: 4px; margin-top: 0.25rem;"
+            ),
+            P(details, style="color: #666; font-size: 0.75rem; margin-top: 0.25rem;") if details else None,
+            style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 0.75rem;"
+        )
+
+    # Generate checklist
+    checklist_items = []
+
+    # 1. Deal type
+    deal_type_display = "Поставка" if deal_type == "supply" else ("Транзит" if deal_type == "transit" else deal_type or "Не указан")
+    deal_status = "ok" if deal_type else "warning"
+    checklist_items.append(checklist_item(
+        "1. Тип сделки",
+        "Поставка или транзит - влияет на минимальную наценку",
+        deal_type_display,
+        deal_status,
+        f"Мин. наценка: {min_markup_supply}% (поставка) / {min_markup_transit}% (транзит)"
+    ))
+
+    # 2. Incoterms
+    incoterms_status = "ok" if incoterms else "warning"
+    checklist_items.append(checklist_item(
+        "2. Базис поставки (Incoterms)",
+        "Обычно DDP. Влияет на распределение расходов и рисков",
+        incoterms or "Не указан",
+        incoterms_status,
+        "DDP = все расходы до клиента включены в цену"
+    ))
+
+    # 3. Currency
+    currency_status = "warning" if currency == "RUB" else "ok"
+    checklist_items.append(checklist_item(
+        "3. Валюта КП",
+        "Проверить корректность конвертации. Рубли требуют согласования",
+        currency,
+        currency_status,
+        f"Курс: {exchange_rate}" if exchange_rate != 1.0 else None
+    ))
+
+    # 4. Payment terms
+    payment_display = f"{prepayment}% предоплата"
+    if payment_terms:
+        payment_display += f" ({payment_terms})"
+    payment_status = "ok" if prepayment == 100 else "warning"
+    checklist_items.append(checklist_item(
+        "4. Условия расчётов с клиентом",
+        "Не 100% предоплата требует согласования",
+        payment_display,
+        payment_status,
+        "100% предоплата = минимальный риск" if prepayment == 100 else "Отсрочка = требует согласования"
+    ))
+
+    # 5. Supplier advance
+    supplier_advance_display = f"{supplier_advance}%"
+    advance_status = "ok" if supplier_advance <= 50 else "warning"
+    checklist_items.append(checklist_item(
+        "5. Размер аванса поставщику",
+        "Проверить соответствие договорённостям с поставщиком",
+        supplier_advance_display,
+        advance_status,
+        "Стандарт: 30-50% аванс"
+    ))
+
+    # 6. Purchase prices
+    total_purchase = sum(float(item.get("purchase_price", 0) or 0) * int(item.get("quantity", 1) or 1) for item in items)
+    vat_rate = float(calc_vars.get("vat_rate", 20) or 20)
+    checklist_items.append(checklist_item(
+        "6. Закупочные цены и НДС",
+        "Проверить корректность закупочных цен",
+        f"Итого закупка: {format_money(total_purchase)} | НДС: {vat_rate}%",
+        "info",
+        f"Позиций с ценами: {len([i for i in items if i.get('purchase_price')])}/{len(items)}"
+    ))
+
+    # 7. Logistics
+    logistics_status = "ok" if total_logistics > 0 else "warning"
+    checklist_items.append(checklist_item(
+        "7. Корректность логистики",
+        "Стоимость должна быть рассчитана, не 'из головы'",
+        f"Поставщик→Хаб: {format_money(logistics_supplier_hub)} | Хаб→Таможня: {format_money(logistics_hub_customs)} | Таможня→Клиент: {format_money(logistics_customs_client)}",
+        logistics_status,
+        f"Итого логистика: {format_money(total_logistics)}"
+    ))
+
+    # 8. Minimum markup
+    min_markup = min_markup_supply if deal_type == "supply" else min_markup_transit
+    markup_status = "ok" if markup >= min_markup else "error"
+    checklist_items.append(checklist_item(
+        "8. Минимальные наценки",
+        f"Минимум: {min_markup}% для {'поставки' if deal_type == 'supply' else 'транзита'}",
+        f"{markup}%",
+        markup_status,
+        "Наценка в норме" if markup >= min_markup else f"⚠ Ниже минимума на {min_markup - markup}%"
+    ))
+
+    # 9. LPR reward
+    lpr_status = "warning" if lpr_reward > 0 else "ok"
+    checklist_items.append(checklist_item(
+        "9. Вознаграждение ЛПРа",
+        "Наличие вознаграждения требует согласования",
+        f"{lpr_reward}" if lpr_reward else "Нет",
+        lpr_status,
+        "Требует согласования топ-менеджера" if lpr_reward > 0 else None
+    ))
+
+    # 10. Forex risk
+    forex_status = "ok" if forex_risk > 0 else "info"
+    checklist_items.append(checklist_item(
+        "10. % курсовой разницы",
+        "Заложен ли риск изменения курса валют",
+        f"{forex_risk}%" if forex_risk else "Не учтён",
+        forex_status,
+        "Рекомендуется 2-5% при длительных сроках поставки"
+    ))
+
+    # Summary info
+    customer_name = quote.get("customers", {}).get("name", "—")
+    quote_total = float(quote.get("total_amount", 0) or 0)
+
+    # Status banner
+    if workflow_status == "pending_quote_control":
+        status_banner = Div(
+            "📋 Требуется проверка",
+            style="background: #fef3c7; color: #92400e; padding: 1rem; border-radius: 8px; text-align: center; font-weight: 500; margin-bottom: 1rem;"
+        )
+    elif workflow_status == "pending_approval":
+        status_banner = Div(
+            "⏳ Ожидает согласования топ-менеджера",
+            style="background: #dbeafe; color: #1e40af; padding: 1rem; border-radius: 8px; text-align: center; font-weight: 500; margin-bottom: 1rem;"
+        )
+    elif workflow_status == "approved":
+        status_banner = Div(
+            "✅ КП одобрено",
+            style="background: #dcfce7; color: #166534; padding: 1rem; border-radius: 8px; text-align: center; font-weight: 500; margin-bottom: 1rem;"
+        )
+    else:
+        status_banner = Div(
+            f"Статус: {workflow_status_badge(workflow_status)}",
+            style="margin-bottom: 1rem;"
+        )
+
+    # Approval requirements banner
+    approval_banner = None
+    if needs_approval and workflow_status == "pending_quote_control":
+        approval_banner = Div(
+            H4("⚠ Требуется согласование топ-менеджера", style="color: #b45309; margin-bottom: 0.5rem;"),
+            Ul(*[Li(reason) for reason in needs_approval_reasons], style="margin: 0; padding-left: 1.5rem; color: #92400e;"),
+            style="background: #fef3c7; border: 1px solid #f59e0b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
+        )
+
+    return page_layout(f"Проверка КП - {quote.get('idn_quote', '')}",
+        # Header
+        Div(
+            A("← Вернуться к списку", href="/quote-control", style="color: #3b82f6; text-decoration: none;"),
+            H1(f"📋 Проверка КП {quote.get('idn_quote', '')}"),
+            P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Status banner
+        status_banner,
+
+        # Approval requirements banner
+        approval_banner,
+
+        # Quote summary card
+        Div(
+            H3("Сводка по КП"),
+            Div(
+                Div(
+                    Strong("Тип сделки: "), deal_type_display,
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Incoterms: "), incoterms or "—",
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Валюта: "), currency,
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Наценка: "), f"{markup}%",
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Позиций: "), str(len(items)),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;"
+            ),
+            cls="card",
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Checklist
+        Div(
+            H3("✓ Чек-лист проверки"),
+            P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #666; margin-bottom: 1rem;"),
+            *checklist_items,
+            cls="card"
+        ),
+
+        # Action buttons (only if can edit)
+        Div(
+            H3("Действия"),
+            Div(
+                # Return for revision button
+                A("↩ Вернуть на доработку", href=f"/quote-control/{quote_id}/return",
+                  role="button", style="background: #f59e0b; border-color: #f59e0b;"),
+                # Approve or send for approval
+                A("✓ Одобрить" if not needs_approval else "⏳ Отправить на согласование",
+                  href=f"/quote-control/{quote_id}/approve" if not needs_approval else f"/quote-control/{quote_id}/request-approval",
+                  role="button", style="background: #22c55e; border-color: #22c55e;") if workflow_status == "pending_quote_control" else None,
+                style="display: flex; gap: 1rem; flex-wrap: wrap;"
+            ),
+            cls="card",
+            style="margin-top: 1rem;"
+        ) if can_edit else Div(
+            P("Редактирование недоступно в текущем статусе", style="color: #666; text-align: center;"),
+            cls="card",
+            style="margin-top: 1rem;"
+        ),
+
+        # Link to quote details
+        Div(
+            A("📄 Открыть КП в редакторе", href=f"/quotes/{quote_id}", role="button",
+              style="background: #6b7280; border-color: #6b7280;"),
+            style="margin-top: 1rem; text-align: center;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

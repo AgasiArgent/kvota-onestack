@@ -541,10 +541,11 @@
       "name": "Чек-лист проверки КП",
       "description": "Все пункты проверки Жанны с чекбоксами",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T16:00:00Z",
+      "completed_at": "2025-01-15T16:30:00Z",
+      "notes": "Created /quote-control/{quote_id} page with full 10-item checklist. Auto-detects approval requirements (RUB currency, <100% prepayment, low markup, LPR reward). Shows color-coded status for each item."
     },
     {
       "id": 49,
