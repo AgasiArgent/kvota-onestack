@@ -150,6 +150,19 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - `is_signatory` flag for specification PDF signatory selection
    - Helper function `get_customer_signatory()` for PDF generation
 
+5. **DB-005** (customer_contracts table) - ✅ COMPLETE
+   - Created `migrations/022_create_customer_contracts_table.sql`
+   - Customer contracts with next_specification_number sequence
+   - Auto-increment function for specification numbers
+
+6. **DB-006** (bank_accounts table) - ✅ COMPLETE
+   - Created `migrations/023_create_bank_accounts_table.sql`
+   - Polymorphic design (entity_type + entity_id)
+   - Supports: supplier, buyer_company, seller_company, customer
+   - Russian format: BIK (9 digits), correspondent account (20 digits)
+   - International: SWIFT (8/11 chars), IBAN validation
+   - Single default trigger, helper functions
+
 ### Progress:
-- v3.0 features complete: **4/94**
-- Next feature: **DB-005** (customer_contracts table with next_specification_number)
+- v3.0 features complete: **6/94**
+- Next feature: **DB-007** (locations table for dropdown search)
