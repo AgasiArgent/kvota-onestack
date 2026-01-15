@@ -282,8 +282,10 @@
       "name": "CRUD API for suppliers",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Create, read, update, delete suppliers with search"
+      "passes": true,
+      "completed_at": "2026-01-15T22:00:00Z",
+      "description": "Create, read, update, delete suppliers with search",
+      "notes": "Created services/supplier_service.py with: Supplier dataclass, validation functions (validate_supplier_code, validate_inn, validate_kpp), CRUD operations (create_supplier, get_supplier, get_supplier_by_code, get_all_suppliers, get_suppliers_by_country, count_suppliers, update_supplier, activate_supplier, deactivate_supplier, delete_supplier), search function for HTMX dropdowns (search_suppliers, get_suppliers_for_dropdown), utility functions (get_unique_countries, get_supplier_stats, get_supplier_display_name, format_supplier_for_dropdown). Tests in tests/test_supplier_service.py with 30 passing tests."
     },
     {
       "id": "API-002",

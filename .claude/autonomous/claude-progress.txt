@@ -3080,3 +3080,36 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - block_telegram_user(telegram_id, reason) - Admin action to block user
 - View: v_telegram_users_summary - Admin dashboard view with user email
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature API-001: CRUD API for suppliers
+- Purpose: Provide comprehensive service layer for supplier management
+- Created services/supplier_service.py with:
+  - Supplier dataclass with all fields from suppliers table
+  - Validation functions: validate_supplier_code(), validate_inn(), validate_kpp()
+  - CRUD operations:
+    - create_supplier() - Create new supplier with validation
+    - get_supplier() - Get by UUID
+    - get_supplier_by_code() - Get by org + code
+    - get_all_suppliers() - List with pagination and filters
+    - get_suppliers_by_country() - Filter by country
+    - count_suppliers() - Count with filters
+    - update_supplier() - Update any field
+    - activate_supplier() / deactivate_supplier() - Status management
+    - delete_supplier() - Permanent delete
+  - Search for HTMX dropdowns:
+    - search_suppliers() - Case-insensitive search by name/code
+    - get_suppliers_for_dropdown() - Pre-formatted for select elements
+  - Utility functions:
+    - get_unique_countries() - List of supplier countries
+    - get_supplier_stats() - Statistics dashboard
+    - get_supplier_display_name() - "CMT - Company Name" format
+    - format_supplier_for_dropdown() - value/label dict for dropdowns
+- Updated services/__init__.py with all exports
+- Created tests/test_supplier_service.py with 30 tests covering:
+  - Validation functions (code format, INN, KPP)
+  - Data class creation and parsing
+  - Utility functions (display name, dropdown formatting)
+  - Edge cases (special characters, boundaries)
+- All 30 tests pass
+- Status: COMPLETE

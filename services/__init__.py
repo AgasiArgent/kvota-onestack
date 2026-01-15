@@ -307,6 +307,37 @@ from .idn_service import (
     get_seller_code_from_idn,
     get_next_expected_sequence,
 )
+from .supplier_service import (
+    # Data class (Feature #API-001)
+    Supplier,
+    # Validation functions
+    validate_supplier_code,
+    validate_inn as validate_supplier_inn,
+    validate_kpp,
+    # Create operations
+    create_supplier,
+    # Read operations
+    get_supplier,
+    get_supplier_by_code,
+    get_all_suppliers,
+    get_suppliers_by_country,
+    count_suppliers,
+    search_suppliers,
+    get_active_suppliers,
+    supplier_exists,
+    # Update operations
+    update_supplier,
+    activate_supplier,
+    deactivate_supplier,
+    # Delete operations
+    delete_supplier,
+    # Utility functions
+    get_unique_countries,
+    get_supplier_stats,
+    get_supplier_display_name,
+    format_supplier_for_dropdown,
+    get_suppliers_for_dropdown,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -698,4 +729,27 @@ __all__ = [
     "get_customer_inn_from_idn",
     "get_seller_code_from_idn",
     "get_next_expected_sequence",
+    # Supplier service (Feature #API-001)
+    "Supplier",
+    "validate_supplier_code",
+    "validate_supplier_inn",
+    "validate_kpp",
+    "create_supplier",
+    "get_supplier",
+    "get_supplier_by_code",
+    "get_all_suppliers",
+    "get_suppliers_by_country",
+    "count_suppliers",
+    "search_suppliers",
+    "get_active_suppliers",
+    "supplier_exists",
+    "update_supplier",
+    "activate_supplier",
+    "deactivate_supplier",
+    "delete_supplier",
+    "get_unique_countries",
+    "get_supplier_stats",
+    "get_supplier_display_name",
+    "format_supplier_for_dropdown",
+    "get_suppliers_for_dropdown",
 ]
