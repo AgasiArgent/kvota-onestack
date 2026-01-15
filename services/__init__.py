@@ -3,6 +3,7 @@ OneStack Services
 
 Export and versioning services for quote management.
 Role management services for workflow system.
+Workflow service for quote status management.
 """
 
 from .database import get_supabase, get_anon_client
@@ -30,6 +31,30 @@ from .role_service import (
     require_any_role,
     require_all_roles,
     get_session_user_roles,
+)
+from .workflow_service import (
+    # Enum and data classes
+    WorkflowStatus,
+    StatusTransition,
+    # Status metadata
+    STATUS_NAMES,
+    STATUS_NAMES_SHORT,
+    STATUS_COLORS,
+    IN_PROGRESS_STATUSES,
+    FINAL_STATUSES,
+    ALLOWED_TRANSITIONS,
+    # Helper functions
+    get_status_name,
+    get_status_name_short,
+    get_status_color,
+    get_allowed_transitions,
+    get_allowed_target_statuses,
+    can_transition,
+    is_final_status,
+    is_in_progress,
+    get_workflow_order,
+    get_workflow_stage,
+    get_all_statuses,
 )
 
 __all__ = [
@@ -65,4 +90,24 @@ __all__ = [
     "require_any_role",
     "require_all_roles",
     "get_session_user_roles",
+    # Workflow
+    "WorkflowStatus",
+    "StatusTransition",
+    "STATUS_NAMES",
+    "STATUS_NAMES_SHORT",
+    "STATUS_COLORS",
+    "IN_PROGRESS_STATUSES",
+    "FINAL_STATUSES",
+    "ALLOWED_TRANSITIONS",
+    "get_status_name",
+    "get_status_name_short",
+    "get_status_color",
+    "get_allowed_transitions",
+    "get_allowed_target_statuses",
+    "can_transition",
+    "is_final_status",
+    "is_in_progress",
+    "get_workflow_order",
+    "get_workflow_stage",
+    "get_all_statuses",
 ]

@@ -255,10 +255,10 @@
       "name": "Enum статусов workflow",
       "description": "Определить все статусы и допустимые переходы",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T15:00:00Z",
+      "completed_at": "2025-01-15T15:30:00Z"
     },
     {
       "id": 24,

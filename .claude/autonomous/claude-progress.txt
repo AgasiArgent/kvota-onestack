@@ -538,3 +538,40 @@
 - Files changed:
   - main.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #23: Enum статусов workflow
+- Created new service file: services/workflow_service.py
+- Implemented WorkflowStatus enum with all 15 workflow statuses:
+  - DRAFT, PENDING_PROCUREMENT, PENDING_LOGISTICS, PENDING_CUSTOMS
+  - PENDING_SALES_REVIEW, PENDING_QUOTE_CONTROL, PENDING_APPROVAL, APPROVED
+  - SENT_TO_CLIENT, CLIENT_NEGOTIATION, PENDING_SPEC_CONTROL, PENDING_SIGNATURE
+  - DEAL, REJECTED, CANCELLED
+- Created StatusTransition dataclass for defining allowed transitions
+- Implemented complete transition matrix (ALLOWED_TRANSITIONS list):
+  - Defines who can transition from what status to what status
+  - Each transition has: from_status, to_status, allowed_roles, requires_comment, auto_transition
+  - 26 total transitions defined covering all workflow paths
+- Added metadata dictionaries:
+  - STATUS_NAMES: Full Russian names for each status
+  - STATUS_NAMES_SHORT: Short names for compact display
+  - STATUS_COLORS: Tailwind CSS classes for status badges
+  - IN_PROGRESS_STATUSES: Set of active statuses
+  - FINAL_STATUSES: Set of terminal statuses (deal, rejected, cancelled)
+- Implemented helper functions:
+  - get_status_name(status) → Russian name
+  - get_status_name_short(status) → Short name
+  - get_status_color(status) → Tailwind CSS classes
+  - get_allowed_transitions(current_status, user_roles) → List[StatusTransition]
+  - get_allowed_target_statuses(current_status, user_roles) → List[WorkflowStatus]
+  - can_transition(current_status, target_status, user_roles) → (bool, error_message)
+  - is_final_status(status) → bool
+  - is_in_progress(status) → bool
+  - get_workflow_order() → ordered list for progress bar
+  - get_workflow_stage(status) → numeric stage (0-12)
+  - get_all_statuses() → list for UI dropdowns
+- Updated services/__init__.py to export all new functions
+- Verified syntax with py_compile
+- Files changed:
+  - services/workflow_service.py (new)
+  - services/__init__.py (updated)
+- Status: COMPLETE
