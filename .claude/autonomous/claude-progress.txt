@@ -263,3 +263,30 @@
 - Added function calculate_plan_fact_variance() for automatic variance calculation
 - Files changed: migrations/009_create_plan_fact_items_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #10: Создать таблицу telegram_users
+- Created SQL migration: `migrations/010_create_telegram_users_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - user_id (UUID FK -> auth.users, CASCADE DELETE)
+  - telegram_id (BIGINT UNIQUE) - Telegram user ID
+  - telegram_username (VARCHAR 255) - username without @
+  - is_verified (BOOLEAN) - whether account is verified
+  - verification_code (VARCHAR 32) - temporary verification code
+  - verification_code_expires_at (TIMESTAMP) - code expiration
+  - created_at (TIMESTAMP)
+  - verified_at (TIMESTAMP) - when account was verified
+- Indexes created:
+  - telegram_id (unique) - one Telegram per user
+  - user_id - for lookup by user
+  - verification_code (partial, where not verified) - for verification process
+  - user_id (partial, where verified) - for sending notifications
+- RLS policies:
+  - Users can view/insert/update/delete their own Telegram link
+  - Admins can view Telegram links of users in their organization
+- Helper functions:
+  - generate_telegram_verification_code() - generates 6-char random code
+  - request_telegram_verification(user_id) - creates/updates verification code
+  - verify_telegram_account(code, telegram_id, username) - verifies account
+- Files changed: migrations/010_create_telegram_users_table.sql (new)
+- Status: COMPLETE

@@ -110,10 +110,10 @@
       "name": "Создать таблицу telegram_users",
       "description": "SQL миграция для связи Telegram с пользователями",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T05:00:00Z",
+      "completed_at": "2025-01-15T05:10:00Z"
     },
     {
       "id": 11,
