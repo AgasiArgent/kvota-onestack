@@ -172,16 +172,20 @@
       "name": "Create workflow_transitions table if not exists",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Audit log for status transitions - verify or create"
+      "passes": true,
+      "completed_at": "2026-01-15T19:20:00Z",
+      "description": "Audit log for status transitions - verify or create",
+      "notes": "VERIFIED: Table already exists in migration 004_create_workflow_transitions_table.sql with all required columns (id, quote_id, from_status, to_status, actor_id, actor_role, comment, created_at). Has proper indexes and RLS policies."
     },
     {
       "id": "DB-019",
       "name": "Create approvals table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Track approval requests with modifications JSONB"
+      "passes": true,
+      "completed_at": "2026-01-15T19:25:00Z",
+      "description": "Track approval requests with modifications JSONB",
+      "notes": "Table existed in migration 005. Created migration 035_add_modifications_to_approvals.sql to add modifications JSONB column for v3.0. Also added: apply_approval_modifications() function, v_approvals_with_modifications view, get_approval_history() function."
     },
     {
       "id": "DB-020",

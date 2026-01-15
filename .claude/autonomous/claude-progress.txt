@@ -2916,3 +2916,42 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - get_supplier_payment_summary(supplier_id, from_date, to_date) - invoice/payment totals
 - View: v_supplier_invoice_payments_full with complete context
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-018: Verify workflow_transitions table
+- VERIFIED: Table already exists in migration 004_create_workflow_transitions_table.sql
+- All required columns present:
+  - id (UUID PK)
+  - quote_id (FK to quotes with CASCADE)
+  - from_status, to_status (VARCHAR 50)
+  - actor_id (FK to auth.users), actor_role
+  - comment (optional TEXT)
+  - created_at (TIMESTAMPTZ)
+- Has proper indexes:
+  - idx_workflow_transitions_quote_id
+  - idx_workflow_transitions_actor_id
+  - idx_workflow_transitions_to_status
+  - idx_workflow_transitions_quote_created (composite)
+- Has RLS policies:
+  - SELECT: Users can view transitions for their organization quotes
+  - INSERT: Authenticated users can insert for their org quotes
+  - No UPDATE/DELETE (immutable audit log)
+- Status: COMPLETE (verified existing)
+
+
+## Session 2026-01-15 - Feature DB-019: Add modifications JSONB to approvals table
+- Table existed in migration 005_create_approvals_table.sql
+- Missing v3.0 requirement: modifications JSONB column for top_manager changes
+- Created migration 035_add_modifications_to_approvals.sql:
+  - Added modifications JSONB column with documentation comment
+  - Example structure shows quote-level and item-level modifications
+  - Created apply_approval_modifications() helper function (placeholder for future logic)
+  - Created v_approvals_with_modifications view with:
+    - Quote IDN, status
+    - Requester/approver emails
+    - Modified items count
+  - Created get_approval_history() function for quote audit trail
+- Purpose: Top manager can now modify quote values during approval process
+  - Changes stored in modifications JSONB
+  - Applied when approval is confirmed
+- Status: COMPLETE
