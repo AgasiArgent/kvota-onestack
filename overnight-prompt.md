@@ -108,15 +108,18 @@ App runs at http://localhost:5001
 - [x] Feature #23: Enum статусов workflow (2025-01-15)
 - [x] Feature #24: Матрица переходов статусов (2025-01-15)
 - [x] Feature #25: Сервис перехода статуса (2025-01-15)
+- [x] Feature #26: Валидация перехода статуса (2025-01-15) - Already in Feature #25
+- [x] Feature #27: Логирование переходов (2025-01-15) - Already in Feature #25
+- [x] Feature #28: Автопереход logistics+customs → sales_review (2025-01-15)
 
 ### Next Up
-- Feature #26: Валидация перехода статуса
+- Feature #29: Назначение исполнителей при переходе
 
 ### Progress
-- **25 of 88 features completed** (28%)
+- **28 of 88 features completed** (32%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
-- **WORKFLOW ENGINE IN PROGRESS** (features 23-25 done, 5 more to go: 26-32)
+- **WORKFLOW ENGINE IN PROGRESS** (features 23-28 done, 4 more to go: 29-32)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -137,13 +140,18 @@ App runs at http://localhost:5001
     - get_transitions_by_role, get_permission_matrix, get_permission_matrix_detailed
     - get_outgoing_transitions, get_incoming_transitions
     - is_comment_required, is_auto_transition
-  - **NEW (Feature #25)**: Transition execution functions:
+  - Transition execution functions (Feature #25):
     - transition_quote_status() - Main function to execute workflow transitions
     - TransitionResult dataclass - Structured return type
     - get_quote_workflow_status() - Get current status of a quote
     - get_quote_transition_history() - Get audit log of transitions
     - get_available_transitions_for_quote() - Get available transitions for UI
+  - **NEW (Feature #28)**: Auto-transition functions:
+    - check_and_auto_transition_to_sales_review() - Auto-transition when both stages complete
+    - complete_logistics() - Mark logistics complete and trigger auto-check
+    - complete_customs() - Mark customs complete and trigger auto-check
+    - get_parallel_stages_status() - Get completion status of parallel stages
 - Added /unauthorized route in main.py
 - Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
 - Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
-- Next: Feature #26 - Validate transitions (already implemented within transition_quote_status)
+- Next: Feature #29 - Auto-assign procurement users by brand when entering pending_procurement
