@@ -577,10 +577,11 @@
       "name": "Кнопка одобрения КП",
       "description": "Одобрить и отправить менеджеру продаж",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T19:05:00Z",
+      "completed_at": "2025-01-15T19:30:00Z",
+      "notes": "Created /quote-control/{quote_id}/approve GET/POST routes. Checks if approval is needed, redirects to request-approval if yes. Direct approval to APPROVED status."
     },
     {
       "id": 52,

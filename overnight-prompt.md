@@ -133,12 +133,14 @@ App runs at http://localhost:5001
 - [x] Feature #48: Чек-лист проверки КП (2025-01-15)
 - [x] Feature #49: Форма возврата на доработку (2025-01-15)
 - [x] Feature #50: Кнопка отправки на согласование (2025-01-15)
+- [x] Feature #51: Кнопка одобрения КП (2025-01-15)
 
 ### Next Up
-- Feature #51: Кнопка одобрения КП (approve quote button)
+- Feature #52: Создание Telegram-бота (Telegram bot creation)
 
 ### Progress
-- **50 of 88 features completed** (57%)
+- **51 of 88 features completed** (58%)
+- **QUOTE CONTROL UI PHASE COMPLETE** (all 6 features done: 46-51)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)

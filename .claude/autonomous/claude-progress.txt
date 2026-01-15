@@ -1115,3 +1115,35 @@
     - Added GET /quote-control/{quote_id}/request-approval route
     - Added POST /quote-control/{quote_id}/request-approval handler
 - Status: COMPLETE - Feature #50 done
+
+
+## Session 2025-01-15 - Feature #51: Кнопка одобрения КП
+- Created /quote-control/{quote_id}/approve GET route:
+  - Shows confirmation page for approving a quote
+  - Requires quote_controller or admin role
+  - Only available when quote is in pending_quote_control status
+  - Checks if top manager approval is needed:
+    - If yes, redirects to request-approval page with explanation
+    - If no, shows confirmation form
+  - Shows quote summary (amount, markup, prepayment)
+  - Success banner indicating quote passed review
+  - Optional comment field
+- Created /quote-control/{quote_id}/approve POST handler:
+  - Validates user role (quote_controller/admin)
+  - Uses transition_quote_status() to move from PENDING_QUOTE_CONTROL to APPROVED
+  - Default comment "Одобрено контроллером КП" if none provided
+  - Shows success page with confirmation
+  - Shows error page if transition fails
+- UI features:
+  - Russian labels
+  - Green success banner indicating quote passed review
+  - Quote summary card
+  - Optional comment textarea
+  - Green submit button (positive action)
+  - Smart redirection if approval is required
+- Files changed:
+  - main.py (~200 lines added):
+    - Added GET /quote-control/{quote_id}/approve route
+    - Added POST /quote-control/{quote_id}/approve handler
+- Status: COMPLETE - Feature #51 done
+- **QUOTE CONTROL UI PHASE COMPLETE** (all 6 features done: 46-51)

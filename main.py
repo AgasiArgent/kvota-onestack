@@ -5772,6 +5772,252 @@ def post(session, quote_id: str, comment: str = ""):
 
 
 # ============================================================================
+# QUOTE CONTROL - APPROVE QUOTE (Feature #51)
+# ============================================================================
+
+@rt("/quote-control/{quote_id}/approve")
+def get(session, quote_id: str):
+    """
+    Approve Quote confirmation page - shows a confirmation before approving.
+
+    Feature #51: Кнопка одобрения КП
+
+    This is used when the quote does NOT require top manager approval.
+    For quotes that need approval, use /request-approval instead.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name, idn_customer)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("Quote Not Found",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← Вернуться к списку", href="/quote-control"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if quote is in correct status
+    if workflow_status != "pending_quote_control":
+        return page_layout("Одобрение невозможно",
+            H1("Одобрение невозможно"),
+            P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}' и не может быть одобрено."),
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}"),
+            session=session
+        )
+
+    # Get calculation variables to check if approval is needed
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    calc_vars = vars_result.data[0]["variables"] if vars_result.data else {}
+
+    # Check if approval is required (same logic as in quote-control detail page)
+    deal_type = quote.get("deal_type") or calc_vars.get("offer_sale_type", "")
+    currency = quote.get("currency", "USD")
+    markup = float(calc_vars.get("markup", 0) or 0)
+    prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
+    lpr_reward = float(calc_vars.get("lpr_reward", 0) or calc_vars.get("decision_maker_reward", 0) or 0)
+
+    min_markup_supply = 12
+    min_markup_transit = 8
+
+    approval_reasons = []
+    if currency == "RUB":
+        approval_reasons.append("Валюта КП = рубли")
+    if prepayment < 100:
+        approval_reasons.append(f"Не 100% предоплата ({prepayment}%)")
+    if deal_type == "supply" and markup < min_markup_supply:
+        approval_reasons.append(f"Наценка ниже минимума для поставки")
+    elif deal_type == "transit" and markup < min_markup_transit:
+        approval_reasons.append(f"Наценка ниже минимума для транзита")
+    if lpr_reward > 0:
+        approval_reasons.append(f"Есть вознаграждение ЛПРа")
+
+    # If approval is required, redirect to request-approval
+    if approval_reasons:
+        return page_layout("Требуется согласование",
+            H1("⚠ Требуется согласование топ-менеджера"),
+            P("Это КП не может быть одобрено напрямую, так как имеются следующие причины для согласования:"),
+            Ul(*[Li(reason) for reason in approval_reasons]),
+            A("⏳ Отправить на согласование", href=f"/quote-control/{quote_id}/request-approval", role="button"),
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}",
+              style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
+            session=session
+        )
+
+    customer_name = quote.get("customers", {}).get("name", "—")
+    idn_quote = quote.get("idn_quote", "")
+    total_amount = float(quote.get("total_amount", 0) or 0)
+    quote_currency = quote.get("currency", "USD")
+
+    return page_layout(f"Одобрение КП - {idn_quote}",
+        # Header
+        Div(
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
+            H1(f"✓ Одобрение КП {idn_quote}"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Success banner
+        Div(
+            "✓ КП прошло проверку и может быть одобрено",
+            style="background: #dcfce7; color: #166534; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
+        ),
+
+        # Quote summary card
+        Div(
+            H3("Сводка по КП"),
+            Div(
+                Div(Strong("Сумма: "), f"{format_money(total_amount)} {quote_currency}"),
+                Div(Strong("Наценка: "), f"{markup}%"),
+                Div(Strong("Предоплата: "), f"{prepayment}%"),
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;"
+            ),
+            cls="card",
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Confirmation form
+        Form(
+            P("После одобрения КП станет доступно для отправки клиенту.", style="color: #666; margin-bottom: 1rem;"),
+
+            # Optional comment
+            Div(
+                Label("Комментарий (необязательно)", for_="comment", style="font-weight: 500; margin-bottom: 0.25rem; display: block;"),
+                Textarea(
+                    name="comment",
+                    id="comment",
+                    placeholder="Дополнительные комментарии...",
+                    style="width: 100%; min-height: 80px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button(
+                    "✓ Одобрить КП",
+                    type="submit",
+                    style="background: #22c55e; border-color: #22c55e; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                ),
+                A("Отмена", href=f"/quote-control/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
+                style="display: flex; align-items: center;"
+            ),
+
+            action=f"/quote-control/{quote_id}/approve",
+            method="post",
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quote-control/{quote_id}/approve")
+def post(session, quote_id: str, comment: str = ""):
+    """
+    Handle the approve quote form submission.
+    Transitions the quote from PENDING_QUOTE_CONTROL to APPROVED.
+
+    Feature #51: Кнопка одобрения КП - POST handler
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Get user's role codes for the transition
+    user_roles = get_user_roles_from_session(session)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to this org
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status, idn_quote") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← Вернуться к списку", href="/quote-control"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    current_status = quote.get("workflow_status", "draft")
+    idn_quote = quote.get("idn_quote", "")
+
+    # Check if quote is in correct status
+    if current_status != "pending_quote_control":
+        return page_layout("Одобрение невозможно",
+            H1("Одобрение невозможно"),
+            P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}' и не может быть одобрено."),
+            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}"),
+            session=session
+        )
+
+    # Perform the workflow transition to APPROVED
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.APPROVED,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=comment.strip() if comment else "Одобрено контроллером КП"
+    )
+
+    if result.success:
+        # Success - redirect to quote control list
+        return page_layout("Успешно",
+            H1("✓ КП одобрено"),
+            P(f"КП {idn_quote} было успешно одобрено."),
+            P("Теперь менеджер по продажам может отправить его клиенту.", style="color: #666;"),
+            A("← Вернуться к списку КП", href="/quote-control", role="button"),
+            session=session
+        )
+    else:
+        # Show error
+        return page_layout("Ошибка",
+            H1("Ошибка одобрения"),
+            P(f"Не удалось одобрить КП: {result.error_message}"),
+            A("← Вернуться к форме", href=f"/quote-control/{quote_id}/approve"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
