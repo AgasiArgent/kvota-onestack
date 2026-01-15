@@ -62,8 +62,10 @@
       "name": "Create locations table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Create locations directory for dropdown with search (country, city, is_hub)"
+      "passes": true,
+      "completed_at": "2026-01-15T17:10:00Z",
+      "description": "Create locations directory for dropdown with search (country, city, is_hub)",
+      "notes": "Created migration 024_create_locations_table.sql with pg_trgm extension, gin index for search, search_locations() function, RLS policies, and create_default_locations() seed function"
     },
     {
       "id": "DB-008",

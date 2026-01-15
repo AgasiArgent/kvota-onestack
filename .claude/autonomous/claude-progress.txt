@@ -2702,3 +2702,31 @@ to determine the signatory name that appears on the document.
 - **RLS policies**: select for org members, insert/update for admin+finance, delete for admin only
 - Files changed: migrations/023_create_bank_accounts_table.sql (new)
 - Status: COMPLETE
+
+## Session 2026-01-15 - Feature DB-007: Create locations table migration
+
+**What was done:**
+- Created migration `migrations/024_create_locations_table.sql`
+- Enabled pg_trgm extension for trigram-based search
+- Table structure:
+  - id (UUID PK), organization_id (FK)
+  - country (required), city, code (short code like MSK, SPB, SH)
+  - address (optional, for specific pickup points)
+  - is_hub, is_customs_point, is_active flags
+  - display_name (computed: "CODE - City, Country")
+  - search_text (lowercase computed for fast ILIKE search)
+- Added GIN index with gin_trgm_ops on search_text for fast partial matching
+- Created `search_locations()` function for HTMX dropdown with:
+  - Query parameter for text search
+  - Optional hub_only and customs_only filters
+  - Results ordered by exact code match, then hubs first, then alphabetically
+- Created `create_default_locations()` function to seed common locations:
+  - China: Shanghai, Shenzhen, Guangzhou, Yiwu, Ningbo, Beijing, Qingdao, Tianjin
+  - Russia: Moscow, SPB, Vladivostok, Novosibirsk, Ekaterinburg, Zabaikalsk, Blagoveshchensk
+  - CIS: Almaty, Khorgos
+  - Europe: Hamburg, Rotterdam, Milan
+  - Turkey: Istanbul
+- RLS policies: users can view, admin can manage
+
+**Next steps:**
+- DB-008: Create brand_supplier_assignments table
