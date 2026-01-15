@@ -3184,3 +3184,27 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - Integration documentation tests
 - Status: COMPLETE
 
+
+## Session 2026-01-15 (continued)
+
+### DEAL-001 (Deal creation from specification) - ✅ COMPLETE
+- Implementation already existed in `services/deal_service.py` (lines 932-1105)
+- `create_deal_from_specification()` function performs complete workflow:
+  1. Validates deal doesn't already exist for specification
+  2. Fetches specification with quote and customer details
+  3. Validates specification status (must be approved or signed)
+  4. Requires signed scan to be uploaded
+  5. Extracts deal data (quote_id, deal_number, signed_at, total_amount, currency, customer_name)
+  6. Creates the deal record with auto-generated deal number
+  7. Optionally updates specification status to 'signed'
+- Created `tests/test_deal_service.py` with 42 passing tests covering:
+  - Deal dataclass (creation, from_dict, to_dict)
+  - Constants and status helpers
+  - Create operations
+  - DEAL-001 specific tests (9 tests for create_deal_from_specification)
+  - Read operations
+  - Update operations (status transitions)
+  - Delete operations
+  - Utility functions
+
+### Progress: 48/94 features complete

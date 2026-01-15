@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "Kvota OneStack - Quote Workflow System with Supply Chain",
-  "description": "Расширение OneStack: 4 типа компаний в цепочке поставок, IDN система, реестр инвойсов поставщиков, 12 ролей",
+  "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0435 OneStack: 4 \u0442\u0438\u043f\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439 \u0432 \u0446\u0435\u043f\u043e\u0447\u043a\u0435 \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a, IDN \u0441\u0438\u0441\u0442\u0435\u043c\u0430, \u0440\u0435\u0435\u0441\u0442\u0440 \u0438\u043d\u0432\u043e\u0439\u0441\u043e\u0432 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432, 12 \u0440\u043e\u043b\u0435\u0439",
   "created": "2025-01-15T00:00:00Z",
   "stack": "Python FastHTML + HTMX + Supabase",
   "spec_file": ".claude/autonomous/app_spec.xml",
@@ -125,7 +125,7 @@
       "passes": true,
       "completed_at": "2026-01-15T18:30:00Z",
       "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days",
-      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier→hub, hub→customs, customs→customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
+      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier\u2192hub, hub\u2192customs, customs\u2192customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
     },
     {
       "id": "DB-014",
@@ -345,7 +345,7 @@
       "passes": true,
       "description": "Search locations with query parameter for HTMX dropdown",
       "completed_at": "2026-01-15T19:03:01.440853",
-      "notes": "Created API endpoints for location search:\n1. GET /api/locations/search - Returns HTML <option> elements for HTMX dropdown\n   - Query params: q (search query), hub_only, customs_only, limit\n   - Returns: HTML options with location badges [хаб], [таможня]\n   - Supports trigram-based partial matching\n2. GET /api/locations/search/json - Returns JSON for custom implementations\n   - Same params as HTML endpoint\n   - Returns: {items: [{value, label}], count, query}\n   - Error handling returns {error, items: []}\n3. Tests: tests/test_api_locations.py with 21 passing tests\n   - Search filtering, hub/customs filters\n   - JSON response structure\n   - Parameter parsing and validation"
+      "notes": "Created API endpoints for location search:\n1. GET /api/locations/search - Returns HTML <option> elements for HTMX dropdown\n   - Query params: q (search query), hub_only, customs_only, limit\n   - Returns: HTML options with location badges [\u0445\u0430\u0431], [\u0442\u0430\u043c\u043e\u0436\u043d\u044f]\n   - Supports trigram-based partial matching\n2. GET /api/locations/search/json - Returns JSON for custom implementations\n   - Same params as HTML endpoint\n   - Returns: {items: [{value, label}], count, query}\n   - Error handling returns {error, items: []}\n3. Tests: tests/test_api_locations.py with 21 passing tests\n   - Search filtering, hub/customs filters\n   - JSON response structure\n   - Parameter parsing and validation"
     },
     {
       "id": "API-008",
@@ -355,7 +355,7 @@
       "passes": true,
       "completed_at": "2026-01-15T19:30:00Z",
       "description": "Manage brand-supplier and brand-procurement assignments",
-      "notes": "Created services/brand_supplier_assignment_service.py with: BrandSupplierAssignment dataclass, CRUD operations (create/get/update/delete), query functions (get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier, count_brand_supplier_assignments), bulk operations (bulk_create_brand_supplier_assignments), primary supplier management (set_primary_supplier_for_brand, unset_primary_supplier_for_brand - uses DB trigger for single-primary enforcement), utility functions (get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier, get_brands_without_primary_supplier, get_brand_supplier_assignment_stats, format_brand_supplier_for_display, get_suppliers_for_brand_dropdown). Note: brand_service.py already handles brand→procurement-manager assignments (brand_assignments table). This new service handles brand→supplier assignments (brand_supplier_assignments table from DB-008). Tests in tests/test_brand_supplier_assignment_service.py with 24 passing tests. Updated services/__init__.py with all exports."
+      "notes": "Created services/brand_supplier_assignment_service.py with: BrandSupplierAssignment dataclass, CRUD operations (create/get/update/delete), query functions (get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier, count_brand_supplier_assignments), bulk operations (bulk_create_brand_supplier_assignments), primary supplier management (set_primary_supplier_for_brand, unset_primary_supplier_for_brand - uses DB trigger for single-primary enforcement), utility functions (get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier, get_brands_without_primary_supplier, get_brand_supplier_assignment_stats, format_brand_supplier_for_display, get_suppliers_for_brand_dropdown). Note: brand_service.py already handles brand\u2192procurement-manager assignments (brand_assignments table). This new service handles brand\u2192supplier assignments (brand_supplier_assignments table from DB-008). Tests in tests/test_brand_supplier_assignment_service.py with 24 passing tests. Updated services/__init__.py with all exports."
     },
     {
       "id": "API-009",
@@ -443,7 +443,7 @@
       "passes": true,
       "completed_at": "2026-01-16T00:15:00Z",
       "description": "Create new versions during client_negotiation",
-      "notes": "Implementation exists in quote_version_service.py. create_quote_version() creates immutable snapshot with auto-incrementing version number, stores: variables (with Decimal→float conversion), products snapshot, calculation results, totals, exchange rate info, change_reason. list_quote_versions() returns ordered list with transformed UI-compatible data. get_quote_version() fetches specific version with full details. Exported in services/__init__.py. Created tests/test_quote_version_service.py with 16 passing tests covering version creation, incrementation, data conversion, list/get operations, and edge cases."
+      "notes": "Implementation exists in quote_version_service.py. create_quote_version() creates immutable snapshot with auto-incrementing version number, stores: variables (with Decimal\u2192float conversion), products snapshot, calculation results, totals, exchange rate info, change_reason. list_quote_versions() returns ordered list with transformed UI-compatible data. get_quote_version() fetches specific version with full details. Exported in services/__init__.py. Created tests/test_quote_version_service.py with 16 passing tests covering version creation, incrementation, data conversion, list/get operations, and edge cases."
     },
     {
       "id": "SPEC-001",
@@ -480,7 +480,7 @@
       "name": "Deal creation from specification",
       "category": "backend",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "description": "Create deal when specification is confirmed"
     },
     {
