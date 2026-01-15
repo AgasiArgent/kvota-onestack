@@ -25,6 +25,9 @@ from services.validation_export import create_validation_excel
 # Import version service
 from services.quote_version_service import create_quote_version, list_quote_versions, get_quote_version
 
+# Import role service
+from services.role_service import get_user_role_codes, get_session_user_roles, require_role, require_any_role
+
 # Import calculation engine
 from calculation_engine import calculate_multiproduct_quote
 from calculation_mapper import map_variables_to_calculation_input, safe_decimal, safe_int
@@ -144,6 +147,71 @@ def require_login(session):
     return None
 
 
+def user_has_role(session, role_code: str) -> bool:
+    """
+    Check if logged-in user has a specific role (from session cache).
+
+    This function checks the roles stored in the session at login time,
+    avoiding database queries for role checks.
+
+    Args:
+        session: Session dict containing user info
+        role_code: Role code to check for (e.g., 'admin', 'sales')
+
+    Returns:
+        True if user has the role, False otherwise
+
+    Example:
+        if user_has_role(session, 'admin'):
+            # Show admin controls
+            pass
+    """
+    user = session.get("user")
+    if not user:
+        return False
+    roles = user.get("roles", [])
+    return role_code in roles
+
+
+def user_has_any_role(session, role_codes: list) -> bool:
+    """
+    Check if logged-in user has any of the specified roles (from session cache).
+
+    Args:
+        session: Session dict containing user info
+        role_codes: List of role codes to check for
+
+    Returns:
+        True if user has at least one of the roles, False otherwise
+
+    Example:
+        if user_has_any_role(session, ['admin', 'finance']):
+            # Show financial controls
+            pass
+    """
+    user = session.get("user")
+    if not user:
+        return False
+    roles = user.get("roles", [])
+    return any(code in roles for code in role_codes)
+
+
+def get_user_roles_from_session(session) -> list:
+    """
+    Get role codes for the logged-in user from session cache.
+
+    Args:
+        session: Session dict containing user info
+
+    Returns:
+        List of role codes, or empty list if not logged in
+    """
+    user = session.get("user")
+    if not user:
+        return []
+    return user.get("roles", [])
+
+
 def format_money(value, currency="RUB"):
     """Format money value"""
     if value is None:
@@ -212,12 +280,19 @@ def post(email: str, password: str, session):
                 .execute()
 
             org_data = org_result.data[0] if org_result.data else None
+            org_id = org_data["organization_id"] if org_data else None
+
+            # Get user's roles in the organization
+            user_roles = []
+            if org_id:
+                user_roles = get_user_role_codes(response.user.id, org_id)
 
             session["user"] = {
                 "id": response.user.id,
                 "email": response.user.email,
-                "org_id": org_data["organization_id"] if org_data else None,
-                "org_name": org_data["organizations"]["name"] if org_data else "No Organization"
+                "org_id": org_id,
+                "org_name": org_data["organizations"]["name"] if org_data else "No Organization",
+                "roles": user_roles  # List of role codes: ['sales', 'admin', etc.]
             }
             session["access_token"] = response.session.access_token
 

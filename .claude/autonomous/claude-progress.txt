@@ -511,3 +511,30 @@
   - services/__init__.py (updated)
   - main.py (updated - added /unauthorized route)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #22: Контекст пользователя с ролями
+- Extended session["user"] to include roles at login time
+- Modified login POST handler in main.py:
+  - After getting org_id, calls get_user_role_codes(user_id, org_id)
+  - Stores roles as list in session["user"]["roles"]
+- Added role service imports to main.py:
+  - get_user_role_codes, get_session_user_roles, require_role, require_any_role
+- Added session-based helper functions in main.py:
+  - user_has_role(session, role_code) → bool
+  - user_has_any_role(session, role_codes) → bool
+  - get_user_roles_from_session(session) → list
+- These helpers check roles from session cache (no database query)
+- Session structure now:
+  ```python
+  session["user"] = {
+      "id": user_id,
+      "email": email,
+      "org_id": org_id,
+      "org_name": org_name,
+      "roles": ["sales", "admin", ...]  # NEW
+  }
+  ```
+- Verified no syntax errors
+- Files changed:
+  - main.py (updated)
+- Status: COMPLETE
