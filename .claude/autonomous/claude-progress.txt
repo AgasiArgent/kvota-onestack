@@ -2788,3 +2788,35 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 **Progress:**
 - v3.0 features complete: **9/94**
 - **Next**: DB-010 (route_logistics_assignments - assign routes to logistics managers)
+
+## Session 2026-01-15 - Feature DB-011: Extend quotes table with v3.0 columns
+- Created migration 028_extend_quotes_v3.sql
+- Added idn column (VARCHAR 100) for Quote IDN format SELLER-INN-YEAR-SEQ
+- Added seller_company_id column (UUID FK to seller_companies)
+- Created generate_quote_idn() function for IDN generation with counter tracking
+- Added idn_counters JSONB column to organizations table  
+- Added auto-generate trigger trg_auto_generate_quote_idn
+- Note: workflow_status, deal_type, assigned_users were already added in v2.0 migration 012
+- Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-012: Extend quote_items with supply chain columns
+- Created migration 029_extend_quote_items_supply_chain.sql
+- Added item_idn column for item-level IDN (QUOTE_IDN-POSITION format)
+- Added supplier_id FK to suppliers table (item-level supplier reference)
+- Added buyer_company_id FK to buyer_companies (our purchasing legal entity)
+- Added pickup_location_id FK to locations (goods pickup location)
+- Added procurement fields: supplier_payment_terms, supplier_advance_percent, production_time_days
+- Added physical fields: weight_kg (DECIMAL 10,3), volume_m3 (DECIMAL 10,4)
+- Created generate_item_idn() function
+- Created auto-generate trigger trg_auto_generate_item_idn
+- Created regenerate_item_idns_for_quote() helper for batch IDN generation
+- Created get_item_supply_chain_summary() query helper
+- Added check constraints for supplier_advance_percent (0-100), positive values for time/weight/volume
+- Status: COMPLETE
+
+## Ralph Checkpoint 11 - 2026-01-15
+- Features completed: DB-011, DB-012
+- Progress: 12/94 v3.0 features
+- Next: DB-013 (logistics fields)
+
