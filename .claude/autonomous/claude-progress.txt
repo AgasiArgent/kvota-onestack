@@ -2730,3 +2730,37 @@ to determine the signatory name that appears on the document.
 
 **Next steps:**
 - DB-008: Create brand_supplier_assignments table
+
+## Session 2026-01-15 - Feature DB-008: Create brand_supplier_assignments table
+
+**Migration file:** `migrations/025_create_brand_supplier_assignments_table.sql`
+
+**Purpose:** Links brands to suppliers (which external supplier provides which brand)
+This is different from brand_assignments/brand_procurement_assignments which assigns brands to internal users.
+
+**Table structure:**
+- `id` (UUID PK)
+- `organization_id` (UUID FK → organizations)
+- `brand` (VARCHAR(255) required)
+- `supplier_id` (UUID FK → suppliers)
+- `is_primary` (BOOLEAN) - indicates the main/preferred supplier for a brand
+- `notes` (TEXT)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+- `created_by` (UUID FK → auth.users)
+
+**Key features:**
+1. **Many-to-many relationship**: One supplier can provide multiple brands, one brand can have multiple suppliers
+2. **Primary supplier flag**: `is_primary` indicates the preferred supplier for each brand
+3. **Single-primary trigger**: Automatically clears previous primary when new one is set
+4. **Helper functions**:
+   - `get_primary_supplier_for_brand(org_id, brand)` - returns primary supplier ID
+   - `get_suppliers_for_brand(org_id, brand)` - returns all suppliers for a brand with details
+   - `get_brands_for_supplier(supplier_id)` - returns all brands provided by a supplier
+5. **RLS policies**:
+   - SELECT: all org members
+   - INSERT/UPDATE: admin, procurement
+   - DELETE: admin only
+
+**Progress:**
+- v3.0 features complete: **8/94**
+- **Next**: DB-009 (brand_procurement_assignments - rename existing brand_assignments)

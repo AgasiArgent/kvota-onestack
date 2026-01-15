@@ -72,8 +72,10 @@
       "name": "Create brand_supplier_assignments table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Link brands to suppliers"
+      "passes": true,
+      "completed_at": "2026-01-15T17:20:00Z",
+      "description": "Link brands to suppliers",
+      "notes": "Created migration 025_create_brand_supplier_assignments_table.sql with is_primary flag, single-primary trigger, helper functions: get_primary_supplier_for_brand(), get_suppliers_for_brand(), get_brands_for_supplier()"
     },
     {
       "id": "DB-009",
