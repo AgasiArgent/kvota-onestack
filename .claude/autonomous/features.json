@@ -11,7 +11,8 @@
       "name": "Create suppliers table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
+      "passes": true,
+      "completed_at": "2026-01-15T16:50:00Z",
       "description": "Create suppliers table with supplier_code, country, city, inn, kpp, contact fields"
     },
     {

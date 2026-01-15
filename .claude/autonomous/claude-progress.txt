@@ -2501,3 +2501,43 @@ Failed: 0
 Status: SUCCESS - All executable tests pass
 Note: This loop has achieved SUCCESS multiple times. Orchestrator should terminate.
 
+
+## Session 2026-01-15 - Feature DB-001: Create suppliers table
+
+**v3.0 Implementation Started**
+
+This marks the beginning of v3.0 supply chain implementation.
+
+**Supply Chain Architecture:**
+- Supplier (external) → linked at ITEM level
+- Buyer Company (our entity) → linked at ITEM level
+- Seller Company (our entity) → linked at QUOTE level
+- Customer (external) → linked at QUOTE level
+
+**What was done:**
+- Created migration `migrations/018_create_suppliers_table.sql`
+- Table includes: id, organization_id, name, supplier_code (3 chars), country, city, inn, kpp
+- Contact fields: contact_person, contact_email, contact_phone
+- default_payment_terms for contract defaults
+- RLS policies for organization isolation
+- Indexes for name, country, active status queries
+- Trigger for updated_at timestamp
+
+**Schema:**
+```sql
+CREATE TABLE suppliers (
+    id UUID PK,
+    organization_id UUID FK,
+    name VARCHAR(255),
+    supplier_code VARCHAR(3),  -- e.g., CMT, RAR
+    country, city,
+    inn, kpp,
+    contact_person, contact_email, contact_phone,
+    default_payment_terms,
+    is_active, created_at, updated_at, created_by
+);
+```
+
+**Status:** COMPLETE
+**Next:** DB-002 (buyer_companies table)
+
