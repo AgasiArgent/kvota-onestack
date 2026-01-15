@@ -6714,6 +6714,885 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# SPECIFICATION DATA ENTRY (Feature #69)
+# ============================================================================
+
+@rt("/spec-control/create/{quote_id}")
+def get(session, quote_id: str):
+    """
+    Create a new specification from a quote.
+
+    Feature #69: Specification data entry form (create new)
+    - Shows quote summary
+    - Pre-fills some fields from quote data
+    - Form for all 18 specification fields
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has spec_controller role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name, inn)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не найдено или у вас нет доступа."),
+            A("← Назад к спецификациям", href="/spec-control"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    customer = quote.get("customers", {}) or {}
+    customer_name = customer.get("name", "Unknown")
+
+    # Check if specification already exists for this quote
+    existing_spec = supabase.table("specifications") \
+        .select("id") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    if existing_spec.data:
+        # Redirect to edit existing specification
+        return RedirectResponse(f"/spec-control/{existing_spec.data[0]['id']}", status_code=303)
+
+    # Get quote versions for version selection
+    versions_result = supabase.table("quote_versions") \
+        .select("id, version_number, comment, created_at, total_amount, currency") \
+        .eq("quote_id", quote_id) \
+        .order("version_number", desc=True) \
+        .execute()
+
+    versions = versions_result.data or []
+
+    # Get quote calculation variables for pre-filling some fields
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    calc_vars = vars_result.data[0].get("variables", {}) if vars_result.data else {}
+
+    # Pre-fill values from quote
+    prefill = {
+        "proposal_idn": quote.get("idn_quote", ""),
+        "specification_currency": quote.get("currency", "USD"),
+        "client_legal_entity": customer_name,
+        "delivery_city_russia": calc_vars.get("delivery_city", ""),
+        "cargo_pickup_country": calc_vars.get("supplier_country", ""),
+    }
+
+    # Form fields grouped by category
+    return page_layout("Создание спецификации",
+        H1("Создание спецификации"),
+
+        # Quote summary
+        Div(
+            H3(f"КП: {quote.get('idn_quote', '-')}"),
+            P(f"Клиент: {customer_name}"),
+            P(f"Сумма: {quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
+            cls="card",
+            style="margin-bottom: 1.5rem; background: #f0f9ff;"
+        ),
+
+        Form(
+            # Hidden fields
+            Input(type="hidden", name="quote_id", value=quote_id),
+            Input(type="hidden", name="organization_id", value=org_id),
+
+            # Section 1: Identification
+            Div(
+                H3("📋 Идентификация"),
+                Div(
+                    Div(
+                        Label("№ Спецификации", For="specification_number"),
+                        Input(name="specification_number", id="specification_number",
+                              placeholder="SPEC-2025-0001",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("IDN КП", For="proposal_idn"),
+                        Input(name="proposal_idn", id="proposal_idn",
+                              value=prefill.get("proposal_idn", ""),
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("IDN-SKU", For="item_ind_sku"),
+                        Input(name="item_ind_sku", id="item_ind_sku",
+                              placeholder="IDN-SKU identifier",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Версия КП", For="quote_version_id"),
+                        Select(
+                            Option("-- Выберите версию --", value=""),
+                            *[Option(
+                                f"v{v.get('version_number', 0)} - {v.get('total_amount', 0):,.2f} {v.get('currency', '')} ({v.get('created_at', '')[:10]})",
+                                value=v.get("id"),
+                                selected=v.get("id") == quote.get("current_version_id")
+                            ) for v in versions],
+                            name="quote_version_id",
+                            id="quote_version_id",
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 2: Dates and Validity
+            Div(
+                H3("📅 Даты и сроки"),
+                Div(
+                    Div(
+                        Label("Дата подписания", For="sign_date"),
+                        Input(name="sign_date", id="sign_date", type="date",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок действия", For="validity_period"),
+                        Input(name="validity_period", id="validity_period",
+                              placeholder="90 дней",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок готовности", For="readiness_period"),
+                        Input(name="readiness_period", id="readiness_period",
+                              placeholder="30-45 дней",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок на логистику", For="logistics_period"),
+                        Input(name="logistics_period", id="logistics_period",
+                              placeholder="14-21 дней",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 3: Currency and Payment
+            Div(
+                H3("💰 Валюта и оплата"),
+                Div(
+                    Div(
+                        Label("Валюта спецификации", For="specification_currency"),
+                        Select(
+                            Option("USD", value="USD", selected=prefill.get("specification_currency") == "USD"),
+                            Option("EUR", value="EUR", selected=prefill.get("specification_currency") == "EUR"),
+                            Option("RUB", value="RUB", selected=prefill.get("specification_currency") == "RUB"),
+                            Option("CNY", value="CNY", selected=prefill.get("specification_currency") == "CNY"),
+                            name="specification_currency",
+                            id="specification_currency",
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Курс к рублю", For="exchange_rate_to_ruble"),
+                        Input(name="exchange_rate_to_ruble", id="exchange_rate_to_ruble",
+                              type="number", step="0.0001",
+                              placeholder="91.5000",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок оплаты после УПД (дней)", For="client_payment_term_after_upd"),
+                        Input(name="client_payment_term_after_upd", id="client_payment_term_after_upd",
+                              type="number", min="0",
+                              placeholder="0",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Условия оплаты клиента", For="client_payment_terms"),
+                        Input(name="client_payment_terms", id="client_payment_terms",
+                              placeholder="100% предоплата",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 4: Origin and Shipping
+            Div(
+                H3("🚚 Отгрузка и доставка"),
+                Div(
+                    Div(
+                        Label("Страна забора груза", For="cargo_pickup_country"),
+                        Input(name="cargo_pickup_country", id="cargo_pickup_country",
+                              value=prefill.get("cargo_pickup_country", ""),
+                              placeholder="Китай",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Страна товара к отгрузке", For="goods_shipment_country"),
+                        Input(name="goods_shipment_country", id="goods_shipment_country",
+                              placeholder="Китай",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Город доставки в РФ", For="delivery_city_russia"),
+                        Input(name="delivery_city_russia", id="delivery_city_russia",
+                              value=prefill.get("delivery_city_russia", ""),
+                              placeholder="Москва",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Тип груза", For="cargo_type"),
+                        Input(name="cargo_type", id="cargo_type",
+                              placeholder="Генеральный",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Страна оплаты поставщику", For="supplier_payment_country"),
+                        Input(name="supplier_payment_country", id="supplier_payment_country",
+                              placeholder="Китай",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 5: Legal Entities
+            Div(
+                H3("🏢 Юридические лица"),
+                Div(
+                    Div(
+                        Label("Наше юридическое лицо", For="our_legal_entity"),
+                        Input(name="our_legal_entity", id="our_legal_entity",
+                              placeholder="ООО \"Наша компания\"",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Юридическое лицо клиента", For="client_legal_entity"),
+                        Input(name="client_legal_entity", id="client_legal_entity",
+                              value=prefill.get("client_legal_entity", ""),
+                              placeholder="ООО \"Клиент\"",
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button("💾 Создать спецификацию", type="submit", name="action", value="create",
+                       style="background: #28a745; border-color: #28a745;"),
+                A("Отмена", href="/spec-control", role="button",
+                  style="background: #6c757d; border-color: #6c757d; margin-left: 1rem;"),
+                style="margin-top: 1rem;"
+            ),
+
+            action=f"/spec-control/create/{quote_id}",
+            method="POST"
+        ),
+
+        session=session
+    )
+
+
+@rt("/spec-control/create/{quote_id}")
+def post(session, quote_id: str, action: str = "create", **kwargs):
+    """
+    Create a new specification from form data.
+
+    Feature #69: Specification data entry form (create POST handler)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to org
+    quote_result = supabase.table("quotes") \
+        .select("id, organization_id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return RedirectResponse("/spec-control", status_code=303)
+
+    # Check if specification already exists
+    existing_spec = supabase.table("specifications") \
+        .select("id") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    if existing_spec.data:
+        return RedirectResponse(f"/spec-control/{existing_spec.data[0]['id']}", status_code=303)
+
+    # Helper for safe numeric conversion
+    def safe_decimal(val, default=None):
+        try:
+            return float(val) if val else default
+        except:
+            return default
+
+    def safe_int(val, default=None):
+        try:
+            return int(val) if val else default
+        except:
+            return default
+
+    # Build specification data
+    spec_data = {
+        "quote_id": quote_id,
+        "organization_id": org_id,
+        "quote_version_id": kwargs.get("quote_version_id") or None,
+        "specification_number": kwargs.get("specification_number") or None,
+        "proposal_idn": kwargs.get("proposal_idn") or None,
+        "item_ind_sku": kwargs.get("item_ind_sku") or None,
+        "sign_date": kwargs.get("sign_date") or None,
+        "validity_period": kwargs.get("validity_period") or None,
+        "specification_currency": kwargs.get("specification_currency") or "USD",
+        "exchange_rate_to_ruble": safe_decimal(kwargs.get("exchange_rate_to_ruble")),
+        "client_payment_term_after_upd": safe_int(kwargs.get("client_payment_term_after_upd")),
+        "client_payment_terms": kwargs.get("client_payment_terms") or None,
+        "cargo_pickup_country": kwargs.get("cargo_pickup_country") or None,
+        "readiness_period": kwargs.get("readiness_period") or None,
+        "goods_shipment_country": kwargs.get("goods_shipment_country") or None,
+        "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
+        "cargo_type": kwargs.get("cargo_type") or None,
+        "logistics_period": kwargs.get("logistics_period") or None,
+        "our_legal_entity": kwargs.get("our_legal_entity") or None,
+        "client_legal_entity": kwargs.get("client_legal_entity") or None,
+        "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "status": "draft",
+        "created_by": user_id,
+    }
+
+    # Insert specification
+    result = supabase.table("specifications").insert(spec_data).execute()
+
+    if result.data:
+        spec_id = result.data[0]["id"]
+        return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка создания спецификации"),
+            P("Не удалось создать спецификацию. Попробуйте еще раз."),
+            A("← Назад", href=f"/spec-control/create/{quote_id}"),
+            session=session
+        )
+
+
+@rt("/spec-control/{spec_id}")
+def get(session, spec_id: str):
+    """
+    View/edit an existing specification.
+
+    Feature #69: Specification data entry form (edit existing)
+    - Shows all 18 specification fields
+    - Editable when status is draft or pending_review
+    - Shows quote summary and customer info
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has spec_controller role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch specification with quote and customer info
+    spec_result = supabase.table("specifications") \
+        .select("*, quotes(id, idn_quote, total_amount, currency, customers(name, inn))") \
+        .eq("id", spec_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not spec_result.data:
+        return page_layout("Спецификация не найдена",
+            H1("Спецификация не найдена"),
+            P("Запрошенная спецификация не найдена или у вас нет доступа."),
+            A("← Назад к спецификациям", href="/spec-control"),
+            session=session
+        )
+
+    spec = spec_result.data[0]
+    quote = spec.get("quotes", {}) or {}
+    customer = quote.get("customers", {}) or {}
+    customer_name = customer.get("name", "Unknown")
+    quote_id = spec.get("quote_id")
+    status = spec.get("status", "draft")
+
+    # Check if editable
+    is_editable = status in ["draft", "pending_review"]
+
+    # Get quote versions for version selection
+    versions_result = supabase.table("quote_versions") \
+        .select("id, version_number, comment, created_at, total_amount, currency") \
+        .eq("quote_id", quote_id) \
+        .order("version_number", desc=True) \
+        .execute()
+
+    versions = versions_result.data or []
+
+    # Status badge helper
+    def spec_status_badge(status):
+        status_map = {
+            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
+            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
+            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
+            "signed": ("Подписана", "bg-green-200 text-green-800"),
+        }
+        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
+        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+
+    return page_layout("Редактирование спецификации",
+        H1("Редактирование спецификации"),
+
+        # Status and info banner
+        Div(
+            Div(
+                H3(f"Спецификация: {spec.get('specification_number', '-') or 'Без номера'}"),
+                P(
+                    "Статус: ", spec_status_badge(status),
+                    style="margin-top: 0.5rem;"
+                ),
+            ),
+            Div(
+                P(f"КП: {quote.get('idn_quote', '-')}"),
+                P(f"Клиент: {customer_name}"),
+                P(f"Сумма КП: {quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
+                style="text-align: right;"
+            ),
+            cls="card",
+            style="margin-bottom: 1.5rem; background: #f0f9ff; display: flex; justify-content: space-between; align-items: start;"
+        ),
+
+        # Warning banner if not editable
+        Div(
+            "⚠️ Спецификация утверждена/подписана и не может быть отредактирована.",
+            cls="card",
+            style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;"
+        ) if not is_editable else None,
+
+        Form(
+            # Hidden fields
+            Input(type="hidden", name="spec_id", value=spec_id),
+
+            # Section 1: Identification
+            Div(
+                H3("📋 Идентификация"),
+                Div(
+                    Div(
+                        Label("№ Спецификации", For="specification_number"),
+                        Input(name="specification_number", id="specification_number",
+                              value=spec.get("specification_number", ""),
+                              placeholder="SPEC-2025-0001",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("IDN КП", For="proposal_idn"),
+                        Input(name="proposal_idn", id="proposal_idn",
+                              value=spec.get("proposal_idn", ""),
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("IDN-SKU", For="item_ind_sku"),
+                        Input(name="item_ind_sku", id="item_ind_sku",
+                              value=spec.get("item_ind_sku", ""),
+                              placeholder="IDN-SKU identifier",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Версия КП", For="quote_version_id"),
+                        Select(
+                            Option("-- Выберите версию --", value=""),
+                            *[Option(
+                                f"v{v.get('version_number', 0)} - {v.get('total_amount', 0):,.2f} {v.get('currency', '')} ({v.get('created_at', '')[:10]})",
+                                value=v.get("id"),
+                                selected=v.get("id") == spec.get("quote_version_id")
+                            ) for v in versions],
+                            name="quote_version_id",
+                            id="quote_version_id",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 2: Dates and Validity
+            Div(
+                H3("📅 Даты и сроки"),
+                Div(
+                    Div(
+                        Label("Дата подписания", For="sign_date"),
+                        Input(name="sign_date", id="sign_date", type="date",
+                              value=spec.get("sign_date", "") or "",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок действия", For="validity_period"),
+                        Input(name="validity_period", id="validity_period",
+                              value=spec.get("validity_period", ""),
+                              placeholder="90 дней",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок готовности", For="readiness_period"),
+                        Input(name="readiness_period", id="readiness_period",
+                              value=spec.get("readiness_period", ""),
+                              placeholder="30-45 дней",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок на логистику", For="logistics_period"),
+                        Input(name="logistics_period", id="logistics_period",
+                              value=spec.get("logistics_period", ""),
+                              placeholder="14-21 дней",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 3: Currency and Payment
+            Div(
+                H3("💰 Валюта и оплата"),
+                Div(
+                    Div(
+                        Label("Валюта спецификации", For="specification_currency"),
+                        Select(
+                            Option("USD", value="USD", selected=spec.get("specification_currency") == "USD"),
+                            Option("EUR", value="EUR", selected=spec.get("specification_currency") == "EUR"),
+                            Option("RUB", value="RUB", selected=spec.get("specification_currency") == "RUB"),
+                            Option("CNY", value="CNY", selected=spec.get("specification_currency") == "CNY"),
+                            name="specification_currency",
+                            id="specification_currency",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Курс к рублю", For="exchange_rate_to_ruble"),
+                        Input(name="exchange_rate_to_ruble", id="exchange_rate_to_ruble",
+                              type="number", step="0.0001",
+                              value=str(spec.get("exchange_rate_to_ruble", "")) if spec.get("exchange_rate_to_ruble") else "",
+                              placeholder="91.5000",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Срок оплаты после УПД (дней)", For="client_payment_term_after_upd"),
+                        Input(name="client_payment_term_after_upd", id="client_payment_term_after_upd",
+                              type="number", min="0",
+                              value=str(spec.get("client_payment_term_after_upd", "")) if spec.get("client_payment_term_after_upd") is not None else "",
+                              placeholder="0",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Условия оплаты клиента", For="client_payment_terms"),
+                        Input(name="client_payment_terms", id="client_payment_terms",
+                              value=spec.get("client_payment_terms", ""),
+                              placeholder="100% предоплата",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 4: Origin and Shipping
+            Div(
+                H3("🚚 Отгрузка и доставка"),
+                Div(
+                    Div(
+                        Label("Страна забора груза", For="cargo_pickup_country"),
+                        Input(name="cargo_pickup_country", id="cargo_pickup_country",
+                              value=spec.get("cargo_pickup_country", ""),
+                              placeholder="Китай",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Страна товара к отгрузке", For="goods_shipment_country"),
+                        Input(name="goods_shipment_country", id="goods_shipment_country",
+                              value=spec.get("goods_shipment_country", ""),
+                              placeholder="Китай",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Город доставки в РФ", For="delivery_city_russia"),
+                        Input(name="delivery_city_russia", id="delivery_city_russia",
+                              value=spec.get("delivery_city_russia", ""),
+                              placeholder="Москва",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Тип груза", For="cargo_type"),
+                        Input(name="cargo_type", id="cargo_type",
+                              value=spec.get("cargo_type", ""),
+                              placeholder="Генеральный",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Страна оплаты поставщику", For="supplier_payment_country"),
+                        Input(name="supplier_payment_country", id="supplier_payment_country",
+                              value=spec.get("supplier_payment_country", ""),
+                              placeholder="Китай",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 5: Legal Entities
+            Div(
+                H3("🏢 Юридические лица"),
+                Div(
+                    Div(
+                        Label("Наше юридическое лицо", For="our_legal_entity"),
+                        Input(name="our_legal_entity", id="our_legal_entity",
+                              value=spec.get("our_legal_entity", ""),
+                              placeholder="ООО \"Наша компания\"",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Юридическое лицо клиента", For="client_legal_entity"),
+                        Input(name="client_legal_entity", id="client_legal_entity",
+                              value=spec.get("client_legal_entity", ""),
+                              placeholder="ООО \"Клиент\"",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button("💾 Сохранить", type="submit", name="action", value="save",
+                       style="background: #28a745; border-color: #28a745;",
+                       disabled=not is_editable) if is_editable else None,
+                Button("📤 Отправить на проверку", type="submit", name="action", value="submit_review",
+                       style="background: #007bff; border-color: #007bff; margin-left: 1rem;",
+                       disabled=not is_editable) if is_editable and status == "draft" else None,
+                Button("✅ Утвердить", type="submit", name="action", value="approve",
+                       style="background: #28a745; border-color: #28a745; margin-left: 1rem;",
+                       disabled=not is_editable) if is_editable and status == "pending_review" else None,
+                A("← Назад к спецификациям", href="/spec-control", role="button",
+                  style="background: #6c757d; border-color: #6c757d; margin-left: 1rem;"),
+                style="margin-top: 1rem;"
+            ),
+
+            action=f"/spec-control/{spec_id}",
+            method="POST"
+        ),
+
+        session=session
+    )
+
+
+@rt("/spec-control/{spec_id}")
+def post(session, spec_id: str, action: str = "save", **kwargs):
+    """
+    Save specification changes or change status.
+
+    Feature #69: Specification data entry form (save/update POST handler)
+
+    Actions:
+    - save: Save current data
+    - submit_review: Save and change status to pending_review
+    - approve: Save and change status to approved
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify spec exists and belongs to org
+    spec_result = supabase.table("specifications") \
+        .select("id, status, quote_id") \
+        .eq("id", spec_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not spec_result.data:
+        return RedirectResponse("/spec-control", status_code=303)
+
+    spec = spec_result.data[0]
+    current_status = spec.get("status", "draft")
+
+    # Check if editable
+    if current_status not in ["draft", "pending_review"]:
+        return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+    # Helper for safe numeric conversion
+    def safe_decimal(val, default=None):
+        try:
+            return float(val) if val else default
+        except:
+            return default
+
+    def safe_int(val, default=None):
+        try:
+            return int(val) if val else default
+        except:
+            return default
+
+    # Determine new status based on action
+    new_status = current_status
+    if action == "submit_review" and current_status == "draft":
+        new_status = "pending_review"
+    elif action == "approve" and current_status == "pending_review":
+        new_status = "approved"
+
+    # Build update data
+    update_data = {
+        "quote_version_id": kwargs.get("quote_version_id") or None,
+        "specification_number": kwargs.get("specification_number") or None,
+        "proposal_idn": kwargs.get("proposal_idn") or None,
+        "item_ind_sku": kwargs.get("item_ind_sku") or None,
+        "sign_date": kwargs.get("sign_date") or None,
+        "validity_period": kwargs.get("validity_period") or None,
+        "specification_currency": kwargs.get("specification_currency") or "USD",
+        "exchange_rate_to_ruble": safe_decimal(kwargs.get("exchange_rate_to_ruble")),
+        "client_payment_term_after_upd": safe_int(kwargs.get("client_payment_term_after_upd")),
+        "client_payment_terms": kwargs.get("client_payment_terms") or None,
+        "cargo_pickup_country": kwargs.get("cargo_pickup_country") or None,
+        "readiness_period": kwargs.get("readiness_period") or None,
+        "goods_shipment_country": kwargs.get("goods_shipment_country") or None,
+        "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
+        "cargo_type": kwargs.get("cargo_type") or None,
+        "logistics_period": kwargs.get("logistics_period") or None,
+        "our_legal_entity": kwargs.get("our_legal_entity") or None,
+        "client_legal_entity": kwargs.get("client_legal_entity") or None,
+        "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "status": new_status,
+    }
+
+    # Update specification
+    supabase.table("specifications") \
+        .update(update_data) \
+        .eq("id", spec_id) \
+        .execute()
+
+    return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

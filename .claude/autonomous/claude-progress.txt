@@ -1673,3 +1673,45 @@
     - Added "Спецификации" to nav_bar for spec_controller/admin roles
     - Added /spec-control route with complete workspace page
 - Status: COMPLETE - 2 features done (67, 68)
+
+## Session 2026-01-15 - Feature #69: Форма ввода данных спецификации
+- Implemented complete specification data entry form with all 18 fields
+- Created routes in main.py (~900 lines added):
+  - GET /spec-control/create/{quote_id} - Create new specification form
+    - Shows quote summary (idn, customer, amount)
+    - Pre-fills values from quote (proposal_idn, currency, customer name)
+    - Loads quote versions for selection
+    - Redirects to edit if spec already exists for quote
+  - POST /spec-control/create/{quote_id} - Create new specification
+    - Validates user role (spec_controller/admin)
+    - Creates specification record in database
+    - Redirects to edit page after creation
+  - GET /spec-control/{spec_id} - View/edit existing specification
+    - Shows spec status badge with edit restrictions
+    - Loads quote and customer info
+    - All 18 fields organized in 5 sections
+    - Disabled fields when status is approved/signed
+  - POST /spec-control/{spec_id} - Save specification changes
+    - Validates user role and edit permissions
+    - Supports three actions: save, submit_review, approve
+    - Updates status based on action
+- Form sections:
+  1. 📋 Идентификация: specification_number, proposal_idn, item_ind_sku, quote_version_id
+  2. 📅 Даты и сроки: sign_date, validity_period, readiness_period, logistics_period
+  3. 💰 Валюта и оплата: specification_currency, exchange_rate_to_ruble, client_payment_term_after_upd, client_payment_terms
+  4. 🚚 Отгрузка и доставка: cargo_pickup_country, goods_shipment_country, delivery_city_russia, cargo_type, supplier_payment_country
+  5. 🏢 Юридические лица: our_legal_entity, client_legal_entity
+- Status transitions supported:
+  - draft → pending_review (via "Отправить на проверку" button)
+  - pending_review → approved (via "Утвердить" button)
+- UI features:
+  - Russian labels throughout
+  - 2-column grid layout for form fields
+  - Warning banner when spec is not editable
+  - Quote/customer info displayed in header
+  - Status badge with color coding
+  - Back link to /spec-control workspace
+- Syntax verified with py_compile
+- Files changed:
+  - main.py (~900 lines added for 4 routes)
+- Status: COMPLETE - Feature #69 done
