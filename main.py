@@ -142,6 +142,10 @@ def nav_bar(session):
         if "finance" in roles or "admin" in roles:
             nav_items.append(Li(A("Финансы", href="/finance")))
 
+        # Admin-only navigation
+        if "admin" in roles:
+            nav_items.append(Li(A("Админ", href="/admin/users")))
+
         # Add settings and logout at the end
         nav_items.extend([
             Li(A("Settings", href="/settings")),
@@ -9319,6 +9323,368 @@ def post(session, deal_id: str, item_id: str,
             A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
             session=session
         )
+
+
+# ============================================================================
+# ADMIN: USER MANAGEMENT
+# Feature #84: Страница /admin/users
+# ============================================================================
+
+@rt("/admin/users")
+def get(session):
+    """Admin page for user and role management.
+
+    Feature #84: Страница /admin/users
+
+    This page allows admins to:
+    - View all users in the organization
+    - See assigned roles for each user
+    - Add/remove roles
+    - See Telegram connection status
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    # Only admins can access this page
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = user["org_id"]
+
+    # Get all organization members with their roles and Telegram status
+    members_result = supabase.table("organization_members").select(
+        "user_id, status, created_at"
+    ).eq("organization_id", org_id).eq("status", "active").execute()
+
+    members = members_result.data if members_result.data else []
+
+    # Get all available roles
+    from services.role_service import get_all_roles
+    all_roles = get_all_roles()
+
+    # Build user data with roles
+    users_data = []
+    for member in members:
+        member_user_id = member["user_id"]
+
+        # Get user roles
+        user_roles_result = supabase.table("user_roles").select(
+            "id, role_id, roles(code, name)"
+        ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
+
+        member_roles = user_roles_result.data if user_roles_result.data else []
+        role_codes = [r.get("roles", {}).get("code", "") for r in member_roles if r.get("roles")]
+        role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
+
+        # Get Telegram status
+        tg_result = supabase.table("telegram_users").select(
+            "telegram_id, username, verified_at"
+        ).eq("user_id", member_user_id).limit(1).execute()
+
+        tg_data = tg_result.data[0] if tg_result.data else None
+
+        # Try to get email from auth.users via profiles or organization_invites
+        # Since we can't directly query auth.users, use the invite email if available
+        # Or show user_id shortened
+        email_display = member_user_id[:8] + "..."  # Default fallback
+
+        users_data.append({
+            "user_id": member_user_id,
+            "email": email_display,
+            "roles": role_codes,
+            "role_names": role_names,
+            "telegram": tg_data,
+            "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
+        })
+
+    # Build users table rows
+    user_rows = []
+    for u in users_data:
+        # Roles badges
+        role_badges = []
+        for i, code in enumerate(u["roles"]):
+            name = u["role_names"][i] if i < len(u["role_names"]) else code
+            color = {
+                "admin": "#ef4444",
+                "sales": "#3b82f6",
+                "procurement": "#10b981",
+                "logistics": "#f59e0b",
+                "customs": "#8b5cf6",
+                "quote_controller": "#ec4899",
+                "spec_controller": "#06b6d4",
+                "finance": "#84cc16",
+                "top_manager": "#f97316"
+            }.get(code, "#6b7280")
+            role_badges.append(
+                Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
+            )
+
+        # Telegram status
+        if u["telegram"] and u["telegram"].get("verified_at"):
+            tg_status = Span("✓ @" + (u["telegram"].get("username") or str(u["telegram"]["telegram_id"])),
+                style="color: #10b981; font-size: 0.875rem;")
+        else:
+            tg_status = Span("—", style="color: #9ca3af;")
+
+        user_rows.append(Tr(
+            Td(u["email"]),
+            Td(*role_badges if role_badges else [Span("—", style="color: #9ca3af;")]),
+            Td(tg_status),
+            Td(u["joined_at"]),
+            Td(
+                A("Роли", href=f"/admin/users/{u['user_id']}/roles", role="button",
+                  style="font-size: 0.75rem; padding: 4px 12px;")
+            )
+        ))
+
+    # Role legend
+    role_legend = Div(
+        H4("Доступные роли:", style="margin-bottom: 8px;"),
+        Div(
+            *[
+                Div(
+                    Span(r.code, style=f"background: #6b7280; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 8px;"),
+                    Span(r.name + (f" - {r.description}" if r.description else ""), style="font-size: 0.875rem;")
+                , style="margin-bottom: 4px;")
+                for r in all_roles
+            ],
+            style="display: grid; gap: 4px;"
+        ),
+        style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px;"
+    )
+
+    return page_layout("Управление пользователями",
+        H1("Управление пользователями"),
+
+        # Stats
+        Div(
+            Div(
+                Div(str(len(users_data)), cls="stat-value", style="color: #3b82f6;"),
+                Div("Всего пользователей", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(sum(1 for u in users_data if u["telegram"])), cls="stat-value", style="color: #10b981;"),
+                Div("С Telegram", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(len(all_roles)), cls="stat-value", style="color: #8b5cf6;"),
+                Div("Доступных ролей", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
+        ),
+
+        # Role legend
+        role_legend,
+
+        # Users table
+        Div(
+            H3("Пользователи организации"),
+            Table(
+                Thead(Tr(
+                    Th("ID пользователя"),
+                    Th("Роли"),
+                    Th("Telegram"),
+                    Th("Дата вступления"),
+                    Th("Действия")
+                )),
+                Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="5", style="text-align: center; color: #9ca3af;"))),
+                cls="striped"
+            ),
+            cls="card"
+        ),
+
+        # Navigation
+        Div(
+            A("← На главную", href="/dashboard", role="button", cls="secondary"),
+            A("Назначение брендов →", href="/admin/brands", role="button"),
+            style="margin-top: 24px; display: flex; gap: 12px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/users/{user_id}/roles")
+def get(user_id: str, session):
+    """Page to manage roles for a specific user.
+
+    Shows all available roles and allows admin to toggle them on/off.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    # Only admins can access this page
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = admin_user["org_id"]
+
+    # Get all available roles
+    from services.role_service import get_all_roles, get_user_role_codes
+    all_roles = get_all_roles()
+
+    # Get current user roles
+    current_roles = get_user_role_codes(user_id, org_id)
+
+    # Build role checkboxes
+    role_inputs = []
+    for r in all_roles:
+        checked = r.code in current_roles
+        color = {
+            "admin": "#ef4444",
+            "sales": "#3b82f6",
+            "procurement": "#10b981",
+            "logistics": "#f59e0b",
+            "customs": "#8b5cf6",
+            "quote_controller": "#ec4899",
+            "spec_controller": "#06b6d4",
+            "finance": "#84cc16",
+            "top_manager": "#f97316"
+        }.get(r.code, "#6b7280")
+
+        role_inputs.append(
+            Label(
+                Input(type="checkbox", name="roles", value=r.code, checked=checked),
+                Span(r.name, style=f"color: {color}; font-weight: 600; margin-left: 8px;"),
+                Span(f" ({r.code})", style="color: #6b7280; font-size: 0.875rem;"),
+                Br(),
+                Span(r.description or "", style="color: #9ca3af; font-size: 0.875rem; margin-left: 28px;") if r.description else None,
+                style="display: block; margin-bottom: 12px; cursor: pointer;"
+            )
+        )
+
+    return page_layout(f"Управление ролями",
+        H1("Управление ролями пользователя"),
+        P(f"ID: {user_id[:8]}...", style="color: #6b7280;"),
+
+        # Current roles display
+        Div(
+            H4("Текущие роли:", style="margin-bottom: 8px;"),
+            Div(
+                *[Span(code, style="background: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.875rem; margin-right: 4px;") for code in current_roles]
+                if current_roles else [Span("Нет ролей", style="color: #9ca3af;")]
+            ),
+            style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 24px;"
+        ),
+
+        # Role management form
+        Form(
+            H3("Выберите роли:"),
+            Div(
+                *role_inputs,
+                style="margin-bottom: 16px;"
+            ),
+            Input(type="hidden", name="user_id", value=user_id),
+            Button("Сохранить роли", type="submit"),
+            method="POST",
+            action=f"/admin/users/{user_id}/roles"
+        ),
+
+        # Navigation
+        Div(
+            A("← Назад к списку", href="/admin/users", role="button", cls="secondary"),
+            style="margin-top: 24px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/users/{user_id}/roles")
+def post(user_id: str, session, roles: list = None):
+    """Handle role updates for a user.
+
+    Compares submitted roles with current roles and adds/removes as needed.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    admin_roles = admin_user.get("roles", [])
+
+    # Only admins can access this page
+    if "admin" not in admin_roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    org_id = admin_user["org_id"]
+    admin_id = admin_user["id"]
+
+    # Handle empty roles list (none selected)
+    if roles is None:
+        roles = []
+    elif isinstance(roles, str):
+        roles = [roles]
+
+    # Get current user roles
+    from services.role_service import get_user_role_codes, assign_role, remove_role
+    current_roles = get_user_role_codes(user_id, org_id)
+
+    submitted_roles = set(roles)
+    current_roles_set = set(current_roles)
+
+    # Roles to add
+    to_add = submitted_roles - current_roles_set
+    for role_code in to_add:
+        result = assign_role(user_id, org_id, role_code, admin_id)
+        if result:
+            print(f"Added role {role_code} to user {user_id}")
+
+    # Roles to remove
+    to_remove = current_roles_set - submitted_roles
+    for role_code in to_remove:
+        result = remove_role(user_id, org_id, role_code)
+        if result:
+            print(f"Removed role {role_code} from user {user_id}")
+
+    # Success message
+    return page_layout("Роли обновлены",
+        H1("✓ Роли обновлены"),
+        P(f"Пользователь: {user_id[:8]}..."),
+        P(f"Добавлено ролей: {len(to_add)}" if to_add else ""),
+        P(f"Удалено ролей: {len(to_remove)}" if to_remove else ""),
+        Div(
+            H4("Текущие роли:", style="margin-bottom: 8px;"),
+            Div(
+                *[Span(code, style="background: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.875rem; margin-right: 4px;") for code in sorted(submitted_roles)]
+                if submitted_roles else [Span("Нет ролей", style="color: #9ca3af;")]
+            ),
+            style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-top: 16px;"
+        ),
+        Div(
+            A("← Назад к списку", href="/admin/users", role="button"),
+            style="margin-top: 24px;"
+        ),
+        session=session
+    )
 
 
 # ============================================================================

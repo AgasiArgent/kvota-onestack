@@ -166,12 +166,13 @@ App runs at http://localhost:5001
 - [x] Feature #81: Сервис план-факта (2026-01-15) - Created services/plan_fact_service.py with full CRUD: PlanFactCategory and PlanFactItem dataclasses, category functions, create/read/update/delete operations for plan_fact_items, summary and statistics (get_deal_plan_fact_summary, get_items_grouped_by_category, get_upcoming_payments, get_payments_for_period), validation functions. Updated services/__init__.py with 35+ exports.
 - [x] Feature #82: Автогенерация плановых платежей (2026-01-15) - Created generate_plan_fact_from_deal(), regenerate_plan_fact_for_deal(), get_plan_fact_generation_preview() functions. Added GeneratePlanFactResult dataclass. Created UI routes: GET/POST /finance/{deal_id}/generate-plan-fact for preview and execution. Updated deal detail page with auto-generation buttons. Generates payments for: client_payment (advance + final), supplier_payment (advance + final), logistics, customs, finance_commission.
 - [x] Feature #83: Расчёт отклонений (2026-01-15) - Already implemented in migration 009: database trigger 'calculate_plan_fact_variance()' automatically computes variance_amount when actual payment recorded. UI displays color-coded variance per item and total variance in deal summary.
+- [x] Feature #84: Страница /admin/users (2026-01-15) - Created /admin/users page for user and role management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles for role assignment with checkboxes. Color-coded badges, stats cards, role legend. Added 'Админ' nav link for admin users.
 
 ### Next Up
-- Feature #84: Страница /admin/users (User and role management admin page)
+- Feature #85: Страница /admin/brands (Brand assignment management page)
 
 ### Progress
-- **83 of 88 features completed** (94%)
+- **84 of 88 features completed** (95%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

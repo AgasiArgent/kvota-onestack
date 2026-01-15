@@ -2140,3 +2140,55 @@ CreateDealFromSpecResult(
 - `services/plan_fact_service.py` - record_actual_payment() uses trigger (lines 663-710)
 
 ### Status: COMPLETE (was already implemented)
+
+## Session 2026-01-15 - Feature #84: Страница /admin/users
+
+### What was done
+- Created admin page for user and role management
+- Added "Админ" nav link (admin-only) to nav_bar
+- Created three routes:
+  - GET /admin/users - Main user list page
+  - GET /admin/users/{user_id}/roles - Role management page for specific user
+  - POST /admin/users/{user_id}/roles - Handle role updates
+
+### Features implemented
+- User list showing:
+  - User ID (shortened)
+  - Assigned roles with color-coded badges
+  - Telegram connection status (verified username or dash)
+  - Join date
+  - "Роли" action button
+- Stats cards: total users, users with Telegram, available roles
+- Role legend section showing all 9 available roles with descriptions
+- Role management page with:
+  - Current roles display
+  - Checkbox form for all available roles
+  - Color-coded role names
+  - Save button that adds/removes roles as needed
+- Admin-only access control on all routes
+
+### Role color scheme
+- admin: red (#ef4444)
+- sales: blue (#3b82f6)
+- procurement: green (#10b981)
+- logistics: amber (#f59e0b)
+- customs: purple (#8b5cf6)
+- quote_controller: pink (#ec4899)
+- spec_controller: cyan (#06b6d4)
+- finance: lime (#84cc16)
+- top_manager: orange (#f97316)
+
+### Files changed
+- main.py:
+  - Added nav_bar "Админ" link for admin users (~3 lines)
+  - Added GET /admin/users route (~180 lines)
+  - Added GET /admin/users/{user_id}/roles route (~80 lines)
+  - Added POST /admin/users/{user_id}/roles route (~60 lines)
+
+### Technical notes
+- Uses role_service functions: get_all_roles, get_user_role_codes, assign_role, remove_role
+- Queries organization_members, user_roles, telegram_users tables
+- Role changes use assign_role/remove_role for proper audit trail
+- Redirects non-admin users with "Доступ запрещён" page
+
+### Status: COMPLETE

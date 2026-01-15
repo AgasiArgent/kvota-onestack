@@ -967,13 +967,14 @@
     {
       "id": 84,
       "category": "ui_admin",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /admin/users",
-      "description": "\u0423\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f\u043c\u0438 \u0438 \u0440\u043e\u043b\u044f\u043c\u0438",
+      "name": "Страница /admin/users",
+      "description": "Управление пользователями и ролями",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T09:15:00.000000",
+      "completed_at": "2026-01-15T09:35:00.000000",
+      "notes": "Created /admin/users page for admin-only user management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles GET/POST for role assignment with checkboxes. Color-coded role badges, stats cards (users, Telegram, roles count), role legend. Added 'Админ' nav link for admin users."
     },
     {
       "id": 85,
