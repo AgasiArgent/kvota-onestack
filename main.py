@@ -129,6 +129,9 @@ def nav_bar(session):
         if "customs" in roles or "admin" in roles:
             nav_items.append(Li(A("Таможня", href="/customs")))
 
+        if "quote_controller" in roles or "admin" in roles:
+            nav_items.append(Li(A("Контроль КП", href="/quote-control")))
+
         # Add settings and logout at the end
         nav_items.extend([
             Li(A("Settings", href="/settings")),
@@ -4719,6 +4722,232 @@ def post(session, quote_id: str, action: str = "save", customs_notes: str = "", 
             print(f"Error completing customs: {result.error}")
 
     return RedirectResponse(f"/customs/{quote_id}", status_code=303)
+
+
+# ============================================================================
+# QUOTE CONTROL WORKSPACE (Features #46-51)
+# ============================================================================
+
+@rt("/quote-control")
+def get(session, status_filter: str = None):
+    """
+    Quote Control workspace - shows quotes pending review for quote_controller role (Жанна).
+
+    Feature #46: Basic quote control page structure
+    Feature #47: List quotes at pending_quote_control status (included)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has quote_controller role
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get quotes for this organization
+    # Quote controller sees quotes at pending_quote_control stage and can view history
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, deal_type, current_version_id") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_quotes = quotes_result.data or []
+
+    # Statuses relevant to quote control
+    control_statuses = [
+        "pending_quote_control",  # Main work status
+        "pending_approval",  # Sent for top manager approval
+        "approved",  # Approved by controller or top manager
+        "sent_to_client",  # Sent to client
+    ]
+
+    quotes_with_details = []
+    for q in all_quotes:
+        ws = q.get("workflow_status")
+        if ws in control_statuses or status_filter:
+            quotes_with_details.append({
+                **q,
+                "needs_review": ws == "pending_quote_control",
+                "pending_approval": ws == "pending_approval",
+                "is_approved": ws == "approved",
+                "sent_to_client": ws == "sent_to_client",
+            })
+
+    # Apply status filter if provided
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    # Separate quotes by review status
+    pending_quotes = [q for q in quotes_with_details
+                      if q.get("needs_review")]
+    awaiting_approval_quotes = [q for q in quotes_with_details
+                                 if q.get("pending_approval")]
+    approved_quotes = [q for q in quotes_with_details
+                       if q.get("is_approved") or q.get("sent_to_client")]
+
+    # Count stats
+    all_count = len(quotes_with_details)
+    pending_count = len(pending_quotes)
+    awaiting_count = len(awaiting_approval_quotes)
+    approved_count = len(approved_quotes)
+
+    # Build the table rows
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+        deal_type = q.get("deal_type")
+        deal_type_badge = ""
+        if deal_type == "supply":
+            deal_type_badge = Span("Поставка", style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
+        elif deal_type == "transit":
+            deal_type_badge = Span("Транзит", style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
+
+        return Tr(
+            Td(
+                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
+                deal_type_badge if deal_type else "",
+            ),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Проверить", href=f"/quote-control/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and q.get("needs_review") else
+                A("Просмотр", href=f"/quote-control/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    # Status filter options
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_quote_control", "📋 На проверке"),
+        ("pending_approval", "⏳ Ожидает согласования"),
+        ("approved", "✅ Одобрено"),
+        ("sent_to_client", "📤 Отправлено клиенту"),
+    ]
+
+    # Status filter form
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/quote-control",
+        style="margin-bottom: 1rem;"
+    )
+
+    return page_layout("Quote Control Workspace",
+        # Header
+        Div(
+            H1("📋 Контроль КП"),
+            P("Рабочая зона контроллера КП (Жанна)"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Stats
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("На проверке"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(awaiting_count), cls="stat-value"),
+                Div("Ожидает согласования"),
+                cls="card stat-card",
+                style="border-left: 4px solid #3b82f6;" if awaiting_count > 0 else ""
+            ),
+            Div(
+                Div(str(approved_count), cls="stat-value"),
+                Div("Одобрено/Отправлено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(all_count), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Status filter
+        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
+
+        # Show filtered view if filter is active
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        # Default view: Pending review quotes
+        Div(
+            H2("📋 Ожидают проверки"),
+            P("КП требующие проверки контроллера", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        # Awaiting approval quotes
+        Div(
+            H2("⏳ Ожидают согласования"),
+            P("КП отправленные на согласование топ-менеджеру", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
+                ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        # Approved/sent quotes
+        Div(
+            H2("✅ Одобренные"),
+            P("КП одобренные и отправленные клиенту", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in approved_quotes[:10]]
+                ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter == "all" else None,
+
+        session=session
+    )
 
 
 # ============================================================================

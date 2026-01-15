@@ -1000,3 +1000,29 @@
     - Added GET /customs/{quote_id} route
     - Added POST /customs/{quote_id} handler
 - Status: COMPLETE - 2 features done (44, 45)
+
+## Session 2025-01-15 - Features #46 & #47: Quote Control Workspace Page
+- Created /quote-control route for quote_controller role (Жанна) workspace
+- Page shows:
+  - Stats cards (pending review, awaiting approval, approved/sent, total quotes)
+  - Status filter dropdown (all, pending_quote_control, pending_approval, approved, sent_to_client)
+  - Pending review quotes section (quotes needing controller review)
+  - Awaiting approval quotes section (quotes sent for top manager approval)
+  - Approved/sent quotes section (quotes ready for client)
+- Added quote_controller link to navigation bar for quote_controller/admin roles
+- Role check: only users with quote_controller or admin role can access
+- Queries:
+  - Fetches quotes with workflow_status in quote control-relevant stages
+  - Shows deal_type badge (Поставка/Транзит) in quote list
+- UI features:
+  - Russian labels
+  - Color-coded workflow status badges
+  - Deal type badges (blue for supply, yellow for transit)
+  - "Проверить" button for pending quotes, "Просмотр" for others
+- Feature #47 (list of quotes at pending_quote_control) is automatically included in #46
+- Files changed:
+  - main.py (~230 lines added):
+    - Added quote_controller to nav_bar role check
+    - Added /quote-control route
+- Status: COMPLETE - 2 features done (46, 47)
+
