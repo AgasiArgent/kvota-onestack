@@ -9688,6 +9688,532 @@ def post(user_id: str, session, roles: list = None):
 
 
 # ============================================================================
+# ADMIN: BRAND MANAGEMENT
+# Feature #85: Страница /admin/brands
+# ============================================================================
+
+@rt("/admin/brands")
+def get(session):
+    """Admin page for brand assignments.
+
+    Feature #85: Страница /admin/brands
+
+    This page allows admins to:
+    - View all brand assignments (brand → procurement manager)
+    - Import new brands from existing quotes
+    - Assign/reassign brands to procurement managers
+    - Delete brand assignments
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    # Only admins can access this page
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = user["org_id"]
+
+    # Import brand service functions
+    from services.brand_service import (
+        get_all_brand_assignments,
+        get_unique_brands_in_org,
+        count_assignments_by_user
+    )
+
+    # Get all current brand assignments
+    assignments = get_all_brand_assignments(org_id)
+
+    # Get unique brands from quote_items in this organization
+    # This is for "import from quotes" functionality
+    quote_items_result = supabase.table("quote_items").select(
+        "brand, quotes!inner(organization_id)"
+    ).eq("quotes.organization_id", org_id).execute()
+
+    all_quote_brands = set()
+    for item in (quote_items_result.data or []):
+        if item.get("brand"):
+            all_quote_brands.add(item["brand"])
+
+    # Get already assigned brands
+    assigned_brands = set(a.brand.lower() for a in assignments)
+
+    # Find unassigned brands
+    unassigned_brands = [b for b in sorted(all_quote_brands) if b.lower() not in assigned_brands]
+
+    # Get procurement users for assignments
+    proc_users_result = supabase.table("organization_members").select(
+        "user_id, user_roles(role_id, roles(code))"
+    ).eq("organization_id", org_id).eq("status", "active").execute()
+
+    # Filter to only procurement users
+    procurement_users = []
+    for member in (proc_users_result.data or []):
+        user_roles = member.get("user_roles", [])
+        has_procurement = any(
+            ur.get("roles", {}).get("code") == "procurement"
+            for ur in user_roles if ur.get("roles")
+        )
+        if has_procurement:
+            procurement_users.append(member["user_id"])
+
+    # Get assignment counts per user
+    assignment_counts = count_assignments_by_user(org_id)
+
+    # Build assignment table rows
+    assignment_rows = []
+    for a in assignments:
+        # Get user display (shortened ID)
+        user_display = a.user_id[:8] + "..."
+        brand_count = assignment_counts.get(a.user_id, 0)
+
+        assignment_rows.append(Tr(
+            Td(Span(a.brand, style="font-weight: 600;")),
+            Td(user_display),
+            Td(str(brand_count)),
+            Td(a.created_at.strftime("%Y-%m-%d") if a.created_at else "-"),
+            Td(
+                Div(
+                    A("Изменить", href=f"/admin/brands/{a.id}/edit", role="button",
+                      style="font-size: 0.75rem; padding: 4px 10px; margin-right: 8px;"),
+                    Form(
+                        Button("Удалить", type="submit", cls="secondary",
+                               style="font-size: 0.75rem; padding: 4px 10px;"),
+                        method="POST",
+                        action=f"/admin/brands/{a.id}/delete",
+                        style="display: inline;"
+                    ),
+                    style="display: flex; align-items: center;"
+                )
+            )
+        ))
+
+    # Build unassigned brands list
+    unassigned_items = []
+    for brand in unassigned_brands:
+        unassigned_items.append(
+            Div(
+                Span(brand, style="font-weight: 500; margin-right: 12px;"),
+                A("Назначить", href=f"/admin/brands/new?brand={brand}", role="button",
+                  style="font-size: 0.75rem; padding: 2px 8px;"),
+                style="display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6;"
+            )
+        )
+
+    return page_layout("Управление брендами",
+        H1("Управление брендами"),
+        P("Назначение брендов менеджерам по закупкам", style="color: #6b7280;"),
+
+        # Stats
+        Div(
+            Div(
+                Div(str(len(assignments)), cls="stat-value", style="color: #10b981;"),
+                Div("Назначено брендов", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(len(unassigned_brands)), cls="stat-value", style="color: #f59e0b;"),
+                Div("Без назначения", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(len(procurement_users)), cls="stat-value", style="color: #3b82f6;"),
+                Div("Менеджеров закупок", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(len(all_quote_brands)), cls="stat-value", style="color: #8b5cf6;"),
+                Div("Всего брендов в КП", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;"
+        ),
+
+        # Unassigned brands section
+        Div(
+            H3("Бренды без назначения", style="margin-bottom: 12px;"),
+            Div(
+                *unassigned_items if unassigned_items else [
+                    P("Все бренды из КП назначены менеджерам ✓", style="color: #10b981;")
+                ],
+                style="max-height: 200px; overflow-y: auto;"
+            ),
+            cls="card", style="margin-bottom: 24px; border-left: 4px solid #f59e0b;" if unassigned_items else "margin-bottom: 24px;"
+        ) if all_quote_brands else None,
+
+        # Add new assignment button
+        Div(
+            A("+ Добавить назначение", href="/admin/brands/new", role="button"),
+            style="margin-bottom: 24px;"
+        ),
+
+        # Current assignments table
+        Div(
+            H3("Текущие назначения"),
+            Table(
+                Thead(Tr(
+                    Th("Бренд"),
+                    Th("Менеджер"),
+                    Th("Всего брендов"),
+                    Th("Дата назначения"),
+                    Th("Действия")
+                )),
+                Tbody(*assignment_rows) if assignment_rows else Tbody(
+                    Tr(Td("Нет назначений", colspan="5", style="text-align: center; color: #9ca3af;"))
+                ),
+                cls="striped"
+            ),
+            cls="card"
+        ),
+
+        # Navigation
+        Div(
+            A("← Управление пользователями", href="/admin/users", role="button", cls="secondary"),
+            A("На главную", href="/dashboard", role="button", cls="secondary"),
+            style="margin-top: 24px; display: flex; gap: 12px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/brands/new")
+def get(session, brand: str = None):
+    """Form to create new brand assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = user["org_id"]
+
+    # Get procurement users
+    proc_users_result = supabase.table("organization_members").select(
+        "user_id, user_roles(role_id, roles(code))"
+    ).eq("organization_id", org_id).eq("status", "active").execute()
+
+    procurement_users = []
+    for member in (proc_users_result.data or []):
+        user_roles = member.get("user_roles", [])
+        has_procurement = any(
+            ur.get("roles", {}).get("code") == "procurement"
+            for ur in user_roles if ur.get("roles")
+        )
+        if has_procurement:
+            procurement_users.append({
+                "user_id": member["user_id"],
+                "display": member["user_id"][:8] + "..."
+            })
+
+    # Build user options
+    user_options = [
+        Option(u["display"], value=u["user_id"])
+        for u in procurement_users
+    ]
+
+    return page_layout("Новое назначение бренда",
+        H1("Новое назначение бренда"),
+
+        Form(
+            Label(
+                "Название бренда",
+                Input(type="text", name="brand", value=brand or "", required=True,
+                      placeholder="Например: BOSCH"),
+            ),
+            Label(
+                "Менеджер по закупкам",
+                Select(
+                    Option("— Выберите менеджера —", value="", disabled=True, selected=True),
+                    *user_options,
+                    name="user_id",
+                    required=True
+                ) if user_options else Div(
+                    P("Нет пользователей с ролью 'procurement'", style="color: #ef4444;"),
+                    P("Сначала назначьте роль менеджера по закупкам на ",
+                      A("странице пользователей", href="/admin/users"), ".")
+                )
+            ),
+            Button("Создать назначение", type="submit") if user_options else None,
+            method="POST",
+            action="/admin/brands/new"
+        ),
+
+        Div(
+            A("← Назад к списку", href="/admin/brands", role="button", cls="secondary"),
+            style="margin-top: 24px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/brands/new")
+def post(session, brand: str, user_id: str):
+    """Create new brand assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    org_id = admin_user["org_id"]
+    admin_id = admin_user["id"]
+
+    from services.brand_service import create_brand_assignment, get_brand_assignment_by_brand
+
+    # Check if brand is already assigned
+    existing = get_brand_assignment_by_brand(org_id, brand)
+    if existing:
+        return page_layout("Ошибка",
+            H1("⚠️ Бренд уже назначен"),
+            P(f"Бренд '{brand}' уже назначен другому менеджеру."),
+            P("Используйте функцию редактирования для изменения назначения."),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+    # Create the assignment
+    result = create_brand_assignment(
+        organization_id=org_id,
+        brand=brand.strip(),
+        user_id=user_id,
+        created_by=admin_id
+    )
+
+    if result:
+        return page_layout("Назначение создано",
+            H1("✓ Назначение создано"),
+            P(f"Бренд '{brand}' успешно назначен менеджеру."),
+            Div(
+                Span(brand, style="background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 600;"),
+                Span(" → ", style="margin: 0 8px;"),
+                Span(user_id[:8] + "...", style="color: #6b7280;"),
+                style="margin: 16px 0;"
+            ),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("❌ Ошибка создания"),
+            P("Не удалось создать назначение. Попробуйте ещё раз."),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+
+@rt("/admin/brands/{assignment_id}/edit")
+def get(assignment_id: str, session):
+    """Edit form for brand assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    from services.brand_service import get_brand_assignment
+
+    assignment = get_brand_assignment(assignment_id)
+    if not assignment:
+        return page_layout("Не найдено",
+            H1("Назначение не найдено"),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = user["org_id"]
+
+    # Get procurement users
+    proc_users_result = supabase.table("organization_members").select(
+        "user_id, user_roles(role_id, roles(code))"
+    ).eq("organization_id", org_id).eq("status", "active").execute()
+
+    procurement_users = []
+    for member in (proc_users_result.data or []):
+        user_roles = member.get("user_roles", [])
+        has_procurement = any(
+            ur.get("roles", {}).get("code") == "procurement"
+            for ur in user_roles if ur.get("roles")
+        )
+        if has_procurement:
+            procurement_users.append({
+                "user_id": member["user_id"],
+                "display": member["user_id"][:8] + "..."
+            })
+
+    # Build user options
+    user_options = [
+        Option(u["display"], value=u["user_id"], selected=(u["user_id"] == assignment.user_id))
+        for u in procurement_users
+    ]
+
+    return page_layout("Редактирование назначения",
+        H1("Редактирование назначения"),
+
+        Div(
+            H3(f"Бренд: {assignment.brand}", style="color: #10b981;"),
+            style="margin-bottom: 16px;"
+        ),
+
+        Form(
+            Input(type="hidden", name="brand", value=assignment.brand),
+            Label(
+                "Менеджер по закупкам",
+                Select(
+                    *user_options,
+                    name="user_id",
+                    required=True
+                ) if user_options else P("Нет менеджеров", style="color: #ef4444;")
+            ),
+            Button("Сохранить изменения", type="submit") if user_options else None,
+            method="POST",
+            action=f"/admin/brands/{assignment_id}/edit"
+        ),
+
+        Div(
+            A("← Назад к списку", href="/admin/brands", role="button", cls="secondary"),
+            style="margin-top: 24px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/brands/{assignment_id}/edit")
+def post(assignment_id: str, session, user_id: str, brand: str = None):
+    """Update brand assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    from services.brand_service import update_brand_assignment, get_brand_assignment
+
+    assignment = get_brand_assignment(assignment_id)
+    if not assignment:
+        return page_layout("Не найдено",
+            H1("Назначение не найдено"),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+    # Update the assignment
+    result = update_brand_assignment(assignment_id, user_id)
+
+    if result:
+        return page_layout("Назначение обновлено",
+            H1("✓ Назначение обновлено"),
+            P(f"Бренд '{assignment.brand}' переназначен новому менеджеру."),
+            Div(
+                Span(assignment.brand, style="background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 600;"),
+                Span(" → ", style="margin: 0 8px;"),
+                Span(user_id[:8] + "...", style="color: #6b7280;"),
+                style="margin: 16px 0;"
+            ),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("❌ Ошибка обновления"),
+            P("Не удалось обновить назначение. Попробуйте ещё раз."),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+
+@rt("/admin/brands/{assignment_id}/delete")
+def post(assignment_id: str, session):
+    """Delete brand assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    from services.brand_service import get_brand_assignment, delete_brand_assignment
+
+    assignment = get_brand_assignment(assignment_id)
+    brand_name = assignment.brand if assignment else "Unknown"
+
+    result = delete_brand_assignment(assignment_id)
+
+    if result:
+        return page_layout("Назначение удалено",
+            H1("✓ Назначение удалено"),
+            P(f"Бренд '{brand_name}' больше не назначен менеджеру."),
+            P("Бренд вернулся в список неназначенных.", style="color: #6b7280;"),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("❌ Ошибка удаления"),
+            P("Не удалось удалить назначение. Попробуйте ещё раз."),
+            A("← Назад к списку", href="/admin/brands", role="button"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

@@ -167,12 +167,13 @@ App runs at http://localhost:5001
 - [x] Feature #82: Автогенерация плановых платежей (2026-01-15) - Created generate_plan_fact_from_deal(), regenerate_plan_fact_for_deal(), get_plan_fact_generation_preview() functions. Added GeneratePlanFactResult dataclass. Created UI routes: GET/POST /finance/{deal_id}/generate-plan-fact for preview and execution. Updated deal detail page with auto-generation buttons. Generates payments for: client_payment (advance + final), supplier_payment (advance + final), logistics, customs, finance_commission.
 - [x] Feature #83: Расчёт отклонений (2026-01-15) - Already implemented in migration 009: database trigger 'calculate_plan_fact_variance()' automatically computes variance_amount when actual payment recorded. UI displays color-coded variance per item and total variance in deal summary.
 - [x] Feature #84: Страница /admin/users (2026-01-15) - Created /admin/users page for user and role management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles for role assignment with checkboxes. Color-coded badges, stats cards, role legend. Added 'Админ' nav link for admin users.
+- [x] Feature #85: Страница /admin/brands (2026-01-15) - Created /admin/brands page for brand assignment management. Full CRUD: list all assignments + unassigned brands from quotes, create new (brand + procurement manager dropdown), edit manager, delete. Stats cards, auto-import from quote_items, admin-only access.
 
 ### Next Up
-- Feature #85: Страница /admin/brands (Brand assignment management page)
+- Feature #86: Обновить dashboard для ролей (Show tasks based on user role)
 
 ### Progress
-- **84 of 88 features completed** (95%)
+- **85 of 88 features completed** (97%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

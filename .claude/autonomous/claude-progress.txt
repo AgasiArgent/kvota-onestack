@@ -2192,3 +2192,66 @@ CreateDealFromSpecResult(
 - Redirects non-admin users with "Доступ запрещён" page
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #85: Страница /admin/brands
+
+### What was done
+- Created admin page for brand assignment management
+- Full CRUD for brand → procurement manager assignments
+- Auto-import of brands from existing quote_items
+
+### Routes implemented
+1. **GET /admin/brands** - Main brand list page
+   - Shows all current brand assignments with manager, date, total brands per user
+   - Shows unassigned brands (from quote_items not yet assigned)
+   - Stats cards: assigned count, unassigned count, procurement users, total brands
+   - Quick "Назначить" links for unassigned brands
+
+2. **GET /admin/brands/new** - New assignment form
+   - Brand name input (text)
+   - Procurement manager dropdown (only users with 'procurement' role)
+   - Pre-fills brand name from query param (?brand=X)
+
+3. **POST /admin/brands/new** - Create assignment
+   - Validates brand not already assigned
+   - Creates assignment via brand_service.create_brand_assignment()
+   - Shows success page with brand → manager display
+
+4. **GET /admin/brands/{id}/edit** - Edit assignment form
+   - Shows current brand name (read-only)
+   - Dropdown to select different procurement manager
+
+5. **POST /admin/brands/{id}/edit** - Update assignment
+   - Calls brand_service.update_brand_assignment()
+   - Shows success page
+
+6. **POST /admin/brands/{id}/delete** - Delete assignment
+   - Calls brand_service.delete_brand_assignment()
+   - Brand returns to unassigned list
+
+### UI features
+- 4 stats cards: assigned brands, unassigned, procurement managers, total brands in quotes
+- Unassigned brands section with scrollable list and "Назначить" buttons
+- Orange left border on unassigned section when there are items
+- Table with brand name, manager ID (shortened), brand count per user, date, actions
+- "Изменить" and "Удалить" buttons per row
+- Delete uses inline form for POST method
+- Admin-only access check on all routes
+
+### Files changed
+- main.py:
+  - Added GET /admin/brands route (~200 lines)
+  - Added GET /admin/brands/new route (~60 lines)
+  - Added POST /admin/brands/new route (~60 lines)
+  - Added GET /admin/brands/{id}/edit route (~70 lines)
+  - Added POST /admin/brands/{id}/edit route (~50 lines)
+  - Added POST /admin/brands/{id}/delete route (~40 lines)
+  - Total: ~480 lines added
+
+### Technical notes
+- Uses brand_service functions: get_all_brand_assignments, count_assignments_by_user, create_brand_assignment, get_brand_assignment, update_brand_assignment, delete_brand_assignment, get_brand_assignment_by_brand
+- Gets brands from quote_items via join with quotes table to filter by organization
+- Filters procurement users by checking user_roles for 'procurement' role code
+- Link from /admin/users page already existed (line 9512)
+
+### Status: COMPLETE
