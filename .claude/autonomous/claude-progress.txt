@@ -456,3 +456,19 @@
   - services/role_service.py (updated)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #19: Сервис ролей: назначение роли
+- Implemented assign_role function in services/role_service.py:
+  - assign_role(user_id, org_id, role_code, assigned_by) → Optional[UserRole]
+  - Creates new user_role record in database
+  - Returns UserRole object if successful, None if user already has role or invalid role_code
+  - Prevents duplicate role assignments by checking with has_role first
+  - Uses get_role_by_code to validate and get role ID
+- Function is idempotent - safe to call multiple times
+- Full documentation with docstrings and examples
+- Updated services/__init__.py to export assign_role
+- Verified no syntax errors
+- Files changed:
+  - services/role_service.py (updated)
+  - services/__init__.py (updated)
+- Status: COMPLETE

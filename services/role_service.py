@@ -166,6 +166,72 @@ def has_all_roles(user_id: str | UUID, organization_id: str | UUID, role_codes: 
     return all(code in user_roles for code in role_codes)
 
 
+def assign_role(
+    user_id: str | UUID,
+    organization_id: str | UUID,
+    role_code: str,
+    assigned_by: str | UUID
+) -> Optional[UserRole]:
+    """
+    Assign a role to a user in an organization.
+
+    This function is an admin operation that creates a new user_role record.
+    If the user already has this role, returns None without creating a duplicate.
+
+    Args:
+        user_id: User's UUID to assign role to
+        organization_id: Organization's UUID
+        role_code: Role code to assign (e.g., 'sales', 'admin')
+        assigned_by: UUID of the user performing the assignment
+
+    Returns:
+        UserRole object if role was assigned, None if user already had role
+        or if role_code is invalid
+
+    Raises:
+        Exception: If there's a database error
+
+    Example:
+        >>> # Assign sales role to a user
+        >>> result = assign_role(user_id, org_id, 'sales', admin_user_id)
+        >>> if result:
+        ...     print(f"Role assigned: {result.role.code}")
+        ... else:
+        ...     print("User already has this role or role is invalid")
+    """
+    # Check if user already has this role
+    if has_role(user_id, organization_id, role_code):
+        return None
+
+    # Get the role ID
+    role = get_role_by_code(role_code)
+    if not role:
+        return None
+
+    supabase = get_supabase()
+
+    # Insert new user_role record
+    response = supabase.table("user_roles").insert({
+        "user_id": str(user_id),
+        "organization_id": str(organization_id),
+        "role_id": str(role.id),
+        "created_by": str(assigned_by)
+    }).execute()
+
+    if response.data and len(response.data) > 0:
+        item = response.data[0]
+        return UserRole(
+            id=UUID(item["id"]),
+            user_id=UUID(item["user_id"]),
+            organization_id=UUID(item["organization_id"]),
+            role=role,
+            created_at=item["created_at"],
+            created_by=UUID(item["created_by"]) if item.get("created_by") else None
+        )
+
+    return None
+
+
 def get_all_roles() -> List[Role]:
     """
     Get all available roles from the roles reference table.
