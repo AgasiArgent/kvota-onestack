@@ -7472,6 +7472,44 @@ def get(session, spec_id: str):
                 style="margin-bottom: 1.5rem;"
             ),
 
+            # Feature #71: Section 6 - Signed Scan Upload (visible when status is approved or signed)
+            Div(
+                H3("✍️ Подписанный скан"),
+                # Show current scan if exists
+                Div(
+                    P(
+                        "✅ Скан загружен: ",
+                        A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
+                          href=spec.get("signed_scan_url", "#"),
+                          target="_blank",
+                          style="color: #007bff;"),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+                    cls="card",
+                    style="background: #d4edda; border-left: 4px solid #28a745; padding: 0.75rem; margin-bottom: 1rem;"
+                ) if spec.get("signed_scan_url") else None,
+                # Upload form (separate form from main form due to enctype)
+                P(
+                    "Загрузите скан подписанной спецификации (PDF, JPG, PNG, до 10 МБ).",
+                    style="margin-bottom: 0.75rem; color: #666;"
+                ) if not spec.get("signed_scan_url") else P(
+                    "Вы можете загрузить новый скан для замены текущего.",
+                    style="margin-bottom: 0.75rem; color: #666;"
+                ),
+                Form(
+                    Input(type="file", name="signed_scan", id="signed_scan",
+                          accept=".pdf,.jpg,.jpeg,.png",
+                          style="margin-bottom: 0.75rem;"),
+                    Button("📤 Загрузить скан", type="submit",
+                           style="background: #6f42c1; border-color: #6f42c1;"),
+                    action=f"/spec-control/{spec_id}/upload-signed",
+                    method="POST",
+                    enctype="multipart/form-data"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem; background: #f8f9fa;"
+            ) if status in ["approved", "signed"] else None,
+
             # Action buttons
             Div(
                 Button("💾 Сохранить", type="submit", name="action", value="save",
@@ -7670,6 +7708,193 @@ def get(session, spec_id: str):
             H1("Ошибка генерации PDF"),
             Div(
                 f"Произошла ошибка при генерации PDF. Пожалуйста, попробуйте позже.",
+                cls="card",
+                style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            P(f"Техническая информация: {str(e)}", style="font-size: 0.8rem; color: #666;"),
+            A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# Feature #71: Upload signed specification scan
+# ============================================================================
+
+@rt("/spec-control/{spec_id}/upload-signed")
+async def post(session, spec_id: str, request):
+    """
+    Upload signed specification scan.
+
+    Feature #71: Загрузка подписанного скана
+
+    Accepts PDF, JPG, PNG files up to 10MB.
+    Stores in Supabase Storage bucket 'specifications'.
+    Updates specifications.signed_scan_url with public URL.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify specification exists and belongs to org
+    spec_result = supabase.table("specifications") \
+        .select("id, status, specification_number, quote_id") \
+        .eq("id", spec_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not spec_result.data:
+        return RedirectResponse("/spec-control", status_code=303)
+
+    spec = spec_result.data[0]
+    status = spec.get("status", "draft")
+
+    # Only allow upload for approved specifications
+    if status not in ["approved", "signed"]:
+        return page_layout("Ошибка загрузки",
+            H1("Ошибка загрузки"),
+            Div(
+                "Загрузка скана доступна только для утверждённых спецификаций.",
+                cls="card",
+                style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+    try:
+        # Get the uploaded file from form data
+        form = await request.form()
+        signed_scan = form.get("signed_scan")
+
+        if not signed_scan or not signed_scan.filename:
+            return page_layout("Ошибка загрузки",
+                H1("Файл не выбран"),
+                Div(
+                    "Пожалуйста, выберите файл для загрузки.",
+                    cls="card",
+                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Validate file type
+        filename = signed_scan.filename
+        allowed_extensions = ['.pdf', '.jpg', '.jpeg', '.png']
+        file_ext = '.' + filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+        if file_ext not in allowed_extensions:
+            return page_layout("Ошибка загрузки",
+                H1("Неподдерживаемый формат"),
+                Div(
+                    f"Поддерживаемые форматы: PDF, JPG, PNG. Вы загрузили: {file_ext}",
+                    cls="card",
+                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Read file content
+        file_content = await signed_scan.read()
+
+        # Validate file size (max 10MB)
+        max_size = 10 * 1024 * 1024  # 10MB
+        if len(file_content) > max_size:
+            return page_layout("Ошибка загрузки",
+                H1("Файл слишком большой"),
+                Div(
+                    f"Максимальный размер файла: 10 МБ. Ваш файл: {len(file_content) / 1024 / 1024:.1f} МБ",
+                    cls="card",
+                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Determine content type
+        content_type_map = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png'
+        }
+        content_type = content_type_map.get(file_ext, 'application/octet-stream')
+
+        # Generate storage path: org_id/spec_id/signed_scan_timestamp.ext
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        spec_number = spec.get("specification_number") or spec_id[:8]
+        safe_spec_number = "".join(c for c in spec_number if c.isalnum() or c in "-_")
+        storage_path = f"{org_id}/{spec_id}/signed_{safe_spec_number}_{timestamp}{file_ext}"
+
+        # Upload to Supabase Storage (bucket: specifications)
+        # Note: Bucket must be created manually in Supabase dashboard first
+        bucket_name = "specifications"
+
+        try:
+            # Upload the file
+            upload_result = supabase.storage.from_(bucket_name).upload(
+                path=storage_path,
+                file=file_content,
+                file_options={"content-type": content_type, "upsert": "true"}
+            )
+
+            # Get public URL
+            public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+
+            # Update specification with signed_scan_url
+            supabase.table("specifications") \
+                .update({"signed_scan_url": public_url, "updated_at": datetime.now().isoformat()}) \
+                .eq("id", spec_id) \
+                .execute()
+
+            print(f"Signed scan uploaded successfully: {public_url}")
+
+            # Redirect back to spec page with success
+            return RedirectResponse(f"/spec-control/{spec_id}?upload_success=1", status_code=303)
+
+        except Exception as storage_error:
+            print(f"Storage upload error: {storage_error}")
+
+            # If bucket doesn't exist, provide helpful message
+            error_msg = str(storage_error)
+            if "Bucket not found" in error_msg or "bucket" in error_msg.lower():
+                return page_layout("Ошибка хранилища",
+                    H1("Хранилище не настроено"),
+                    Div(
+                        "Хранилище для спецификаций не настроено. ",
+                        "Необходимо создать bucket 'specifications' в Supabase Storage.",
+                        cls="card",
+                        style="background: #fef3c7; border-left: 4px solid #f59e0b;"
+                    ),
+                    P("Инструкция: Supabase Dashboard → Storage → New Bucket → Name: specifications, Public: Yes",
+                      style="font-size: 0.9rem; color: #666; margin-top: 1rem;"),
+                    A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                    session=session
+                )
+
+            raise storage_error
+
+    except Exception as e:
+        print(f"Error uploading signed scan: {e}")
+        import traceback
+        traceback.print_exc()
+
+        return page_layout("Ошибка загрузки",
+            H1("Ошибка загрузки файла"),
+            Div(
+                "Произошла ошибка при загрузке файла. Пожалуйста, попробуйте позже.",
                 cls="card",
                 style="background: #fee2e2; border-left: 4px solid #dc2626;"
             ),

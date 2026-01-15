@@ -814,10 +814,11 @@
       "name": "Загрузка подписанного скана",
       "description": "Upload скана + сохранение URL",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T19:00:00Z",
+      "completed_at": "2026-01-15T19:30:00Z",
+      "notes": "Implemented /spec-control/{spec_id}/upload-signed POST endpoint. Accepts PDF/JPG/PNG up to 10MB. Stores in Supabase Storage bucket 'specifications'. Updates signed_scan_url field. Added upload UI section to spec edit page (visible when status is approved/signed). Created migration 017 with storage bucket setup instructions."
     },
     {
       "id": 72,

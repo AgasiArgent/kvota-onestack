@@ -1757,3 +1757,39 @@
   - services/__init__.py (updated exports)
   - main.py (~85 lines added for route and button)
 - Status: COMPLETE - Feature #70 done
+
+
+## Session 2026-01-15 - Feature #71: Загрузка подписанного скана (Upload Signed Scan)
+- Implemented signed specification scan upload functionality
+- Updated main.py - added upload UI section:
+  - New Section 6 "✍️ Подписанный скан" in spec edit page
+  - Visible only when spec status is "approved" or "signed"
+  - Shows current scan with link if already uploaded
+  - File upload form with accept=".pdf,.jpg,.jpeg,.png"
+  - Separate form with enctype="multipart/form-data"
+- Created POST route /spec-control/{spec_id}/upload-signed (~170 lines):
+  - Async handler for multipart form data
+  - Validates user role (spec_controller/admin)
+  - Validates spec exists and status is approved/signed
+  - File validation:
+    - Allowed types: PDF, JPG, JPEG, PNG
+    - Max size: 10MB
+    - Content type mapping
+  - Storage path: org_id/spec_id/signed_{spec_number}_{timestamp}.ext
+  - Uploads to Supabase Storage bucket "specifications"
+  - Updates specifications.signed_scan_url with public URL
+  - Comprehensive error handling:
+    - File not selected
+    - Unsupported format
+    - File too large
+    - Storage bucket not found
+- Created migration 017_setup_specifications_storage.sql:
+  - Documents manual Supabase bucket setup
+  - Instructions for Dashboard → Storage → New bucket
+  - Settings: name=specifications, public=yes, size=10MB
+  - RLS policy examples for public read access
+- Syntax verified with python3 -m py_compile main.py
+- Files changed:
+  - main.py (~200 lines added: UI section + upload route)
+  - migrations/017_setup_specifications_storage.sql (new file)
+- Status: COMPLETE - Feature #71 done
