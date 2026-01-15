@@ -379,3 +379,24 @@
 - Trigger: trigger_assign_procurement_user - auto-assigns procurement user based on brand
 - Files changed: migrations/013_extend_quote_items_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #14: Заполнить справочник roles
+- NOTE: Already completed as part of Feature #1
+- Roles seed data was included in migrations/001_create_roles_table.sql
+- All 9 roles (sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin) already inserted
+- Status: COMPLETE (no additional work needed)
+
+## Session 2025-01-15 - Feature #15: Заполнить справочник plan_fact_categories
+- Created SQL migration: `migrations/014_seed_plan_fact_categories.sql`
+- Inserted 7 payment categories:
+  - client_payment (income) - Оплата от клиента
+  - supplier_payment (expense) - Оплата поставщику
+  - logistics (expense) - Логистика
+  - customs (expense) - Таможня
+  - tax (expense) - Налоги
+  - finance_commission (expense) - Банковская комиссия
+  - other (expense) - Прочее
+- Used UPSERT pattern (ON CONFLICT DO UPDATE) for idempotency
+- Added documentation comments for each category
+- Files changed: migrations/014_seed_plan_fact_categories.sql (new)
+- Status: COMPLETE

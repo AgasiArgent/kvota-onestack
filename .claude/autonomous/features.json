@@ -154,10 +154,11 @@
       "name": "Заполнить справочник roles",
       "description": "INSERT данных для всех 9 ролей",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T07:30:00Z",
+      "completed_at": "2025-01-15T07:35:00Z",
+      "notes": "Already included in migration 001_create_roles_table.sql"
     },
     {
       "id": 15,
@@ -165,10 +166,10 @@
       "name": "Заполнить справочник plan_fact_categories",
       "description": "INSERT категорий: client_payment, supplier_payment, logistics, customs, tax, finance_commission, other",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T07:40:00Z",
+      "completed_at": "2025-01-15T07:45:00Z"
     },
     {
       "id": 16,
