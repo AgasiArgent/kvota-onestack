@@ -11413,6 +11413,305 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
 
 
 # ============================================================================
+# SUPPLIERS LIST (Feature UI-001)
+# ============================================================================
+
+@rt("/suppliers")
+def get(session, q: str = "", country: str = "", status: str = ""):
+    """
+    Suppliers list page with search and filters.
+
+    Query Parameters:
+        q: Search query (matches name or supplier_code)
+        country: Filter by country
+        status: Filter by status ("active", "inactive", or "" for all)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin or procurement role required
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра справочника поставщиков."),
+                P("Требуется роль: admin или procurement"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import supplier service
+    from services.supplier_service import (
+        get_all_suppliers, search_suppliers, get_unique_countries, get_supplier_stats
+    )
+
+    # Get suppliers based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            suppliers = search_suppliers(
+                organization_id=org_id,
+                query=q.strip(),
+                country=country if country else None,
+                active_only=(status == "active"),
+                limit=100
+            )
+        else:
+            # Get all with filters
+            active_only = None if status == "" else (status == "active")
+            suppliers = get_all_suppliers(
+                organization_id=org_id,
+                country=country if country else None,
+                active_only=active_only,
+                limit=100
+            )
+
+        # Get countries for filter dropdown
+        countries = get_unique_countries(organization_id=org_id)
+
+        # Get stats for summary
+        stats = get_supplier_stats(organization_id=org_id)
+
+    except Exception as e:
+        print(f"Error loading suppliers: {e}")
+        suppliers = []
+        countries = []
+        stats = {"total": 0, "active": 0, "inactive": 0}
+
+    # Build country options for filter
+    country_options = [Option("Все страны", value="")] + [
+        Option(c, value=c, selected=(c == country)) for c in countries
+    ]
+
+    # Status options
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+        Option("Активные", value="active", selected=(status == "active")),
+        Option("Неактивные", value="inactive", selected=(status == "inactive")),
+    ]
+
+    # Build supplier rows
+    supplier_rows = []
+    for s in suppliers:
+        status_class = "status-approved" if s.is_active else "status-rejected"
+        status_text = "Активен" if s.is_active else "Неактивен"
+
+        supplier_rows.append(
+            Tr(
+                Td(
+                    Strong(s.supplier_code),
+                    style="font-family: monospace; color: #4a4aff;"
+                ),
+                Td(s.name),
+                Td(f"{s.country or '—'}, {s.city or '—'}" if s.country else "—"),
+                Td(s.inn or "—"),
+                Td(s.contact_person or "—"),
+                Td(s.contact_email or "—"),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/suppliers/{s.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/suppliers/{s.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    return page_layout("Поставщики",
+        # Header
+        Div(
+            H1("📦 Поставщики"),
+            A("+ Добавить поставщика", href="/suppliers/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value", style="color: #28a745;"),
+                Div("Активных"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(stats.get("inactive", 0)), cls="stat-value", style="color: #dc3545;"),
+                Div("Неактивных"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filters
+        Div(
+            Form(
+                Div(
+                    Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
+                    Select(*country_options, name="country", style="flex: 1;"),
+                    Select(*status_options, name="status", style="flex: 1;"),
+                    Button("🔍 Поиск", type="submit"),
+                    A("Сбросить", href="/suppliers", role="button", cls="secondary"),
+                    style="display: flex; gap: 0.5rem; align-items: center;"
+                ),
+                method="get",
+                action="/suppliers"
+            ),
+            cls="card", style="margin-bottom: 1rem;"
+        ),
+
+        # Table
+        Table(
+            Thead(
+                Tr(
+                    Th("Код"),
+                    Th("Название"),
+                    Th("Локация"),
+                    Th("ИНН"),
+                    Th("Контакт"),
+                    Th("Email"),
+                    Th("Статус"),
+                    Th("Действия")
+                )
+            ),
+            Tbody(*supplier_rows) if supplier_rows else Tbody(
+                Tr(Td(
+                    "Поставщики не найдены. ",
+                    A("Добавить первого поставщика", href="/suppliers/new"),
+                    colspan="8", style="text-align: center; padding: 2rem;"
+                ))
+            )
+        ),
+
+        # Results count
+        P(f"Показано записей: {len(suppliers)}", style="color: #666; margin-top: 0.5rem;"),
+
+        session=session
+    )
+
+
+@rt("/suppliers/{supplier_id}")
+def get(supplier_id: str, session):
+    """View single supplier details."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.supplier_service import get_supplier
+
+    supplier = get_supplier(supplier_id)
+
+    if not supplier:
+        return page_layout("Поставщик не найден",
+            Div(
+                H1("❌ Поставщик не найден"),
+                P("Запрашиваемый поставщик не существует."),
+                A("← К списку поставщиков", href="/suppliers", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    status_class = "status-approved" if supplier.is_active else "status-rejected"
+    status_text = "Активен" if supplier.is_active else "Неактивен"
+
+    return page_layout(f"Поставщик: {supplier.name}",
+        # Header with actions
+        Div(
+            H1(f"📦 {supplier.name}"),
+            Div(
+                A("✏️ Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
+                A("← К списку", href="/suppliers", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Main info card
+        Div(
+            Div(
+                H3("Основная информация"),
+                Table(
+                    Tr(Th("Код поставщика:"), Td(
+                        Strong(supplier.supplier_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
+                    )),
+                    Tr(Th("Название:"), Td(supplier.name)),
+                    Tr(Th("Статус:"), Td(Span(status_text, cls=f"status-badge {status_class}"))),
+                    style="width: auto;"
+                ),
+                style="flex: 1;"
+            ),
+            Div(
+                H3("Локация"),
+                Table(
+                    Tr(Th("Страна:"), Td(supplier.country or "—")),
+                    Tr(Th("Город:"), Td(supplier.city or "—")),
+                    style="width: auto;"
+                ),
+                style="flex: 1;"
+            ),
+            cls="card", style="display: flex; gap: 2rem;"
+        ),
+
+        # Legal info (if Russian supplier)
+        Div(
+            H3("Юридические данные"),
+            Table(
+                Tr(Th("ИНН:"), Td(supplier.inn or "—")),
+                Tr(Th("КПП:"), Td(supplier.kpp or "—")),
+            ),
+            cls="card"
+        ) if supplier.inn or supplier.kpp else "",
+
+        # Contact info
+        Div(
+            H3("Контактная информация"),
+            Table(
+                Tr(Th("Контактное лицо:"), Td(supplier.contact_person or "—")),
+                Tr(Th("Email:"), Td(
+                    A(supplier.contact_email, href=f"mailto:{supplier.contact_email}")
+                    if supplier.contact_email else "—"
+                )),
+                Tr(Th("Телефон:"), Td(
+                    A(supplier.contact_phone, href=f"tel:{supplier.contact_phone}")
+                    if supplier.contact_phone else "—"
+                )),
+            ),
+            cls="card"
+        ),
+
+        # Payment terms
+        Div(
+            H3("Условия оплаты"),
+            P(supplier.default_payment_terms or "Не указаны"),
+            cls="card"
+        ) if supplier.default_payment_terms else "",
+
+        # Metadata
+        Div(
+            P(f"Создан: {supplier.created_at.strftime('%d.%m.%Y %H:%M') if supplier.created_at else '—'}"),
+            P(f"Обновлён: {supplier.updated_at.strftime('%d.%m.%Y %H:%M') if supplier.updated_at else '—'}"),
+            style="color: #666; font-size: 0.875rem;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
