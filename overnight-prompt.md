@@ -151,12 +151,13 @@ App runs at http://localhost:5001
 - [x] Feature #66: Обработка решения согласования (2026-01-15) - process_approval_decision() function with ApprovalDecisionResult dataclass. Complete workflow: validates approval exists and is pending, validates quote status, updates approval record, transitions quote to approved/rejected, cancels other pending approvals, sends notifications to creator and requester.
 - [x] Feature #67: Страница /spec-control (2026-01-15) - Created /spec-control workspace page for spec_controller role. Shows quotes pending specification creation (pending_spec_control status), specifications grouped by status (draft, pending_review, approved, signed). Added 'Спецификации' link to nav_bar. Stats cards, status filter, action buttons.
 - [x] Feature #68: Список спецификаций на проверке (2026-01-15) - Already in #67: dedicated section showing specs at pending_review status with filtering.
+- [x] Feature #69: Форма ввода данных спецификации (2026-01-15) - Complete spec data entry form with all 18 fields in 5 sections. Routes: /spec-control/create/{quote_id} (GET/POST), /spec-control/{spec_id} (GET/POST). Pre-fills from quote data, supports status transitions draft→pending_review→approved.
 
 ### Next Up
-- Feature #69: Форма ввода данных спецификации (Specification data entry form with all 18 fields)
+- Feature #70: Preview PDF спецификации (Specification PDF preview)
 
 ### Progress
-- **68 of 88 features completed** (77%)
+- **69 of 88 features completed** (78%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
