@@ -200,10 +200,10 @@
       "name": "Сервис ролей: проверка наличия роли",
       "description": "Функция has_role(user_id, org_id, role_code) → bool",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T10:00:00Z",
+      "completed_at": "2025-01-15T10:15:00Z"
     },
     {
       "id": 19,

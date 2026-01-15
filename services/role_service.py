@@ -94,6 +94,78 @@ def get_user_role_codes(user_id: str | UUID, organization_id: str | UUID) -> Lis
     return [role.code for role in roles]
 
 
+def has_role(user_id: str | UUID, organization_id: str | UUID, role_code: str) -> bool:
+    """
+    Check if a user has a specific role in an organization.
+
+    This is the primary function for role-based access control checks.
+
+    Args:
+        user_id: User's UUID
+        organization_id: Organization's UUID
+        role_code: Role code to check for (e.g., 'admin', 'sales', 'procurement')
+
+    Returns:
+        True if user has the specified role, False otherwise
+
+    Example:
+        >>> if has_role(user_id, org_id, 'admin'):
+        ...     # User is admin, allow operation
+        ...     pass
+    """
+    user_roles = get_user_role_codes(user_id, organization_id)
+    return role_code in user_roles
+
+
+def has_any_role(user_id: str | UUID, organization_id: str | UUID, role_codes: List[str]) -> bool:
+    """
+    Check if a user has any of the specified roles in an organization.
+
+    Useful for checking if user has permission for an action that
+    can be performed by multiple roles.
+
+    Args:
+        user_id: User's UUID
+        organization_id: Organization's UUID
+        role_codes: List of role codes to check for
+
+    Returns:
+        True if user has at least one of the specified roles, False otherwise
+
+    Example:
+        >>> # Check if user can modify quotes (either sales or admin)
+        >>> if has_any_role(user_id, org_id, ['sales', 'admin']):
+        ...     # User can modify quotes
+        ...     pass
+    """
+    user_roles = get_user_role_codes(user_id, organization_id)
+    return any(code in user_roles for code in role_codes)
+
+
+def has_all_roles(user_id: str | UUID, organization_id: str | UUID, role_codes: List[str]) -> bool:
+    """
+    Check if a user has ALL of the specified roles in an organization.
+
+    Useful for checking if user has a combination of required permissions.
+
+    Args:
+        user_id: User's UUID
+        organization_id: Organization's UUID
+        role_codes: List of role codes that user must have all of
+
+    Returns:
+        True if user has all of the specified roles, False otherwise
+
+    Example:
+        >>> # Check if user is both admin and finance (rare but possible)
+        >>> if has_all_roles(user_id, org_id, ['admin', 'finance']):
+        ...     # User has both roles
+        ...     pass
+    """
+    user_roles = get_user_role_codes(user_id, organization_id)
+    return all(code in user_roles for code in role_codes)
+
+
 def get_all_roles() -> List[Role]:
     """
     Get all available roles from the roles reference table.

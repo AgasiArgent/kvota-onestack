@@ -442,3 +442,17 @@
   - services/role_service.py (new)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #18: Сервис ролей: проверка наличия роли
+- Implemented three role-checking functions in services/role_service.py:
+  - has_role(user_id, org_id, role_code) → bool - check for single role
+  - has_any_role(user_id, org_id, role_codes) → bool - check for any of multiple roles
+  - has_all_roles(user_id, org_id, role_codes) → bool - check for all specified roles
+- All functions use get_user_role_codes internally for efficiency
+- Updated services/__init__.py to export new functions
+- Verified no syntax errors
+- These functions enable role-based access control throughout the application
+- Files changed:
+  - services/role_service.py (updated)
+  - services/__init__.py (updated)
+- Status: COMPLETE
