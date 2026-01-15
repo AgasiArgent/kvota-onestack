@@ -1946,3 +1946,35 @@ CreateDealFromSpecResult(
 - Automatically extracts total_amount and currency from quote
 - Generates deal number using `generate_deal_number()`
 - Status: COMPLETE
+
+## Session 2026-01-15 - Feature #77: Страница /finance
+
+### What was done
+- Created `/finance` route for finance manager workspace
+- Added "Финансы" link to nav_bar for finance/admin roles
+- Page displays deal statistics in 4 stat cards:
+  - Active deals count + total amount
+  - Completed deals count + total amount
+  - Cancelled deals count
+  - Total deals count + combined amount
+- Status filter buttons (Все, В работе, Завершённые, Отменённые)
+- Deals table with columns: № Сделки, № Спецификации, Клиент, Сумма, Дата подписания, Статус, Действия
+- Joins with specifications and quotes/customers for full details
+- Color-coded status badges (green=active, blue=completed, red=cancelled)
+- "Подробнее" button links to deal detail page /finance/{id}
+
+### Files changed
+- `main.py`:
+  - Added finance role link in nav_bar() (~3 lines)
+  - Added FINANCE WORKSPACE section with /finance route (~230 lines)
+
+### Feature #78 also completed
+- List of active deals is already included in /finance page
+- Shows all deals grouped by status with active deals first
+
+### Notes
+- Syntax verified with py_compile
+- Pattern follows existing workspace pages (spec-control, procurement)
+- Ready for Feature #79: Plan-fact table per deal
+
+### Status: COMPLETE - Features #77 and #78 done

@@ -886,10 +886,11 @@
       "name": "Страница /finance",
       "description": "Рабочая зона финансового менеджера",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T10:00:00Z",
+      "completed_at": "2026-01-15T10:30:00Z",
+      "notes": "Created /finance route for finance role workspace. Shows deal statistics (active, completed, total amounts), filterable deals list with status badges. Navigation link added for finance/admin roles. Includes specs/quote/customer join, formatted amounts with currency."
     },
     {
       "id": 78,
@@ -897,10 +898,11 @@
       "name": "Список активных сделок",
       "description": "Сделки со статусом active",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T10:00:00Z",
+      "completed_at": "2026-01-15T10:30:00Z",
+      "notes": "Already implemented in Feature #77 - /finance page shows active deals list by default with status filter, includes deal_number, spec_number, customer, amount, signed_at date, status badge and 'Подробнее' action button."
     },
     {
       "id": 79,

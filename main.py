@@ -139,6 +139,9 @@ def nav_bar(session):
         if "spec_controller" in roles or "admin" in roles:
             nav_items.append(Li(A("Спецификации", href="/spec-control")))
 
+        if "finance" in roles or "admin" in roles:
+            nav_items.append(Li(A("Финансы", href="/finance")))
+
         # Add settings and logout at the end
         nav_items.extend([
             Li(A("Settings", href="/settings")),
@@ -8152,6 +8155,244 @@ def post(session, spec_id: str):
             A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
             session=session
         )
+
+
+# ============================================================================
+# FINANCE WORKSPACE (Features #77-80)
+# ============================================================================
+
+@rt("/finance")
+def get(session, status_filter: str = None):
+    """
+    Finance workspace - shows active deals and plan-fact management
+    for finance role.
+
+    Feature #77: Basic finance page structure
+    Feature #78: List of active deals (included)
+
+    This page shows:
+    1. Deal statistics (active, completed, total amounts)
+    2. Active deals list with navigation to deal details
+    3. Quick summary of amounts
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get deal statistics
+    stats = {
+        "active": 0,
+        "completed": 0,
+        "cancelled": 0,
+        "total": 0,
+        "active_amount": 0.0,
+        "completed_amount": 0.0,
+    }
+
+    try:
+        # Count deals by status
+        for status in ["active", "completed", "cancelled"]:
+            count_result = supabase.table("deals").select("id", count="exact") \
+                .eq("organization_id", org_id) \
+                .eq("status", status) \
+                .execute()
+            stats[status] = count_result.count or 0
+
+        stats["total"] = stats["active"] + stats["completed"] + stats["cancelled"]
+
+        # Sum amounts for active deals
+        active_result = supabase.table("deals").select("total_amount") \
+            .eq("organization_id", org_id) \
+            .eq("status", "active") \
+            .execute()
+        if active_result.data:
+            stats["active_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in active_result.data)
+
+        # Sum amounts for completed deals
+        completed_result = supabase.table("deals").select("total_amount") \
+            .eq("organization_id", org_id) \
+            .eq("status", "completed") \
+            .execute()
+        if completed_result.data:
+            stats["completed_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in completed_result.data)
+
+    except Exception as e:
+        print(f"Error getting deal stats: {e}")
+
+    # Get deals with details based on filter
+    target_status = status_filter if status_filter and status_filter != "all" else None
+
+    try:
+        query = supabase.table("deals").select(
+            "id, deal_number, signed_at, total_amount, currency, status, created_at, "
+            "specifications(id, specification_number, proposal_idn), "
+            "quotes(id, idn_quote, customer_name, customers(name, company_name))"
+        ).eq("organization_id", org_id)
+
+        if target_status:
+            query = query.eq("status", target_status)
+
+        deals_result = query.order("signed_at", desc=True).limit(100).execute()
+        deals = deals_result.data or []
+    except Exception as e:
+        print(f"Error getting deals: {e}")
+        deals = []
+
+    # Separate deals by status for display
+    active_deals = [d for d in deals if d.get("status") == "active"]
+    completed_deals = [d for d in deals if d.get("status") == "completed"]
+    cancelled_deals = [d for d in deals if d.get("status") == "cancelled"]
+
+    # Status badge helper
+    def deal_status_badge(status):
+        status_map = {
+            "active": ("В работе", "bg-green-200 text-green-800"),
+            "completed": ("Завершена", "bg-blue-200 text-blue-800"),
+            "cancelled": ("Отменена", "bg-red-200 text-red-800"),
+        }
+        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
+        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+
+    # Deal row helper
+    def deal_row(deal):
+        spec = deal.get("specifications", {}) or {}
+        quote = deal.get("quotes", {}) or {}
+        customer = quote.get("customers", {}) or {}
+        customer_name = customer.get("company_name") or customer.get("name") or quote.get("customer_name", "Неизвестно")
+
+        # Format amount
+        amount = float(deal.get("total_amount", 0) or 0)
+        currency = deal.get("currency", "RUB")
+        amount_str = f"{amount:,.2f} {currency}"
+
+        # Format date
+        signed_at = deal.get("signed_at", "")[:10] if deal.get("signed_at") else "-"
+
+        return Tr(
+            Td(A(deal.get("deal_number", "-"), href=f"/finance/{deal['id']}")),
+            Td(spec.get("specification_number", "-") or spec.get("proposal_idn", "-")),
+            Td(customer_name),
+            Td(amount_str, style="text-align: right; font-weight: 500;"),
+            Td(signed_at),
+            Td(deal_status_badge(deal.get("status", "active"))),
+            Td(
+                A("Подробнее", href=f"/finance/{deal['id']}", role="button",
+                  style="background: #3b82f6; border-color: #3b82f6; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
+            ),
+        )
+
+    # Build deals table
+    def deals_table(deals_list, title, status_color):
+        if not deals_list:
+            return Div(
+                H3(f"{title} (0)", style=f"color: {status_color};"),
+                P("Нет сделок", style="color: #666; font-style: italic;"),
+                style="margin-bottom: 2rem;"
+            )
+
+        return Div(
+            H3(f"{title} ({len(deals_list)})", style=f"color: {status_color};"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("№ Сделки"),
+                        Th("№ Спецификации"),
+                        Th("Клиент"),
+                        Th("Сумма", style="text-align: right;"),
+                        Th("Дата подписания"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*[deal_row(d) for d in deals_list]),
+                cls="striped"
+            ),
+            style="margin-bottom: 2rem;"
+        )
+
+    # Build filter buttons
+    filter_buttons = Div(
+        A("Все", href="/finance", role="button",
+          cls="secondary" if status_filter and status_filter != "all" else "",
+          style="margin-right: 0.5rem;"),
+        A("В работе", href="/finance?status_filter=active", role="button",
+          cls="secondary" if status_filter != "active" else "",
+          style="margin-right: 0.5rem; background: #10b981;" if status_filter == "active" else "margin-right: 0.5rem;"),
+        A("Завершённые", href="/finance?status_filter=completed", role="button",
+          cls="secondary" if status_filter != "completed" else "",
+          style="margin-right: 0.5rem; background: #3b82f6;" if status_filter == "completed" else "margin-right: 0.5rem;"),
+        A("Отменённые", href="/finance?status_filter=cancelled", role="button",
+          cls="secondary" if status_filter != "cancelled" else "",
+          style="background: #ef4444;" if status_filter == "cancelled" else ""),
+        style="margin-bottom: 1.5rem;"
+    )
+
+    # Show appropriate table based on filter
+    if status_filter == "active":
+        deals_section = deals_table(active_deals, "Сделки в работе", "#10b981")
+    elif status_filter == "completed":
+        deals_section = deals_table(completed_deals, "Завершённые сделки", "#3b82f6")
+    elif status_filter == "cancelled":
+        deals_section = deals_table(cancelled_deals, "Отменённые сделки", "#ef4444")
+    else:
+        # Show all (active first, then completed, then cancelled)
+        deals_section = Div(
+            deals_table(active_deals, "Сделки в работе", "#10b981") if active_deals else "",
+            deals_table(completed_deals, "Завершённые сделки", "#3b82f6") if completed_deals else "",
+            deals_table(cancelled_deals, "Отменённые сделки", "#ef4444") if cancelled_deals else "",
+        )
+
+    return page_layout("Финансы",
+        H1("Финансовый менеджер"),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats["active"]), cls="stat-value", style="color: #10b981;"),
+                Div("В работе", style="font-size: 0.875rem;"),
+                Div(f"{stats['active_amount']:,.0f} ₽", style="font-size: 0.75rem; color: #666;"),
+                cls="stat-card",
+                style="border-left: 4px solid #10b981;" if stats["active"] > 0 else ""
+            ),
+            Div(
+                Div(str(stats["completed"]), cls="stat-value", style="color: #3b82f6;"),
+                Div("Завершено", style="font-size: 0.875rem;"),
+                Div(f"{stats['completed_amount']:,.0f} ₽", style="font-size: 0.75rem; color: #666;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["cancelled"]), cls="stat-value", style="color: #ef4444;"),
+                Div("Отменено", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["total"]), cls="stat-value", style="color: #6b7280;"),
+                Div("Всего сделок", style="font-size: 0.875rem;"),
+                Div(f"{stats['active_amount'] + stats['completed_amount']:,.0f} ₽", style="font-size: 0.75rem; color: #666;"),
+                cls="stat-card"
+            ),
+            cls="stats-grid",
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem;"
+        ),
+
+        # Filter buttons
+        filter_buttons,
+
+        # Deals section
+        deals_section,
+
+        session=session
+    )
 
 
 # ============================================================================

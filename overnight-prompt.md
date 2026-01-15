@@ -159,12 +159,14 @@ App runs at http://localhost:5001
 - [x] Feature #74: Создание спецификации из КП (2026-01-15) - Created create_specification_from_quote() function in specification_service.py with CreateSpecFromQuoteResult dataclass. Function fetches quote data, optionally uses specific version data, pre-fills 15+ specification fields from quote and calculation variables (proposal_idn, currency, exchange rate, payment terms, countries, legal entities, periods). Returns result with success flag, specification object, error message, and prefilled_fields dict. Updated services/__init__.py with exports.
 - [x] Feature #75: Сервис сделок (2026-01-15) - Created services/deal_service.py with full CRUD operations: Deal dataclass with all fields, DEAL_STATUSES/DEAL_STATUS_NAMES/DEAL_STATUS_COLORS/DEAL_TRANSITIONS constants, status helpers, create_deal(), get_deal(), get_deal_by_specification(), get_deal_by_quote(), get_deals_by_status(), get_all_deals(), get_deals_with_details(), count_deals_by_status(), deal_exists_for_specification(), deal_exists_for_quote(), update_deal(), update_deal_status(), complete_deal(), cancel_deal(), update_deal_amount(), delete_deal(), generate_deal_number(), get_deal_stats(), get_active_deals(), get_recent_deals(), get_deals_by_date_range(), search_deals(). Updated services/__init__.py with all exports.
 - [x] Feature #76: Создание сделки из спецификации (2026-01-15) - Created create_deal_from_specification() function in deal_service.py with CreateDealFromSpecResult dataclass. Function fetches specification with quote/customer details, validates spec status (approved/signed) and signed_scan, extracts financial data (total_amount, currency), generates deal_number, creates deal record in 'active' status, optionally updates spec status to 'signed'.
+- [x] Feature #77: Страница /finance (2026-01-15) - Created /finance route for finance manager workspace. Shows deal statistics (active, completed, total amounts), status filter buttons, deals table with spec/customer joins. Added "Финансы" link to nav_bar for finance/admin roles.
+- [x] Feature #78: Список активных сделок (2026-01-15) - Already in #77: deals list shows active/completed/cancelled with status badges, amounts, dates, action buttons.
 
 ### Next Up
-- Feature #77: Страница /finance (Finance manager workspace)
+- Feature #79: Таблица план-факт по сделке (Plan-fact table for deals)
 
 ### Progress
-- **76 of 88 features completed** (86%)
+- **78 of 88 features completed** (89%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
