@@ -232,6 +232,60 @@ def assign_role(
     return None
 
 
+def remove_role(
+    user_id: str | UUID,
+    organization_id: str | UUID,
+    role_code: str
+) -> bool:
+    """
+    Remove a role from a user in an organization.
+
+    This function is an admin operation that deletes a user_role record.
+    If the user doesn't have this role, returns False without any action.
+
+    Args:
+        user_id: User's UUID to remove role from
+        organization_id: Organization's UUID
+        role_code: Role code to remove (e.g., 'sales', 'admin')
+
+    Returns:
+        True if role was removed, False if user didn't have role
+        or if role_code is invalid
+
+    Raises:
+        Exception: If there's a database error
+
+    Example:
+        >>> # Remove sales role from a user
+        >>> result = remove_role(user_id, org_id, 'sales')
+        >>> if result:
+        ...     print("Role removed successfully")
+        ... else:
+        ...     print("User didn't have this role")
+    """
+    # Check if user has this role
+    if not has_role(user_id, organization_id, role_code):
+        return False
+
+    # Get the role ID
+    role = get_role_by_code(role_code)
+    if not role:
+        return False
+
+    supabase = get_supabase()
+
+    # Delete the user_role record
+    response = supabase.table("user_roles") \
+        .delete() \
+        .eq("user_id", str(user_id)) \
+        .eq("organization_id", str(organization_id)) \
+        .eq("role_id", str(role.id)) \
+        .execute()
+
+    # Check if deletion was successful (response.data contains deleted rows)
+    return len(response.data) > 0
+
+
 def get_all_roles() -> List[Role]:
     """
     Get all available roles from the roles reference table.

@@ -472,3 +472,19 @@
   - services/role_service.py (updated)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #20: Сервис ролей: удаление роли
+- Implemented remove_role function in services/role_service.py:
+  - remove_role(user_id, org_id, role_code) → bool
+  - Deletes user_role record from database
+  - Returns True if role was removed, False if user didn't have role or invalid role_code
+  - Validates that user has the role before attempting deletion
+  - Uses get_role_by_code to get role ID for deletion
+- Function complements assign_role for complete role management
+- Full documentation with docstrings and examples
+- Updated services/__init__.py to export remove_role
+- Verified no syntax errors
+- Files changed:
+  - services/role_service.py (updated)
+  - services/__init__.py (updated)
+- Status: COMPLETE

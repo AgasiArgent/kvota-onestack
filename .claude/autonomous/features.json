@@ -222,10 +222,10 @@
       "name": "Сервис ролей: удаление роли",
       "description": "Функция remove_role(user_id, org_id, role_code)",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T12:00:00Z",
+      "completed_at": "2025-01-15T12:10:00Z"
     },
     {
       "id": 21,
