@@ -2836,3 +2836,20 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 - Created v_quote_items_logistics view for logistics workspace
 - Status: COMPLETE
 
+
+
+## Session 2026-01-15 - Feature DB-014: Extend quote_items with customs fields
+- Created migration 031_extend_quote_items_customs.sql
+- Added customs columns to quote_items table:
+  - hs_code (VARCHAR 20) - Harmonized System code (ТН ВЭД) with regex format validation
+  - customs_duty_percent (DECIMAL 5,2) - Duty rate 0-100%
+  - customs_extra_cost (DECIMAL 15,2) - Additional customs costs (brokerage, storage, etc.)
+- Check constraints: HS code format, duty percent 0-100, non-negative extra cost
+- Created helper functions:
+  - get_item_customs_total(item_id, use_rub) - calculates duty + extra costs for item
+  - get_quote_customs_summary(quote_id) - aggregated customs data for quote
+  - is_quote_customs_complete(quote_id) - TRUE when all items have HS code and duty
+  - get_hs_code_stats(org_id) - statistics on HS code usage by prefix
+- Created v_quote_items_customs view for customs workspace
+- Added indexes on hs_code for efficient reporting
+- Status: COMPLETE

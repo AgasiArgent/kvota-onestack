@@ -132,8 +132,10 @@
       "name": "Extend quote_items with customs fields",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Add hs_code, customs_duty_percent, customs_extra_cost"
+      "passes": true,
+      "completed_at": "2026-01-15T18:40:00Z",
+      "description": "Add hs_code, customs_duty_percent, customs_extra_cost",
+      "notes": "Created migration 031_extend_quote_items_customs.sql with: hs_code (VARCHAR 20 with format validation), customs_duty_percent (DECIMAL 5,2, 0-100%), customs_extra_cost (DECIMAL 15,2). Helper functions: get_item_customs_total(), get_quote_customs_summary(), is_quote_customs_complete(), get_hs_code_stats(). Created v_quote_items_customs view for customs workspace. Added indexes for HS code reporting."
     },
     {
       "id": "DB-015",
