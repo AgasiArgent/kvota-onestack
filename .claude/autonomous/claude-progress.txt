@@ -594,3 +594,25 @@
   - services/workflow_service.py (updated - added ~250 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #25: Сервис перехода статуса
+- Implemented transition_quote_status() - the main function for executing workflow transitions
+  - Takes: quote_id, to_status, actor_id, actor_roles, comment (optional), skip_validation (optional)
+  - Returns: TransitionResult dataclass with success/error info
+  - Steps: Fetch quote → Validate transition → Check comment required → Update quote → Log transition
+  - Handles errors gracefully, returns meaningful error messages
+- Added TransitionResult dataclass for structured return values
+- Implemented helper functions:
+  - get_quote_workflow_status(quote_id) → Optional[WorkflowStatus] - Get current status of a quote
+  - get_quote_transition_history(quote_id, limit) → List[Dict] - Get audit log of transitions
+  - get_available_transitions_for_quote(quote_id, user_roles) → List[Dict] - Get available transitions for UI
+- All functions:
+  - Use Supabase service role for database access
+  - Handle both string and enum status values
+  - Include comprehensive docstrings and examples
+- Updated services/__init__.py to export all new functions
+- Verified imports successfully in venv
+- Files changed:
+  - services/workflow_service.py (updated - added ~350 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

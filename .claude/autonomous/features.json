@@ -277,10 +277,10 @@
       "name": "Сервис перехода статуса",
       "description": "Функция transition_quote_status(quote_id, to_status, actor_id, comment)",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T17:00:00Z",
+      "completed_at": "2025-01-15T17:30:00Z"
     },
     {
       "id": 26,

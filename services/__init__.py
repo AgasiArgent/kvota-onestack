@@ -36,6 +36,7 @@ from .workflow_service import (
     # Enum and data classes
     WorkflowStatus,
     StatusTransition,
+    TransitionResult,
     # Status metadata
     STATUS_NAMES,
     STATUS_NAMES_SHORT,
@@ -65,6 +66,11 @@ from .workflow_service import (
     get_incoming_transitions,
     is_comment_required,
     is_auto_transition,
+    # Transition execution functions (Feature #25)
+    transition_quote_status,
+    get_quote_workflow_status,
+    get_quote_transition_history,
+    get_available_transitions_for_quote,
 )
 
 __all__ = [
@@ -103,6 +109,7 @@ __all__ = [
     # Workflow
     "WorkflowStatus",
     "StatusTransition",
+    "TransitionResult",
     "STATUS_NAMES",
     "STATUS_NAMES_SHORT",
     "STATUS_COLORS",
@@ -130,4 +137,9 @@ __all__ = [
     "get_incoming_transitions",
     "is_comment_required",
     "is_auto_transition",
+    # Transition execution functions (Feature #25)
+    "transition_quote_status",
+    "get_quote_workflow_status",
+    "get_quote_transition_history",
+    "get_available_transitions_for_quote",
 ]

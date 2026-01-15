@@ -986,3 +986,353 @@ def is_auto_transition(
     if transition:
         return transition.auto_transition
     return False
+
+
+# =============================================================================
+# TRANSITION EXECUTION FUNCTIONS (Feature #25)
+# =============================================================================
+
+from .database import get_supabase
+from datetime import datetime, timezone
+
+
+@dataclass
+class TransitionResult:
+    """
+    Result of a status transition attempt.
+
+    Attributes:
+        success: Whether the transition was successful
+        error_message: Error message if failed, None if success
+        quote_id: The quote ID that was transitioned
+        from_status: Previous status
+        to_status: New status
+        transition_id: UUID of the workflow_transitions record created
+    """
+    success: bool
+    error_message: Optional[str] = None
+    quote_id: Optional[str] = None
+    from_status: Optional[str] = None
+    to_status: Optional[str] = None
+    transition_id: Optional[str] = None
+
+
+def transition_quote_status(
+    quote_id: str,
+    to_status: WorkflowStatus | str,
+    actor_id: str,
+    actor_roles: List[str],
+    comment: Optional[str] = None,
+    skip_validation: bool = False
+) -> TransitionResult:
+    """
+    Transition a quote to a new workflow status.
+
+    This is the main function for executing workflow transitions.
+    It performs the following steps:
+    1. Fetches the quote's current status
+    2. Validates the transition is allowed for the actor's roles
+    3. Checks if comment is required and provided
+    4. Updates the quote's workflow_status
+    5. Creates a record in workflow_transitions for audit
+    6. Returns success or error
+
+    Args:
+        quote_id: UUID of the quote to transition
+        to_status: Target workflow status (enum or string)
+        actor_id: UUID of the user performing the transition
+        actor_roles: List of role codes the actor has (e.g., ['sales', 'admin'])
+        comment: Optional comment explaining the transition (required for some transitions)
+        skip_validation: If True, skip role/transition validation (for auto-transitions)
+
+    Returns:
+        TransitionResult with success status and details
+
+    Example:
+        >>> result = transition_quote_status(
+        ...     quote_id="quote-uuid",
+        ...     to_status="pending_procurement",
+        ...     actor_id="user-uuid",
+        ...     actor_roles=["sales"],
+        ...     comment=None
+        ... )
+        >>> if result.success:
+        ...     print(f"Transitioned to {result.to_status}")
+        ... else:
+        ...     print(f"Failed: {result.error_message}")
+    """
+    supabase = get_supabase()
+
+    # Convert string to enum if needed
+    if isinstance(to_status, str):
+        try:
+            to_status_enum = WorkflowStatus(to_status)
+        except ValueError:
+            return TransitionResult(
+                success=False,
+                error_message=f"Invalid target status: {to_status}",
+                quote_id=quote_id
+            )
+    else:
+        to_status_enum = to_status
+
+    # Step 1: Fetch current quote status
+    try:
+        quote_response = supabase.table("quotes") \
+            .select("id, workflow_status, organization_id") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    quote = quote_response.data
+    if not quote:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    current_status = quote.get("workflow_status", "draft")
+    organization_id = quote.get("organization_id")
+
+    # Convert current status to enum
+    try:
+        current_status_enum = WorkflowStatus(current_status)
+    except ValueError:
+        # If current status is invalid, treat as draft
+        current_status_enum = WorkflowStatus.DRAFT
+
+    # Step 2: Validate transition (unless skipped for auto-transitions)
+    if not skip_validation:
+        allowed, error = can_transition(current_status_enum, to_status_enum, actor_roles)
+        if not allowed:
+            return TransitionResult(
+                success=False,
+                error_message=error,
+                quote_id=quote_id,
+                from_status=current_status
+            )
+
+    # Step 3: Check if comment is required
+    if is_comment_required(current_status_enum, to_status_enum):
+        if not comment or not comment.strip():
+            return TransitionResult(
+                success=False,
+                error_message=f"Comment is required for transition from {get_status_name(current_status_enum)} to {get_status_name(to_status_enum)}",
+                quote_id=quote_id,
+                from_status=current_status
+            )
+
+    # Step 4: Update the quote's workflow_status
+    try:
+        update_response = supabase.table("quotes") \
+            .update({"workflow_status": to_status_enum.value}) \
+            .eq("id", quote_id) \
+            .execute()
+
+        if not update_response.data:
+            return TransitionResult(
+                success=False,
+                error_message="Failed to update quote status",
+                quote_id=quote_id,
+                from_status=current_status
+            )
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Database error updating quote: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Step 5: Log the transition in workflow_transitions
+    # Determine actor's primary role for this transition
+    transition_req = get_transition_requirements(current_status_enum, to_status_enum)
+    actor_role_for_log = None
+    if transition_req and actor_roles:
+        # Find the role that authorized this transition
+        for role in actor_roles:
+            if role in transition_req.allowed_roles:
+                actor_role_for_log = role
+                break
+    if not actor_role_for_log and actor_roles:
+        actor_role_for_log = actor_roles[0]  # Fallback to first role
+
+    try:
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": current_status,
+            "to_status": to_status_enum.value,
+            "actor_id": actor_id,
+            "actor_role": actor_role_for_log,
+            "comment": comment.strip() if comment else None
+        }
+
+        log_response = supabase.table("workflow_transitions") \
+            .insert(transition_data) \
+            .execute()
+
+        transition_id = None
+        if log_response.data and len(log_response.data) > 0:
+            transition_id = log_response.data[0].get("id")
+
+    except Exception as e:
+        # Transition succeeded but logging failed - still return success
+        # but note the logging failure (in production, you'd want to handle this better)
+        return TransitionResult(
+            success=True,
+            error_message=f"Warning: Transition succeeded but audit log failed: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status,
+            to_status=to_status_enum.value,
+            transition_id=None
+        )
+
+    return TransitionResult(
+        success=True,
+        error_message=None,
+        quote_id=quote_id,
+        from_status=current_status,
+        to_status=to_status_enum.value,
+        transition_id=transition_id
+    )
+
+
+def get_quote_workflow_status(quote_id: str) -> Optional[WorkflowStatus]:
+    """
+    Get the current workflow status of a quote.
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        WorkflowStatus enum value, or None if quote not found
+
+    Example:
+        >>> status = get_quote_workflow_status("quote-uuid")
+        >>> if status == WorkflowStatus.DRAFT:
+        ...     print("Quote is still in draft")
+    """
+    supabase = get_supabase()
+
+    try:
+        response = supabase.table("quotes") \
+            .select("workflow_status") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+
+        if response.data:
+            status_str = response.data.get("workflow_status", "draft")
+            try:
+                return WorkflowStatus(status_str)
+            except ValueError:
+                return WorkflowStatus.DRAFT
+    except Exception:
+        return None
+
+    return None
+
+
+def get_quote_transition_history(quote_id: str, limit: int = 50) -> List[Dict]:
+    """
+    Get the workflow transition history for a quote.
+
+    Args:
+        quote_id: UUID of the quote
+        limit: Maximum number of records to return (default 50)
+
+    Returns:
+        List of transition records, ordered by created_at DESC (most recent first)
+        Each record contains:
+        - id: Transition record UUID
+        - from_status: Previous status code
+        - from_status_name: Previous status name
+        - to_status: New status code
+        - to_status_name: New status name
+        - actor_id: User who made the transition
+        - actor_role: Role used for the transition
+        - comment: Comment/reason for transition
+        - created_at: When the transition occurred
+
+    Example:
+        >>> history = get_quote_transition_history("quote-uuid")
+        >>> for record in history:
+        ...     print(f"{record['from_status_name']} → {record['to_status_name']}")
+    """
+    supabase = get_supabase()
+
+    try:
+        response = supabase.table("workflow_transitions") \
+            .select("*") \
+            .eq("quote_id", quote_id) \
+            .order("created_at", desc=True) \
+            .limit(limit) \
+            .execute()
+
+        result = []
+        for record in response.data:
+            result.append({
+                "id": record.get("id"),
+                "from_status": record.get("from_status"),
+                "from_status_name": get_status_name(record.get("from_status", "")),
+                "to_status": record.get("to_status"),
+                "to_status_name": get_status_name(record.get("to_status", "")),
+                "actor_id": record.get("actor_id"),
+                "actor_role": record.get("actor_role"),
+                "comment": record.get("comment"),
+                "created_at": record.get("created_at")
+            })
+
+        return result
+    except Exception:
+        return []
+
+
+def get_available_transitions_for_quote(
+    quote_id: str,
+    user_roles: List[str]
+) -> List[Dict]:
+    """
+    Get available status transitions for a specific quote and user.
+
+    Combines get_quote_workflow_status and get_allowed_transitions
+    for convenience.
+
+    Args:
+        quote_id: UUID of the quote
+        user_roles: List of role codes the user has
+
+    Returns:
+        List of available transitions, each containing:
+        - to_status: Target status code
+        - to_status_name: Target status name
+        - requires_comment: Whether comment is required
+        - allowed_roles: Roles that can perform this transition
+
+    Example:
+        >>> transitions = get_available_transitions_for_quote("quote-uuid", ["sales"])
+        >>> for t in transitions:
+        ...     print(f"Can move to: {t['to_status_name']}")
+    """
+    current_status = get_quote_workflow_status(quote_id)
+    if current_status is None:
+        return []
+
+    allowed = get_allowed_transitions(current_status, user_roles)
+    result = []
+    for transition in allowed:
+        result.append({
+            "to_status": transition.to_status.value,
+            "to_status_name": STATUS_NAMES[transition.to_status],
+            "requires_comment": transition.requires_comment,
+            "allowed_roles": transition.allowed_roles
+        })
+
+    return result
