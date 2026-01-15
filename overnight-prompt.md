@@ -96,8 +96,13 @@ App runs at http://localhost:5001
 - [x] Feature #11: Create notifications table (2025-01-15)
 - [x] Feature #12: Extend quotes table with workflow fields (2025-01-15)
 - [x] Feature #13: Extend quote_items table with workflow fields (2025-01-15)
+- [x] Feature #14: Seed roles data (2025-01-15) - Already in migration 001
+- [x] Feature #15: Seed plan_fact_categories data (2025-01-15)
 
 ### Next Up
-- Feature #14: Seed roles data
-- Feature #15: Seed plan_fact_categories data
 - Feature #16: Configure RLS for new tables
+
+### Progress
+- **15 of 88 features completed** (17%)
+- All database tables complete, seed data complete
+- Next: RLS policies for new tables
