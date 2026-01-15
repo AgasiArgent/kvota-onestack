@@ -2653,3 +2653,29 @@ to determine the signatory name that appears on the document.
 
 **Status:** COMPLETE
 **Next:** DB-005 (customer_contracts table with next_specification_number)
+
+## Session 2026-01-15 - Feature DB-005: Create customer_contracts table
+
+**Migration file:** `migrations/022_create_customer_contracts_table.sql`
+
+**Table structure:**
+- `id` (UUID PK)
+- `organization_id` (UUID FK → organizations)
+- `customer_id` (UUID FK → customers)
+- `contract_number` (TEXT) - unique within organization
+- `contract_date` (DATE)
+- `status` (TEXT) - active/suspended/terminated
+- `next_specification_number` (INTEGER default 1)
+- `notes` (TEXT)
+- `created_at`, `updated_at` (TIMESTAMPTZ)
+
+**Key features:**
+1. **Specification numbering counter** - `next_specification_number` for sequential spec generation
+2. **Helper function** - `get_next_specification_number(contract_id)` atomically increments and returns
+3. **Unique constraint** - contract_number unique within organization
+4. **Status tracking** - active/suspended/terminated states
+5. **RLS policies** - sales, spec_controller, admin can manage; all org members can view
+
+**Progress:**
+- v3.0 features complete: **5/94**
+- **Next**: DB-006 (bank_accounts table - polymorphic for all entity types)

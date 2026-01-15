@@ -45,7 +45,7 @@
       "name": "Create customer_contracts table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "description": "Create customer_contracts table with next_specification_number counter"
     },
     {
