@@ -450,24 +450,30 @@
       "name": "Specification creation service",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Create specification from selected quote version"
+      "passes": true,
+      "completed_at": "2026-01-16T00:30:00Z",
+      "description": "Create specification from selected quote version",
+      "notes": "Implementation exists in specification_service.py. Specification dataclass with 25+ fields covering identification, dates, currency, origin, legal entities, status. create_specification() for basic creation. create_specification_from_quote() extracts data from quote and optional version, prefills fields. CreateSpecFromQuoteResult dataclass returns success, specification, error, prefilled_fields. Status workflow with SPEC_STATUSES (draft, pending_review, approved, signed) and transition validation. Created tests/test_specification_service.py with 28 passing tests."
     },
     {
       "id": "SPEC-002",
       "name": "Specification PDF generation",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Generate PDF with all required fields"
+      "passes": true,
+      "completed_at": "2026-01-16T00:30:00Z",
+      "description": "Generate PDF with all required fields",
+      "notes": "Implementation exists in specification_export.py. generate_specification_pdf() and generate_spec_pdf_from_spec_id() create PDF from specification data. SpecificationData dataclass holds all data needed for PDF. fetch_specification_data() retrieves data from DB. generate_spec_pdf_html() creates HTML template for PDF conversion. Export includes products table, totals, currency info, legal entities. Tests verify imports."
     },
     {
       "id": "SPEC-003",
       "name": "Signed scan upload and storage",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Upload and store signed specification scans"
+      "passes": true,
+      "completed_at": "2026-01-16T00:30:00Z",
+      "description": "Upload and store signed specification scans",
+      "notes": "Implementation exists in specification_service.py. set_signed_scan_url() updates specification with URL of signed scan. signed_scan_url field in Specification dataclass. get_specifications_for_signing() finds approved specs without signed scan. get_recently_signed_specifications() lists recently signed. Tests verify set_signed_scan_url functionality."
     },
     {
       "id": "DEAL-001",
