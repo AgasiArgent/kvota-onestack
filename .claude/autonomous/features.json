@@ -649,8 +649,10 @@
       "name": "Quote form: seller company selector",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Dropdown to select seller company at quote level"
+      "passes": true,
+      "description": "Dropdown to select seller company at quote level",
+      "completed_at": "2026-01-15T20:40:19.677680Z",
+      "notes": "Implemented seller company dropdown at quote level:\n- Updated quote edit form (GET /quotes/{id}/edit) to include seller_company dropdown\n- Updated quote edit POST handler to save seller_company_id to database\n- Updated quote creation form (GET /quotes/new) to include seller_company dropdown\n- Updated quote creation POST handler to save seller_company_id\n- Updated calculate page to display seller company from quote (read-only with link to edit)\n- Calculate page shows warning when seller company not set with link to edit form\n- Uses format_seller_company_for_dropdown() for display labels\n- Tests: 28 passing tests in tests/test_ui_quote_seller_company.py"
     },
     {
       "id": "UI-016",

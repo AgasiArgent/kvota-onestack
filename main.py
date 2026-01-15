@@ -1022,6 +1022,10 @@ def get(session):
 
     customers = customers_result.data or []
 
+    # Get seller companies for dropdown (v3.0)
+    from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], active_only=True)
+
     return page_layout("New Quote",
         H1("Create New Quote"),
 
@@ -1046,6 +1050,22 @@ def get(session):
                         )
                     ),
                     cls="form-row"
+                ),
+                # Seller company selector (v3.0 - at quote level)
+                Div(
+                    Label("Компания-продавец *",
+                        Select(
+                            Option("Выберите компанию...", value="", disabled=True, selected=True),
+                            *[Option(
+                                format_seller_company_for_dropdown(sc),
+                                value=sc.id
+                            ) for sc in seller_companies],
+                            name="seller_company_id", required=True
+                        ),
+                        Small("Наше юридическое лицо для продажи (определяет IDN котировки)",
+                              style="color: #666; display: block; margin-top: 0.25rem;")
+                    ),
+                    cls="form-group"
                 ),
                 Div(
                     Label("Delivery Terms",
@@ -1087,7 +1107,8 @@ def get(session):
 
 
 @rt("/quotes/new")
-def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: int, notes: str, session):
+def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: int, notes: str,
+         seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -1114,7 +1135,7 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
         customer_name = customer_result.data.get("name", "Unknown") if customer_result.data else "Unknown"
         title = f"Quote for {customer_name}"
 
-        result = supabase.table("quotes").insert({
+        insert_data = {
             "idn_quote": idn_quote,
             "title": title,
             "customer_id": customer_id,
@@ -1125,7 +1146,13 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
             "notes": notes or None,
             "status": "draft",
             "created_by": user["id"]
-        }).execute()
+        }
+
+        # v3.0: seller_company_id at quote level
+        if seller_company_id and seller_company_id.strip():
+            insert_data["seller_company_id"] = seller_company_id.strip()
+
+        result = supabase.table("quotes").insert(insert_data).execute()
 
         new_quote = result.data[0]
         return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
@@ -1813,9 +1840,9 @@ def get(quote_id: str, session):
     user = session["user"]
     supabase = get_supabase()
 
-    # Get quote
+    # Get quote with seller company info
     result = supabase.table("quotes") \
-        .select("*") \
+        .select("*, seller_companies(id, supplier_code, name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
         .execute()
@@ -1833,6 +1860,17 @@ def get(quote_id: str, session):
         .execute()
 
     customers = customers_result.data or []
+
+    # Get seller companies for dropdown
+    from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], active_only=True)
+
+    # Prepare seller company info for pre-selected value
+    selected_seller_id = quote.get("seller_company_id")
+    selected_seller_label = None
+    if quote.get("seller_companies"):
+        sc = quote["seller_companies"]
+        selected_seller_label = f"{sc.get('supplier_code', '')} - {sc.get('name', '')}"
 
     return page_layout(f"Edit {quote.get('idn_quote', '')}",
         H1(f"Edit Quote {quote.get('idn_quote', '')}"),
@@ -1860,6 +1898,23 @@ def get(quote_id: str, session):
                         )
                     ),
                     cls="form-row"
+                ),
+                # Seller company selector (v3.0 - at quote level)
+                Div(
+                    Label("Компания-продавец *",
+                        Select(
+                            Option("Выберите компанию...", value=""),
+                            *[Option(
+                                format_seller_company_for_dropdown(sc),
+                                value=sc.id,
+                                selected=(str(sc.id) == str(selected_seller_id)) if selected_seller_id else False
+                            ) for sc in seller_companies],
+                            name="seller_company_id", required=True
+                        ),
+                        Small("Наше юридическое лицо для продажи (определяет IDN котировки)",
+                              style="color: #666; display: block; margin-top: 0.25rem;")
+                    ),
+                    cls="form-group"
                 ),
                 Div(
                     Label("Currency",
@@ -1911,7 +1966,7 @@ def get(quote_id: str, session):
 
 @rt("/quotes/{quote_id}/edit")
 def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_terms: str,
-         payment_terms: int, delivery_days: int, notes: str, session):
+         payment_terms: int, delivery_days: int, notes: str, seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -1920,7 +1975,7 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
     supabase = get_supabase()
 
     try:
-        supabase.table("quotes").update({
+        update_data = {
             "customer_id": customer_id,
             "status": status,
             "currency": currency,
@@ -1929,7 +1984,19 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
             "delivery_days": delivery_days,
             "notes": notes or None,
             "updated_at": datetime.now().isoformat()
-        }).eq("id", quote_id).eq("organization_id", user["org_id"]).execute()
+        }
+
+        # v3.0: seller_company_id at quote level
+        # If provided and not empty, set it; otherwise keep existing or set to None
+        if seller_company_id and seller_company_id.strip():
+            update_data["seller_company_id"] = seller_company_id.strip()
+        else:
+            update_data["seller_company_id"] = None
+
+        supabase.table("quotes").update(update_data) \
+            .eq("id", quote_id) \
+            .eq("organization_id", user["org_id"]) \
+            .execute()
 
         return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
 
@@ -2363,9 +2430,9 @@ def get(quote_id: str, session):
     user = session["user"]
     supabase = get_supabase()
 
-    # Get quote with items
+    # Get quote with items and seller company (v3.0)
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name)") \
+        .select("*, customers(name), seller_companies(id, supplier_code, name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
         .execute()
@@ -2375,6 +2442,14 @@ def get(quote_id: str, session):
 
     quote = quote_result.data[0]
     currency = quote.get("currency", "USD")
+
+    # Get seller company info for display
+    seller_company_info = quote.get("seller_companies")
+    seller_company_display = "Не выбрана"
+    seller_company_name = ""
+    if seller_company_info:
+        seller_company_display = f"{seller_company_info.get('supplier_code', '')} - {seller_company_info.get('name', '')}"
+        seller_company_name = seller_company_info.get('name', '')
 
     # Get quote items
     items_result = supabase.table("quote_items") \
@@ -2404,6 +2479,37 @@ def get(quote_id: str, session):
     def get_var(key, default):
         return saved_vars.get(key, default)
 
+    # Build seller company section based on whether it's set
+    if seller_company_info:
+        seller_company_section = Div(
+            Label("Компания-продавец",
+                Div(
+                    Strong(seller_company_display),
+                    # Hidden input to pass seller_company name to preview
+                    Input(type="hidden", name="seller_company", value=seller_company_name),
+                    style="padding: 0.5rem; background: #f5f5f5; border-radius: 4px;"
+                ),
+                Small(
+                    A("Изменить в настройках КП", href=f"/quotes/{quote_id}/edit", style="font-size: 0.85rem;"),
+                    style="display: block; margin-top: 0.25rem;"
+                )
+            )
+        )
+    else:
+        seller_company_section = Div(
+            Label("Компания-продавец",
+                Div(
+                    "⚠️ Не выбрана",
+                    style="padding: 0.5rem; background: #fff3cd; border-radius: 4px; color: #856404;"
+                ),
+                Small(
+                    A("Выбрать в настройках КП", href=f"/quotes/{quote_id}/edit", style="font-size: 0.85rem; font-weight: bold;"),
+                    style="display: block; margin-top: 0.25rem;"
+                )
+            ),
+            Input(type="hidden", name="seller_company", value=""),
+        )
+
     return page_layout(f"Calculate - {quote.get('idn_quote', '')}",
         H1(f"Calculate {quote.get('idn_quote', '')}"),
         P(f"Customer: {quote.get('customers', {}).get('name', '-')} | Currency: {currency} | {len(items)} products",
@@ -2417,14 +2523,7 @@ def get(quote_id: str, session):
                     # Company & Deal Type
                     Div(
                         H3("Company Settings"),
-                        Label("Seller Company",
-                            Select(
-                                Option("МАСТЕР БЭРИНГ ООО", value="МАСТЕР БЭРИНГ ООО", selected=get_var('seller_company', '') == "МАСТЕР БЭРИНГ ООО"),
-                                Option("TEXCEL OTOMOTIV", value="TEXCEL OTOMOTİV TİCARET LİMİTED ŞİRKETİ"),
-                                Option("GESTUS OTOMOTIV", value="GESTUS OTOMOTİV TİCARET LİMİTED ŞİRKETİ"),
-                                name="seller_company"
-                            )
-                        ),
+                        seller_company_section,
                         Div(
                             Label("Sale Type",
                                 Select(

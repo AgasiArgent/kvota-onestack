@@ -3264,3 +3264,46 @@ Features:
   - Add payment button
   - Status badge, overdue indicator
 
+
+## Session Update - 2026-01-15 (continued)
+
+### Feature UI-015 (Quote form: seller company selector) - ✅ COMPLETE
+
+**Implemented seller_company dropdown at quote level:**
+
+1. **Quote Edit Form (GET /quotes/{id}/edit)**
+   - Added seller_company_id dropdown with all active seller companies
+   - Pre-selects current seller company if set
+   - Uses format_seller_company_for_dropdown() for labels
+   - Help text explains this is "Наше юридическое лицо для продажи"
+   - Russian labels throughout
+
+2. **Quote Edit Form POST Handler**
+   - Added seller_company_id parameter
+   - Saves to database with proper null handling
+   - Strips whitespace from input
+
+3. **Quote Creation Form (GET /quotes/new)**
+   - Added seller_company_id dropdown (required field)
+   - Same format and styling as edit form
+   - Required for new quotes to ensure IDN generation works
+
+4. **Quote Creation POST Handler**
+   - Added seller_company_id parameter
+   - Includes in insert data if provided
+
+5. **Calculate Page**
+   - Changed from hardcoded seller_company select to read-only display
+   - Loads seller_company from quote via Supabase join
+   - Shows "CMT - Company Name" format when set
+   - Shows warning "Не выбрана" with link to edit when not set
+   - Passes seller_company name to preview via hidden input
+
+**Tests Created:**
+- tests/test_ui_quote_seller_company.py with 28 passing tests
+- Covers: dataclass, form rendering, POST handlers, integration, validation, edge cases
+
+**Key Changes:**
+- Quote-level seller_company_id (v3.0 requirement)
+- Replaced hardcoded dropdown with dynamic data
+- Links calculate page to edit form for seller company changes
