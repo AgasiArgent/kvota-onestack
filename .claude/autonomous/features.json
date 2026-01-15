@@ -262,16 +262,20 @@
       "name": "Implement IDN generation for quotes",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Generate IDN in format SELLER-INN-YEAR-SEQ using idn_counters"
+      "passes": true,
+      "completed_at": "2026-01-15T21:30:00Z",
+      "description": "Generate IDN in format SELLER-INN-YEAR-SEQ using idn_counters",
+      "notes": "Created services/idn_service.py with: ParsedQuoteIDN/ParsedItemIDN dataclasses, IDNGenerationResult, parse_quote_idn(), parse_item_idn(), is_valid_quote_idn(), is_valid_item_idn(), validate_seller_code(), validate_inn(), generate_quote_idn() (calls DB function), assign_idn_to_quote(), get_quote_idn(), get_quote_by_idn(), utility functions. 26 tests pass in tests/test_idn_service.py. Database function already exists from migration 028."
     },
     {
       "id": "IDN-002",
       "name": "Implement IDN generation for quote items",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Generate item IDN as QUOTE_IDN-POSITION"
+      "passes": true,
+      "completed_at": "2026-01-15T21:30:00Z",
+      "description": "Generate item IDN as QUOTE_IDN-POSITION",
+      "notes": "Implemented in services/idn_service.py with: generate_item_idn() (calls DB function), regenerate_item_idns_for_quote(), get_item_idn(), get_item_by_idn(), extract_quote_idn_from_item_idn(), format_item_position(). Tests for item IDN parsing and validation included in tests/test_idn_service.py. Database function generate_item_idn() exists from migration 029."
     },
     {
       "id": "API-001",
