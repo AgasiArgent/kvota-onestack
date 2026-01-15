@@ -1793,3 +1793,36 @@
   - main.py (~200 lines added: UI section + upload route)
   - migrations/017_setup_specifications_storage.sql (new file)
 - Status: COMPLETE - Feature #71 done
+
+
+## Session 2026-01-15 - Feature #72: Кнопка подтверждения подписи (Confirm Signature)
+- Implemented confirm signature button and automatic deal creation
+- Updated spec edit page UI:
+  - Added "✅ Подтвердить подпись и создать сделку" button 
+  - Button visible only when status="approved" AND signed_scan_url exists
+  - Added info section for already signed specs showing "Сделка создана"
+  - Button styled green with full width for emphasis
+- Created POST /spec-control/{spec_id}/confirm-signature endpoint (~180 lines):
+  - Validates user role (spec_controller/admin)
+  - Validates spec status is "approved"
+  - Validates signed_scan_url exists
+  - Checks for existing deal (prevents duplicates)
+  - Generates deal number:
+    - First tries SQL function generate_deal_number(org_id)
+    - Falls back to manual generation: DEAL-YYYY-NNNN format
+    - Sequential numbering per organization per year
+  - Creates deal record with:
+    - specification_id, quote_id, organization_id
+    - deal_number (auto-generated)
+    - signed_at (from spec.sign_date or today)
+    - total_amount (from quote.calculated_total_client_price)
+    - currency (from spec.specification_currency)
+    - status: "active"
+  - Updates specification status to "signed"
+  - Optionally transitions quote workflow to DEAL_SIGNED
+  - Success page shows deal details with links
+  - Comprehensive error handling with rollback
+- Syntax verified with python3 -m py_compile main.py
+- Files changed:
+  - main.py (~220 lines added: UI updates + confirm endpoint)
+- Status: COMPLETE - Feature #72 done

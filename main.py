@@ -7506,6 +7506,30 @@ def get(session, spec_id: str):
                     method="POST",
                     enctype="multipart/form-data"
                 ),
+                # Feature #72: Confirm Signature button (visible when approved + has signed scan)
+                Div(
+                    Hr(style="margin: 1rem 0;"),
+                    P(
+                        "📋 Скан загружен. Подтвердите подпись для создания сделки.",
+                        style="margin-bottom: 0.75rem; color: #155724; font-weight: 500;"
+                    ),
+                    Form(
+                        Button("✅ Подтвердить подпись и создать сделку", type="submit",
+                               style="background: #28a745; border-color: #28a745; width: 100%;"),
+                        action=f"/spec-control/{spec_id}/confirm-signature",
+                        method="POST"
+                    ),
+                    style="margin-top: 1rem;"
+                ) if status == "approved" and spec.get("signed_scan_url") else None,
+                # Info for already signed specs
+                Div(
+                    Hr(style="margin: 1rem 0;"),
+                    P(
+                        "✅ Спецификация подписана. Сделка создана.",
+                        style="margin-bottom: 0; color: #155724; font-weight: 500;"
+                    ),
+                    style="margin-top: 1rem;"
+                ) if status == "signed" else None,
                 cls="card",
                 style="margin-bottom: 1.5rem; background: #f8f9fa;"
             ) if status in ["approved", "signed"] else None,
@@ -7897,6 +7921,232 @@ async def post(session, spec_id: str, request):
                 "Произошла ошибка при загрузке файла. Пожалуйста, попробуйте позже.",
                 cls="card",
                 style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            P(f"Техническая информация: {str(e)}", style="font-size: 0.8rem; color: #666;"),
+            A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# Feature #72: Confirm Signature and Create Deal
+# ============================================================================
+
+@rt("/spec-control/{spec_id}/confirm-signature")
+def post(session, spec_id: str):
+    """
+    Confirm signature on specification and create a deal.
+
+    Feature #72: Кнопка подтверждения подписи
+
+    This endpoint:
+    1. Validates spec is in 'approved' status and has signed_scan_url
+    2. Updates specification status to 'signed'
+    3. Creates a new deal record from the specification data
+    4. Updates quote workflow status to 'deal_signed'
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role (spec_controller or admin)
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    try:
+        # Fetch specification with all needed data
+        spec_result = supabase.table("specifications") \
+            .select("id, quote_id, organization_id, status, signed_scan_url, specification_number, sign_date, specification_currency, exchange_rate_to_ruble") \
+            .eq("id", spec_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+
+        if not spec_result.data:
+            return page_layout("Ошибка",
+                H1("Спецификация не найдена"),
+                Div("Спецификация не найдена или у вас нет доступа.", cls="card", style="background: #fee2e2;"),
+                A("← Назад к спецификациям", href="/spec-control"),
+                session=session
+            )
+
+        spec = spec_result.data[0]
+        current_status = spec.get("status", "")
+        signed_scan_url = spec.get("signed_scan_url", "")
+
+        # Validate status is 'approved'
+        if current_status != "approved":
+            return page_layout("Ошибка статуса",
+                H1("Неверный статус"),
+                Div(
+                    f"Подтверждение подписи возможно только для спецификаций в статусе 'Утверждена'. Текущий статус: {current_status}",
+                    cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Validate signed scan exists
+        if not signed_scan_url:
+            return page_layout("Ошибка",
+                H1("Скан не загружен"),
+                Div(
+                    "Для подтверждения подписи необходимо сначала загрузить скан подписанной спецификации.",
+                    cls="card", style="background: #fef3c7; border-left: 4px solid #f59e0b;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Check if deal already exists for this spec
+        existing_deal = supabase.table("deals") \
+            .select("id, deal_number") \
+            .eq("specification_id", spec_id) \
+            .execute()
+
+        if existing_deal.data:
+            return page_layout("Сделка уже существует",
+                H1("Сделка уже создана"),
+                Div(
+                    f"Для этой спецификации уже создана сделка: {existing_deal.data[0].get('deal_number', 'N/A')}",
+                    cls="card", style="background: #d4edda; border-left: 4px solid #28a745;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        # Get quote data for total amount calculation
+        quote_id = spec.get("quote_id")
+        quote_result = supabase.table("quotes") \
+            .select("id, client_name, calculated_total_client_price") \
+            .eq("id", quote_id) \
+            .execute()
+
+        if not quote_result.data:
+            return page_layout("Ошибка",
+                H1("КП не найдено"),
+                Div("Связанное КП не найдено.", cls="card", style="background: #fee2e2;"),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
+        quote = quote_result.data[0]
+        total_amount = quote.get("calculated_total_client_price") or 0
+
+        # Generate deal number using SQL function if available, otherwise generate manually
+        try:
+            deal_number_result = supabase.rpc("generate_deal_number", {"org_id": org_id}).execute()
+            deal_number = deal_number_result.data if deal_number_result.data else None
+        except Exception:
+            deal_number = None
+
+        # Fallback: generate deal number manually
+        if not deal_number:
+            from datetime import datetime
+            year = datetime.now().year
+
+            # Count existing deals for this org in current year
+            count_result = supabase.table("deals") \
+                .select("id", count="exact") \
+                .eq("organization_id", org_id) \
+                .execute()
+
+            seq_num = (count_result.count or 0) + 1
+            deal_number = f"DEAL-{year}-{seq_num:04d}"
+
+        # Get sign date (from spec or use today)
+        from datetime import date
+        sign_date = spec.get("sign_date") or date.today().isoformat()
+        currency = spec.get("specification_currency") or "RUB"
+
+        # Step 1: Update specification status to 'signed'
+        supabase.table("specifications") \
+            .update({"status": "signed"}) \
+            .eq("id", spec_id) \
+            .execute()
+
+        # Step 2: Create deal record
+        deal_data = {
+            "specification_id": spec_id,
+            "quote_id": quote_id,
+            "organization_id": org_id,
+            "deal_number": deal_number,
+            "signed_at": sign_date,
+            "total_amount": float(total_amount) if total_amount else 0.0,
+            "currency": currency,
+            "status": "active",
+            "created_by": user_id,
+        }
+
+        deal_result = supabase.table("deals") \
+            .insert(deal_data) \
+            .execute()
+
+        if not deal_result.data:
+            # Rollback spec status
+            supabase.table("specifications") \
+                .update({"status": "approved"}) \
+                .eq("id", spec_id) \
+                .execute()
+            raise Exception("Failed to create deal record")
+
+        deal_id = deal_result.data[0]["id"]
+
+        # Step 3: Update quote workflow status to deal_signed (if workflow service available)
+        try:
+            from services import transition_quote_status, WorkflowStatus
+            # Try to transition quote to deal_signed status
+            transition_result = transition_quote_status(
+                quote_id=quote_id,
+                to_status=WorkflowStatus.DEAL_SIGNED,
+                actor_id=user_id,
+                actor_roles=get_user_roles_from_session(session),
+                comment=f"Сделка {deal_number} создана из спецификации",
+                supabase=supabase
+            )
+            print(f"Quote workflow transition result: {transition_result}")
+        except Exception as e:
+            # Workflow transition is optional - log but don't fail
+            print(f"Note: Could not transition quote workflow: {e}")
+
+        print(f"Deal created successfully: {deal_number} (ID: {deal_id})")
+
+        # Show success page
+        return page_layout("Сделка создана",
+            H1("✅ Сделка успешно создана"),
+            Div(
+                H3(f"Номер сделки: {deal_number}"),
+                P(f"Клиент: {quote.get('client_name', 'N/A')}"),
+                P(f"Сумма: {total_amount:,.2f} {currency}"),
+                P(f"Дата подписания: {sign_date}"),
+                cls="card",
+                style="background: #d4edda; border-left: 4px solid #28a745; padding: 1rem;"
+            ),
+            Div(
+                A("→ К спецификации", href=f"/spec-control/{spec_id}", role="button",
+                  style="background: #007bff; border-color: #007bff; margin-right: 1rem;"),
+                A("← Назад к списку", href="/spec-control", role="button",
+                  style="background: #6c757d; border-color: #6c757d;"),
+                style="margin-top: 1rem;"
+            ),
+            session=session
+        )
+
+    except Exception as e:
+        print(f"Error confirming signature: {e}")
+        import traceback
+        traceback.print_exc()
+
+        return page_layout("Ошибка",
+            H1("Ошибка создания сделки"),
+            Div(
+                "Произошла ошибка при создании сделки. Пожалуйста, попробуйте позже.",
+                cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"
             ),
             P(f"Техническая информация: {str(e)}", style="font-size: 0.8rem; color: #666;"),
             A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),

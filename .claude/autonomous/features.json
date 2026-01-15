@@ -826,10 +826,11 @@
       "name": "Кнопка подтверждения подписи",
       "description": "Перевод спецификации в статус signed → создание deal",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T21:00:00Z",
+      "completed_at": "2026-01-15T21:30:00Z",
+      "notes": "Implemented confirm signature button and deal creation. Added 'Подтвердить подпись' button to spec edit page (visible when status=approved + signed_scan exists). Created POST /spec-control/{spec_id}/confirm-signature endpoint. Handler: validates status=approved + has signed_scan, creates deal record with auto-generated deal_number (DEAL-YYYY-NNNN), updates spec status to 'signed', optionally transitions quote to deal_signed. Complete error handling and success feedback."
     },
     {
       "id": 73,
