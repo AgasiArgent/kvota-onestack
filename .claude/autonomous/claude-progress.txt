@@ -2853,3 +2853,23 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 - Created v_quote_items_customs view for customs workspace
 - Added indexes on hs_code for efficient reporting
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-015: Create supplier_invoices table
+- Created migration 032_create_supplier_invoices_table.sql
+- Supplier invoices registry for tracking purchasing and payments
+- Fields: invoice_number, invoice_date, due_date, total_amount, currency
+- Status workflow: pending → partially_paid → paid (or overdue/cancelled)
+- Added invoice_file_url for scanned document storage (Supabase Storage)
+- Constraints:
+  - Unique invoice number per supplier per org
+  - Amount must be positive
+  - Due date must be >= invoice date
+- RLS policies: procurement, quote_controller, finance, admin can manage
+- Auto-overdue function: update_overdue_supplier_invoices() for scheduled jobs
+- Helper functions:
+  - get_invoice_payment_summary(invoice_id) - payment status for invoice
+  - get_supplier_invoices_summary(org_id) - counts by status
+  - get_invoices_for_supplier(supplier_id) - list with payment info
+- Created v_supplier_invoices_with_payments view
+- Status: COMPLETE
