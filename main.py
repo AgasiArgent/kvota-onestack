@@ -1676,6 +1676,20 @@ def get(quote_id: str, session):
         except ImportError:
             pass
 
+    # Fetch pickup location info for items that have pickup_location_id (UI-018 v3.0)
+    pickup_location_map = {}
+    pickup_location_ids = [item.get("pickup_location_id") for item in items if item.get("pickup_location_id")]
+    if pickup_location_ids:
+        try:
+            from services.location_service import get_location
+            for pickup_location_id in set(pickup_location_ids):
+                try:
+                    pickup_location_map[pickup_location_id] = get_location(pickup_location_id)
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
     # Helper to get supplier info for an item
     def get_item_supplier(item):
         return supplier_map.get(item.get("supplier_id"))
@@ -1684,6 +1698,10 @@ def get(quote_id: str, session):
     def get_item_buyer_company(item):
         return buyer_company_map.get(item.get("buyer_company_id"))
 
+    # Helper to get pickup location info for an item (UI-018)
+    def get_item_pickup_location(item):
+        return pickup_location_map.get(item.get("pickup_location_id"))
+
     return page_layout(f"Products - {quote.get('idn_quote', '')}",
         H1(f"Add Products to {quote.get('idn_quote', '')}"),
 
@@ -1691,7 +1709,7 @@ def get(quote_id: str, session):
         Div(
             H3(f"Products ({len(items)})"),
             Div(id="products-list",
-                *[product_row(item, quote["currency"], supplier_info=get_item_supplier(item), buyer_company_info=get_item_buyer_company(item)) for item in items]
+                *[product_row(item, quote["currency"], supplier_info=get_item_supplier(item), buyer_company_info=get_item_buyer_company(item), pickup_location_info=get_item_pickup_location(item)) for item in items]
             ) if items else Div(P("No products yet. Add your first product below."), id="products-list"),
             cls="card"
         ),
@@ -1729,6 +1747,17 @@ def get(quote_id: str, session):
                         required=False,
                         placeholder="Выберите компанию...",
                         help_text="Наше юрлицо для закупки данной позиции"
+                    ),
+                    cls="form-row"
+                ),
+                # Supply chain: Pickup location selector (UI-018)
+                Div(
+                    location_dropdown(
+                        name="pickup_location_id",
+                        label="Точка отгрузки",
+                        required=False,
+                        placeholder="Поиск локации...",
+                        help_text="Откуда забирать товар у поставщика"
                     ),
                     cls="form-row"
                 ),
@@ -1784,8 +1813,8 @@ def get(quote_id: str, session):
     )
 
 
-def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=None):
-    """Render a single product row with optional supplier and buyer company info (UI-016, UI-017)"""
+def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=None, pickup_location_info=None):
+    """Render a single product row with optional supplier, buyer company, and pickup location info (UI-016, UI-017, UI-018)"""
     total = (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else Decimal(0)
 
     # Build product info with supplier/buyer company badges if available
@@ -1826,6 +1855,24 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
                  title="Компания-покупатель назначена")
         )
 
+    # Add pickup location badge if pickup location is assigned (v3.0 - UI-018)
+    if pickup_location_info:
+        location_code = pickup_location_info.code if hasattr(pickup_location_info, 'code') else pickup_location_info.get('code', '')
+        location_city = pickup_location_info.city if hasattr(pickup_location_info, 'city') else pickup_location_info.get('city', '')
+        location_country = pickup_location_info.country if hasattr(pickup_location_info, 'country') else pickup_location_info.get('country', '')
+        location_display = location_code or location_city[:15] or "—"
+        location_full = f"{location_city}, {location_country}" if location_city else location_country
+        product_content.append(
+            Span(f" 📍 {location_display}", style="color: #cc6600; font-size: 0.85em; margin-left: 0.5rem;",
+                 title=f"Точка отгрузки: {location_full}")
+        )
+    elif item.get("pickup_location_id"):
+        # Pickup location ID exists but info not passed - show placeholder
+        product_content.append(
+            Span(" 📍", style="color: #cc6600; font-size: 0.85em; margin-left: 0.5rem;",
+                 title="Точка отгрузки назначена")
+        )
+
     return Div(
         Div(*product_content, style="flex: 2;"),
         Div(f"Qty: {item.get('quantity', 0)}", style="flex: 1;"),
@@ -1849,7 +1896,7 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
 @rt("/quotes/{quote_id}/products")
 def post(quote_id: str, product_name: str, product_code: str, brand: str, quantity: int,
          base_price_vat: float, weight_in_kg: float, supplier_country: str, customs_code: str,
-         supplier_id: str = None, buyer_company_id: str = None, session=None):
+         supplier_id: str = None, buyer_company_id: str = None, pickup_location_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -1891,6 +1938,10 @@ def post(quote_id: str, product_name: str, product_code: str, brand: str, quanti
         if buyer_company_id and buyer_company_id.strip():
             item_data["buyer_company_id"] = buyer_company_id.strip()
 
+        # Add pickup_location_id if provided (v3.0 supply chain - UI-018)
+        if pickup_location_id and pickup_location_id.strip():
+            item_data["pickup_location_id"] = pickup_location_id.strip()
+
         result = supabase.table("quote_items").insert(item_data).execute()
 
         new_item = result.data[0]
@@ -1913,8 +1964,17 @@ def post(quote_id: str, product_name: str, product_code: str, brand: str, quanti
             except Exception:
                 pass
 
+        # Fetch pickup location info for display if pickup_location_id was set (UI-018)
+        pickup_location_info = None
+        if new_item.get("pickup_location_id"):
+            try:
+                from services.location_service import get_location
+                pickup_location_info = get_location(new_item["pickup_location_id"])
+            except Exception:
+                pass
+
         # Return just the new row for HTMX to append
-        return product_row(new_item, quote["currency"], supplier_info=supplier_info, buyer_company_info=buyer_company_info)
+        return product_row(new_item, quote["currency"], supplier_info=supplier_info, buyer_company_info=buyer_company_info, pickup_location_info=pickup_location_info)
 
     except Exception as e:
         return Div(f"Error: {str(e)}", cls="alert alert-error")

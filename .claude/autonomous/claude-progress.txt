@@ -3323,3 +3323,35 @@ Implementation:
 - Placeholder badge shown when buyer_company_id set but info not loaded
 Tests: 22 passing (test_ui_quote_buyer_company.py)
 
+
+========================================
+2026-01-15 20:54:13 - UI-018 COMPLETE
+========================================
+Feature: Quote item form: pickup location selector
+
+Changes made:
+1. Added location_dropdown() to Add Product form (main.py lines ~1735-1744)
+   - name='pickup_location_id', label='Точка отгрузки'
+   - help_text='Откуда забирать товар у поставщика'
+   - Uses /api/locations/search with HTMX
+
+2. Updated POST /quotes/{id}/products handler (main.py):
+   - Added pickup_location_id parameter (optional)
+   - Saves to item_data if provided
+   - Fetches location info for product_row display
+
+3. Updated product_row() function (main.py):
+   - Added pickup_location_info parameter
+   - Shows 📍 badge in orange (#cc6600)
+   - Badge shows code or city, title shows full location
+
+4. Updated GET /quotes/{id}/products handler (main.py):
+   - Added pickup_location_map for batch fetching
+   - Added get_item_pickup_location() helper
+   - Passes pickup_location_info to product_row
+
+Tests: 33 passing tests in tests/test_ui_quote_pickup_location.py
+
+Progress: 69/94 features complete
+Next: UI-019 (Procurement workspace view)
+
