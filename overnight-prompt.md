@@ -183,6 +183,59 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - Updatable view rules for full CRUD
    - Helper functions: get_procurement_manager_for_brand(), etc.
 
+10. **DB-010** (route_logistics_assignments) - ✅ COMPLETE
+   - Created `migrations/027_create_route_logistics_assignments_table.sql`
+   - Routes to logistics managers with pattern matching (wildcards)
+
+11. **DB-011** (quotes extension) - ✅ COMPLETE
+   - Created `migrations/028_extend_quotes_v3.sql`
+   - Added idn, seller_company_id, IDN generation functions
+
+12. **DB-012** (quote_items supply chain) - ✅ COMPLETE
+   - Created `migrations/029_extend_quote_items_supply_chain.sql`
+   - item_idn, supplier_id, buyer_company_id, pickup_location_id
+
+13. **DB-013** (quote_items logistics) - ✅ COMPLETE
+   - Created `migrations/030_extend_quote_items_logistics.sql`
+   - 4 logistics cost segments + total_days
+
+14. **DB-014** (quote_items customs) - ✅ COMPLETE
+   - Created `migrations/031_extend_quote_items_customs.sql`
+   - hs_code, customs_duty_percent, customs_extra_cost
+
+15. **DB-015** (supplier_invoices) - ✅ COMPLETE
+   - Created `migrations/032_create_supplier_invoices_table.sql`
+
+16. **DB-016** (supplier_invoice_items) - ✅ COMPLETE
+   - Created `migrations/033_create_supplier_invoice_items_table.sql`
+
+17. **DB-017** (supplier_invoice_payments) - ✅ COMPLETE
+   - Created `migrations/034_create_supplier_invoice_payments_table.sql`
+
+18. **DB-018** (workflow_transitions) - ✅ VERIFIED
+   - Table exists from v2.0
+
+19. **DB-019** (approvals modifications) - ✅ COMPLETE
+   - Created `migrations/035_add_modifications_to_approvals.sql`
+
+20. **DB-020** (specifications extension) - ✅ COMPLETE
+   - Created `migrations/036_extend_specifications_v3.sql`
+
+21. **DB-021** (deals extension) - ✅ COMPLETE
+   - Created `migrations/037_extend_deals_v3.sql`
+
+22. **DB-022** (plan_fact_categories) - ✅ COMPLETE
+   - Created `migrations/038_create_plan_fact_categories_table.sql`
+
+23. **DB-023** (plan_fact_items) - ✅ COMPLETE
+   - Created `migrations/039_create_plan_fact_items_table.sql`
+
+24. **DB-024** (telegram_users) - ✅ COMPLETE
+   - Created `migrations/040_create_telegram_users_table.sql`
+   - Telegram account linking with verification flow
+   - Notification preferences per type
+   - Helper functions for verification and recipients
+
 ### Progress:
-- v3.0 features complete: **9/94**
-- Next feature: **DB-010** (route_logistics_assignments)
+- v3.0 features complete: **24/94**
+- Next feature: **DB-025** (notifications table)
