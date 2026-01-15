@@ -402,16 +402,20 @@
       "name": "Auto-transition: procurement complete",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Auto-advance when all brands evaluated"
+      "passes": true,
+      "completed_at": "2026-01-15T23:45:00Z",
+      "description": "Auto-advance when all brands evaluated",
+      "notes": "Implementation already exists in workflow_service.py. Functions: check_all_procurement_complete() - checks if ALL quote_items have procurement_status='completed' and returns completion stats (is_complete, total_items, completed_items, pending_items). complete_procurement() - validates role (procurement/admin), validates status (must be pending_procurement), validates not already completed, checks all items complete, sets procurement_completed_at timestamp, transitions to pending_logistics, logs transition. Added 11 tests in TestProcurementAutoTransition class."
     },
     {
       "id": "WF-003",
       "name": "Auto-transition: logistics+customs complete",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Auto-advance when BOTH logistics and customs done"
+      "passes": true,
+      "completed_at": "2026-01-15T23:45:00Z",
+      "description": "Auto-advance when BOTH logistics and customs done",
+      "notes": "Implementation already exists in workflow_service.py. Functions: complete_logistics() - validates role (logistics/admin), sets logistics_completed_at, triggers auto-transition check. complete_customs() - validates role (customs/admin), sets customs_completed_at, triggers auto-transition check. check_and_auto_transition_to_sales_review() - if BOTH completed, transitions to pending_sales_review. get_parallel_stages_status() - returns dict with logistics_completed, customs_completed, both_completed flags. Added 9 tests in TestLogisticsCustomsAutoTransition class."
     },
     {
       "id": "WF-004",

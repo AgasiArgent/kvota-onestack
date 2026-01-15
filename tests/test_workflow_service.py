@@ -647,5 +647,378 @@ class TestPerformance:
         assert matrix1 == matrix2
 
 
+# =============================================================================
+# WF-002: AUTO-TRANSITION PROCUREMENT COMPLETE TESTS
+# =============================================================================
+
+class TestProcurementAutoTransition:
+    """Tests for WF-002: Auto-transition when all brands are evaluated."""
+
+    def test_check_all_procurement_complete_import(self):
+        """check_all_procurement_complete function should be importable."""
+        from services.workflow_service import check_all_procurement_complete
+        assert callable(check_all_procurement_complete)
+
+    def test_complete_procurement_import(self):
+        """complete_procurement function should be importable."""
+        from services.workflow_service import complete_procurement
+        assert callable(complete_procurement)
+
+    @patch('services.workflow_service.get_supabase')
+    def test_check_all_procurement_complete_all_done(self, mock_supabase):
+        """check_all_procurement_complete returns True when all items complete."""
+        from services.workflow_service import check_all_procurement_complete
+
+        # Mock Supabase response - all items completed
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.data = [
+            {"id": "item1", "procurement_status": "completed"},
+            {"id": "item2", "procurement_status": "completed"},
+            {"id": "item3", "procurement_status": "completed"},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+
+        result = check_all_procurement_complete("quote-uuid")
+
+        assert result["is_complete"] is True
+        assert result["total_items"] == 3
+        assert result["completed_items"] == 3
+        assert result["pending_items"] == 0
+
+    @patch('services.workflow_service.get_supabase')
+    def test_check_all_procurement_complete_partial(self, mock_supabase):
+        """check_all_procurement_complete returns False when items pending."""
+        from services.workflow_service import check_all_procurement_complete
+
+        # Mock Supabase response - some items pending
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.data = [
+            {"id": "item1", "procurement_status": "completed"},
+            {"id": "item2", "procurement_status": "pending"},
+            {"id": "item3", "procurement_status": "in_progress"},
+        ]
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+
+        result = check_all_procurement_complete("quote-uuid")
+
+        assert result["is_complete"] is False
+        assert result["total_items"] == 3
+        assert result["completed_items"] == 1
+        assert result["pending_items"] == 2
+
+    @patch('services.workflow_service.get_supabase')
+    def test_check_all_procurement_complete_empty(self, mock_supabase):
+        """check_all_procurement_complete returns False for empty quote."""
+        from services.workflow_service import check_all_procurement_complete
+
+        # Mock Supabase response - no items
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+        mock_response = MagicMock()
+        mock_response.data = []
+        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+
+        result = check_all_procurement_complete("quote-uuid")
+
+        assert result["is_complete"] is False
+        assert result["total_items"] == 0
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_procurement_wrong_role(self, mock_supabase):
+        """complete_procurement rejects users without procurement role."""
+        from services.workflow_service import complete_procurement
+
+        result = complete_procurement(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["sales"]  # Wrong role
+        )
+
+        assert result.success is False
+        assert "procurement" in result.error_message.lower() or "admin" in result.error_message.lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_procurement_procurement_role_accepted(self, mock_supabase):
+        """complete_procurement accepts procurement role."""
+        from services.workflow_service import complete_procurement, WorkflowStatus
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        # Mock quote query
+        mock_quote_response = MagicMock()
+        mock_quote_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+            "procurement_completed_at": None
+        }
+
+        # Mock items query (all complete)
+        mock_items_response = MagicMock()
+        mock_items_response.data = [
+            {"id": "item1", "procurement_status": "completed"},
+        ]
+
+        # Mock update
+        mock_update_response = MagicMock()
+        mock_update_response.data = [{"id": "quote-uuid"}]
+
+        # Mock transition log
+        mock_log_response = MagicMock()
+        mock_log_response.data = [{"id": "transition-uuid"}]
+
+        # Setup call chain
+        table_mock = MagicMock()
+        mock_client.table.return_value = table_mock
+
+        # First call: quotes.select().eq().single().execute()
+        # Second call: quote_items.select().eq().execute()
+        # Third call: quotes.update().eq().execute()
+        # Fourth call: workflow_transitions.insert().execute()
+        call_count = [0]
+
+        def table_side_effect(table_name):
+            call_count[0] += 1
+            if table_name == "quotes" and call_count[0] == 1:
+                chain = MagicMock()
+                chain.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_quote_response
+                return chain
+            elif table_name == "quote_items":
+                chain = MagicMock()
+                chain.select.return_value.eq.return_value.execute.return_value = mock_items_response
+                return chain
+            elif table_name == "quotes" and call_count[0] > 1:
+                chain = MagicMock()
+                chain.update.return_value.eq.return_value.execute.return_value = mock_update_response
+                return chain
+            else:
+                chain = MagicMock()
+                chain.insert.return_value.execute.return_value = mock_log_response
+                return chain
+
+        mock_client.table.side_effect = table_side_effect
+
+        result = complete_procurement(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["procurement"]
+        )
+
+        # Should succeed with procurement role
+        assert result.success is True
+        assert result.to_status == WorkflowStatus.PENDING_LOGISTICS.value
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_procurement_admin_role_accepted(self, mock_supabase):
+        """complete_procurement accepts admin role."""
+        from services.workflow_service import complete_procurement, WorkflowStatus
+
+        # Simplified mock - just check role validation passes
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        # Mock quote in wrong status to trigger early return
+        mock_response = MagicMock()
+        mock_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": "draft",  # Wrong status
+            "procurement_completed_at": None
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = complete_procurement(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["admin"]
+        )
+
+        # Should pass role check but fail on status (not "role denied")
+        assert "procurement" not in result.error_message.lower() or "status" in result.error_message.lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_procurement_wrong_status(self, mock_supabase):
+        """complete_procurement fails if quote not in pending_procurement."""
+        from services.workflow_service import complete_procurement
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        # Quote in wrong status
+        mock_response = MagicMock()
+        mock_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": "draft",
+            "procurement_completed_at": None
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = complete_procurement(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["procurement"]
+        )
+
+        assert result.success is False
+        assert "status" in result.error_message.lower() or "cannot complete" in result.error_message.lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_procurement_already_completed(self, mock_supabase):
+        """complete_procurement fails if already completed."""
+        from services.workflow_service import complete_procurement, WorkflowStatus
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        # Quote with procurement already completed
+        mock_response = MagicMock()
+        mock_response.data = {
+            "id": "quote-uuid",
+            "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+            "procurement_completed_at": "2026-01-15T12:00:00Z"  # Already done
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = complete_procurement(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["procurement"]
+        )
+
+        assert result.success is False
+        assert "already" in result.error_message.lower()
+
+    def test_get_quote_procurement_status_import(self):
+        """get_quote_procurement_status function should be importable."""
+        from services.workflow_service import get_quote_procurement_status
+        assert callable(get_quote_procurement_status)
+
+
+# =============================================================================
+# WF-003: AUTO-TRANSITION LOGISTICS+CUSTOMS COMPLETE TESTS
+# =============================================================================
+
+class TestLogisticsCustomsAutoTransition:
+    """Tests for WF-003: Auto-transition when BOTH logistics and customs done."""
+
+    def test_complete_logistics_import(self):
+        """complete_logistics function should be importable."""
+        from services.workflow_service import complete_logistics
+        assert callable(complete_logistics)
+
+    def test_complete_customs_import(self):
+        """complete_customs function should be importable."""
+        from services.workflow_service import complete_customs
+        assert callable(complete_customs)
+
+    def test_check_and_auto_transition_import(self):
+        """check_and_auto_transition_to_sales_review should be importable."""
+        from services.workflow_service import check_and_auto_transition_to_sales_review
+        assert callable(check_and_auto_transition_to_sales_review)
+
+    def test_get_parallel_stages_status_import(self):
+        """get_parallel_stages_status function should be importable."""
+        from services.workflow_service import get_parallel_stages_status
+        assert callable(get_parallel_stages_status)
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_logistics_wrong_role(self, mock_supabase):
+        """complete_logistics rejects users without logistics role."""
+        from services.workflow_service import complete_logistics
+
+        result = complete_logistics(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["sales"]  # Wrong role
+        )
+
+        assert result.success is False
+        assert "logistics" in result.error_message.lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_complete_customs_wrong_role(self, mock_supabase):
+        """complete_customs rejects users without customs role."""
+        from services.workflow_service import complete_customs
+
+        result = complete_customs(
+            quote_id="quote-uuid",
+            actor_id="user-uuid",
+            actor_roles=["sales"]  # Wrong role
+        )
+
+        assert result.success is False
+        assert "customs" in result.error_message.lower()
+
+    @patch('services.workflow_service.get_supabase')
+    def test_get_parallel_stages_status_both_incomplete(self, mock_supabase):
+        """get_parallel_stages_status returns correct state when both incomplete."""
+        from services.workflow_service import get_parallel_stages_status
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = {
+            "workflow_status": "pending_logistics",
+            "logistics_completed_at": None,
+            "customs_completed_at": None
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = get_parallel_stages_status("quote-uuid")
+
+        assert result["logistics_completed"] is False
+        assert result["customs_completed"] is False
+        assert result["both_completed"] is False
+
+    @patch('services.workflow_service.get_supabase')
+    def test_get_parallel_stages_status_logistics_only(self, mock_supabase):
+        """get_parallel_stages_status handles logistics-only completion."""
+        from services.workflow_service import get_parallel_stages_status
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = {
+            "workflow_status": "pending_logistics",
+            "logistics_completed_at": "2026-01-15T12:00:00Z",
+            "customs_completed_at": None
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = get_parallel_stages_status("quote-uuid")
+
+        assert result["logistics_completed"] is True
+        assert result["customs_completed"] is False
+        assert result["both_completed"] is False
+
+    @patch('services.workflow_service.get_supabase')
+    def test_get_parallel_stages_status_both_complete(self, mock_supabase):
+        """get_parallel_stages_status returns True when both complete."""
+        from services.workflow_service import get_parallel_stages_status
+
+        mock_client = MagicMock()
+        mock_supabase.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.data = {
+            "workflow_status": "pending_logistics",
+            "logistics_completed_at": "2026-01-15T12:00:00Z",
+            "customs_completed_at": "2026-01-15T13:00:00Z"
+        }
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_response
+
+        result = get_parallel_stages_status("quote-uuid")
+
+        assert result["logistics_completed"] is True
+        assert result["customs_completed"] is True
+        assert result["both_completed"] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
