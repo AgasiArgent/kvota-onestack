@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "Kvota OneStack - Quote Workflow System with Supply Chain",
-  "description": "Расширение OneStack: 4 типа компаний в цепочке поставок, IDN система, реестр инвойсов поставщиков, 12 ролей",
+  "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0435 OneStack: 4 \u0442\u0438\u043f\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439 \u0432 \u0446\u0435\u043f\u043e\u0447\u043a\u0435 \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a, IDN \u0441\u0438\u0441\u0442\u0435\u043c\u0430, \u0440\u0435\u0435\u0441\u0442\u0440 \u0438\u043d\u0432\u043e\u0439\u0441\u043e\u0432 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432, 12 \u0440\u043e\u043b\u0435\u0439",
   "created": "2025-01-15T00:00:00Z",
   "stack": "Python FastHTML + HTMX + Supabase",
   "spec_file": ".claude/autonomous/app_spec.xml",
@@ -125,7 +125,7 @@
       "passes": true,
       "completed_at": "2026-01-15T18:30:00Z",
       "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days",
-      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier→hub, hub→customs, customs→customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
+      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier\u2192hub, hub\u2192customs, customs\u2192customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
     },
     {
       "id": "DB-014",
@@ -312,8 +312,10 @@
       "name": "CRUD API for customers with contacts",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Manage customers and their contacts"
+      "passes": true,
+      "description": "Manage customers and their contacts",
+      "completed_at": "2026-01-15T18:49:08.723871Z",
+      "notes": "Created services/customer_service.py with: Customer/CustomerContact dataclasses, validation functions (inn, kpp, ogrn, email, phone), customer CRUD (create, get, get_with_contacts, get_by_inn, get_all, get_active, count, search, update, activate/deactivate, add/remove_warehouse_address, delete), contact CRUD (create, get, get_for_customer, get_signatory, get_primary, count, update, set_signatory, set_primary, delete, delete_all), utility functions (stats, display_name, dropdown format, for_document, for_idn, signatory_for_specification). Tests in tests/test_customer_service.py with 53 passing tests."
     },
     {
       "id": "API-005",
