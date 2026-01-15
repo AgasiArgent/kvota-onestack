@@ -152,12 +152,13 @@ App runs at http://localhost:5001
 - [x] Feature #67: Страница /spec-control (2026-01-15) - Created /spec-control workspace page for spec_controller role. Shows quotes pending specification creation (pending_spec_control status), specifications grouped by status (draft, pending_review, approved, signed). Added 'Спецификации' link to nav_bar. Stats cards, status filter, action buttons.
 - [x] Feature #68: Список спецификаций на проверке (2026-01-15) - Already in #67: dedicated section showing specs at pending_review status with filtering.
 - [x] Feature #69: Форма ввода данных спецификации (2026-01-15) - Complete spec data entry form with all 18 fields in 5 sections. Routes: /spec-control/create/{quote_id} (GET/POST), /spec-control/{spec_id} (GET/POST). Pre-fills from quote data, supports status transitions draft→pending_review→approved.
+- [x] Feature #70: Preview PDF спецификации (2026-01-15) - Full PDF preview functionality using all 18 spec fields. Enhanced specification_export.py with SpecificationData, fetch_specification_data(), generate_spec_pdf_html(), generate_spec_pdf_from_spec_id(). Route: /spec-control/{spec_id}/preview-pdf. Added "Предпросмотр PDF" button to spec edit page.
 
 ### Next Up
-- Feature #70: Preview PDF спецификации (Specification PDF preview)
+- Feature #71: Загрузка подписанного скана (Upload signed scan + save URL)
 
 ### Progress
-- **69 of 88 features completed** (78%)
+- **70 of 88 features completed** (80%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

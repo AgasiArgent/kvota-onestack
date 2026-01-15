@@ -802,10 +802,11 @@
       "name": "Preview PDF спецификации",
       "description": "Предпросмотр сгенерированного PDF",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T17:00:00Z",
+      "completed_at": "2026-01-15T17:45:00Z",
+      "notes": "Implemented /spec-control/{spec_id}/preview-pdf route. Enhanced specification_export.py with SpecificationData class, fetch_specification_data(), generate_spec_pdf_html(), and generate_spec_pdf_from_spec_id(). Uses all 18 specification fields from the specifications table. Added 'Предпросмотр PDF' button to spec edit page. PDF opens in new tab with inline display."
     },
     {
       "id": 71,

@@ -1715,3 +1715,45 @@
 - Files changed:
   - main.py (~900 lines added for 4 routes)
 - Status: COMPLETE - Feature #69 done
+
+
+## Session 2026-01-15 - Feature #70: Preview PDF спецификации (Specification PDF Preview)
+- Implemented specification PDF preview functionality
+- Enhanced services/specification_export.py (~450 lines added):
+  - SpecificationData dataclass for PDF generation data
+  - fetch_specification_data(spec_id, org_id) → SpecificationData:
+    - Fetches specification record from specifications table
+    - Fetches associated quote, customer, organization
+    - Fetches quote items with calculation results
+    - Calculates totals from items if no summary exists
+  - _calculate_totals_from_items() helper for fallback totals
+  - generate_spec_pdf_html(data) → str:
+    - Generates HTML using all 18 specification fields
+    - Professional Russian document layout
+    - Includes: header, parties, products table, totals, terms, delivery info, signatures
+    - Uses specification_currency, exchange_rate, legal entities from spec
+    - Amount in words using num2words
+  - generate_spec_pdf_from_spec_id(spec_id, org_id) → bytes:
+    - Main function to generate PDF from spec ID
+    - Uses weasyprint for HTML → PDF conversion
+- Created route in main.py (~80 lines added):
+  - GET /spec-control/{spec_id}/preview-pdf:
+    - Role check for spec_controller/admin
+    - Generates PDF using generate_spec_pdf_from_spec_id
+    - Returns inline PDF (opens in browser tab)
+    - Filename includes spec number for clarity
+    - Error handling for missing specs and generation failures
+- Updated specification edit page:
+  - Added "📄 Предпросмотр PDF" button (cyan color)
+  - Opens in new browser tab (target="_blank")
+  - Available for all specification statuses
+- Updated services/__init__.py exports:
+  - SpecificationData, fetch_specification_data
+  - generate_spec_pdf_html, generate_spec_pdf_from_spec_id
+- All syntax verified with py_compile
+- Imports tested in venv
+- Files changed:
+  - services/specification_export.py (~450 lines added)
+  - services/__init__.py (updated exports)
+  - main.py (~85 lines added for route and button)
+- Status: COMPLETE - Feature #70 done

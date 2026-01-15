@@ -9,7 +9,14 @@ Telegram bot service for notifications and approvals.
 
 from .database import get_supabase, get_anon_client
 from .export_data_mapper import fetch_export_data, ExportData
-from .specification_export import generate_specification_pdf
+from .specification_export import (
+    generate_specification_pdf,
+    # Feature #70: Enhanced PDF generation from specifications table
+    SpecificationData,
+    fetch_specification_data,
+    generate_spec_pdf_html,
+    generate_spec_pdf_from_spec_id,
+)
 from .invoice_export import generate_invoice_pdf
 from .validation_export import create_validation_excel
 from .quote_version_service import create_quote_version, list_quote_versions, get_quote_version

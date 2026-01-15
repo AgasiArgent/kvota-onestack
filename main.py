@@ -18,7 +18,7 @@ from services.database import get_supabase, get_anon_client
 
 # Import export services
 from services.export_data_mapper import fetch_export_data
-from services.specification_export import generate_specification_pdf
+from services.specification_export import generate_specification_pdf, generate_spec_pdf_from_spec_id
 from services.invoice_export import generate_invoice_pdf
 from services.validation_export import create_validation_excel
 from services.procurement_export import create_procurement_excel
@@ -7483,6 +7483,10 @@ def get(session, spec_id: str):
                 Button("✅ Утвердить", type="submit", name="action", value="approve",
                        style="background: #28a745; border-color: #28a745; margin-left: 1rem;",
                        disabled=not is_editable) if is_editable and status == "pending_review" else None,
+                # Feature #70: PDF Preview button
+                A("📄 Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf",
+                  target="_blank", role="button",
+                  style="background: #17a2b8; border-color: #17a2b8; margin-left: 1rem; text-decoration: none;"),
                 A("← Назад к спецификациям", href="/spec-control", role="button",
                   style="background: #6c757d; border-color: #6c757d; margin-left: 1rem;"),
                 style="margin-top: 1rem;"
@@ -7590,6 +7594,89 @@ def post(session, spec_id: str, action: str = "save", **kwargs):
         .execute()
 
     return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+
+# ============================================================================
+# Feature #70: Specification PDF Preview
+# ============================================================================
+
+@rt("/spec-control/{spec_id}/preview-pdf")
+def get(session, spec_id: str):
+    """
+    Preview/download specification PDF.
+
+    Feature #70: Preview PDF спецификации
+
+    Generates PDF using all 18 specification fields from the specifications table.
+    Returns PDF for download or viewing in browser.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check role access
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    try:
+        # Generate PDF using enhanced specification export function
+        pdf_bytes = generate_spec_pdf_from_spec_id(spec_id, org_id)
+
+        # Get spec number for filename
+        supabase = get_supabase()
+        spec_result = supabase.table("specifications") \
+            .select("specification_number, proposal_idn") \
+            .eq("id", spec_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+
+        spec_number = "spec"
+        if spec_result.data:
+            spec_number = spec_result.data[0].get("specification_number") or spec_result.data[0].get("proposal_idn") or "spec"
+
+        # Clean filename for safe characters
+        safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
+
+        # Return as file download (or inline view)
+        from starlette.responses import Response
+        filename = f"specification_{safe_spec_number}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                # Use "inline" for browser preview, "attachment" for download
+                "Content-Disposition": f'inline; filename="{filename}"'
+            }
+        )
+
+    except ValueError as e:
+        return page_layout("Ошибка",
+            H1("Ошибка генерации PDF"),
+            Div(
+                f"Не удалось сгенерировать PDF: {str(e)}",
+                cls="card",
+                style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+    except Exception as e:
+        print(f"Error generating specification PDF: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка генерации PDF"),
+            Div(
+                f"Произошла ошибка при генерации PDF. Пожалуйста, попробуйте позже.",
+                cls="card",
+                style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            P(f"Техническая информация: {str(e)}", style="font-size: 0.8rem; color: #666;"),
+            A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
 
 
 # ============================================================================
