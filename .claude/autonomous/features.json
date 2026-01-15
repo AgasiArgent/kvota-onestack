@@ -488,8 +488,10 @@
       "name": "Plan-fact auto-generation",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Generate planned payments from deal terms"
+      "passes": true,
+      "completed_at": "2026-01-15T20:30:00Z",
+      "description": "Generate planned payments from deal terms",
+      "notes": "Implementation exists in services/plan_fact_service.py with: GeneratePlanFactResult dataclass, generate_plan_fact_from_deal() function that reads deal/spec/quote data, extracts calculation variables (advance percentages, timing), calculates totals (purchase, logistics, customs), and generates plan_fact_items for client payments (advance+remaining), supplier payments (advance+remaining), logistics costs, customs costs, and bank commissions. Also includes regenerate_plan_fact_for_deal() wrapper and get_plan_fact_generation_preview() for UI preview before generation. Tests: tests/test_plan_fact_generation.py with 44 passing tests."
     },
     {
       "id": "DEAL-003",
