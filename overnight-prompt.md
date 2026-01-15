@@ -106,15 +106,16 @@ App runs at http://localhost:5001
 - [x] Feature #21: Middleware require_role (2025-01-15)
 - [x] Feature #22: Контекст пользователя с ролями (2025-01-15)
 - [x] Feature #23: Enum статусов workflow (2025-01-15)
+- [x] Feature #24: Матрица переходов статусов (2025-01-15)
 
 ### Next Up
-- Feature #24: Матрица переходов статусов (already defined in workflow_service.py)
+- Feature #25: Сервис перехода статуса (transition_quote_status function)
 
 ### Progress
-- **23 of 88 features completed** (26%)
+- **24 of 88 features completed** (27%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
-- **WORKFLOW ENGINE STARTED** (feature 23 done)
+- **WORKFLOW ENGINE IN PROGRESS** (features 23-24 done, 6 more to go: 25-32)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -130,7 +131,12 @@ App runs at http://localhost:5001
   - ALLOWED_TRANSITIONS list with 26 transitions
   - STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS dicts
   - get_allowed_transitions, can_transition, is_final_status helpers
+  - **NEW (Feature #24)**: Permission matrix functions:
+    - get_transition_requirements, get_roles_for_transition
+    - get_transitions_by_role, get_permission_matrix, get_permission_matrix_detailed
+    - get_outgoing_transitions, get_incoming_transitions
+    - is_comment_required, is_auto_transition
 - Added /unauthorized route in main.py
 - Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
 - Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
-- Next: Continue workflow engine phase (features 24-32)
+- Next: Feature #25 - Implement transition_quote_status function

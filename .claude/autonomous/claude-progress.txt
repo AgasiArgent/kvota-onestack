@@ -575,3 +575,22 @@
   - services/workflow_service.py (new)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #24: Матрица переходов статусов
+- Extended workflow_service.py with permission matrix functions:
+  - get_transition_requirements(from, to) → StatusTransition - Get requirements for specific transition
+  - get_roles_for_transition(from, to) → List[str] - Get roles that can perform transition
+  - get_transitions_by_role(role_code) → List[Dict] - Get all transitions a role can perform
+  - get_permission_matrix() → Dict - Complete nested dict for UI {from: {to: [roles]}}
+  - get_permission_matrix_detailed() → List[Dict] - Full details for table display
+  - get_outgoing_transitions(status) → List[Dict] - All possible destinations from status
+  - get_incoming_transitions(status) → List[Dict] - All possible sources to status
+  - is_comment_required(from, to) → bool - Check if transition needs comment
+  - is_auto_transition(from, to) → bool - Check if transition is automatic
+- Updated services/__init__.py to export all new functions
+- All functions handle both WorkflowStatus enum and string status codes
+- Verified syntax with py_compile
+- Files changed:
+  - services/workflow_service.py (updated - added ~250 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

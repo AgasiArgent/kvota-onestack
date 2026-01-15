@@ -266,10 +266,10 @@
       "name": "Матрица переходов статусов",
       "description": "Кто может перевести из какого статуса в какой",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T16:00:00Z",
+      "completed_at": "2025-01-15T16:30:00Z"
     },
     {
       "id": 25,

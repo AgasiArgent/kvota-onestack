@@ -693,3 +693,296 @@ def get_all_statuses() -> List[Dict[str, str]]:
         {"code": status.value, "name": STATUS_NAMES[status]}
         for status in WorkflowStatus
     ]
+
+
+# =============================================================================
+# PERMISSION MATRIX FUNCTIONS (Feature #24)
+# =============================================================================
+
+def get_transition_requirements(
+    from_status: WorkflowStatus | str,
+    to_status: WorkflowStatus | str
+) -> Optional[StatusTransition]:
+    """
+    Get the transition requirements for a specific status change.
+
+    Args:
+        from_status: Source workflow status
+        to_status: Target workflow status
+
+    Returns:
+        StatusTransition with requirements, or None if transition not allowed
+
+    Example:
+        >>> req = get_transition_requirements('draft', 'pending_procurement')
+        >>> if req:
+        ...     print(f"Allowed roles: {req.allowed_roles}")
+        ...     print(f"Comment required: {req.requires_comment}")
+    """
+    # Convert strings to enums
+    if isinstance(from_status, str):
+        try:
+            from_status = WorkflowStatus(from_status)
+        except ValueError:
+            return None
+
+    if isinstance(to_status, str):
+        try:
+            to_status = WorkflowStatus(to_status)
+        except ValueError:
+            return None
+
+    # Find matching transition
+    available = _TRANSITIONS_BY_STATUS.get(from_status, [])
+    for transition in available:
+        if transition.to_status == to_status:
+            return transition
+
+    return None
+
+
+def get_roles_for_transition(
+    from_status: WorkflowStatus | str,
+    to_status: WorkflowStatus | str
+) -> List[str]:
+    """
+    Get list of roles that can perform a specific transition.
+
+    Args:
+        from_status: Source workflow status
+        to_status: Target workflow status
+
+    Returns:
+        List of role codes, or empty list if transition not allowed
+
+    Example:
+        >>> roles = get_roles_for_transition('draft', 'pending_procurement')
+        >>> print(roles)  # ['sales', 'admin']
+    """
+    transition = get_transition_requirements(from_status, to_status)
+    if transition:
+        return transition.allowed_roles
+    return []
+
+
+def get_transitions_by_role(role_code: str) -> List[Dict]:
+    """
+    Get all transitions that a specific role can perform.
+
+    Args:
+        role_code: Role code (e.g., 'sales', 'procurement', 'admin')
+
+    Returns:
+        List of dicts with transition details:
+        - from_status: Source status code
+        - from_status_name: Source status name
+        - to_status: Target status code
+        - to_status_name: Target status name
+        - requires_comment: Whether comment is required
+        - auto_transition: Whether this is automatic
+
+    Example:
+        >>> sales_transitions = get_transitions_by_role('sales')
+        >>> for t in sales_transitions:
+        ...     print(f"{t['from_status_name']} → {t['to_status_name']}")
+    """
+    result = []
+    for transition in ALLOWED_TRANSITIONS:
+        if role_code in transition.allowed_roles:
+            result.append({
+                "from_status": transition.from_status.value,
+                "from_status_name": STATUS_NAMES[transition.from_status],
+                "to_status": transition.to_status.value,
+                "to_status_name": STATUS_NAMES[transition.to_status],
+                "requires_comment": transition.requires_comment,
+                "auto_transition": transition.auto_transition
+            })
+    return result
+
+
+def get_permission_matrix() -> Dict[str, Dict[str, List[str]]]:
+    """
+    Get the complete permission matrix for UI display.
+
+    Returns:
+        Nested dict: {from_status: {to_status: [allowed_roles]}}
+
+    Example:
+        >>> matrix = get_permission_matrix()
+        >>> print(matrix['draft']['pending_procurement'])  # ['sales', 'admin']
+    """
+    matrix: Dict[str, Dict[str, List[str]]] = {}
+
+    for transition in ALLOWED_TRANSITIONS:
+        from_key = transition.from_status.value
+        to_key = transition.to_status.value
+
+        if from_key not in matrix:
+            matrix[from_key] = {}
+
+        matrix[from_key][to_key] = transition.allowed_roles
+
+    return matrix
+
+
+def get_permission_matrix_detailed() -> List[Dict]:
+    """
+    Get detailed permission matrix as a list for table display.
+
+    Returns:
+        List of dicts with full transition details:
+        - from_status, from_status_name
+        - to_status, to_status_name
+        - allowed_roles: list of role codes
+        - allowed_roles_names: list of role names
+        - requires_comment: bool
+        - auto_transition: bool
+
+    Example:
+        >>> for row in get_permission_matrix_detailed():
+        ...     print(f"{row['from_status_name']} → {row['to_status_name']}: {row['allowed_roles']}")
+    """
+    # Role names for display
+    ROLE_NAMES = {
+        "sales": "Менеджер по продажам",
+        "procurement": "Менеджер по закупкам",
+        "logistics": "Логист",
+        "customs": "Менеджер ТО",
+        "quote_controller": "Контроллер КП",
+        "spec_controller": "Контроллер спецификаций",
+        "finance": "Финансовый менеджер",
+        "top_manager": "Топ-менеджер",
+        "admin": "Администратор"
+    }
+
+    result = []
+    for transition in ALLOWED_TRANSITIONS:
+        result.append({
+            "from_status": transition.from_status.value,
+            "from_status_name": STATUS_NAMES[transition.from_status],
+            "to_status": transition.to_status.value,
+            "to_status_name": STATUS_NAMES[transition.to_status],
+            "allowed_roles": transition.allowed_roles,
+            "allowed_roles_names": [ROLE_NAMES.get(r, r) for r in transition.allowed_roles],
+            "requires_comment": transition.requires_comment,
+            "auto_transition": transition.auto_transition
+        })
+    return result
+
+
+def get_outgoing_transitions(status: WorkflowStatus | str) -> List[Dict]:
+    """
+    Get all possible outgoing transitions from a status (regardless of role).
+
+    Args:
+        status: Source workflow status
+
+    Returns:
+        List of dicts with transition details
+
+    Example:
+        >>> transitions = get_outgoing_transitions('draft')
+        >>> for t in transitions:
+        ...     print(f"Can go to: {t['to_status_name']}")
+    """
+    if isinstance(status, str):
+        try:
+            status = WorkflowStatus(status)
+        except ValueError:
+            return []
+
+    available = _TRANSITIONS_BY_STATUS.get(status, [])
+    result = []
+    for transition in available:
+        result.append({
+            "to_status": transition.to_status.value,
+            "to_status_name": STATUS_NAMES[transition.to_status],
+            "allowed_roles": transition.allowed_roles,
+            "requires_comment": transition.requires_comment,
+            "auto_transition": transition.auto_transition
+        })
+    return result
+
+
+def get_incoming_transitions(status: WorkflowStatus | str) -> List[Dict]:
+    """
+    Get all possible incoming transitions to a status (regardless of role).
+
+    Args:
+        status: Target workflow status
+
+    Returns:
+        List of dicts with transition details
+
+    Example:
+        >>> transitions = get_incoming_transitions('approved')
+        >>> for t in transitions:
+        ...     print(f"Can come from: {t['from_status_name']}")
+    """
+    if isinstance(status, str):
+        try:
+            status = WorkflowStatus(status)
+        except ValueError:
+            return []
+
+    result = []
+    for transition in ALLOWED_TRANSITIONS:
+        if transition.to_status == status:
+            result.append({
+                "from_status": transition.from_status.value,
+                "from_status_name": STATUS_NAMES[transition.from_status],
+                "allowed_roles": transition.allowed_roles,
+                "requires_comment": transition.requires_comment,
+                "auto_transition": transition.auto_transition
+            })
+    return result
+
+
+def is_comment_required(
+    from_status: WorkflowStatus | str,
+    to_status: WorkflowStatus | str
+) -> bool:
+    """
+    Check if a comment is required for this transition.
+
+    Args:
+        from_status: Source workflow status
+        to_status: Target workflow status
+
+    Returns:
+        True if comment is required, False otherwise
+
+    Example:
+        >>> if is_comment_required('pending_quote_control', 'pending_sales_review'):
+        ...     # Return to revision requires comment
+        ...     comment = input("Please explain: ")
+    """
+    transition = get_transition_requirements(from_status, to_status)
+    if transition:
+        return transition.requires_comment
+    return False
+
+
+def is_auto_transition(
+    from_status: WorkflowStatus | str,
+    to_status: WorkflowStatus | str
+) -> bool:
+    """
+    Check if this transition is automatic (triggered by system, not user).
+
+    Args:
+        from_status: Source workflow status
+        to_status: Target workflow status
+
+    Returns:
+        True if automatic, False otherwise
+
+    Example:
+        >>> if is_auto_transition('pending_procurement', 'pending_logistics'):
+        ...     # This happens automatically when procurement completes
+        ...     pass
+    """
+    transition = get_transition_requirements(from_status, to_status)
+    if transition:
+        return transition.auto_transition
+    return False

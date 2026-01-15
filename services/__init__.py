@@ -55,6 +55,16 @@ from .workflow_service import (
     get_workflow_order,
     get_workflow_stage,
     get_all_statuses,
+    # Permission matrix functions (Feature #24)
+    get_transition_requirements,
+    get_roles_for_transition,
+    get_transitions_by_role,
+    get_permission_matrix,
+    get_permission_matrix_detailed,
+    get_outgoing_transitions,
+    get_incoming_transitions,
+    is_comment_required,
+    is_auto_transition,
 )
 
 __all__ = [
@@ -110,4 +120,14 @@ __all__ = [
     "get_workflow_order",
     "get_workflow_stage",
     "get_all_statuses",
+    # Permission matrix functions (Feature #24)
+    "get_transition_requirements",
+    "get_roles_for_transition",
+    "get_transitions_by_role",
+    "get_permission_matrix",
+    "get_permission_matrix_detailed",
+    "get_outgoing_transitions",
+    "get_incoming_transitions",
+    "is_comment_required",
+    "is_auto_transition",
 ]
