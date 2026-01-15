@@ -32,7 +32,7 @@ from enum import Enum
 
 # Telegram bot imports - handle import gracefully if not installed
 try:
-    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+    from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
     from telegram.error import TelegramError
     TELEGRAM_AVAILABLE = True
 except ImportError:
@@ -40,6 +40,7 @@ except ImportError:
     Bot = None
     InlineKeyboardButton = None
     InlineKeyboardMarkup = None
+    Update = None
     TelegramError = Exception
 
 from dotenv import load_dotenv
@@ -643,3 +644,183 @@ def parse_callback_data(callback_data: str) -> Optional[CallbackData]:
         quote_id=quote_id,
         raw=callback_data
     )
+
+
+# ============================================================================
+# Webhook Processing
+# ============================================================================
+
+@dataclass
+class WebhookResult:
+    """Result of processing a webhook update."""
+    success: bool
+    update_type: str  # "message", "callback_query", "unknown"
+    message: Optional[str] = None
+    callback_data: Optional[CallbackData] = None
+    telegram_id: Optional[int] = None
+    text: Optional[str] = None
+    error: Optional[str] = None
+
+
+def parse_telegram_update(json_data: Dict[str, Any]) -> Optional['Update']:
+    """Parse JSON data into a Telegram Update object.
+
+    Args:
+        json_data: Raw JSON data from webhook
+
+    Returns:
+        Update object or None if parsing failed
+
+    Example:
+        update = parse_telegram_update({"update_id": 123, "message": {...}})
+    """
+    if not TELEGRAM_AVAILABLE or Update is None:
+        logger.warning("Telegram library not available, cannot parse update")
+        return None
+
+    try:
+        return Update.de_json(json_data, get_bot())
+    except Exception as e:
+        logger.error(f"Failed to parse Telegram update: {e}")
+        return None
+
+
+async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
+    """Process an incoming webhook update from Telegram.
+
+    This function handles:
+    - Text messages (commands like /start, /status, /help)
+    - Callback queries from inline buttons (approve, reject, details)
+
+    Args:
+        json_data: Raw JSON data from webhook request
+
+    Returns:
+        WebhookResult with processing details
+
+    Example:
+        result = await process_webhook_update(request_json)
+        if result.success:
+            # Handle based on update_type
+            if result.update_type == "callback_query":
+                # Handle approval/rejection
+                pass
+    """
+    # Parse the update
+    update = parse_telegram_update(json_data)
+    if not update:
+        return WebhookResult(
+            success=False,
+            update_type="unknown",
+            error="Failed to parse update"
+        )
+
+    # Handle callback queries (inline button presses)
+    if update.callback_query:
+        callback_query = update.callback_query
+        telegram_id = callback_query.from_user.id
+
+        # Parse the callback data
+        callback_data = parse_callback_data(callback_query.data or "")
+
+        # Acknowledge the callback to remove loading state
+        try:
+            await callback_query.answer()
+        except TelegramError as e:
+            logger.warning(f"Failed to answer callback query: {e}")
+
+        if callback_data:
+            return WebhookResult(
+                success=True,
+                update_type="callback_query",
+                callback_data=callback_data,
+                telegram_id=telegram_id,
+                message=f"Received {callback_data.action} for quote {callback_data.quote_id}"
+            )
+        else:
+            return WebhookResult(
+                success=False,
+                update_type="callback_query",
+                telegram_id=telegram_id,
+                error=f"Invalid callback data: {callback_query.data}"
+            )
+
+    # Handle regular messages
+    if update.message:
+        message = update.message
+        telegram_id = message.from_user.id if message.from_user else None
+        text = message.text or ""
+
+        # Check if it's a command
+        if text.startswith("/"):
+            command = text.split()[0].lower()
+            # Extract command argument if present
+            args = text.split()[1:] if len(text.split()) > 1 else []
+
+            return WebhookResult(
+                success=True,
+                update_type="command",
+                telegram_id=telegram_id,
+                text=command,
+                message=f"Command {command} received" + (f" with args: {args}" if args else "")
+            )
+        else:
+            # Regular text message
+            return WebhookResult(
+                success=True,
+                update_type="message",
+                telegram_id=telegram_id,
+                text=text,
+                message="Text message received"
+            )
+
+    # Unknown update type
+    return WebhookResult(
+        success=False,
+        update_type="unknown",
+        error="Unsupported update type"
+    )
+
+
+async def respond_to_command(telegram_id: int, command: str, args: List[str] = None) -> bool:
+    """Send a response to a bot command.
+
+    This is a placeholder that will be expanded in later features.
+
+    Args:
+        telegram_id: User's Telegram ID
+        command: Command received (e.g., "/start")
+        args: Optional command arguments
+
+    Returns:
+        True if response was sent successfully
+
+    Note: Full implementations for /start, /status, /help will be
+    added in Features #54, #55, #57.
+    """
+    bot = get_bot()
+    if not bot:
+        return False
+
+    args = args or []
+
+    # Basic command responses (placeholders - will be enhanced in later features)
+    responses = {
+        "/start": "👋 Добро пожаловать в OneStack Bot!\n\nДля привязки аккаунта введите ваш код верификации.",
+        "/help": "📚 Справка по боту:\n\n/start - Начало работы, привязка аккаунта\n/status - Показать мои текущие задачи\n/help - Показать эту справку",
+        "/status": "📋 Для просмотра задач необходимо привязать ваш аккаунт.\n\nИспользуйте /start для начала.",
+    }
+
+    response_text = responses.get(command, f"Неизвестная команда: {command}\n\nИспользуйте /help для справки.")
+
+    try:
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=response_text,
+            parse_mode="Markdown"
+        )
+        logger.info(f"Sent response for {command} to {telegram_id}")
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to send command response: {e}")
+        return False

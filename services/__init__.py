@@ -138,6 +138,11 @@ from .telegram_service import (
     # Callback data
     CallbackData,
     parse_callback_data,
+    # Webhook processing (Feature #53)
+    WebhookResult,
+    parse_telegram_update,
+    process_webhook_update,
+    respond_to_command,
 )
 
 __all__ = [
@@ -259,4 +264,9 @@ __all__ = [
     "get_bot_info",
     "CallbackData",
     "parse_callback_data",
+    # Webhook processing (Feature #53)
+    "WebhookResult",
+    "parse_telegram_update",
+    "process_webhook_update",
+    "respond_to_command",
 ]

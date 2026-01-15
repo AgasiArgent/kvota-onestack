@@ -601,10 +601,11 @@
       "name": "Webhook endpoint",
       "description": "POST /api/telegram/webhook для получения сообщений",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T21:00:00Z",
+      "completed_at": "2025-01-15T21:30:00Z",
+      "notes": "Created POST /api/telegram/webhook route in main.py. Added WebhookResult, parse_telegram_update, process_webhook_update, respond_to_command functions to telegram_service.py. Handles text messages, commands (/start, /status, /help), and callback queries (approve, reject, details). Returns JSON responses, always returns 200 OK to prevent Telegram retries."
     },
     {
       "id": 54,

@@ -1196,3 +1196,38 @@
   - .env.example (updated - added telegram config variables)
 - Status: COMPLETE - Feature #52 done
 - Note: Actual bot registration with BotFather is a manual step done in production
+
+
+## Session 2025-01-15 - Feature #53: Webhook endpoint
+- Created POST /api/telegram/webhook route in main.py (~80 lines)
+- Added WebhookResult dataclass to telegram_service.py:
+  - success: bool
+  - update_type: str ("message", "callback_query", "command", "unknown")
+  - message, callback_data, telegram_id, text, error fields
+- Added parse_telegram_update() function:
+  - Parses JSON from Telegram into Update object
+  - Handles missing telegram library gracefully
+- Added process_webhook_update() async function:
+  - Handles callback queries (inline button presses)
+  - Handles text messages and commands
+  - Parses callback data for approve/reject/details actions
+  - Answers callback queries to remove loading state
+- Added respond_to_command() async function:
+  - Placeholder responses for /start, /status, /help
+  - Will be enhanced in Features #54, #55, #57
+- Webhook endpoint features:
+  - Checks if bot is configured before processing
+  - Parses JSON request body
+  - Processes updates and responds to commands
+  - Logs all incoming updates for debugging
+  - Always returns 200 OK to prevent Telegram retries
+- Updated services/__init__.py to export new functions
+- Tested with curl:
+  - Command message test: works
+  - Callback query test: works
+  - Returns "Bot not configured" when TELEGRAM_BOT_TOKEN not set
+- Files changed:
+  - main.py (~80 lines added for webhook route)
+  - services/telegram_service.py (~200 lines added for webhook processing)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #53 done

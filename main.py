@@ -6018,6 +6018,93 @@ def post(session, quote_id: str, comment: str = ""):
 
 
 # ============================================================================
+# TELEGRAM BOT WEBHOOK (Feature #53)
+# ============================================================================
+
+# Import asyncio for running async webhook handler
+import asyncio
+
+# Import telegram service functions
+from services.telegram_service import (
+    is_bot_configured,
+    process_webhook_update,
+    respond_to_command,
+    WebhookResult,
+)
+
+
+@rt("/api/telegram/webhook")
+async def telegram_webhook(request):
+    """Handle incoming Telegram webhook updates.
+
+    This endpoint receives updates from Telegram when:
+    - Users send messages to the bot (/start, /status, /help)
+    - Users press inline buttons (approve, reject, details)
+
+    Returns:
+        JSON response with status
+
+    Note:
+        - This endpoint must be publicly accessible (HTTPS in production)
+        - Webhook URL must be registered with Telegram via set_webhook()
+        - Always return 200 OK quickly to prevent Telegram from retrying
+    """
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Check if bot is configured
+    if not is_bot_configured():
+        logger.warning("Telegram webhook received but bot is not configured")
+        return {"ok": True, "message": "Bot not configured"}
+
+    # Get the request body
+    try:
+        # FastHTML provides the body through request
+        body = await request.body()
+        json_data = json.loads(body)
+    except Exception as e:
+        logger.error(f"Failed to parse webhook request: {e}")
+        return {"ok": False, "error": "Invalid request body"}
+
+    # Log the incoming update (for debugging)
+    logger.info(f"Telegram webhook received update: {json_data.get('update_id', 'unknown')}")
+
+    # Process the update asynchronously
+    try:
+        result: WebhookResult = await process_webhook_update(json_data)
+
+        if result.success:
+            # Handle different update types
+            if result.update_type == "command" and result.telegram_id and result.text:
+                # Respond to commands
+                await respond_to_command(result.telegram_id, result.text)
+
+            elif result.update_type == "callback_query" and result.callback_data:
+                # Callback query handling will be expanded in Features #60, #61
+                # For now, just log it
+                logger.info(f"Callback query: {result.callback_data.action} for {result.callback_data.quote_id}")
+
+            elif result.update_type == "message":
+                # Regular text message (not a command)
+                # Could be verification code - will be handled in Feature #55
+                logger.info(f"Text message from {result.telegram_id}: {result.text}")
+
+            logger.info(f"Webhook processed: {result.message}")
+        else:
+            logger.warning(f"Webhook processing failed: {result.error}")
+
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}")
+        # Still return 200 to prevent Telegram from retrying
+        return {"ok": True, "error": str(e)}
+
+    # Always return 200 OK to Telegram
+    return {"ok": True}
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
