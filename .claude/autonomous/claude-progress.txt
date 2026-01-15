@@ -2955,3 +2955,27 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - Changes stored in modifications JSONB
   - Applied when approval is confirmed
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-020: Extend specifications table for v3.0
+- Table already existed in migration 006_create_specifications_table.sql
+- v3.0 requirements missing from existing table:
+  - contract_id FK to customer_contracts for specification numbering
+  - specification_date DATE column
+  - export_data JSONB for storing complete quote snapshot
+  - 'cancelled' status option in constraint
+- Created migration 036_extend_specifications_v3.sql with:
+  - Added contract_id column with FK to customer_contracts
+  - Added specification_date with default CURRENT_DATE
+  - Added export_data JSONB for complete data snapshot
+  - Updated status constraint to include 'cancelled'
+  - Index on contract_id for queries
+- Helper functions:
+  - get_next_specification_number(contract_id) - gets and increments contract's next spec number
+  - generate_specification_number(contract_id, spec_number?) - formats as CONTRACT_NUMBER-SPEC_NUMBER
+  - create_specification_from_quote(quote_id, version_id?, contract_id?, created_by?) - creates spec with export snapshot
+  - get_specification_details(spec_id) - complete specification with all related data
+  - get_specifications_summary(org_id, status?, from_date?, to_date?) - dashboard counts by status
+  - get_specification_signatory(spec_id) - gets signatory from customer_contacts.is_signatory
+- View: v_specifications_list with quote, contract, customer details
+- Status: COMPLETE

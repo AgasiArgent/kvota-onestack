@@ -192,8 +192,10 @@
       "name": "Create specifications table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Store specification exports with all required fields"
+      "passes": true,
+      "completed_at": "2026-01-15T19:40:00Z",
+      "description": "Store specification exports with all required fields",
+      "notes": "Table existed in migration 006. Created migration 036_extend_specifications_v3.sql with: contract_id FK to customer_contracts, specification_date, export_data JSONB, updated status constraint (added 'cancelled'). Helper functions: get_next_specification_number(), generate_specification_number(), create_specification_from_quote(), get_specification_details(), get_specifications_summary(), get_specification_signatory(). View: v_specifications_list."
     },
     {
       "id": "DB-021",
