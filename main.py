@@ -12116,6 +12116,287 @@ def post(supplier_id: str, session):
 
 
 # ============================================================================
+# BUYER COMPANIES LIST (Feature UI-003)
+# ============================================================================
+
+@rt("/buyer-companies")
+def get(session, q: str = "", status: str = ""):
+    """
+    Buyer companies list page with search and filters.
+
+    Buyer companies are OUR legal entities used for purchasing from suppliers.
+    Each quote_item can have its own buyer_company_id.
+
+    Query Parameters:
+        q: Search query (matches name or company_code)
+        status: Filter by status ("active", "inactive", or "" for all)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only can manage buyer companies
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра справочника компаний-покупателей."),
+                P("Требуется роль: admin"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import buyer company service
+    from services.buyer_company_service import (
+        get_all_buyer_companies, search_buyer_companies, get_buyer_company_stats
+    )
+
+    # Get buyer companies based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            companies = search_buyer_companies(
+                organization_id=org_id,
+                query=q.strip(),
+                active_only=(status == "active"),
+                limit=100
+            )
+        else:
+            # Get all with filters
+            active_only = None if status == "" else (status == "active")
+            companies = get_all_buyer_companies(
+                organization_id=org_id,
+                active_only=active_only,
+                limit=100
+            )
+
+        # Get stats for summary
+        stats = get_buyer_company_stats(organization_id=org_id)
+
+    except Exception as e:
+        print(f"Error loading buyer companies: {e}")
+        companies = []
+        stats = {"total": 0, "active": 0, "inactive": 0}
+
+    # Status options for filter
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+        Option("Активные", value="active", selected=(status == "active")),
+        Option("Неактивные", value="inactive", selected=(status == "inactive")),
+    ]
+
+    # Build company rows
+    company_rows = []
+    for c in companies:
+        status_class = "status-approved" if c.is_active else "status-rejected"
+        status_text = "Активна" if c.is_active else "Неактивна"
+
+        company_rows.append(
+            Tr(
+                Td(
+                    Strong(c.company_code),
+                    style="font-family: monospace; color: #4a4aff;"
+                ),
+                Td(c.name),
+                Td(c.inn or "—"),
+                Td(c.kpp or "—"),
+                Td(c.ogrn or "—"),
+                Td(c.general_director_name or "—"),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/buyer-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/buyer-companies/{c.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    return page_layout("Компании-покупатели",
+        # Header
+        Div(
+            H1("🏢 Компании-покупатели (закупки)"),
+            A("+ Добавить компанию", href="/buyer-companies/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert explaining what this is
+        Div(
+            "💡 Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. "
+            "Указываются на уровне позиции КП (quote_item.buyer_company_id).",
+            cls="alert alert-info"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value", style="color: #28a745;"),
+                Div("Активных"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(stats.get("inactive", 0)), cls="stat-value", style="color: #dc3545;"),
+                Div("Неактивных"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filters
+        Div(
+            Form(
+                Div(
+                    Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
+                    Select(*status_options, name="status", style="flex: 1;"),
+                    Button("🔍 Поиск", type="submit"),
+                    A("Сбросить", href="/buyer-companies", role="button", cls="secondary"),
+                    style="display: flex; gap: 0.5rem; align-items: center;"
+                ),
+                method="get",
+                action="/buyer-companies"
+            ),
+            cls="card", style="margin-bottom: 1rem;"
+        ),
+
+        # Table
+        Table(
+            Thead(
+                Tr(
+                    Th("Код"),
+                    Th("Название"),
+                    Th("ИНН"),
+                    Th("КПП"),
+                    Th("ОГРН"),
+                    Th("Директор"),
+                    Th("Статус"),
+                    Th("Действия")
+                )
+            ),
+            Tbody(*company_rows) if company_rows else Tbody(
+                Tr(Td(
+                    "Компании не найдены. ",
+                    A("Добавить первую компанию", href="/buyer-companies/new"),
+                    colspan="8", style="text-align: center; padding: 2rem;"
+                ))
+            )
+        ),
+
+        # Results count
+        P(f"Показано записей: {len(companies)}", style="color: #666; margin-top: 0.5rem;"),
+
+        session=session
+    )
+
+
+@rt("/buyer-companies/{company_id}")
+def get(company_id: str, session):
+    """View single buyer company details."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра компаний-покупателей.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.buyer_company_service import get_buyer_company
+
+    company = get_buyer_company(company_id)
+
+    if not company:
+        return page_layout("Компания не найдена",
+            Div(
+                H1("❌ Компания не найдена"),
+                P("Запрашиваемая компания-покупатель не существует."),
+                A("← К списку компаний", href="/buyer-companies", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    status_class = "status-approved" if company.is_active else "status-rejected"
+    status_text = "Активна" if company.is_active else "Неактивна"
+
+    return page_layout(f"Компания: {company.name}",
+        # Header with actions
+        Div(
+            H1(f"🏢 {company.name}"),
+            Div(
+                A("✏️ Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
+                A("← К списку", href="/buyer-companies", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Main info card
+        Div(
+            Div(
+                H3("Основная информация"),
+                Table(
+                    Tr(Th("Код компании:"), Td(
+                        Strong(company.company_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
+                    )),
+                    Tr(Th("Название:"), Td(company.name)),
+                    Tr(Th("Страна:"), Td(company.country or "Россия")),
+                    Tr(Th("Статус:"), Td(Span(status_text, cls=f"status-badge {status_class}"))),
+                    style="width: auto;"
+                ),
+                style="flex: 1;"
+            ),
+            Div(
+                H3("Руководство"),
+                Table(
+                    Tr(Th("Должность:"), Td(company.general_director_position or "Генеральный директор")),
+                    Tr(Th("ФИО:"), Td(company.general_director_name or "—")),
+                    style="width: auto;"
+                ),
+                style="flex: 1;"
+            ),
+            cls="card", style="display: flex; gap: 2rem;"
+        ),
+
+        # Legal info
+        Div(
+            H3("Юридические данные"),
+            Table(
+                Tr(Th("ИНН:"), Td(company.inn or "—")),
+                Tr(Th("КПП:"), Td(company.kpp or "—")),
+                Tr(Th("ОГРН:"), Td(company.ogrn or "—")),
+            ),
+            cls="card"
+        ),
+
+        # Registration address
+        Div(
+            H3("Юридический адрес"),
+            P(company.registration_address or "Не указан"),
+            cls="card"
+        ) if company.registration_address else "",
+
+        # Metadata
+        Div(
+            P(f"Создана: {company.created_at.strftime('%d.%m.%Y %H:%M') if company.created_at else '—'}"),
+            P(f"Обновлена: {company.updated_at.strftime('%d.%m.%Y %H:%M') if company.updated_at else '—'}"),
+            style="color: #666; font-size: 0.875rem;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

@@ -528,8 +528,10 @@
       "name": "Buyer companies list page",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "List our purchasing legal entities"
+      "passes": true,
+      "completed_at": "2026-01-15T22:10:00Z",
+      "description": "List our purchasing legal entities",
+      "notes": "Implemented in main.py:\n- GET /buyer-companies - List page with search and status filter\n- GET /buyer-companies/{id} - Detail view page\n- Permission check: admin role required\n- Uses buyer_company_service: get_all_buyer_companies, search_buyer_companies, get_buyer_company_stats\n- Stats cards showing total/active/inactive counts\n- Table with: Code, Name, INN, KPP, OGRN, Director, Status, Actions\n- Info alert explaining what buyer companies are (our legal entities for purchasing)\n- Russian UI labels, filter form, empty state handling"
     },
     {
       "id": "UI-004",
