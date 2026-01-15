@@ -469,10 +469,11 @@
       "name": "Страница /customs",
       "description": "Рабочая зона менеджера ТО",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T06:30:00Z",
+      "completed_at": "2025-01-15T06:32:00Z",
+      "notes": "Created /customs route with customs workspace page. Includes parallel stages status, filtering, role check for customs/admin."
     },
     {
       "id": 43,
@@ -480,10 +481,11 @@
       "name": "Список КП на этапе таможни",
       "description": "КП со статусом pending_customs",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T06:30:00Z",
+      "completed_at": "2025-01-15T06:32:00Z",
+      "notes": "Already implemented in Feature #42 - /customs page shows quotes filtered by pending_customs and pending_logistics status"
     },
     {
       "id": 44,

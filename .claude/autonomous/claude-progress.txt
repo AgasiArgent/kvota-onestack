@@ -934,3 +934,30 @@
     - Added .stat-card-mini CSS class
 - Status: COMPLETE - LOGISTICS UI PHASE COMPLETE (all 4 features done: 38-41)
 
+## Session 2025-01-15 - Features #42 & #43: Customs Workspace Page
+- Created /customs route for customs role (Олег Князев) workspace
+- Page shows:
+  - Stats cards (pending, completed, total quotes)
+  - Status filter dropdown (all, pending_customs, pending_logistics, pending_sales_review)
+  - Pending quotes section (quotes needing customs work)
+  - Completed quotes section (quotes where customs is done)
+  - Parallel stage status indicators (logistics + customs progress)
+- Added customs link to navigation bar for customs/admin roles
+- Role check: only users with customs or admin role can access
+- Queries:
+  - Fetches quotes with workflow_status in customs-relevant stages
+  - Shows logistics_completed_at and customs_completed_at status
+- UI features:
+  - Russian labels
+  - Color-coded workflow status badges
+  - Parallel stage progress (✅/⏳ indicators for both logistics and customs)
+  - "Работать" button for pending quotes, "Просмотр" for completed
+- Import updated: added complete_customs from workflow_service
+- Feature #43 (list of quotes at customs stage) is automatically included in #42
+- Files changed:
+  - main.py (~220 lines added):
+    - Added complete_customs import from workflow_service
+    - Added /customs route
+    - Added "Таможня" link to nav_bar for customs/admin roles
+- Status: COMPLETE - 2 features done (42, 43)
+

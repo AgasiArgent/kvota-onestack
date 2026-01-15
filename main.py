@@ -35,7 +35,7 @@ from services.brand_service import get_assigned_brands
 # Import workflow service for status display
 from services.workflow_service import (
     WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
-    check_all_procurement_complete, complete_procurement, complete_logistics
+    check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs
 )
 
 # Import calculation engine
@@ -125,6 +125,9 @@ def nav_bar(session):
 
         if "logistics" in roles or "admin" in roles:
             nav_items.append(Li(A("Логистика", href="/logistics")))
+
+        if "customs" in roles or "admin" in roles:
+            nav_items.append(Li(A("Таможня", href="/customs")))
 
         # Add settings and logout at the end
         nav_items.extend([
@@ -4154,6 +4157,218 @@ def post(session, quote_id: str,
             print(f"Error completing logistics: {result.error}")
 
     return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
+
+
+# ============================================================================
+# CUSTOMS WORKSPACE (Feature #42)
+# ============================================================================
+
+@rt("/customs")
+def get(session, status_filter: str = None):
+    """
+    Customs workspace - shows quotes in customs stage for customs role.
+
+    Feature #42: Basic customs page structure
+    Feature #43: List quotes at customs stage (included)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has customs role
+    if not user_has_any_role(session, ["customs", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get quotes for this organization
+    # Customs sees quotes in pending_customs or pending_logistics (parallel) or pending_sales_review (after)
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_customs_user") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_quotes = quotes_result.data or []
+
+    # Filter to quotes that are relevant to customs
+    customs_statuses = [
+        "pending_customs",
+        "pending_logistics",  # Can work in parallel
+        "pending_sales_review",  # Already done, for reference
+    ]
+
+    quotes_with_details = []
+    for q in all_quotes:
+        ws = q.get("workflow_status")
+        if ws in customs_statuses or status_filter:
+            logistics_done = q.get("logistics_completed_at") is not None
+            customs_done = q.get("customs_completed_at") is not None
+            quotes_with_details.append({
+                **q,
+                "logistics_done": logistics_done,
+                "customs_done": customs_done,
+                "assigned_to_me": q.get("assigned_customs_user") == user_id
+            })
+
+    # Apply status filter if provided
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    # Separate quotes by status
+    pending_quotes = [q for q in quotes_with_details
+                      if q.get("workflow_status") in ["pending_customs", "pending_logistics"]
+                      and not q.get("customs_done")]
+    completed_quotes = [q for q in quotes_with_details
+                        if q.get("customs_done")]
+
+    # Count stats
+    all_count = len(quotes_with_details)
+    pending_count = len(pending_quotes)
+    completed_count = len(completed_quotes)
+
+    # Build the table rows
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+        logistics_done = q.get("logistics_done", False)
+        customs_done = q.get("customs_done", False)
+
+        # Parallel stage progress indicator
+        stages_status = []
+        if logistics_done:
+            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
+        else:
+            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
+
+        if customs_done:
+            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
+        else:
+            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
+
+        return Tr(
+            Td(
+                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
+            ),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(*stages_status),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Работать", href=f"/customs/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics"] else
+                A("Просмотр", href=f"/customs/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    # Status filter options
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_customs", "🛃 На таможне"),
+        ("pending_logistics", "📦 На логистике (параллельно)"),
+        ("pending_sales_review", "👤 У менеджера продаж"),
+    ]
+
+    # Status filter form
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/customs",
+        style="margin-bottom: 1rem;"
+    )
+
+    return page_layout("Customs Workspace",
+        # Header
+        Div(
+            H1("🛃 Таможня"),
+            P(f"Рабочая зона менеджера ТО (Олег Князев)"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Stats
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("Ожидает таможни"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(completed_count), cls="stat-value"),
+                Div("Завершено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(all_count), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Status filter
+        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
+
+        # Show filtered view if filter is active
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        # Default view: Pending quotes
+        Div(
+            H2("🛃 Ожидают таможни"),
+            P("КП требующие таможенного оформления", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        # Completed quotes
+        Div(
+            H2("✅ Завершённые"),
+            P("КП с завершённой таможней", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in completed_quotes[:10]]
+                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            P(f"Показано 10 из {len(completed_quotes)}", style="color: #888; font-size: 0.875rem; margin-top: 0.5rem;") if len(completed_quotes) > 10 else None,
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        session=session
+    )
 
 
 # ============================================================================
