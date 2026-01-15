@@ -104,14 +104,15 @@ App runs at http://localhost:5001
 - [x] Feature #19: Role service - assign_role function (2025-01-15)
 - [x] Feature #20: Role service - remove_role function (2025-01-15)
 - [x] Feature #21: Middleware require_role (2025-01-15)
+- [x] Feature #22: Контекст пользователя с ролями (2025-01-15)
 
 ### Next Up
-- Feature #22: Контекст пользователя с ролями (extend session with roles)
+- Feature #23: Enum статусов workflow (define status enum and transitions)
 
 ### Progress
-- **21 of 88 features completed** (24%)
+- **22 of 88 features completed** (25%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
-- **ROLE SERVICE IN PROGRESS** (features 17-21 done)
+- **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -123,4 +124,6 @@ App runs at http://localhost:5001
   - require_role, require_any_role, require_all_roles (route protection middleware)
   - get_session_user_roles (convenience function)
 - Added /unauthorized route in main.py
-- Next: Extend session user context with roles (feature 22)
+- Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
+- Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
+- Next: Workflow engine phase (features 23-32)
