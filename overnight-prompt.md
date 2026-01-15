@@ -144,6 +144,12 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - supplier_code, inn, kpp, ogrn, director info
    - Examples: MBR, RAR, CMT, GES, TEX
 
+4. **DB-004** (customer_contacts table) - ✅ COMPLETE
+   - Created `migrations/021_create_customer_contacts_table.sql`
+   - Contact persons (ЛПР) for customers
+   - `is_signatory` flag for specification PDF signatory selection
+   - Helper function `get_customer_signatory()` for PDF generation
+
 ### Progress:
-- v3.0 features complete: **3/94**
-- Next feature: **DB-004** (customer_contacts table with is_signatory)
+- v3.0 features complete: **4/94**
+- Next feature: **DB-005** (customer_contracts table with next_specification_number)
