@@ -6079,7 +6079,8 @@ async def telegram_webhook(request):
             # Handle different update types
             if result.update_type == "command" and result.telegram_id and result.text:
                 # Respond to commands, passing any arguments (e.g., /start ABC123)
-                await respond_to_command(result.telegram_id, result.text, result.args)
+                # Also pass telegram_username for verification (Feature #55)
+                await respond_to_command(result.telegram_id, result.text, result.args, result.telegram_username)
 
             elif result.update_type == "callback_query" and result.callback_data:
                 # Callback query handling will be expanded in Features #60, #61
@@ -6088,7 +6089,6 @@ async def telegram_webhook(request):
 
             elif result.update_type == "message":
                 # Regular text message (not a command)
-                # Could be verification code - will be handled in Feature #55
                 logger.info(f"Text message from {result.telegram_id}: {result.text}")
 
             logger.info(f"Webhook processed: {result.message}")

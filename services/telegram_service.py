@@ -44,6 +44,7 @@ except ImportError:
     TelegramError = Exception
 
 from dotenv import load_dotenv
+from services.database import get_supabase
 
 # Load environment variables
 load_dotenv()
@@ -647,6 +648,145 @@ def parse_callback_data(callback_data: str) -> Optional[CallbackData]:
 
 
 # ============================================================================
+# Account Verification (Feature #55)
+# ============================================================================
+
+@dataclass
+class VerificationResult:
+    """Result of account verification attempt."""
+    success: bool
+    user_id: Optional[str] = None
+    message: str = ""
+    error: Optional[str] = None
+
+
+async def verify_telegram_account(
+    verification_code: str,
+    telegram_id: int,
+    telegram_username: Optional[str] = None
+) -> VerificationResult:
+    """Verify a Telegram account using the provided verification code.
+
+    Feature #55: Account verification (привязка telegram_id к user через код)
+
+    This function calls the database function verify_telegram_account() which:
+    1. Looks up the verification code in telegram_users table
+    2. Checks if code is valid and not expired
+    3. Links the telegram_id to the user
+    4. Marks the account as verified
+
+    Args:
+        verification_code: 6-character verification code from the user
+        telegram_id: Telegram user ID
+        telegram_username: Optional Telegram username
+
+    Returns:
+        VerificationResult with success status and user_id if successful
+
+    Example:
+        result = await verify_telegram_account("ABC123", 12345678, "username")
+        if result.success:
+            print(f"Verified user: {result.user_id}")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            logger.error("Cannot get service Supabase client")
+            return VerificationResult(
+                success=False,
+                error="Database connection error",
+                message="Не удалось подключиться к базе данных. Попробуйте позже."
+            )
+
+        # Call the database function
+        # Using RPC call to verify_telegram_account
+        response = supabase.rpc(
+            "verify_telegram_account",
+            {
+                "p_verification_code": verification_code.upper(),
+                "p_telegram_id": telegram_id,
+                "p_telegram_username": telegram_username
+            }
+        ).execute()
+
+        logger.info(f"Verification response: {response.data}")
+
+        if response.data and len(response.data) > 0:
+            result = response.data[0]
+            if result.get("success"):
+                logger.info(f"Successfully verified Telegram account {telegram_id} for user {result.get('user_id')}")
+                return VerificationResult(
+                    success=True,
+                    user_id=result.get("user_id"),
+                    message=result.get("message", "Аккаунт успешно привязан!")
+                )
+            else:
+                # Verification failed (invalid/expired code or already linked)
+                error_msg = result.get("message", "Неверный или устаревший код")
+                logger.warning(f"Verification failed for {telegram_id}: {error_msg}")
+                return VerificationResult(
+                    success=False,
+                    error=error_msg,
+                    message=error_msg
+                )
+        else:
+            logger.error(f"Empty response from verify_telegram_account for {telegram_id}")
+            return VerificationResult(
+                success=False,
+                error="Empty response",
+                message="Не удалось проверить код. Попробуйте позже."
+            )
+
+    except Exception as e:
+        logger.error(f"Error verifying Telegram account: {e}")
+        return VerificationResult(
+            success=False,
+            error=str(e),
+            message="Произошла ошибка при проверке кода. Попробуйте позже."
+        )
+
+
+async def get_telegram_user(telegram_id: int) -> Optional[Dict[str, Any]]:
+    """Get the linked user for a Telegram ID.
+
+    Args:
+        telegram_id: Telegram user ID
+
+    Returns:
+        Dict with user_id and other info if linked, None otherwise
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return None
+
+        response = supabase.table("telegram_users").select(
+            "id, user_id, telegram_username, is_verified, verified_at"
+        ).eq("telegram_id", telegram_id).eq("is_verified", True).execute()
+
+        if response.data and len(response.data) > 0:
+            return response.data[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting Telegram user: {e}")
+        return None
+
+
+async def is_telegram_linked(telegram_id: int) -> bool:
+    """Check if a Telegram ID is linked to a user.
+
+    Args:
+        telegram_id: Telegram user ID
+
+    Returns:
+        True if linked, False otherwise
+    """
+    user = await get_telegram_user(telegram_id)
+    return user is not None
+
+
+# ============================================================================
 # Webhook Processing
 # ============================================================================
 
@@ -658,6 +798,7 @@ class WebhookResult:
     message: Optional[str] = None
     callback_data: Optional[CallbackData] = None
     telegram_id: Optional[int] = None
+    telegram_username: Optional[str] = None  # Username for verification (Feature #55)
     text: Optional[str] = None
     args: Optional[List[str]] = None  # Command arguments (e.g., /start ABC123 → args=["ABC123"])
     error: Optional[str] = None
@@ -750,6 +891,7 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
     if update.message:
         message = update.message
         telegram_id = message.from_user.id if message.from_user else None
+        telegram_username = message.from_user.username if message.from_user else None
         text = message.text or ""
 
         # Check if it's a command
@@ -762,6 +904,7 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
                 success=True,
                 update_type="command",
                 telegram_id=telegram_id,
+                telegram_username=telegram_username,
                 text=command,
                 args=args if args else None,
                 message=f"Command {command} received" + (f" with args: {args}" if args else "")
@@ -772,6 +915,7 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
                 success=True,
                 update_type="message",
                 telegram_id=telegram_id,
+                telegram_username=telegram_username,
                 text=text,
                 message="Text message received"
             )
@@ -784,11 +928,11 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
     )
 
 
-async def respond_to_command(telegram_id: int, command: str, args: List[str] = None) -> bool:
+async def respond_to_command(telegram_id: int, command: str, args: List[str] = None, telegram_username: str = None) -> bool:
     """Send a response to a bot command.
 
     Handles the main bot commands:
-    - /start: Greeting and verification instructions (Feature #54)
+    - /start: Greeting and verification instructions (Feature #54, #55)
     - /status: Show current tasks (Feature #57 placeholder)
     - /help: Show help information (Feature #57 placeholder)
 
@@ -796,6 +940,7 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
         telegram_id: User's Telegram ID
         command: Command received (e.g., "/start")
         args: Optional command arguments
+        telegram_username: Optional Telegram username (for verification)
 
     Returns:
         True if response was sent successfully
@@ -806,9 +951,9 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 
     args = args or []
 
-    # Handle /start command specially (Feature #54)
+    # Handle /start command specially (Feature #54, #55)
     if command == "/start":
-        return await handle_start_command(telegram_id, args)
+        return await handle_start_command(telegram_id, args, telegram_username)
 
     # Other commands
     responses = {
@@ -855,19 +1000,20 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
         return False
 
 
-async def handle_start_command(telegram_id: int, args: List[str] = None) -> bool:
+async def handle_start_command(telegram_id: int, args: List[str] = None, telegram_username: str = None) -> bool:
     """Handle the /start command with greeting and verification instructions.
 
     Feature #54: Команда /start (приветствие и инструкция по привязке)
+    Feature #55: Верификация аккаунта (account verification)
 
     The /start command can be called in two ways:
     1. /start - Shows welcome message and instructions
     2. /start <code> - Attempts to verify account with the provided code
-       (Actual verification is handled in Feature #55)
 
     Args:
         telegram_id: User's Telegram ID
         args: Optional arguments (verification code)
+        telegram_username: Optional Telegram username (for storing during verification)
 
     Returns:
         True if message was sent successfully
@@ -878,21 +1024,52 @@ async def handle_start_command(telegram_id: int, args: List[str] = None) -> bool
 
     args = args or []
 
-    # If a code is provided, show message that verification will be attempted
-    # Actual verification logic is in Feature #55
+    # If a code is provided, attempt verification (Feature #55)
     if args:
         code = args[0].strip().upper()
-        # This will be expanded in Feature #55 (Верификация аккаунта)
-        response_text = f"""🔄 *Проверка кода привязки*
-
-Код: `{code}`
-
-⏳ Проверяю ваш код верификации...
-
-_Если код неверный или устарел, получите новый в настройках системы._"""
-
-        # For now, just show the message. Feature #55 will add actual verification
         logger.info(f"Verification code received from {telegram_id}: {code}")
+
+        # Call the verification function
+        verification_result = await verify_telegram_account(
+            verification_code=code,
+            telegram_id=telegram_id,
+            telegram_username=telegram_username
+        )
+
+        if verification_result.success:
+            # Success message
+            response_text = f"""✅ *Аккаунт успешно привязан!*
+
+Ваш Telegram аккаунт теперь связан с системой OneStack.
+
+*Что будет дальше:*
+• Вы будете получать уведомления о новых задачах
+• Сможете согласовывать КП прямо в этом чате
+• Будете в курсе изменений статусов
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Используйте /status для просмотра ваших задач
+📚 Используйте /help для справки"""
+        else:
+            # Error message with specific reason
+            error_msg = verification_result.message
+            response_text = f"""❌ *Не удалось привязать аккаунт*
+
+{error_msg}
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+*Возможные причины:*
+• Код неверный или устарел (действует 15 минут)
+• Этот Telegram уже привязан к другому пользователю
+• Код уже был использован
+
+*Что делать:*
+1. Откройте OneStack в браузере
+2. Перейдите в Настройки → Telegram
+3. Нажмите "Получить новый код"
+4. Отправьте новый код боту"""
     else:
         # Standard greeting without code
         response_text = """👋 *Добро пожаловать в OneStack Bot!*

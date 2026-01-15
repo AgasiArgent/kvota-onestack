@@ -143,6 +143,11 @@ from .telegram_service import (
     parse_telegram_update,
     process_webhook_update,
     respond_to_command,
+    # Account verification (Feature #55)
+    VerificationResult,
+    verify_telegram_account,
+    get_telegram_user,
+    is_telegram_linked,
 )
 
 __all__ = [
@@ -269,4 +274,9 @@ __all__ = [
     "parse_telegram_update",
     "process_webhook_update",
     "respond_to_command",
+    # Account verification (Feature #55)
+    "VerificationResult",
+    "verify_telegram_account",
+    "get_telegram_user",
+    "is_telegram_linked",
 ]

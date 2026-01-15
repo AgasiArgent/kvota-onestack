@@ -1259,3 +1259,45 @@
   - services/telegram_service.py (~100 lines modified/added)
   - main.py (1 line - pass args to respond_to_command)
 - Status: COMPLETE - Feature #54 done
+
+
+## Session 2025-01-15 - Feature #55: Верификация аккаунта (Telegram account verification)
+- Implemented full account verification flow when user sends `/start <code>`:
+  - verify_telegram_account() function in telegram_service.py (~90 lines):
+    - Calls database function verify_telegram_account() via Supabase RPC
+    - Handles success/failure responses from database
+    - Returns VerificationResult dataclass with success, user_id, message
+    - Russian language error messages for user-friendly feedback
+  - get_telegram_user() function:
+    - Looks up linked user by telegram_id in telegram_users table
+    - Returns user info dict if found and verified, None otherwise
+  - is_telegram_linked() function:
+    - Simple boolean check if telegram_id has verified account
+- Updated handle_start_command() to perform actual verification:
+  - When code is provided, calls verify_telegram_account()
+  - On success: Shows congratulations message with next steps
+  - On failure: Shows error message with troubleshooting guide
+  - Passes telegram_username to store during verification
+- Enhanced WebhookResult dataclass:
+  - Added telegram_username field for passing username through pipeline
+- Updated process_webhook_update() to extract username from update
+- Updated respond_to_command() to accept and pass telegram_username
+- Updated main.py webhook handler to pass telegram_username to respond_to_command()
+- Updated services/__init__.py to export new functions:
+  - VerificationResult, verify_telegram_account, get_telegram_user, is_telegram_linked
+- Verification uses database function verify_telegram_account() from migration 010:
+  - Validates verification code exists and not expired
+  - Checks telegram_id not already linked to another user
+  - Updates telegram_users table with verified status
+  - Clears verification code after successful verification
+- Files changed:
+  - services/telegram_service.py (~150 lines added):
+    - VerificationResult dataclass
+    - verify_telegram_account(), get_telegram_user(), is_telegram_linked()
+    - Updated handle_start_command() with actual verification
+    - Updated respond_to_command() signature
+    - Updated WebhookResult with telegram_username
+    - Updated process_webhook_update() to extract username
+  - services/__init__.py (updated - added verification exports)
+  - main.py (updated webhook handler to pass telegram_username)
+- Status: COMPLETE - Feature #55 done
