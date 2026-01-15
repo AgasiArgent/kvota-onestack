@@ -400,3 +400,26 @@
 - Added documentation comments for each category
 - Files changed: migrations/014_seed_plan_fact_categories.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #16: Настроить RLS для новых таблиц
+- Verified that all 11 new tables have RLS enabled and policies configured
+- RLS was already set up in each table's individual migration file:
+  - 001: roles - SELECT for all authenticated users
+  - 002: user_roles - SELECT own/org, INSERT/DELETE admin only
+  - 003: brand_assignments - full CRUD with org/admin restrictions
+  - 004: workflow_transitions - SELECT/INSERT for org quotes (immutable)
+  - 005: approvals - SELECT org, INSERT quote_controller, UPDATE approver
+  - 006: specifications - SELECT/INSERT/UPDATE org, DELETE admin
+  - 007: deals - SELECT org, INSERT spec_controller, UPDATE finance
+  - 008: plan_fact_categories - SELECT all, write admin only
+  - 009: plan_fact_items - SELECT org, INSERT/UPDATE finance
+  - 010: telegram_users - own record access
+  - 011: notifications - SELECT/UPDATE own, INSERT org
+- Created verification migration: migrations/015_verify_rls_policies.sql
+- Added helper functions:
+  - user_has_role_in_org(user_id, org_id, role_codes[]) - check role membership
+  - user_organization_ids(user_id) - get user's organizations
+  - user_is_admin_in_org(org_id) - check admin role
+- Added comprehensive RLS policy documentation
+- Files changed: migrations/015_verify_rls_policies.sql (new)
+- Status: COMPLETE

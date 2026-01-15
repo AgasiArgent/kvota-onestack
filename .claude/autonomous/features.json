@@ -177,10 +177,11 @@
       "name": "Настроить RLS для новых таблиц",
       "description": "Row Level Security политики для всех новых таблиц",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T08:00:00Z",
+      "completed_at": "2025-01-15T08:10:00Z",
+      "notes": "RLS policies were included in each table's migration file. Created verification migration 015 with helper functions."
     },
     {
       "id": 17,

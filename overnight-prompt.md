@@ -98,11 +98,16 @@ App runs at http://localhost:5001
 - [x] Feature #13: Extend quote_items table with workflow fields (2025-01-15)
 - [x] Feature #14: Seed roles data (2025-01-15) - Already in migration 001
 - [x] Feature #15: Seed plan_fact_categories data (2025-01-15)
+- [x] Feature #16: Configure RLS for new tables (2025-01-15)
 
 ### Next Up
-- Feature #16: Configure RLS for new tables
+- Feature #17: Сервис ролей: получение ролей пользователя
 
 ### Progress
-- **15 of 88 features completed** (17%)
-- All database tables complete, seed data complete
-- Next: RLS policies for new tables
+- **16 of 88 features completed** (18%)
+- **DATABASE PHASE COMPLETE** (all 16 features done)
+- All 11 new tables created with comprehensive RLS policies
+- Extended quotes and quote_items tables with workflow fields
+- Seed data for roles and plan_fact_categories inserted
+- Helper functions added: user_has_role_in_org, user_organization_ids, user_is_admin_in_org
+- Next: Role system services (features 17-22)
