@@ -136,6 +136,9 @@ def nav_bar(session):
         if "quote_controller" in roles or "admin" in roles:
             nav_items.append(Li(A("Контроль КП", href="/quote-control")))
 
+        if "spec_controller" in roles or "admin" in roles:
+            nav_items.append(Li(A("Спецификации", href="/spec-control")))
+
         # Add settings and logout at the end
         nav_items.extend([
             Li(A("Settings", href="/settings")),
@@ -6440,6 +6443,274 @@ async def telegram_webhook(request):
 
     # Always return 200 OK to Telegram
     return {"ok": True}
+
+
+# ============================================================================
+# SPEC CONTROL WORKSPACE (Features #67-72)
+# ============================================================================
+
+@rt("/spec-control")
+def get(session, status_filter: str = None):
+    """
+    Spec Control workspace - shows quotes pending specification and existing specifications
+    for spec_controller role.
+
+    Feature #67: Basic spec control page structure
+    Feature #68: List specifications at pending_review status (included)
+
+    This page shows:
+    1. Quotes awaiting specification creation (workflow_status = pending_spec_control)
+    2. Existing specifications with their review status (draft, pending_review, approved, signed)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has spec_controller role
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get quotes awaiting specification creation (pending_spec_control status)
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, currency, created_at, deal_type, current_version_id") \
+        .eq("organization_id", org_id) \
+        .eq("workflow_status", "pending_spec_control") \
+        .order("created_at", desc=True) \
+        .execute()
+
+    pending_quotes = quotes_result.data or []
+
+    # Get all specifications for this organization
+    specs_result = supabase.table("specifications") \
+        .select("id, quote_id, specification_number, proposal_idn, status, sign_date, specification_currency, created_at, updated_at, quotes(idn_quote, customers(name))") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_specs = specs_result.data or []
+
+    # Filter specifications by status if filter is applied
+    if status_filter and status_filter != "all":
+        if status_filter == "pending_quotes":
+            # Show only the pending quotes section (handled separately)
+            filtered_specs = []
+        else:
+            filtered_specs = [s for s in all_specs if s.get("status") == status_filter]
+    else:
+        filtered_specs = all_specs
+
+    # Group specifications by status
+    draft_specs = [s for s in all_specs if s.get("status") == "draft"]
+    pending_review_specs = [s for s in all_specs if s.get("status") == "pending_review"]
+    approved_specs = [s for s in all_specs if s.get("status") == "approved"]
+    signed_specs = [s for s in all_specs if s.get("status") == "signed"]
+
+    # Stats
+    stats = {
+        "pending_quotes": len(pending_quotes),
+        "draft_specs": len(draft_specs),
+        "pending_review": len(pending_review_specs),
+        "approved": len(approved_specs),
+        "signed": len(signed_specs),
+        "total_specs": len(all_specs),
+    }
+
+    # Spec status badge helper
+    def spec_status_badge(status):
+        status_map = {
+            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
+            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
+            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
+            "signed": ("Подписана", "bg-green-200 text-green-800"),
+        }
+        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
+        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+
+    # Deal type badge helper
+    def deal_type_badge(deal_type):
+        if deal_type == "supply":
+            return Span("Поставка", cls="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800")
+        elif deal_type == "transit":
+            return Span("Транзит", cls="px-2 py-1 rounded text-sm bg-yellow-100 text-yellow-800")
+        return None
+
+    # Quote row for pending quotes section
+    def pending_quote_row(quote):
+        customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
+        return Tr(
+            Td(A(quote.get("idn_quote", "-"), href=f"/quotes/{quote['id']}")),
+            Td(customer_name),
+            Td(deal_type_badge(quote.get("deal_type")) or "-"),
+            Td(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
+            Td(quote.get("created_at", "")[:10] if quote.get("created_at") else "-"),
+            Td(
+                A("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", role="button",
+                  style="background: #28a745; border-color: #28a745; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
+            ),
+        )
+
+    # Spec row for specifications section
+    def spec_row(spec, show_work_button=True):
+        quote = spec.get("quotes", {}) or {}
+        customer = quote.get("customers", {}) or {}
+        quote_idn = quote.get("idn_quote", "-")
+        customer_name = customer.get("name", "Unknown")
+
+        return Tr(
+            Td(spec.get("specification_number", "-") or A(quote_idn, href=f"/quotes/{spec.get('quote_id')}")),
+            Td(customer_name),
+            Td(spec_status_badge(spec.get("status", "draft"))),
+            Td(spec.get("specification_currency", "-")),
+            Td(spec.get("created_at", "")[:10] if spec.get("created_at") else "-"),
+            Td(
+                A("Редактировать", href=f"/spec-control/{spec['id']}", role="button",
+                  style="background: #007bff; border-color: #007bff; font-size: 0.875rem; padding: 0.25rem 0.5rem;") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
+                A("Просмотр", href=f"/spec-control/{spec['id']}", style="color: #666; font-size: 0.875rem;"),
+            ),
+        )
+
+    return page_layout("Контроль спецификаций",
+        H1("Контроль спецификаций"),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats["pending_quotes"]), cls="stat-value", style="color: #f59e0b;"),
+                Div("Ожидают спецификации", style="font-size: 0.875rem;"),
+                cls="stat-card",
+                style="border-left: 4px solid #f59e0b;" if stats["pending_quotes"] > 0 else ""
+            ),
+            Div(
+                Div(str(stats["pending_review"]), cls="stat-value", style="color: #3b82f6;"),
+                Div("На проверке", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["approved"]), cls="stat-value", style="color: #22c55e;"),
+                Div("Утверждены", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["signed"]), cls="stat-value", style="color: #10b981;"),
+                Div("Подписаны", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            cls="grid",
+            style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
+        ),
+
+        # Status filter
+        Div(
+            Label("Фильтр: ", For="status_filter"),
+            Select(
+                Option("Все", value="all", selected=not status_filter or status_filter == "all"),
+                Option(f"Ожидают спецификации ({stats['pending_quotes']})", value="pending_quotes", selected=status_filter == "pending_quotes"),
+                Option(f"Черновики ({stats['draft_specs']})", value="draft", selected=status_filter == "draft"),
+                Option(f"На проверке ({stats['pending_review']})", value="pending_review", selected=status_filter == "pending_review"),
+                Option(f"Утверждены ({stats['approved']})", value="approved", selected=status_filter == "approved"),
+                Option(f"Подписаны ({stats['signed']})", value="signed", selected=status_filter == "signed"),
+                id="status_filter",
+                onchange="window.location.href='/spec-control?status_filter=' + this.value"
+            ),
+            style="margin-bottom: 1.5rem;"
+        ),
+
+        # Pending quotes section (quotes waiting for spec creation)
+        Div(
+            H2(f"КП ожидающие спецификации ({stats['pending_quotes']})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("№ КП"),
+                        Th("Клиент"),
+                        Th("Тип сделки"),
+                        Th("Сумма"),
+                        Th("Дата"),
+                        Th("Действие"),
+                    )
+                ),
+                Tbody(
+                    *[pending_quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "pending_quotes"] else None,
+
+        # Specifications on review section
+        Div(
+            H2(f"Спецификации на проверке ({stats['pending_review']})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("№ Спецификации"),
+                        Th("Клиент"),
+                        Th("Статус"),
+                        Th("Валюта"),
+                        Th("Дата"),
+                        Th("Действие"),
+                    )
+                ),
+                Tbody(
+                    *[spec_row(s, show_work_button=True) for s in pending_review_specs]
+                ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "pending_review"] else None,
+
+        # Draft specifications section
+        Div(
+            H2(f"Черновики ({stats['draft_specs']})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("№ Спецификации / КП"),
+                        Th("Клиент"),
+                        Th("Статус"),
+                        Th("Валюта"),
+                        Th("Дата"),
+                        Th("Действие"),
+                    )
+                ),
+                Tbody(
+                    *[spec_row(s, show_work_button=True) for s in draft_specs[:10]]
+                ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "draft"] else None,
+
+        # Approved/Signed specifications section
+        Div(
+            H2(f"Утверждённые и подписанные ({stats['approved'] + stats['signed']})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("№ Спецификации"),
+                        Th("Клиент"),
+                        Th("Статус"),
+                        Th("Валюта"),
+                        Th("Дата"),
+                        Th("Действие"),
+                    )
+                ),
+                Tbody(
+                    *[spec_row(s, show_work_button=False) for s in (approved_specs + signed_specs)[:10]]
+                ) if (approved_specs + signed_specs) else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "approved", "signed"] else None,
+
+        session=session
+    )
 
 
 # ============================================================================

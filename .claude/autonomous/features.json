@@ -766,10 +766,11 @@
       "name": "Страница /spec-control",
       "description": "Рабочая зона контроллера спецификаций",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T15:00:00Z",
+      "completed_at": "2026-01-15T15:30:00Z",
+      "notes": "Created /spec-control route with workspace page for spec_controller role. Shows quotes pending specification creation (pending_spec_control status), specifications grouped by status (draft, pending_review, approved, signed). Added 'Спецификации' link to nav_bar for spec_controller/admin roles. Stats cards, status filter, action buttons for each item."
     },
     {
       "id": 68,
@@ -777,10 +778,11 @@
       "name": "Список спецификаций на проверке",
       "description": "Спецификации со статусом pending_review",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T15:00:00Z",
+      "completed_at": "2026-01-15T15:30:00Z",
+      "notes": "Already implemented in Feature #67 - /spec-control page shows specifications at pending_review status in dedicated section with filtering support."
     },
     {
       "id": 69,

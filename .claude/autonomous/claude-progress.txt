@@ -1647,3 +1647,29 @@
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #66 done
 - **APPROVALS PHASE COMPLETE** (all 3 features done: 64-66)
+
+
+## Session 2026-01-15 - Features #67 & #68: Spec Control Workspace Page
+- Created /spec-control route for spec_controller role workspace
+- Page shows:
+  - Quotes awaiting specification creation (workflow_status = pending_spec_control)
+  - Specifications grouped by status (draft, pending_review, approved, signed)
+  - Stats cards: pending quotes, pending review, approved, signed counts
+  - Status filter dropdown for filtering view
+  - Action buttons: "Создать спецификацию" for pending quotes, "Редактировать"/"Просмотр" for specs
+- Added spec_controller link to navigation bar ("Спецификации" for spec_controller/admin roles)
+- Role check: only users with spec_controller or admin role can access
+- Queries:
+  - Quotes with pending_spec_control status
+  - Specifications table with joined quote/customer data
+- UI features:
+  - Russian labels
+  - Color-coded status badges for specifications (draft, pending_review, approved, signed)
+  - Deal type badges (Поставка/Транзит) for quotes
+  - Responsive grid layout for stats
+- Feature #68 (list specs at pending_review) is automatically included in #67
+- Files changed:
+  - main.py (~280 lines added):
+    - Added "Спецификации" to nav_bar for spec_controller/admin roles
+    - Added /spec-control route with complete workspace page
+- Status: COMPLETE - 2 features done (67, 68)
