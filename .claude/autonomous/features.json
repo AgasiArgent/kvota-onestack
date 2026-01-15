@@ -538,8 +538,10 @@
       "name": "Buyer company form",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Form with all buyer company fields"
+      "passes": true,
+      "completed_at": "2026-01-16T03:00:00Z",
+      "description": "Form with all buyer company fields",
+      "notes": "Implemented in main.py:\n- _buyer_company_form() helper renders create/edit form\n- GET /buyer-companies/new - Create form page\n- POST /buyer-companies/new - Handle creation with validation\n- GET /buyer-companies/{id}/edit - Edit form page\n- POST /buyer-companies/{id}/edit - Handle update\n- POST /buyer-companies/{id}/delete - Soft delete (deactivate)\n- Form sections: Main info (code, name, country), Legal (INN/KPP/OGRN), Address, Director info, Status\n- Validation: company_code (3 uppercase letters), INN (10 digits required), KPP (9 digits), OGRN (13 digits)\n- Permission: admin role only\n- Russian UI labels, error handling, redirect on success"
     },
     {
       "id": "UI-005",

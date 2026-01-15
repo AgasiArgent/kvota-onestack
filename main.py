@@ -12397,6 +12397,474 @@ def get(company_id: str, session):
 
 
 # ============================================================================
+# BUYER COMPANY FORM (Feature UI-004)
+# ============================================================================
+
+def _buyer_company_form(company=None, error=None, session=None):
+    """
+    Render buyer company create/edit form.
+
+    Args:
+        company: Existing BuyerCompany object for edit mode, None for create mode
+        error: Error message to display
+        session: Session object for page layout
+    """
+    is_edit = company is not None
+    title = "Редактирование компании-покупателя" if is_edit else "Новая компания-покупатель"
+    action_url = f"/buyer-companies/{company.id}/edit" if is_edit else "/buyer-companies/new"
+
+    return page_layout(title,
+        # Error alert
+        Div(error, cls="alert alert-error") if error else "",
+
+        H1(f"{'✏️' if is_edit else '➕'} {title}"),
+
+        # Info alert
+        Div(
+            "💡 Компания-покупатель — наше юридическое лицо, через которое мы закупаем товар у поставщиков. "
+            "Привязывается к позиции КП (quote_item).",
+            cls="alert alert-info"
+        ),
+
+        Div(
+            Form(
+                # Main info section
+                H3("Основная информация"),
+                Div(
+                    Label("Код компании *",
+                        Input(
+                            name="company_code",
+                            value=company.company_code if company else "",
+                            placeholder="ZAK",
+                            required=True,
+                            maxlength="3",
+                            pattern="[A-Z]{3}",
+                            title="3 заглавные латинские буквы",
+                            style="text-transform: uppercase; font-family: monospace; font-weight: bold;"
+                        ),
+                        Small("3 заглавные латинские буквы (например: ZAK, CMT)", style="color: #666; display: block;")
+                    ),
+                    Label("Название компании *",
+                        Input(
+                            name="name",
+                            value=company.name if company else "",
+                            placeholder='ООО "Закупки"',
+                            required=True
+                        )
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("Страна",
+                        Input(
+                            name="country",
+                            value=company.country if company else "Россия",
+                            placeholder="Россия"
+                        )
+                    ),
+                    Div(cls="form-placeholder"),  # Empty placeholder for alignment
+                    cls="form-row"
+                ),
+
+                # Legal info section (required for Russian legal entity)
+                H3("Юридические данные", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("ИНН *",
+                        Input(
+                            name="inn",
+                            value=company.inn if company else "",
+                            placeholder="1234567890",
+                            pattern="\\d{10}",
+                            title="10 цифр для юридического лица",
+                            required=True
+                        ),
+                        Small("10 цифр (ИНН юридического лица)", style="color: #666; display: block;")
+                    ),
+                    Label("КПП",
+                        Input(
+                            name="kpp",
+                            value=company.kpp if company else "",
+                            placeholder="123456789",
+                            pattern="\\d{9}",
+                            title="9 цифр"
+                        ),
+                        Small("9 цифр", style="color: #666; display: block;")
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("ОГРН",
+                        Input(
+                            name="ogrn",
+                            value=company.ogrn if company else "",
+                            placeholder="1234567890123",
+                            pattern="\\d{13}",
+                            title="13 цифр"
+                        ),
+                        Small("13 цифр", style="color: #666; display: block;")
+                    ),
+                    Div(cls="form-placeholder"),
+                    cls="form-row"
+                ),
+
+                # Registration address
+                H3("Юридический адрес", style="margin-top: 1.5rem;"),
+                Label("Адрес регистрации",
+                    Textarea(
+                        company.registration_address if company else "",
+                        name="registration_address",
+                        placeholder="123456, г. Москва, ул. Примерная, д. 1",
+                        rows="2"
+                    )
+                ),
+
+                # Director information
+                H3("Руководство (для документов)", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Должность руководителя",
+                        Input(
+                            name="general_director_position",
+                            value=company.general_director_position if company else "Генеральный директор",
+                            placeholder="Генеральный директор"
+                        )
+                    ),
+                    Label("ФИО руководителя",
+                        Input(
+                            name="general_director_name",
+                            value=company.general_director_name if company else "",
+                            placeholder="Иванов Иван Иванович"
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Status (for edit mode)
+                Div(
+                    H3("Статус", style="margin-top: 1.5rem;"),
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_active",
+                            checked=company.is_active if company else True,
+                            value="true"
+                        ),
+                        " Активная компания",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
+                    Small("Неактивные компании не отображаются в выпадающих списках", style="color: #666;"),
+                ) if is_edit else "",
+
+                # Form actions
+                Div(
+                    Button("💾 Сохранить", type="submit"),
+                    A("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", role="button", cls="secondary"),
+                    cls="form-actions", style="margin-top: 1.5rem;"
+                ),
+
+                method="post",
+                action=action_url
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/buyer-companies/new")
+def get(session):
+    """Show form to create a new buyer company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-покупателей. Требуется роль: admin", cls="alert alert-error"),
+            session=session
+        )
+
+    return _buyer_company_form(session=session)
+
+
+@rt("/buyer-companies/new")
+def post(
+    company_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    session=None
+):
+    """Handle buyer company creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-покупателей.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.buyer_company_service import (
+        create_buyer_company, validate_company_code, validate_inn, validate_kpp, validate_ogrn
+    )
+
+    # Normalize company code to uppercase
+    company_code = company_code.strip().upper() if company_code else ""
+
+    # Validate company code format
+    if not company_code or not validate_company_code(company_code):
+        return _buyer_company_form(
+            error="Код компании должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    # Validate INN (required for buyer companies)
+    inn_clean = inn.strip() if inn else ""
+    if not inn_clean:
+        return _buyer_company_form(
+            error="ИНН обязателен для компании-покупателя",
+            session=session
+        )
+    if not validate_inn(inn_clean):
+        return _buyer_company_form(
+            error="ИНН должен состоять из 10 цифр (для юридического лица)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _buyer_company_form(
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _buyer_company_form(
+            error="ОГРН должен состоять из 13 цифр",
+            session=session
+        )
+
+    try:
+        company = create_buyer_company(
+            organization_id=org_id,
+            name=name.strip(),
+            company_code=company_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if company:
+            return RedirectResponse(f"/buyer-companies/{company.id}", status_code=303)
+        else:
+            return _buyer_company_form(
+                error="Компания с таким кодом или ИНН уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _buyer_company_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating buyer company: {e}")
+        return _buyer_company_form(error=f"Ошибка при создании: {e}", session=session)
+
+
+@rt("/buyer-companies/{company_id}/edit")
+def get(company_id: str, session):
+    """Show form to edit an existing buyer company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования компаний-покупателей.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.buyer_company_service import get_buyer_company
+
+    company = get_buyer_company(company_id)
+
+    if not company:
+        return page_layout("Компания не найдена",
+            Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
+            A("← К списку компаний", href="/buyer-companies", role="button"),
+            session=session
+        )
+
+    return _buyer_company_form(company=company, session=session)
+
+
+@rt("/buyer-companies/{company_id}/edit")
+def post(
+    company_id: str,
+    company_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    is_active: str = "",
+    session=None
+):
+    """Handle buyer company edit form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования компаний-покупателей.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.buyer_company_service import (
+        get_buyer_company, update_buyer_company, validate_company_code,
+        validate_inn, validate_kpp, validate_ogrn
+    )
+
+    company = get_buyer_company(company_id)
+    if not company:
+        return page_layout("Компания не найдена",
+            Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
+            A("← К списку компаний", href="/buyer-companies", role="button"),
+            session=session
+        )
+
+    # Normalize company code to uppercase
+    company_code = company_code.strip().upper() if company_code else ""
+
+    # Validate company code format
+    if not company_code or not validate_company_code(company_code):
+        return _buyer_company_form(
+            company=company,
+            error="Код компании должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    # Validate INN (required)
+    inn_clean = inn.strip() if inn else ""
+    if not inn_clean:
+        return _buyer_company_form(
+            company=company,
+            error="ИНН обязателен для компании-покупателя",
+            session=session
+        )
+    if not validate_inn(inn_clean):
+        return _buyer_company_form(
+            company=company,
+            error="ИНН должен состоять из 10 цифр (для юридического лица)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _buyer_company_form(
+            company=company,
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _buyer_company_form(
+            company=company,
+            error="ОГРН должен состоять из 13 цифр",
+            session=session
+        )
+
+    # Checkbox handling: is_active
+    active = is_active == "true"
+
+    try:
+        updated = update_buyer_company(
+            company_id=company_id,
+            name=name.strip(),
+            company_code=company_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=active,
+        )
+
+        if updated:
+            return RedirectResponse(f"/buyer-companies/{company_id}", status_code=303)
+        else:
+            return _buyer_company_form(
+                company=company,
+                error="Не удалось обновить компанию. Возможно, код или ИНН уже используются другой компанией.",
+                session=session
+            )
+
+    except ValueError as e:
+        return _buyer_company_form(company=company, error=str(e), session=session)
+    except Exception as e:
+        print(f"Error updating buyer company: {e}")
+        return _buyer_company_form(company=company, error=f"Ошибка при обновлении: {e}", session=session)
+
+
+@rt("/buyer-companies/{company_id}/delete")
+def post(company_id: str, session):
+    """Handle buyer company deletion (soft delete - deactivate)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("Только администратор может удалять компании-покупатели.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.buyer_company_service import deactivate_buyer_company
+
+    result = deactivate_buyer_company(company_id)
+
+    if result:
+        return RedirectResponse("/buyer-companies", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
+            A("← К списку компаний", href="/buyer-companies", role="button"),
+            session=session
+        )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
