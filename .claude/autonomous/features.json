@@ -252,8 +252,10 @@
       "name": "Add RLS policies for all new tables",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Row-level security for organization isolation"
+      "passes": true,
+      "completed_at": "2026-01-15T21:00:00Z",
+      "description": "Row-level security for organization isolation",
+      "notes": "Created migration 042_verify_v3_rls_policies.sql - comprehensive RLS verification. All v3.0 tables already have RLS enabled from their creation migrations: suppliers, buyer_companies, seller_companies, customer_contacts, customer_contracts, bank_accounts, locations, brand_supplier_assignments, route_logistics_assignments, supplier_invoices, supplier_invoice_items, supplier_invoice_payments, plan_fact_categories, plan_fact_items, telegram_users, notifications. Added helper functions: user_can_access_organization(), get_quote_organization_id(), get_customer_organization_id(), get_supplier_invoice_organization_id(), get_deal_organization_id(), user_has_any_role(). Created verify_v3_rls_status() audit function. Full policy documentation included."
     },
     {
       "id": "IDN-001",
