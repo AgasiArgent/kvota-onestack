@@ -609,8 +609,10 @@
       "name": "Location dropdown component with HTMX search",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Reusable dropdown with search"
+      "passes": true,
+      "completed_at": "2026-01-16T08:00:00Z",
+      "description": "Reusable dropdown with search",
+      "notes": "Created reusable HTMX-powered dropdown components in main.py:\n1. location_dropdown() - Full-featured with search, hub_only, customs_only filters\n2. location_dropdown_simple() - Static dropdown for small lists\n3. supplier_dropdown() - Search suppliers via /api/suppliers/search\n4. buyer_company_dropdown() - Search buyer companies via /api/buyer-companies/search\n5. seller_company_dropdown() - Search seller companies via /api/seller-companies/search\nAll components support: custom name, label, required, placeholder, help_text, CSS class, dropdown_id, pre-selected value.\nCreated API endpoints: /api/suppliers/search, /api/buyer-companies/search, /api/seller-companies/search.\nTests: tests/test_ui_dropdowns.py with 52 passing tests."
     },
     {
       "id": "UI-012",

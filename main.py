@@ -11413,6 +11413,576 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
 
 
 # ============================================================================
+# UI COMPONENTS - Reusable HTMX Dropdown Components (Feature UI-011)
+# ============================================================================
+
+def location_dropdown(
+    name: str = "pickup_location_id",
+    label: str = "Локация",
+    selected_id: str = None,
+    selected_label: str = None,
+    required: bool = False,
+    hub_only: bool = False,
+    customs_only: bool = False,
+    placeholder: str = "Поиск локации...",
+    help_text: str = None,
+    cls: str = "",
+    dropdown_id: str = None,
+) -> Div:
+    """
+    Reusable HTMX-powered location dropdown component.
+
+    Creates a searchable dropdown that fetches location options from
+    /api/locations/search as user types. Uses trigram-based search
+    for fuzzy matching on city, country, code, and address.
+
+    Args:
+        name: Form field name (default: "pickup_location_id")
+        label: Label text displayed above the dropdown
+        selected_id: Pre-selected location UUID (for edit forms)
+        selected_label: Pre-selected location display text
+        required: Whether field is required
+        hub_only: Only show hub locations (is_hub=true)
+        customs_only: Only show customs point locations (is_customs_point=true)
+        placeholder: Placeholder text for search input
+        help_text: Optional help text below the dropdown
+        cls: Additional CSS classes for the container
+        dropdown_id: Custom ID for the dropdown (auto-generated if not provided)
+
+    Returns:
+        Div: FastHTML element containing the complete dropdown component
+
+    Usage in forms:
+        # Basic usage
+        location_dropdown(name="pickup_location_id", label="Точка отгрузки")
+
+        # For edit form with pre-selected value
+        location_dropdown(
+            name="pickup_location_id",
+            label="Точка отгрузки",
+            selected_id=item.get("pickup_location_id"),
+            selected_label="MSK - Москва, Россия [хаб]",
+            required=True
+        )
+
+        # Hub locations only
+        location_dropdown(
+            name="hub_location_id",
+            label="Хаб",
+            hub_only=True
+        )
+
+        # Customs points only
+        location_dropdown(
+            name="customs_location_id",
+            label="Таможенный пост",
+            customs_only=True
+        )
+
+    Example HTML output:
+        <div class="location-dropdown">
+            <label>Локация *</label>
+            <input type="text"
+                   placeholder="Поиск локации..."
+                   hx-get="/api/locations/search"
+                   hx-trigger="input changed delay:300ms, focus"
+                   hx-target="#location-options-123"
+                   hx-vals='{"hub_only": "false"}'>
+            <select id="location-options-123" name="pickup_location_id">
+                <option value="">Выберите локацию...</option>
+            </select>
+            <p class="help-text">Начните вводить название</p>
+        </div>
+    """
+    # Generate unique ID if not provided
+    import uuid
+    component_id = dropdown_id or f"loc-{uuid.uuid4().hex[:8]}"
+    search_id = f"search-{component_id}"
+    select_id = f"select-{component_id}"
+
+    # Build hx-vals for query parameters
+    hx_vals_dict = {}
+    if hub_only:
+        hx_vals_dict["hub_only"] = "true"
+    if customs_only:
+        hx_vals_dict["customs_only"] = "true"
+
+    # Convert to JSON string for hx-vals
+    import json
+    hx_vals = json.dumps(hx_vals_dict) if hx_vals_dict else None
+
+    # Build the search input attributes
+    search_attrs = {
+        "type": "text",
+        "id": search_id,
+        "placeholder": placeholder,
+        "autocomplete": "off",
+        "hx-get": "/api/locations/search",
+        "hx-trigger": "input changed delay:300ms, focus",
+        "hx-target": f"#{select_id}",
+        "name": "q",  # Query parameter for search
+        "style": "margin-bottom: 0.5rem;",
+    }
+    if hx_vals:
+        search_attrs["hx-vals"] = hx_vals
+
+    # Build select options
+    options = [Option("Выберите локацию...", value="")]
+    if selected_id and selected_label:
+        options.append(Option(selected_label, value=selected_id, selected=True))
+
+    # Build label with required indicator
+    label_text = f"{label} *" if required else label
+
+    # Build help text element
+    help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
+
+    # Build the container class
+    container_cls = f"location-dropdown {cls}".strip()
+
+    # Construct the component
+    return Div(
+        Label(
+            label_text,
+            Input(**search_attrs),
+            Select(
+                *options,
+                id=select_id,
+                name=name,
+                required=required,
+                style="width: 100%;",
+            ),
+            help_element,
+        ),
+        cls=container_cls,
+        id=component_id,
+    )
+
+
+def location_dropdown_simple(
+    name: str = "location_id",
+    label: str = "Локация",
+    locations: List[Dict] = None,
+    selected_id: str = None,
+    required: bool = False,
+    placeholder: str = "Выберите локацию...",
+    help_text: str = None,
+) -> Label:
+    """
+    Simple location dropdown without HTMX search.
+
+    Use when you have a small list of locations that can be preloaded.
+    For large lists or dynamic search, use location_dropdown() instead.
+
+    Args:
+        name: Form field name
+        label: Label text
+        locations: List of location dicts with 'value' and 'label' keys
+        selected_id: Pre-selected location UUID
+        required: Whether field is required
+        placeholder: First option placeholder text
+        help_text: Optional help text
+
+    Returns:
+        Label: FastHTML Label element containing the dropdown
+    """
+    options = [Option(placeholder, value="")]
+
+    if locations:
+        for loc in locations:
+            is_selected = loc.get("value") == selected_id
+            options.append(Option(loc.get("label", ""), value=loc.get("value", ""), selected=is_selected))
+
+    label_text = f"{label} *" if required else label
+
+    elements = [
+        label_text,
+        Select(*options, name=name, required=required),
+    ]
+    if help_text:
+        elements.append(Small(help_text, style="color: #666;"))
+
+    return Label(*elements)
+
+
+def supplier_dropdown(
+    name: str = "supplier_id",
+    label: str = "Поставщик",
+    selected_id: str = None,
+    selected_label: str = None,
+    required: bool = False,
+    placeholder: str = "Поиск поставщика...",
+    help_text: str = None,
+    cls: str = "",
+    dropdown_id: str = None,
+) -> Div:
+    """
+    Reusable HTMX-powered supplier dropdown component.
+
+    Creates a searchable dropdown that fetches supplier options from
+    /api/suppliers/search as user types.
+
+    Args:
+        name: Form field name (default: "supplier_id")
+        label: Label text displayed above the dropdown
+        selected_id: Pre-selected supplier UUID (for edit forms)
+        selected_label: Pre-selected supplier display text
+        required: Whether field is required
+        placeholder: Placeholder text for search input
+        help_text: Optional help text below the dropdown
+        cls: Additional CSS classes for the container
+        dropdown_id: Custom ID for the dropdown
+
+    Returns:
+        Div: FastHTML element containing the complete dropdown component
+
+    Usage:
+        supplier_dropdown(
+            name="supplier_id",
+            label="Поставщик",
+            required=True
+        )
+    """
+    import uuid
+    component_id = dropdown_id or f"sup-{uuid.uuid4().hex[:8]}"
+    search_id = f"search-{component_id}"
+    select_id = f"select-{component_id}"
+
+    search_attrs = {
+        "type": "text",
+        "id": search_id,
+        "placeholder": placeholder,
+        "autocomplete": "off",
+        "hx-get": "/api/suppliers/search",
+        "hx-trigger": "input changed delay:300ms, focus",
+        "hx-target": f"#{select_id}",
+        "name": "q",
+        "style": "margin-bottom: 0.5rem;",
+    }
+
+    options = [Option("Выберите поставщика...", value="")]
+    if selected_id and selected_label:
+        options.append(Option(selected_label, value=selected_id, selected=True))
+
+    label_text = f"{label} *" if required else label
+    help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
+    container_cls = f"supplier-dropdown {cls}".strip()
+
+    return Div(
+        Label(
+            label_text,
+            Input(**search_attrs),
+            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            help_element,
+        ),
+        cls=container_cls,
+        id=component_id,
+    )
+
+
+def buyer_company_dropdown(
+    name: str = "buyer_company_id",
+    label: str = "Компания-покупатель",
+    selected_id: str = None,
+    selected_label: str = None,
+    required: bool = False,
+    placeholder: str = "Поиск компании...",
+    help_text: str = None,
+    cls: str = "",
+    dropdown_id: str = None,
+) -> Div:
+    """
+    Reusable HTMX-powered buyer company dropdown component.
+
+    Creates a searchable dropdown for selecting our purchasing legal entities.
+
+    Args:
+        name: Form field name (default: "buyer_company_id")
+        label: Label text
+        selected_id: Pre-selected company UUID
+        selected_label: Pre-selected company display text
+        required: Whether field is required
+        placeholder: Placeholder text
+        help_text: Optional help text
+        cls: Additional CSS classes
+        dropdown_id: Custom ID
+
+    Returns:
+        Div: FastHTML element containing the dropdown
+    """
+    import uuid
+    component_id = dropdown_id or f"buy-{uuid.uuid4().hex[:8]}"
+    search_id = f"search-{component_id}"
+    select_id = f"select-{component_id}"
+
+    search_attrs = {
+        "type": "text",
+        "id": search_id,
+        "placeholder": placeholder,
+        "autocomplete": "off",
+        "hx-get": "/api/buyer-companies/search",
+        "hx-trigger": "input changed delay:300ms, focus",
+        "hx-target": f"#{select_id}",
+        "name": "q",
+        "style": "margin-bottom: 0.5rem;",
+    }
+
+    options = [Option("Выберите компанию...", value="")]
+    if selected_id and selected_label:
+        options.append(Option(selected_label, value=selected_id, selected=True))
+
+    label_text = f"{label} *" if required else label
+    help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
+    container_cls = f"buyer-company-dropdown {cls}".strip()
+
+    return Div(
+        Label(
+            label_text,
+            Input(**search_attrs),
+            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            help_element,
+        ),
+        cls=container_cls,
+        id=component_id,
+    )
+
+
+def seller_company_dropdown(
+    name: str = "seller_company_id",
+    label: str = "Компания-продавец",
+    selected_id: str = None,
+    selected_label: str = None,
+    required: bool = False,
+    placeholder: str = "Поиск компании...",
+    help_text: str = None,
+    cls: str = "",
+    dropdown_id: str = None,
+) -> Div:
+    """
+    Reusable HTMX-powered seller company dropdown component.
+
+    Creates a searchable dropdown for selecting our selling legal entities
+    at the quote level.
+
+    Args:
+        name: Form field name (default: "seller_company_id")
+        label: Label text
+        selected_id: Pre-selected company UUID
+        selected_label: Pre-selected company display text
+        required: Whether field is required
+        placeholder: Placeholder text
+        help_text: Optional help text
+        cls: Additional CSS classes
+        dropdown_id: Custom ID
+
+    Returns:
+        Div: FastHTML element containing the dropdown
+    """
+    import uuid
+    component_id = dropdown_id or f"sel-{uuid.uuid4().hex[:8]}"
+    search_id = f"search-{component_id}"
+    select_id = f"select-{component_id}"
+
+    search_attrs = {
+        "type": "text",
+        "id": search_id,
+        "placeholder": placeholder,
+        "autocomplete": "off",
+        "hx-get": "/api/seller-companies/search",
+        "hx-trigger": "input changed delay:300ms, focus",
+        "hx-target": f"#{select_id}",
+        "name": "q",
+        "style": "margin-bottom: 0.5rem;",
+    }
+
+    options = [Option("Выберите компанию...", value="")]
+    if selected_id and selected_label:
+        options.append(Option(selected_label, value=selected_id, selected=True))
+
+    label_text = f"{label} *" if required else label
+    help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
+    container_cls = f"seller-company-dropdown {cls}".strip()
+
+    return Div(
+        Label(
+            label_text,
+            Input(**search_attrs),
+            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            help_element,
+        ),
+        cls=container_cls,
+        id=component_id,
+    )
+
+
+# ============================================================================
+# API ENDPOINTS - Supplier Search for HTMX Dropdown (Feature UI-011)
+# ============================================================================
+
+@rt("/api/suppliers/search")
+def get(session, q: str = "", country: str = "", limit: int = 20):
+    """
+    Search suppliers for HTMX dropdown autocomplete.
+
+    Query Parameters:
+        q: Search query (matches name, supplier_code, or INN)
+        country: Filter by country code
+        limit: Maximum results (default 20, max 50)
+
+    Returns:
+        HTML fragment with <option> elements for dropdown
+    """
+    redirect = require_login(session)
+    if redirect:
+        return Option("Требуется авторизация", value="", disabled=True)
+
+    user = session["user"]
+    org_id = user.get("organization_id")
+
+    if not org_id:
+        return Option("Организация не найдена", value="", disabled=True)
+
+    try:
+        from services.supplier_service import search_suppliers, get_all_suppliers, format_supplier_for_dropdown
+
+        if q and len(q.strip()) > 0:
+            suppliers = search_suppliers(
+                organization_id=org_id,
+                query=q.strip(),
+                is_active=True,
+                limit=min(limit, 50),
+            )
+        else:
+            suppliers = get_all_suppliers(
+                organization_id=org_id,
+                is_active=True,
+                limit=min(limit, 50),
+            )
+
+        options = [Option("Выберите поставщика...", value="")]
+        for sup in suppliers:
+            label = format_supplier_for_dropdown(sup)
+            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+
+        if len(suppliers) == 0 and q:
+            options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
+
+        return Group(*options)
+
+    except Exception as e:
+        print(f"Error in supplier search API: {e}")
+        return Option(f"Ошибка: {str(e)}", value="", disabled=True)
+
+
+@rt("/api/buyer-companies/search")
+def get(session, q: str = "", limit: int = 20):
+    """
+    Search buyer companies for HTMX dropdown autocomplete.
+
+    Query Parameters:
+        q: Search query (matches name, company_code, or INN)
+        limit: Maximum results (default 20, max 50)
+
+    Returns:
+        HTML fragment with <option> elements for dropdown
+    """
+    redirect = require_login(session)
+    if redirect:
+        return Option("Требуется авторизация", value="", disabled=True)
+
+    user = session["user"]
+    org_id = user.get("organization_id")
+
+    if not org_id:
+        return Option("Организация не найдена", value="", disabled=True)
+
+    try:
+        from services.buyer_company_service import search_buyer_companies, get_all_buyer_companies, format_buyer_company_for_dropdown
+
+        if q and len(q.strip()) > 0:
+            companies = search_buyer_companies(
+                organization_id=org_id,
+                query=q.strip(),
+                is_active=True,
+                limit=min(limit, 50),
+            )
+        else:
+            companies = get_all_buyer_companies(
+                organization_id=org_id,
+                is_active=True,
+                limit=min(limit, 50),
+            )
+
+        options = [Option("Выберите компанию...", value="")]
+        for comp in companies:
+            label = format_buyer_company_for_dropdown(comp)
+            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+
+        if len(companies) == 0 and q:
+            options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
+
+        return Group(*options)
+
+    except Exception as e:
+        print(f"Error in buyer company search API: {e}")
+        return Option(f"Ошибка: {str(e)}", value="", disabled=True)
+
+
+@rt("/api/seller-companies/search")
+def get(session, q: str = "", limit: int = 20):
+    """
+    Search seller companies for HTMX dropdown autocomplete.
+
+    Query Parameters:
+        q: Search query (matches name, supplier_code, or INN)
+        limit: Maximum results (default 20, max 50)
+
+    Returns:
+        HTML fragment with <option> elements for dropdown
+    """
+    redirect = require_login(session)
+    if redirect:
+        return Option("Требуется авторизация", value="", disabled=True)
+
+    user = session["user"]
+    org_id = user.get("organization_id")
+
+    if not org_id:
+        return Option("Организация не найдена", value="", disabled=True)
+
+    try:
+        from services.seller_company_service import search_seller_companies, get_all_seller_companies, format_seller_company_for_dropdown
+
+        if q and len(q.strip()) > 0:
+            companies = search_seller_companies(
+                organization_id=org_id,
+                query=q.strip(),
+                is_active=True,
+                limit=min(limit, 50),
+            )
+        else:
+            companies = get_all_seller_companies(
+                organization_id=org_id,
+                is_active=True,
+                limit=min(limit, 50),
+            )
+
+        options = [Option("Выберите компанию...", value="")]
+        for comp in companies:
+            label = format_seller_company_for_dropdown(comp)
+            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+
+        if len(companies) == 0 and q:
+            options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
+
+        return Group(*options)
+
+    except Exception as e:
+        print(f"Error in seller company search API: {e}")
+        return Option(f"Ошибка: {str(e)}", value="", disabled=True)
+
+
+# ============================================================================
 # SUPPLIERS LIST (Feature UI-001)
 # ============================================================================
 
