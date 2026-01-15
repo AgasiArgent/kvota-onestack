@@ -3208,3 +3208,22 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - Utility functions
 
 ### Progress: 48/94 features complete
+
+56. **UI-006** (Seller company form - create/edit) - ✅ COMPLETE
+    - Created `_seller_company_form()` helper function for rendering create/edit forms
+    - GET /seller-companies/new - Create form page
+    - POST /seller-companies/new - Handle creation with validation
+    - GET /seller-companies/{id}/edit - Edit form page
+    - POST /seller-companies/{id}/edit - Handle update
+    - POST /seller-companies/{id}/delete - Soft delete (deactivate) for admins only
+    - Form sections:
+      - Main info: supplier_code (3 uppercase letters, used in IDN), name, country
+      - Legal: INN (10 digits for юрлицо, 12 for ИП), KPP (9 digits), OGRN (13/15 digits)
+      - Registration address (textarea)
+      - Director info: position + name (for contracts and specifications)
+      - Status checkbox (edit mode only)
+    - Validation functions from seller_company_service: validate_supplier_code(), validate_inn(), validate_kpp(), validate_ogrn()
+    - Russian UI labels, info alerts, error handling
+    - Permission: admin role only
+    - Redirect on success to company detail page
+

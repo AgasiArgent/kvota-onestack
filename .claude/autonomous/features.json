@@ -558,8 +558,10 @@
       "name": "Seller company form",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Form with all seller company fields"
+      "passes": true,
+      "completed_at": "2026-01-15T23:10:00Z",
+      "description": "Form with all seller company fields",
+      "notes": "Added _seller_company_form() helper function and 4 routes: GET/POST /seller-companies/new (create), GET/POST /seller-companies/{id}/edit (update), POST /seller-companies/{id}/delete (soft delete). Form sections: code (3 letters for IDN), name, country, legal (INN 10/12 digits, KPP 9 digits, OGRN 13/15 digits supporting both legal entities and IEs), registration address, director info, status checkbox. Russian UI labels. Admin only access."
     },
     {
       "id": "UI-007",

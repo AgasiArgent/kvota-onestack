@@ -13152,6 +13152,480 @@ def get(company_id: str, session):
     )
 
 
+# -----------------------------------------------------------------------------
+# UI-006: Seller Company Form (Create/Edit)
+# -----------------------------------------------------------------------------
+
+def _seller_company_form(
+    company: "SellerCompany | None" = None,
+    error: str = "",
+    session=None
+):
+    """
+    Render create/edit form for seller companies.
+
+    Args:
+        company: Existing company (for edit mode), None for create mode
+        error: Error message to display
+        session: User session
+
+    Returns:
+        Page layout with seller company form
+    """
+    is_edit = company is not None
+    title = f"Редактировать: {company.name}" if is_edit else "Новая компания-продавец"
+    action_url = f"/seller-companies/{company.id}/edit" if is_edit else "/seller-companies/new"
+
+    return page_layout(title,
+        # Header
+        Div(
+            H1(f"🏭 {title}"),
+            cls="card"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Компания-продавец — это наше юридическое лицо, от имени которого мы продаём товары клиентам. ",
+            "Код компании (3 буквы) используется для генерации IDN коммерческого предложения.",
+            cls="alert alert-info"
+        ),
+
+        # Error message
+        Div(f"❌ {error}", cls="alert alert-error") if error else "",
+
+        # Form
+        Div(
+            Form(
+                # Basic information
+                H3("Основная информация"),
+                Div(
+                    Label("Код компании *",
+                        Input(
+                            name="supplier_code",
+                            value=company.supplier_code if company else "",
+                            placeholder="MBR",
+                            pattern="[A-Za-z]{3}",
+                            maxlength="3",
+                            required=True,
+                            title="3 буквы латиницей (например, MBR, CMT, GES)",
+                            style="text-transform: uppercase;"
+                        ),
+                        Small("3 буквы латиницей (используется в IDN)", style="color: #666; display: block;")
+                    ),
+                    Label("Название компании *",
+                        Input(
+                            name="name",
+                            value=company.name if company else "",
+                            placeholder="ООО «МАСТЕР БЭРИНГ»",
+                            required=True
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Country
+                Div(
+                    Label("Страна",
+                        Input(
+                            name="country",
+                            value=company.country if company else "Россия",
+                            placeholder="Россия"
+                        )
+                    ),
+                    Div(cls="form-placeholder"),
+                    cls="form-row"
+                ),
+
+                # Legal identifiers
+                H3("Юридические реквизиты", style="margin-top: 1.5rem;"),
+                Div(
+                    "ℹ️ ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.",
+                    cls="alert alert-info", style="margin-bottom: 1rem;"
+                ),
+                Div(
+                    Label("ИНН",
+                        Input(
+                            name="inn",
+                            value=company.inn if company else "",
+                            placeholder="1234567890 или 123456789012",
+                            pattern="\\d{10}|\\d{12}",
+                            title="10 цифр для юрлица или 12 цифр для ИП"
+                        ),
+                        Small("10 цифр (юрлицо) или 12 цифр (ИП)", style="color: #666; display: block;")
+                    ),
+                    Label("КПП",
+                        Input(
+                            name="kpp",
+                            value=company.kpp if company else "",
+                            placeholder="123456789",
+                            pattern="\\d{9}",
+                            title="9 цифр (только для юрлиц)"
+                        ),
+                        Small("9 цифр (только для юрлиц)", style="color: #666; display: block;")
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("ОГРН",
+                        Input(
+                            name="ogrn",
+                            value=company.ogrn if company else "",
+                            placeholder="1234567890123 или 123456789012345",
+                            pattern="\\d{13}|\\d{15}",
+                            title="13 цифр для юрлица или 15 цифр для ИП"
+                        ),
+                        Small("13 цифр (юрлицо) или 15 цифр (ИП)", style="color: #666; display: block;")
+                    ),
+                    Div(cls="form-placeholder"),
+                    cls="form-row"
+                ),
+
+                # Registration address
+                H3("Юридический адрес", style="margin-top: 1.5rem;"),
+                Label("Адрес регистрации",
+                    Textarea(
+                        company.registration_address if company else "",
+                        name="registration_address",
+                        placeholder="123456, г. Москва, ул. Примерная, д. 1, офис 100",
+                        rows="2"
+                    )
+                ),
+
+                # Director information
+                H3("Руководство (для документов)", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Должность руководителя",
+                        Input(
+                            name="general_director_position",
+                            value=company.general_director_position if company else "Генеральный директор",
+                            placeholder="Генеральный директор"
+                        )
+                    ),
+                    Label("ФИО руководителя",
+                        Input(
+                            name="general_director_name",
+                            value=company.general_director_name if company else "",
+                            placeholder="Иванов Иван Иванович"
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Status (for edit mode)
+                Div(
+                    H3("Статус", style="margin-top: 1.5rem;"),
+                    Label(
+                        Input(
+                            type="checkbox",
+                            name="is_active",
+                            checked=company.is_active if company else True,
+                            value="true"
+                        ),
+                        " Активная компания",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
+                    Small("Неактивные компании не отображаются в выпадающих списках при создании КП", style="color: #666;"),
+                ) if is_edit else "",
+
+                # Form actions
+                Div(
+                    Button("💾 Сохранить", type="submit"),
+                    A("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", role="button", cls="secondary"),
+                    cls="form-actions", style="margin-top: 1.5rem;"
+                ),
+
+                method="post",
+                action=action_url
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/seller-companies/new")
+def get(session):
+    """Show form to create a new seller company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-продавцов. Требуется роль: admin", cls="alert alert-error"),
+            session=session
+        )
+
+    return _seller_company_form(session=session)
+
+
+@rt("/seller-companies/new")
+def post(
+    supplier_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    session=None
+):
+    """Handle seller company creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-продавцов.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.seller_company_service import (
+        create_seller_company, validate_supplier_code, validate_inn, validate_kpp, validate_ogrn
+    )
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _seller_company_form(
+            error="Код компании должен состоять из 3 заглавных латинских букв (например, MBR, CMT, GES)",
+            session=session
+        )
+
+    # Validate INN (optional but if provided must be valid)
+    inn_clean = inn.strip() if inn else ""
+    if inn_clean and not validate_inn(inn_clean):
+        return _seller_company_form(
+            error="ИНН должен состоять из 10 цифр (юрлицо) или 12 цифр (ИП)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _seller_company_form(
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _seller_company_form(
+            error="ОГРН должен состоять из 13 цифр (юрлицо) или 15 цифр (ИП)",
+            session=session
+        )
+
+    try:
+        company = create_seller_company(
+            organization_id=org_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean or None,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if company:
+            return RedirectResponse(f"/seller-companies/{company.id}", status_code=303)
+        else:
+            return _seller_company_form(
+                error="Компания с таким кодом или ИНН уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _seller_company_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating seller company: {e}")
+        return _seller_company_form(error=f"Ошибка при создании: {e}", session=session)
+
+
+@rt("/seller-companies/{company_id}/edit")
+def get(company_id: str, session):
+    """Show form to edit an existing seller company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования компаний-продавцов.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.seller_company_service import get_seller_company
+
+    company = get_seller_company(company_id)
+
+    if not company:
+        return page_layout("Компания не найдена",
+            Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
+            A("← К списку компаний", href="/seller-companies", role="button"),
+            session=session
+        )
+
+    return _seller_company_form(company=company, session=session)
+
+
+@rt("/seller-companies/{company_id}/edit")
+def post(
+    company_id: str,
+    supplier_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    is_active: str = "",
+    session=None
+):
+    """Handle seller company edit form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для редактирования компаний-продавцов.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.seller_company_service import (
+        get_seller_company, update_seller_company, validate_supplier_code,
+        validate_inn, validate_kpp, validate_ogrn
+    )
+
+    company = get_seller_company(company_id)
+    if not company:
+        return page_layout("Компания не найдена",
+            Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
+            A("← К списку компаний", href="/seller-companies", role="button"),
+            session=session
+        )
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _seller_company_form(
+            company=company,
+            error="Код компании должен состоять из 3 заглавных латинских букв (например, MBR, CMT, GES)",
+            session=session
+        )
+
+    # Validate INN (optional)
+    inn_clean = inn.strip() if inn else ""
+    if inn_clean and not validate_inn(inn_clean):
+        return _seller_company_form(
+            company=company,
+            error="ИНН должен состоять из 10 цифр (юрлицо) или 12 цифр (ИП)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _seller_company_form(
+            company=company,
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _seller_company_form(
+            company=company,
+            error="ОГРН должен состоять из 13 цифр (юрлицо) или 15 цифр (ИП)",
+            session=session
+        )
+
+    # Checkbox handling: is_active
+    active = is_active == "true"
+
+    try:
+        updated = update_seller_company(
+            company_id=company_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean or None,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=active,
+        )
+
+        if updated:
+            return RedirectResponse(f"/seller-companies/{company_id}", status_code=303)
+        else:
+            return _seller_company_form(
+                company=company,
+                error="Не удалось обновить компанию. Возможно, код или ИНН уже используются другой компанией.",
+                session=session
+            )
+
+    except ValueError as e:
+        return _seller_company_form(company=company, error=str(e), session=session)
+    except Exception as e:
+        print(f"Error updating seller company: {e}")
+        return _seller_company_form(company=company, error=f"Ошибка при обновлении: {e}", session=session)
+
+
+@rt("/seller-companies/{company_id}/delete")
+def post(company_id: str, session):
+    """Handle seller company deletion (soft delete - deactivate)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("Только администратор может удалять компании-продавцы.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.seller_company_service import deactivate_seller_company
+
+    result = deactivate_seller_company(company_id)
+
+    if result:
+        return RedirectResponse("/seller-companies", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
+            A("← К списку компаний", href="/seller-companies", role="button"),
+            session=session
+        )
+
+
 # ============================================================================
 # RUN SERVER
 # ============================================================================
