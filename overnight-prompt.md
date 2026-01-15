@@ -168,12 +168,13 @@ App runs at http://localhost:5001
 - [x] Feature #83: Расчёт отклонений (2026-01-15) - Already implemented in migration 009: database trigger 'calculate_plan_fact_variance()' automatically computes variance_amount when actual payment recorded. UI displays color-coded variance per item and total variance in deal summary.
 - [x] Feature #84: Страница /admin/users (2026-01-15) - Created /admin/users page for user and role management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles for role assignment with checkboxes. Color-coded badges, stats cards, role legend. Added 'Админ' nav link for admin users.
 - [x] Feature #85: Страница /admin/brands (2026-01-15) - Created /admin/brands page for brand assignment management. Full CRUD: list all assignments + unassigned brands from quotes, create new (brand + procurement manager dropdown), edit manager, delete. Stats cards, auto-import from quote_items, admin-only access.
+- [x] Feature #86: Обновить dashboard для ролей (2026-01-15) - Completely redesigned /dashboard to show role-specific task sections. Added _get_role_tasks_sections() helper. Features: (1) TOP_MANAGER/ADMIN: pending approvals, (2) PROCUREMENT: quotes pending evaluation, (3) LOGISTICS: quotes pending logistics, (4) CUSTOMS: quotes pending customs, (5) QUOTE_CONTROLLER: quotes pending review, (6) SPEC_CONTROLLER: spec stats, (7) FINANCE: active deals, (8) SALES: quotes pending sales review. Color-coded sections, role badges in header, workflow-aware stats.
 
 ### Next Up
-- Feature #86: Обновить dashboard для ролей (Show tasks based on user role)
+- Feature #87: Прогресс-бар workflow на КП (Workflow progress bar visualization)
 
 ### Progress
-- **85 of 88 features completed** (97%)
+- **86 of 88 features completed** (98%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

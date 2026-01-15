@@ -994,10 +994,11 @@
       "name": "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c dashboard \u0434\u043b\u044f \u0440\u043e\u043b\u0435\u0439",
       "description": "\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 \u0432 \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u0438 \u043e\u0442 \u0440\u043e\u043b\u0438",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T14:00:00.000000",
+      "completed_at": "2026-01-15T14:30:00.000000",
+      "notes": "Completely redesigned /dashboard route to show role-specific task sections. Added _get_role_tasks_sections() helper function. Features: (1) TOP_MANAGER/ADMIN: pending approvals with quote details and 'Согласовать' buttons, (2) PROCUREMENT: quotes pending procurement evaluation, (3) LOGISTICS: quotes pending logistics data, (4) CUSTOMS: quotes pending customs clearance, (5) QUOTE_CONTROLLER: quotes pending review with amounts, (6) SPEC_CONTROLLER: specifications stats (drafts, pending review, quotes pending spec creation), (7) FINANCE: active deals with totals and action buttons, (8) SALES: quotes pending sales review. Each section has color-coded border, count badge, table with action buttons, and link to dedicated section. Dashboard header shows user's roles as color-coded badges. Stats cards now show workflow-aware counts (total KP, revenue from approved/deals, quotes 'В работе'). Recent quotes table uses workflow_status_badge(). Fixed approval_service.py to use correct field name idn_quote. Added new imports: count_pending_approvals, get_pending_approvals_for_user, get_approvals_with_details, count_deals_by_status, get_deals_by_status, count_specifications_by_status."
     },
     {
       "id": 87,

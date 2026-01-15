@@ -307,7 +307,7 @@ def get_approvals_with_details(
 
     try:
         query = supabase.table('approvals').select(
-            '*, quotes(id, idn, customer_name, workflow_status, total_amount, currency, organization_id)'
+            '*, quotes(id, idn_quote, customer_name, workflow_status, total_amount, currency, organization_id)'
         ).eq('approver_id', user_id)
 
         if status:

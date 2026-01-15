@@ -39,8 +39,14 @@ from services.workflow_service import (
     transition_quote_status
 )
 
-# Import approval service (Feature #65)
-from services.approval_service import request_approval
+# Import approval service (Feature #65, #86)
+from services.approval_service import request_approval, count_pending_approvals, get_pending_approvals_for_user, get_approvals_with_details
+
+# Import deal service (Feature #86)
+from services.deal_service import count_deals_by_status, get_deals_by_status
+
+# Import specification service (Feature #86)
+from services.specification_service import count_specifications_by_status
 
 # Import calculation engine
 from calculation_engine import calculate_multiproduct_quote
@@ -391,8 +397,317 @@ def get(session):
 
 
 # ============================================================================
-# DASHBOARD
+# DASHBOARD (Feature #86: Role-based tasks)
 # ============================================================================
+
+def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -> list:
+    """
+    Build role-specific task sections for the dashboard.
+    Returns a list of FastHTML elements showing tasks relevant to user's roles.
+    """
+    sections = []
+
+    # -------------------------------------------------------------------------
+    # TOP MANAGER / ADMIN: Pending Approvals
+    # -------------------------------------------------------------------------
+    if 'top_manager' in roles or 'admin' in roles:
+        pending_count = count_pending_approvals(user_id)
+        if pending_count > 0:
+            # Get approval details - only pending ones
+            approvals = get_approvals_with_details(user_id, status='pending', limit=5)
+
+            approval_rows = []
+            for a in approvals:
+                quote_info = a.get('quotes', {}) or {}
+                # Handle both 'idn' and 'idn_quote' field names
+                quote_idn = quote_info.get('idn_quote') or quote_info.get('idn') or f"#{a.get('quote_id', '')[:8]}"
+                approval_rows.append(Tr(
+                    Td(quote_idn),
+                    Td(quote_info.get('customer_name', '—')),
+                    Td(format_money(quote_info.get('total_amount'))),
+                    Td(a.get('requested_at', '')[:10] if a.get('requested_at') else '—'),
+                    Td(
+                        A("Согласовать", href=f"/quotes/{a.get('quote_id')}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;")
+                    )
+                ))
+
+            sections.append(
+                Div(
+                    H2(f"⏳ Ожидают согласования ({pending_count})", style="color: #b45309;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Запрошено"), Th("Действие"))),
+                        Tbody(*approval_rows) if approval_rows else Tbody(Tr(Td("Нет ожидающих", colspan="5", style="text-align: center;")))
+                    ) if approvals else P("Загрузка..."),
+                    A("Открыть все согласования →", href="/quotes?status=pending_approval"),
+                    cls="card", style="border-left: 4px solid #f59e0b; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # PROCUREMENT: Quotes needing procurement evaluation
+    # -------------------------------------------------------------------------
+    if 'procurement' in roles:
+        # Get quotes in pending_procurement status
+        proc_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), workflow_status, created_at") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_procurement") \
+            .order("created_at", desc=False) \
+            .limit(5) \
+            .execute()
+
+        proc_quotes = proc_result.data or []
+        proc_count = len(proc_quotes)
+
+        if proc_count > 0:
+            proc_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(A("Оценить", href=f"/procurement", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ) for q in proc_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(f"📦 Закупки: ожидают оценки ({proc_count})", style="color: #92400e;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                        Tbody(*proc_rows)
+                    ),
+                    A("Открыть раздел Закупки →", href="/procurement"),
+                    cls="card", style="border-left: 4px solid #fbbf24; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # LOGISTICS: Quotes needing logistics data
+    # -------------------------------------------------------------------------
+    if 'logistics' in roles:
+        log_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), workflow_status, created_at") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_logistics") \
+            .order("created_at", desc=False) \
+            .limit(5) \
+            .execute()
+
+        log_quotes = log_result.data or []
+        log_count = len(log_quotes)
+
+        if log_count > 0:
+            log_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(A("Заполнить", href=f"/logistics", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ) for q in log_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(f"🚚 Логистика: ожидают данных ({log_count})", style="color: #1e40af;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                        Tbody(*log_rows)
+                    ),
+                    A("Открыть раздел Логистика →", href="/logistics"),
+                    cls="card", style="border-left: 4px solid #3b82f6; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # CUSTOMS: Quotes needing customs data
+    # -------------------------------------------------------------------------
+    if 'customs' in roles:
+        cust_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), workflow_status, created_at") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_customs") \
+            .order("created_at", desc=False) \
+            .limit(5) \
+            .execute()
+
+        cust_quotes = cust_result.data or []
+        cust_count = len(cust_quotes)
+
+        if cust_count > 0:
+            cust_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(A("Заполнить", href=f"/customs", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ) for q in cust_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(f"🛃 Таможня: ожидают данных ({cust_count})", style="color: #6b21a8;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                        Tbody(*cust_rows)
+                    ),
+                    A("Открыть раздел Таможня →", href="/customs"),
+                    cls="card", style="border-left: 4px solid #8b5cf6; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # QUOTE_CONTROLLER: Quotes needing review
+    # -------------------------------------------------------------------------
+    if 'quote_controller' in roles or 'admin' in roles:
+        qc_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), workflow_status, total_amount, created_at") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_quote_control") \
+            .order("created_at", desc=False) \
+            .limit(5) \
+            .execute()
+
+        qc_quotes = qc_result.data or []
+        qc_count = len(qc_quotes)
+
+        if qc_count > 0:
+            qc_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td(format_money(q.get("total_amount"))),
+                    Td(A("Проверить", href=f"/quote-control/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ) for q in qc_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(f"✅ Контроль КП: на проверке ({qc_count})", style="color: #9d174d;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                        Tbody(*qc_rows)
+                    ),
+                    A("Открыть раздел Контроль КП →", href="/quote-control"),
+                    cls="card", style="border-left: 4px solid #ec4899; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # SPEC_CONTROLLER: Specifications needing work
+    # -------------------------------------------------------------------------
+    if 'spec_controller' in roles or 'admin' in roles:
+        spec_counts = count_specifications_by_status(org_id)
+        pending_specs = spec_counts.get('pending_review', 0) + spec_counts.get('draft', 0)
+
+        # Also check quotes pending spec control
+        spec_quotes_result = supabase.table("quotes") \
+            .select("id", count="exact") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_spec_control") \
+            .execute()
+        pending_spec_quotes = spec_quotes_result.count or 0
+
+        total_spec_work = pending_specs + pending_spec_quotes
+
+        if total_spec_work > 0:
+            sections.append(
+                Div(
+                    H2(f"📋 Спецификации: требуют внимания ({total_spec_work})", style="color: #4338ca;"),
+                    Div(
+                        Div(
+                            Div(str(pending_spec_quotes), cls="stat-value", style="font-size: 1.5rem; color: #4338ca;"),
+                            Div("КП для создания спец."),
+                            cls="stat-card", style="padding: 0.5rem;"
+                        ),
+                        Div(
+                            Div(str(spec_counts.get('draft', 0)), cls="stat-value", style="font-size: 1.5rem; color: #6366f1;"),
+                            Div("Черновики"),
+                            cls="stat-card", style="padding: 0.5rem;"
+                        ),
+                        Div(
+                            Div(str(spec_counts.get('pending_review', 0)), cls="stat-value", style="font-size: 1.5rem; color: #818cf8;"),
+                            Div("На проверке"),
+                            cls="stat-card", style="padding: 0.5rem;"
+                        ),
+                        cls="stats-grid", style="grid-template-columns: repeat(3, 1fr);"
+                    ),
+                    A("Открыть раздел Спецификации →", href="/spec-control"),
+                    cls="card", style="border-left: 4px solid #6366f1; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # FINANCE: Active deals
+    # -------------------------------------------------------------------------
+    if 'finance' in roles or 'admin' in roles:
+        deal_counts = count_deals_by_status(org_id)
+        active_deals = deal_counts.get('active', 0)
+
+        if active_deals > 0:
+            # Get a few active deals
+            active_deals_list = get_deals_by_status(org_id, 'active', limit=5)
+
+            deal_rows = []
+            for d in active_deals_list:
+                spec_info = d.get('specification', {})
+                deal_rows.append(Tr(
+                    Td(d.get('deal_number', '—')),
+                    Td(spec_info.get('customer_name', '—') if spec_info else '—'),
+                    Td(format_money(d.get('total_amount'), d.get('currency', 'RUB'))),
+                    Td(A("Открыть", href=f"/finance/{d.get('id')}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ))
+
+            sections.append(
+                Div(
+                    H2(f"💰 Финансы: активные сделки ({active_deals})", style="color: #059669;"),
+                    Table(
+                        Thead(Tr(Th("Сделка #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                        Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="4", style="text-align: center;")))
+                    ),
+                    A("Открыть раздел Финансы →", href="/finance"),
+                    cls="card", style="border-left: 4px solid #10b981; margin-bottom: 1rem;"
+                )
+            )
+
+    # -------------------------------------------------------------------------
+    # SALES: My quotes (pending sales review)
+    # -------------------------------------------------------------------------
+    if 'sales' in roles:
+        sales_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), workflow_status, total_amount") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "pending_sales_review") \
+            .order("updated_at", desc=True) \
+            .limit(5) \
+            .execute()
+
+        sales_quotes = sales_result.data or []
+        sales_count = len(sales_quotes)
+
+        if sales_count > 0:
+            sales_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td(format_money(q.get("total_amount"))),
+                    Td(A("Продолжить", href=f"/quotes/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ) for q in sales_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(f"📝 Продажи: ожидают вашего решения ({sales_count})", style="color: #9a3412;"),
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                        Tbody(*sales_rows)
+                    ),
+                    A("Все мои КП →", href="/quotes"),
+                    cls="card", style="border-left: 4px solid #f97316; margin-bottom: 1rem;"
+                )
+            )
+
+    return sections
+
 
 @rt("/dashboard")
 def get(session):
@@ -401,12 +716,21 @@ def get(session):
         return redirect
 
     user = session["user"]
+    user_id = user.get("id")
+    org_id = user.get("org_id")
     supabase = get_supabase()
 
-    # Get quotes stats
+    # Get user roles
+    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
+
+    # If no roles, show standard dashboard
+    if not roles:
+        roles = []
+
+    # Get overall quotes stats
     quotes_result = supabase.table("quotes") \
-        .select("id, status, total_amount") \
-        .eq("organization_id", user["org_id"]) \
+        .select("id, status, workflow_status, total_amount") \
+        .eq("organization_id", org_id) \
         .execute()
 
     quotes = quotes_result.data or []
@@ -414,59 +738,101 @@ def get(session):
     total_quotes = len(quotes)
     total_revenue = sum(
         Decimal(str(q.get("total_amount") or 0))
-        for q in quotes if q.get("status") == "approved"
+        for q in quotes if q.get("workflow_status") in ["approved", "deal"]
     )
-    pending_quotes = len([q for q in quotes if q.get("status") in ["draft", "sent"]])
+
+    # Count quotes in active workflow stages
+    active_workflow = len([q for q in quotes if q.get("workflow_status") not in
+                          ["draft", "approved", "deal", "rejected", "cancelled", None]])
 
     # Get recent quotes
     recent_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), status, total_amount, created_at") \
-        .eq("organization_id", user["org_id"]) \
+        .select("id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at") \
+        .eq("organization_id", org_id) \
         .order("created_at", desc=True) \
         .limit(5) \
         .execute()
 
     recent_quotes = recent_result.data or []
 
-    return page_layout("Dashboard",
-        H1(f"Welcome back!"),
-        P(f"Organization: {user.get('org_name', 'Unknown')}"),
+    # Build role-specific task sections
+    task_sections = _get_role_tasks_sections(user_id, org_id, roles, supabase)
 
-        # Stats cards
+    # Role badges
+    role_names = {
+        'sales': ('Продажи', '#f97316'),
+        'procurement': ('Закупки', '#fbbf24'),
+        'logistics': ('Логистика', '#3b82f6'),
+        'customs': ('Таможня', '#8b5cf6'),
+        'quote_controller': ('Контроль КП', '#ec4899'),
+        'spec_controller': ('Спецификации', '#6366f1'),
+        'finance': ('Финансы', '#10b981'),
+        'top_manager': ('Топ-менеджер', '#f59e0b'),
+        'admin': ('Админ', '#ef4444'),
+    }
+
+    role_badges = [
+        Span(role_names.get(r, (r, '#6b7280'))[0],
+             style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; background: {role_names.get(r, (r, '#6b7280'))[1]}20; color: {role_names.get(r, (r, '#6b7280'))[1]}; border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}40;")
+        for r in roles
+    ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
+
+    return page_layout("Dashboard",
+        # Header with roles
+        Div(
+            H1(f"👋 Добро пожаловать!"),
+            P(
+                Strong("Организация: "), user.get('org_name', 'Неизвестно'), " | ",
+                Strong("Ваши роли: "), *role_badges
+            ),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Overall stats cards
         Div(
             Div(
                 Div(str(total_quotes), cls="stat-value"),
-                Div("Total Quotes"),
+                Div("Всего КП"),
                 cls="card stat-card"
             ),
             Div(
                 Div(format_money(total_revenue), cls="stat-value"),
-                Div("Revenue (Approved)"),
+                Div("Выручка (одобренные)"),
                 cls="card stat-card"
             ),
             Div(
-                Div(str(pending_quotes), cls="stat-value"),
-                Div("Pending"),
+                Div(str(active_workflow), cls="stat-value"),
+                Div("В работе"),
                 cls="card stat-card"
             ),
             cls="stats-grid"
         ),
 
+        # Role-specific task sections
+        H2("📋 Ваши задачи", style="margin-top: 1.5rem; margin-bottom: 1rem;") if task_sections else "",
+        *task_sections,
+
+        # If no tasks, show helpful message
+        Div(
+            P("✅ У вас нет активных задач! Все под контролем.", style="color: #059669; font-size: 1.1rem;"),
+            cls="card", style="text-align: center; background: #ecfdf5;"
+        ) if not task_sections else "",
+
         # Recent quotes
-        H2("Recent Quotes"),
+        H2("📊 Последние КП", style="margin-top: 1.5rem;"),
         Table(
-            Thead(Tr(Th("Quote #"), Th("Customer"), Th("Status"), Th("Total"), Th("Actions"))),
+            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Действия"))),
             Tbody(
                 *[Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(status_badge(q.get("status", "draft"))),
+                    Td(workflow_status_badge(q.get("workflow_status") or q.get("status", "draft"))),
                     Td(format_money(q.get("total_amount"))),
-                    Td(A("View", href=f"/quotes/{q['id']}"))
+                    Td(A("Открыть", href=f"/quotes/{q['id']}"))
                 ) for q in recent_quotes]
-            ) if recent_quotes else Tbody(Tr(Td("No quotes yet", colspan="5", style="text-align: center;")))
+            ) if recent_quotes else Tbody(Tr(Td("Нет КП", colspan="5", style="text-align: center;")))
         ),
-        A("View All Quotes →", href="/quotes"),
+        A("Все КП →", href="/quotes"),
         session=session
     )
 
