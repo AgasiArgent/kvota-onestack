@@ -372,8 +372,10 @@
       "name": "Supplier invoices CRUD",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Manage supplier invoices with items"
+      "passes": true,
+      "completed_at": "2026-01-15T22:30:00Z",
+      "description": "Manage supplier invoices with items",
+      "notes": "Created services/supplier_invoice_service.py with: SupplierInvoice/SupplierInvoiceItem/InvoiceSummary dataclasses, validation functions (validate_invoice_number, validate_invoice_status, validate_currency, validate_amount), status helpers (get_invoice_status_name, get_invoice_status_color, is_invoice_payable, is_invoice_editable), invoice CRUD (create_invoice, create_invoice_with_items, get_invoice, get_invoice_with_details, get_invoice_by_number, get_invoices_for_supplier, get_all_invoices, count_invoices, search_invoices, invoice_exists, get_overdue_invoices, get_pending_invoices, update_invoice, update_invoice_status, cancel_invoice, mark_invoice_overdue, update_overdue_invoices, delete_invoice), item operations (add_invoice_item, get_invoice_item, get_invoice_items, get_invoice_items_with_details, update_invoice_item, delete_invoice_item, get_items_for_quote_item, get_total_invoiced_for_quote_item), utility functions (get_invoice_summary, get_invoice_stats_by_supplier, format_invoice_for_display, get_invoices_for_dropdown). Tests: tests/test_supplier_invoice_service.py with 52 passing tests. Updated services/__init__.py with all exports."
     },
     {
       "id": "API-011",
