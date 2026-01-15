@@ -496,6 +496,46 @@ from .customer_contract_service import (
     get_contracts_for_dropdown,
     get_contract_for_specification,
 )
+from .location_service import (
+    # Data class (Feature #API-006)
+    Location,
+    # Validation functions
+    validate_location_code,
+    validate_country,
+    # Create operations
+    create_location,
+    create_location_if_not_exists,
+    # Read operations
+    get_location,
+    get_location_by_code,
+    get_location_by_country_city,
+    get_all_locations,
+    get_locations_by_country,
+    get_hub_locations,
+    get_customs_point_locations,
+    count_locations,
+    location_exists,
+    # Search operations (for HTMX dropdown)
+    search_locations,
+    get_active_locations,
+    # Update operations
+    update_location,
+    activate_location,
+    deactivate_location,
+    set_as_hub,
+    set_as_customs_point,
+    # Delete operations
+    delete_location,
+    # Utility functions
+    get_unique_countries as get_location_unique_countries,
+    get_location_stats,
+    get_location_display_name,
+    format_location_for_dropdown,
+    get_locations_for_dropdown,
+    # Seed data
+    seed_default_locations,
+    get_location_for_route,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -1035,4 +1075,34 @@ __all__ = [
     "format_contract_for_dropdown",
     "get_contracts_for_dropdown",
     "get_contract_for_specification",
+    # Location service (Feature #API-006)
+    "Location",
+    "validate_location_code",
+    "validate_country",
+    "create_location",
+    "create_location_if_not_exists",
+    "get_location",
+    "get_location_by_code",
+    "get_location_by_country_city",
+    "get_all_locations",
+    "get_locations_by_country",
+    "get_hub_locations",
+    "get_customs_point_locations",
+    "count_locations",
+    "location_exists",
+    "search_locations",
+    "get_active_locations",
+    "update_location",
+    "activate_location",
+    "deactivate_location",
+    "set_as_hub",
+    "set_as_customs_point",
+    "delete_location",
+    "get_location_unique_countries",
+    "get_location_stats",
+    "get_location_display_name",
+    "format_location_for_dropdown",
+    "get_locations_for_dropdown",
+    "seed_default_locations",
+    "get_location_for_route",
 ]

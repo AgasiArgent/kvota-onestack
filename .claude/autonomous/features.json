@@ -332,8 +332,10 @@
       "name": "CRUD API for locations",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Manage locations directory"
+      "passes": true,
+      "completed_at": "2026-01-15T20:00:00Z",
+      "description": "Manage locations directory",
+      "notes": "Created services/location_service.py with: Location dataclass (country, city, code, address, is_hub, is_customs_point, display_name, search_text), validation functions (validate_location_code 2-5 uppercase letters, validate_country), create operations (create_location, create_location_if_not_exists), read operations (get_location, get_location_by_code, get_location_by_country_city, get_all_locations, get_locations_by_country, get_hub_locations, get_customs_point_locations, count_locations, location_exists), search operations (search_locations using DB RPC with fallback, get_active_locations), update operations (update_location, activate_location, deactivate_location, set_as_hub, set_as_customs_point), delete operations (delete_location), utility functions (get_unique_countries, get_location_stats, get_location_display_name, format_location_for_dropdown, get_locations_for_dropdown), seed data functions (seed_default_locations using DB RPC, get_location_for_route). Updated services/__init__.py with all exports. Tests in tests/test_location_service.py with 41 passing tests."
     },
     {
       "id": "API-007",
