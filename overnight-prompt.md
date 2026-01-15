@@ -115,12 +115,13 @@ App runs at http://localhost:5001
 - [x] Feature #30: Сервис назначений брендов (2025-01-15)
 - [x] Feature #31: Получение менеджера по бренду (2025-01-15)
 - [x] Feature #32: Получение брендов менеджера (2025-01-15)
+- [x] Feature #33: Страница /procurement (2025-01-15)
 
 ### Next Up
-- Feature #33: Страница /procurement
+- Feature #34: Список КП с моими брендами
 
 ### Progress
-- **32 of 88 features completed** (36%)
+- **33 of 88 features completed** (38%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
@@ -170,4 +171,11 @@ App runs at http://localhost:5001
 - Added /unauthorized route in main.py
 - Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
 - Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
-- **Next: UI Phase begins with Feature #33 - /procurement page**
+- **UI Phase started - Feature #33 complete: /procurement page**
+- Procurement page includes:
+  - Role check for procurement/admin access
+  - Displays user's assigned brands
+  - Lists quotes with items matching user's brands
+  - Separates "pending" vs "other" quotes by workflow status
+  - Color-coded workflow status badges
+- Navigation updated with role-based links

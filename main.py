@@ -28,6 +28,14 @@ from services.quote_version_service import create_quote_version, list_quote_vers
 # Import role service
 from services.role_service import get_user_role_codes, get_session_user_roles, require_role, require_any_role
 
+# Import brand service for procurement
+from services.brand_service import get_assigned_brands
+
+# Import workflow service for status display
+from services.workflow_service import (
+    WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS
+)
+
 # Import calculation engine
 from calculation_engine import calculate_multiproduct_quote
 from calculation_mapper import map_variables_to_calculation_input, safe_decimal, safe_int
@@ -96,20 +104,33 @@ label input, label select, label textarea { margin-top: 0.25rem; width: 100%; }
 # ============================================================================
 
 def nav_bar(session):
-    """Navigation bar component"""
+    """Navigation bar component with role-based links"""
     user = session.get("user")
     if user:
+        roles = user.get("roles", [])
+
+        # Base navigation items
+        nav_items = [
+            Li(A("Dashboard", href="/dashboard")),
+            Li(A("Quotes", href="/quotes")),
+            Li(A("Customers", href="/customers")),
+            Li(A("New Quote", href="/quotes/new")),
+        ]
+
+        # Role-specific navigation items
+        if "procurement" in roles or "admin" in roles:
+            nav_items.append(Li(A("Закупки", href="/procurement")))
+
+        # Add settings and logout at the end
+        nav_items.extend([
+            Li(A("Settings", href="/settings")),
+            Li(A(f"Logout ({user.get('email', 'User')})", href="/logout")),
+        ])
+
         return Nav(
             Div(
                 Ul(Li(Strong("Kvota OneStack"))),
-                Ul(
-                    Li(A("Dashboard", href="/dashboard")),
-                    Li(A("Quotes", href="/quotes")),
-                    Li(A("Customers", href="/customers")),
-                    Li(A("New Quote", href="/quotes/new")),
-                    Li(A("Settings", href="/settings")),
-                    Li(A(f"Logout ({user.get('email', 'User')})", href="/logout")),
-                ),
+                Ul(*nav_items),
                 cls="nav-container"
             )
         )
@@ -2674,6 +2695,190 @@ def post(rate_forex_risk: float, rate_fin_comm: float, rate_loan_interest_daily:
             A("← Back", href="/settings"),
             session=session
         )
+
+
+# ============================================================================
+# PROCUREMENT WORKSPACE (Feature #33)
+# ============================================================================
+
+def workflow_status_badge(status_str: str):
+    """
+    Create a styled badge for workflow status.
+    Uses workflow service colors and names.
+    """
+    try:
+        status = WorkflowStatus(status_str) if status_str else None
+    except ValueError:
+        status = None
+
+    if status:
+        name = STATUS_NAMES_SHORT.get(status, status_str)
+        # Convert Tailwind classes to inline styles for non-Tailwind environment
+        color_map = {
+            WorkflowStatus.DRAFT: ("#f3f4f6", "#1f2937"),
+            WorkflowStatus.PENDING_PROCUREMENT: ("#fef3c7", "#92400e"),
+            WorkflowStatus.PENDING_LOGISTICS: ("#dbeafe", "#1e40af"),
+            WorkflowStatus.PENDING_CUSTOMS: ("#e9d5ff", "#6b21a8"),
+            WorkflowStatus.PENDING_SALES_REVIEW: ("#ffedd5", "#9a3412"),
+            WorkflowStatus.PENDING_QUOTE_CONTROL: ("#fce7f3", "#9d174d"),
+            WorkflowStatus.PENDING_APPROVAL: ("#fef3c7", "#b45309"),
+            WorkflowStatus.APPROVED: ("#dcfce7", "#166534"),
+            WorkflowStatus.SENT_TO_CLIENT: ("#cffafe", "#0e7490"),
+            WorkflowStatus.CLIENT_NEGOTIATION: ("#ccfbf1", "#115e59"),
+            WorkflowStatus.PENDING_SPEC_CONTROL: ("#e0e7ff", "#3730a3"),
+            WorkflowStatus.PENDING_SIGNATURE: ("#ede9fe", "#5b21b6"),
+            WorkflowStatus.DEAL: ("#d1fae5", "#065f46"),
+            WorkflowStatus.REJECTED: ("#fee2e2", "#991b1b"),
+            WorkflowStatus.CANCELLED: ("#f5f5f4", "#57534e"),
+        }
+        bg, text = color_map.get(status, ("#f3f4f6", "#1f2937"))
+        return Span(name, style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; background: {bg}; color: {text};")
+
+    return Span(status_str or "—", cls="status-badge")
+
+
+@rt("/procurement")
+def get(session):
+    """
+    Procurement workspace - shows quotes with items having brands assigned to current user.
+
+    Feature #33: Basic procurement page structure
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get brands assigned to this user
+    my_brands = get_assigned_brands(user_id, org_id)
+
+    # Get quotes that have items with brands assigned to this user
+    # This is done in two steps:
+    # 1. Get quote_item ids with my brands
+    # 2. Get quotes that contain those items
+
+    quotes_with_my_brands = []
+
+    if my_brands:
+        # Query quote_items with my brands in this organization's quotes
+        # First get quote IDs that have items with my brands
+        items_result = supabase.table("quote_items") \
+            .select("quote_id, brand") \
+            .in_("brand", my_brands) \
+            .execute()
+
+        quote_ids_with_my_brands = list(set([item["quote_id"] for item in (items_result.data or [])]))
+
+        if quote_ids_with_my_brands:
+            # Get full quote data for those quotes
+            quotes_result = supabase.table("quotes") \
+                .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at") \
+                .eq("organization_id", org_id) \
+                .in_("id", quote_ids_with_my_brands) \
+                .order("created_at", desc=True) \
+                .execute()
+
+            quotes_with_my_brands = quotes_result.data or []
+
+    # Separate quotes by workflow status
+    pending_quotes = [q for q in quotes_with_my_brands
+                      if q.get("workflow_status") == "pending_procurement"]
+    other_quotes = [q for q in quotes_with_my_brands
+                    if q.get("workflow_status") != "pending_procurement"]
+
+    # Build the table rows
+    def quote_row(q):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+
+        return Tr(
+            Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("View", href=f"/quotes/{q['id']}", style="margin-right: 0.5rem;"),
+                A("Work", href=f"/procurement/{q['id']}", role="button", style="font-size: 0.875rem; padding: 0.25rem 0.5rem;")
+                if workflow_status == "pending_procurement" else ""
+            )
+        )
+
+    return page_layout("Procurement Workspace",
+        # Header
+        Div(
+            H1("Закупки"),
+            P(f"Рабочая зона менеджера по закупкам"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # My assigned brands
+        Div(
+            H3("Мои бренды"),
+            P(", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору."),
+            cls="card"
+        ) if True else None,
+
+        # Stats
+        Div(
+            Div(
+                Div(str(len(pending_quotes)), cls="stat-value"),
+                Div("Ожидает оценки"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(my_brands)), cls="stat-value"),
+                Div("Моих брендов"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(quotes_with_my_brands)), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Pending quotes (requiring my attention)
+        Div(
+            H2("Ожидают оценки"),
+            P("КП на этапе закупок с моими брендами", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ),
+
+        # Other quotes with my brands
+        Div(
+            H2("Другие КП с моими брендами"),
+            P("КП на других этапах workflow", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in other_quotes]
+                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if other_quotes else None,
+
+        session=session
+    )
 
 
 # ============================================================================

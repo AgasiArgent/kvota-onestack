@@ -732,3 +732,30 @@
   - services/brand_service.py (updated - added ~50 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #33: Страница /procurement
+- Created /procurement route for procurement managers
+- Implemented workflow_status_badge() helper for styled status display
+- Page shows:
+  - List of brands assigned to current user
+  - Stats cards (pending quotes, my brands count, total quotes)
+  - Pending quotes section (quotes in pending_procurement status with my brands)
+  - Other quotes section (quotes with my brands in other workflow stages)
+- Added role-based navigation - "Закупки" link appears for procurement/admin roles
+- Role check: only users with procurement or admin role can access the page
+- Queries:
+  - Uses get_assigned_brands() from brand_service to get user's brands
+  - Queries quote_items table to find quotes with user's brands
+  - Fetches full quote data including customer names and workflow status
+- UI features:
+  - Russian labels for procurement-specific page
+  - Color-coded workflow status badges matching workflow_service colors
+  - "Work" button for quotes requiring attention (pending_procurement)
+  - "View" link for all quotes
+- Files changed:
+  - main.py (added ~160 lines)
+    - Added imports: get_assigned_brands, WorkflowStatus, STATUS_NAMES, etc.
+    - Added workflow_status_badge() helper function
+    - Added /procurement route
+    - Updated nav_bar() to include role-based links
+- Status: COMPLETE
