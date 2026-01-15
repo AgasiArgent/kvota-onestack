@@ -639,8 +639,10 @@
       "name": "Invoice payment form",
       "category": "frontend",
       "priority": 2,
-      "passes": false,
-      "description": "Register payment with buyer_company selection"
+      "passes": true,
+      "completed_at": "2026-01-15T21:15:00Z",
+      "description": "Register payment with buyer_company selection",
+      "notes": "Created complete invoice payment form in main.py:\n- _invoice_payment_form() helper function for create/edit forms\n- GET /supplier-invoices/{id}/payments/new - display payment registration form\n- POST /supplier-invoices/{id}/payments/new - handle form submission\n- Invoice context card showing supplier, dates, amounts, remaining balance\n- Payment fields: date, type (advance/partial/final/refund), amount, currency\n- Payer section: buyer_company dropdown, exchange rate to RUB\n- Document reference and notes\n- Role-based access: admin, procurement, finance\n- Organization access verification\n- Input validation: date, amount (positive), exchange rate\n- Uses register_payment() from supplier_invoice_payment_service\n- Tests: 37 passing tests in tests/test_ui_invoice_payment.py"
     },
     {
       "id": "UI-015",

@@ -16158,6 +16158,357 @@ def get(invoice_id: str, session):
 
 
 # ============================================================================
+# UI-014: INVOICE PAYMENT FORM
+# ============================================================================
+
+def _invoice_payment_form(invoice, payment=None, error=None, session=None):
+    """
+    Render invoice payment create/edit form.
+
+    Args:
+        invoice: SupplierInvoice object (required for context)
+        payment: Existing SupplierInvoicePayment object for edit mode, None for create mode
+        error: Error message to display
+        session: Session object for page layout
+    """
+    from services.supplier_invoice_payment_service import (
+        PAYMENT_TYPES, PAYMENT_TYPE_NAMES, DEFAULT_CURRENCY, SUPPORTED_CURRENCIES,
+        get_remaining_amount
+    )
+    from services.buyer_company_service import get_all_buyer_companies
+
+    is_edit = payment is not None
+    title = "Редактирование платежа" if is_edit else "Регистрация платежа"
+    action_url = f"/supplier-invoices/{invoice.id}/payments/{payment.id}/edit" if is_edit else f"/supplier-invoices/{invoice.id}/payments/new"
+
+    # Calculate remaining amount
+    remaining = get_remaining_amount(invoice.id)
+
+    # Get buyer companies for dropdown
+    buyer_companies = get_all_buyer_companies(invoice.organization_id) if invoice.organization_id else []
+
+    # Format invoice dates
+    invoice_date_str = invoice.invoice_date.strftime("%d.%m.%Y") if invoice.invoice_date else "—"
+    due_date_str = invoice.due_date.strftime("%d.%m.%Y") if invoice.due_date else "—"
+
+    # Pre-fill values
+    today_str = date.today().isoformat()
+    default_amount = str(remaining) if remaining > 0 else ""
+    default_currency = invoice.currency or DEFAULT_CURRENCY
+
+    # Build payment type options
+    payment_type_options = []
+    for pt in PAYMENT_TYPES:
+        attrs = {"value": pt}
+        if payment and payment.payment_type == pt:
+            attrs["selected"] = True
+        elif not payment and pt == "advance":  # Default to advance for new payments
+            attrs["selected"] = True
+        payment_type_options.append(Option(PAYMENT_TYPE_NAMES.get(pt, pt), **attrs))
+
+    # Build currency options
+    currency_options = []
+    for curr in SUPPORTED_CURRENCIES:
+        attrs = {"value": curr}
+        if payment and payment.currency == curr:
+            attrs["selected"] = True
+        elif not payment and curr == default_currency:
+            attrs["selected"] = True
+        currency_options.append(Option(curr, **attrs))
+
+    # Build buyer company options
+    buyer_company_options = [Option("— Не указан —", value="")]
+    for bc in buyer_companies:
+        if bc.is_active:
+            attrs = {"value": bc.id}
+            if payment and payment.buyer_company_id == bc.id:
+                attrs["selected"] = True
+            label = f"{bc.company_code} - {bc.name}"
+            buyer_company_options.append(Option(label, **attrs))
+
+    return page_layout(title,
+        # Error alert
+        Div(error, cls="alert alert-error") if error else "",
+
+        H1(f"{'✏️' if is_edit else '💳'} {title}"),
+
+        # Invoice context card
+        Div(
+            H3(f"📋 Инвойс {invoice.invoice_number}"),
+            Div(
+                Div(
+                    Table(
+                        Tr(Td(Strong("Поставщик:")), Td(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}")),
+                        Tr(Td(Strong("Дата инвойса:")), Td(invoice_date_str)),
+                        Tr(Td(Strong("Срок оплаты:")), Td(due_date_str)),
+                        style="border: none;"
+                    ),
+                    cls="col"
+                ),
+                Div(
+                    Table(
+                        Tr(Td(Strong("Сумма:")), Td(f"{invoice.total_amount:,.2f} {invoice.currency}", style="font-size: 1.1rem;")),
+                        Tr(Td(Strong("Оплачено:")), Td(f"{invoice.total_paid:,.2f} {invoice.currency}", style="color: #28a745;")),
+                        Tr(Td(Strong("Остаток:")), Td(f"{remaining:,.2f} {invoice.currency}", style="color: #dc3545; font-weight: bold;" if remaining > 0 else "color: #28a745; font-weight: bold;")),
+                        style="border: none;"
+                    ),
+                    cls="col"
+                ),
+                cls="grid"
+            ),
+            cls="card", style="margin-bottom: 1.5rem; background: #f8f9fa;"
+        ),
+
+        Div(
+            Form(
+                # Payment details section
+                H3("Данные платежа"),
+                Div(
+                    Label("Дата платежа *",
+                        Input(
+                            name="payment_date",
+                            type="date",
+                            value=payment.payment_date.isoformat() if payment and payment.payment_date else today_str,
+                            required=True
+                        )
+                    ),
+                    Label("Тип платежа *",
+                        Select(
+                            *payment_type_options,
+                            name="payment_type",
+                            required=True
+                        ),
+                        Small("Аванс — первый платёж, Финальный — полное закрытие", style="color: #666; display: block;")
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("Сумма *",
+                        Input(
+                            name="amount",
+                            type="number",
+                            step="0.01",
+                            min="0.01",
+                            value=str(payment.amount) if payment else default_amount,
+                            placeholder="1000.00",
+                            required=True
+                        ),
+                        Small(f"Остаток к оплате: {remaining:,.2f} {invoice.currency}", style="color: #666; display: block;") if remaining > 0 else ""
+                    ),
+                    Label("Валюта *",
+                        Select(
+                            *currency_options,
+                            name="currency",
+                            required=True
+                        )
+                    ),
+                    cls="form-row"
+                ),
+
+                # Payer section
+                H3("Плательщик", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Компания-плательщик",
+                        Select(
+                            *buyer_company_options,
+                            name="buyer_company_id"
+                        ),
+                        Small("Наше юрлицо, с которого производится оплата", style="color: #666; display: block;")
+                    ),
+                    Label("Курс к RUB",
+                        Input(
+                            name="exchange_rate",
+                            type="number",
+                            step="0.0001",
+                            min="0",
+                            value=str(payment.exchange_rate) if payment and payment.exchange_rate else "",
+                            placeholder="90.5"
+                        ),
+                        Small("Для конвертации в рубли (опционально)", style="color: #666; display: block;")
+                    ),
+                    cls="form-row"
+                ),
+
+                # Document reference
+                H3("Документ", style="margin-top: 1.5rem;"),
+                Div(
+                    Label("Номер платёжного документа",
+                        Input(
+                            name="payment_document",
+                            value=payment.payment_document if payment else "",
+                            placeholder="ПП-123, PAY-2025-001"
+                        ),
+                        Small("Номер платёжки или банковской операции", style="color: #666; display: block;")
+                    ),
+                    Div(cls="form-placeholder"),
+                    cls="form-row"
+                ),
+
+                # Notes
+                Label("Примечания",
+                    Textarea(
+                        payment.notes if payment else "",
+                        name="notes",
+                        rows=3,
+                        placeholder="Дополнительная информация о платеже..."
+                    )
+                ),
+
+                # Buttons
+                Div(
+                    Button("💾 Сохранить", type="submit"),
+                    A("Отмена", href=f"/supplier-invoices/{invoice.id}", role="button", cls="secondary"),
+                    style="display: flex; gap: 1rem; margin-top: 1.5rem;"
+                ),
+
+                method="POST",
+                action=action_url
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/supplier-invoices/{invoice_id}/payments/new")
+def get_new_invoice_payment(session, invoice_id: str):
+    """Display form to register new payment for supplier invoice."""
+    # Check authentication
+    user = session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Check roles (admin, procurement, or finance can register payments)
+    org_id = session.get("organization_id")
+    if org_id:
+        from services.user_service import get_user_roles_in_organization
+        user_roles = get_user_roles_in_organization(user["id"], org_id)
+        role_codes = [r.get("role_code") for r in user_roles]
+        if not any(r in role_codes for r in ["admin", "procurement", "finance"]):
+            return page_layout("Доступ запрещён",
+                Div("У вас нет прав для регистрации платежей.", cls="alert alert-error"),
+                session=session
+            )
+
+    # Get invoice with details
+    from services.supplier_invoice_service import get_invoice_with_details
+    invoice = get_invoice_with_details(invoice_id)
+
+    if not invoice:
+        return page_layout("Инвойс не найден",
+            Div("Инвойс не найден или был удалён.", cls="alert alert-error"),
+            A("← К реестру инвойсов", href="/supplier-invoices"),
+            session=session
+        )
+
+    # Check organization access
+    if invoice.organization_id and invoice.organization_id != org_id:
+        return page_layout("Доступ запрещён",
+            Div("У вас нет доступа к этому инвойсу.", cls="alert alert-error"),
+            session=session
+        )
+
+    return _invoice_payment_form(invoice, session=session)
+
+
+@rt("/supplier-invoices/{invoice_id}/payments/new")
+def post_new_invoice_payment(session, invoice_id: str, payment_date: str, payment_type: str, amount: str, currency: str, buyer_company_id: str = None, exchange_rate: str = None, payment_document: str = None, notes: str = None):
+    """Handle new payment form submission."""
+    # Check authentication
+    user = session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    # Check roles
+    org_id = session.get("organization_id")
+    if org_id:
+        from services.user_service import get_user_roles_in_organization
+        user_roles = get_user_roles_in_organization(user["id"], org_id)
+        role_codes = [r.get("role_code") for r in user_roles]
+        if not any(r in role_codes for r in ["admin", "procurement", "finance"]):
+            return page_layout("Доступ запрещён",
+                Div("У вас нет прав для регистрации платежей.", cls="alert alert-error"),
+                session=session
+            )
+
+    # Get invoice
+    from services.supplier_invoice_service import get_invoice_with_details
+    invoice = get_invoice_with_details(invoice_id)
+
+    if not invoice:
+        return page_layout("Инвойс не найден",
+            Div("Инвойс не найден или был удалён.", cls="alert alert-error"),
+            session=session
+        )
+
+    # Check organization access
+    if invoice.organization_id and invoice.organization_id != org_id:
+        return page_layout("Доступ запрещён",
+            Div("У вас нет доступа к этому инвойсу.", cls="alert alert-error"),
+            session=session
+        )
+
+    # Parse and validate input
+    from decimal import Decimal, InvalidOperation
+    from datetime import date as dt_date
+
+    try:
+        payment_date_parsed = dt_date.fromisoformat(payment_date)
+    except (ValueError, TypeError):
+        return _invoice_payment_form(invoice, error="Некорректная дата платежа", session=session)
+
+    try:
+        amount_decimal = Decimal(amount.strip())
+        if amount_decimal <= 0:
+            return _invoice_payment_form(invoice, error="Сумма должна быть больше нуля", session=session)
+    except (InvalidOperation, ValueError, AttributeError):
+        return _invoice_payment_form(invoice, error="Некорректная сумма платежа", session=session)
+
+    exchange_rate_decimal = None
+    if exchange_rate and exchange_rate.strip():
+        try:
+            exchange_rate_decimal = Decimal(exchange_rate.strip())
+            if exchange_rate_decimal <= 0:
+                return _invoice_payment_form(invoice, error="Курс должен быть больше нуля", session=session)
+        except (InvalidOperation, ValueError):
+            return _invoice_payment_form(invoice, error="Некорректный курс валюты", session=session)
+
+    # Clean up optional fields
+    buyer_company_id_clean = buyer_company_id.strip() if buyer_company_id and buyer_company_id.strip() else None
+    payment_document_clean = payment_document.strip() if payment_document and payment_document.strip() else None
+    notes_clean = notes.strip() if notes and notes.strip() else None
+
+    # Register payment
+    from services.supplier_invoice_payment_service import register_payment
+
+    try:
+        payment = register_payment(
+            invoice_id=invoice_id,
+            payment_date=payment_date_parsed,
+            amount=amount_decimal,
+            currency=currency,
+            exchange_rate=exchange_rate_decimal,
+            payment_type=payment_type,
+            buyer_company_id=buyer_company_id_clean,
+            payment_document=payment_document_clean,
+            notes=notes_clean,
+            created_by=user["id"]
+        )
+
+        if payment:
+            # Success - redirect to invoice detail
+            return RedirectResponse(f"/supplier-invoices/{invoice_id}", status_code=303)
+        else:
+            return _invoice_payment_form(invoice, error="Не удалось зарегистрировать платёж", session=session)
+
+    except ValueError as e:
+        return _invoice_payment_form(invoice, error=str(e), session=session)
+    except Exception as e:
+        return _invoice_payment_form(invoice, error=f"Ошибка при сохранении: {str(e)}", session=session)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

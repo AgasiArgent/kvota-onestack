@@ -253,6 +253,20 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - Uses customer_service functions properly
    - Russian localization
 
+64. **UI-014** (Invoice payment form) - ✅ COMPLETE
+   - Created `_invoice_payment_form()` helper function in main.py
+   - Created `GET /supplier-invoices/{id}/payments/new` route
+   - Created `POST /supplier-invoices/{id}/payments/new` route
+   - Invoice context card showing supplier, dates, amounts, remaining balance
+   - Payment fields: date, type (advance/partial/final/refund), amount, currency
+   - Payer section: buyer_company dropdown, exchange rate to RUB
+   - Document reference field and notes textarea
+   - Role-based access: admin, procurement, finance
+   - Organization access verification
+   - Input validation: date format, amount positive, exchange rate positive
+   - Uses `register_payment()` from supplier_invoice_payment_service
+   - Tests: 37 passing tests in `tests/test_ui_invoice_payment.py`
+
 ### Progress:
-- v3.0 features complete: **57/94**
-- Next feature: **UI-008** (Customer create/edit form)
+- v3.0 features complete: **65/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 14 UI features done!)
+- Next feature: **UI-015** (Quote form: seller company selector)
