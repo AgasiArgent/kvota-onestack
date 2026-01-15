@@ -139,12 +139,13 @@ App runs at http://localhost:5001
 - [x] Feature #54: Команда /start (2025-01-15) - Welcome message with account linking instructions
 - [x] Feature #55: Верификация аккаунта (2025-01-15) - Telegram account verification via code
 - [x] Feature #56: UI генерации кода верификации (2025-01-15) - /settings/telegram page with verification code
+- [x] Feature #57: Команда /status (2025-01-15) - Shows user's tasks by role with formatted Telegram message
 
 ### Next Up
-- Feature #57: Команда /status (показать мои текущие задачи)
+- Feature #58: Отправка уведомления task_assigned (уведомление о новой задаче)
 
 ### Progress
-- **56 of 88 features completed** (64%)
+- **57 of 88 features completed** (65%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

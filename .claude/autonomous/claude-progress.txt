@@ -1343,3 +1343,36 @@
   - services/__init__.py (updated exports)
   - main.py (~240 lines added for /settings/telegram routes)
 - Status: COMPLETE - Feature #56 done
+
+
+## Session 2025-01-15 - Feature #57: Команда /status (show user's current tasks)
+- Implemented full /status command for Telegram bot:
+  - UserTask dataclass to represent tasks
+  - get_user_tasks(user_id) function (~200 lines):
+    - Gets user's roles from user_roles table
+    - Queries relevant quotes based on roles:
+      - sales: drafts and pending_sales_review quotes they created
+      - procurement: quotes with their brands in pending_procurement
+      - logistics: quotes in pending_logistics
+      - customs: quotes in pending_customs or pending_logistics (parallel stages)
+      - quote_controller: quotes in pending_quote_control
+      - top_manager: pending approvals from approvals table
+    - Returns structured data with tasks grouped by type
+  - _get_status_name_ru() helper for Russian status names
+  - _format_tasks_message() function (~80 lines):
+    - Formats tasks data into Telegram message with emojis
+    - Shows user name and roles
+    - Groups tasks by category with icons
+    - Shows up to 5 tasks per category with "... and N more"
+    - Includes link to open system
+  - handle_status_command(telegram_id) function:
+    - Checks if Telegram is linked (via get_telegram_user)
+    - If not linked: shows instructions to link account
+    - If linked: gets tasks and sends formatted message
+- Updated respond_to_command() to call handle_status_command for /status
+- Updated services/__init__.py exports:
+  - UserTask, get_user_tasks, handle_status_command
+- Files changed:
+  - services/telegram_service.py (~350 lines added)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #57 done

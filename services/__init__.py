@@ -153,6 +153,10 @@ from .telegram_service import (
     get_user_telegram_status,
     request_verification_code,
     unlink_telegram_account,
+    # Status command (Feature #57)
+    UserTask,
+    get_user_tasks,
+    handle_status_command,
 )
 
 __all__ = [
@@ -289,4 +293,8 @@ __all__ = [
     "get_user_telegram_status",
     "request_verification_code",
     "unlink_telegram_account",
+    # Status command (Feature #57)
+    "UserTask",
+    "get_user_tasks",
+    "handle_status_command",
 ]

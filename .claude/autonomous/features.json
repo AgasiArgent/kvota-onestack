@@ -646,10 +646,11 @@
       "name": "Команда /status",
       "description": "Показать мои текущие задачи",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T12:00:00Z",
+      "completed_at": "2026-01-15T12:30:00Z",
+      "notes": "Implemented /status command with role-based task display. Shows tasks for sales, procurement, logistics, customs, quote_controller, and top_manager roles. Includes user info, role badges, task counts by category, and links to system."
     },
     {
       "id": 58,

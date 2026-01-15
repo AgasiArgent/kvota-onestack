@@ -1073,8 +1073,8 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 
     Handles the main bot commands:
     - /start: Greeting and verification instructions (Feature #54, #55)
-    - /status: Show current tasks (Feature #57 placeholder)
-    - /help: Show help information (Feature #57 placeholder)
+    - /status: Show current tasks (Feature #57)
+    - /help: Show help information
 
     Args:
         telegram_id: User's Telegram ID
@@ -1094,6 +1094,10 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
     # Handle /start command specially (Feature #54, #55)
     if command == "/start":
         return await handle_start_command(telegram_id, args, telegram_username)
+
+    # Handle /status command (Feature #57)
+    if command == "/status":
+        return await handle_status_command(telegram_id)
 
     # Other commands
     responses = {
@@ -1117,12 +1121,6 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 • Изменения статусов КП
 
 По вопросам работы бота обратитесь к администратору.""",
-
-        "/status": """📋 *Проверка статуса*
-
-Для просмотра ваших задач необходимо привязать Telegram аккаунт к системе.
-
-Используйте /start для получения инструкций по привязке.""",
     }
 
     response_text = responses.get(command, f"❓ Неизвестная команда: `{command}`\n\nИспользуйте /help для списка доступных команд.")
@@ -1252,4 +1250,473 @@ async def handle_start_command(telegram_id: int, args: List[str] = None, telegra
         return True
     except TelegramError as e:
         logger.error(f"Failed to send /start response: {e}")
+        return False
+
+
+# ============================================================================
+# /status Command - Show user's current tasks (Feature #57)
+# ============================================================================
+
+@dataclass
+class UserTask:
+    """Represents a task/quote for the user."""
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    status: str
+    status_name: str
+    task_type: str  # e.g., "procurement", "logistics", "review"
+    url: str
+
+
+def get_user_tasks(user_id: str) -> Dict[str, Any]:
+    """Get all pending tasks for a user based on their roles.
+
+    Feature #57: Команда /status - показать мои текущие задачи
+
+    This function:
+    1. Gets user's roles from user_roles table
+    2. Based on roles, queries relevant quotes:
+       - sales: quotes they created in draft or pending_sales_review
+       - procurement: quotes with their brands in pending_procurement
+       - logistics: quotes in pending_logistics
+       - customs: quotes in pending_customs
+       - quote_controller: quotes in pending_quote_control
+       - top_manager: quotes in pending_approval (approvals table)
+
+    Args:
+        user_id: UUID of the system user
+
+    Returns:
+        Dict with:
+        - success: bool
+        - user_name: str
+        - roles: list of role codes
+        - tasks: dict of task_type -> list of UserTask
+        - total_tasks: int
+        - error: str if failed
+
+    Example:
+        >>> tasks = get_user_tasks(user_id)
+        >>> if tasks["success"]:
+        ...     print(f"You have {tasks['total_tasks']} tasks")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "success": False,
+                "error": "Database connection error"
+            }
+
+        # Get user info
+        user_response = supabase.table("organization_members").select(
+            "user_id, organization_id, profile:profiles(email, full_name)"
+        ).eq("user_id", user_id).execute()
+
+        if not user_response.data or len(user_response.data) == 0:
+            return {
+                "success": False,
+                "error": "User not found in any organization"
+            }
+
+        member_data = user_response.data[0]
+        org_id = member_data.get("organization_id")
+        profile = member_data.get("profile", {})
+        user_name = profile.get("full_name") or profile.get("email", "Пользователь")
+
+        # Get user roles
+        roles_response = supabase.table("user_roles").select(
+            "role:roles(code, name)"
+        ).eq("user_id", user_id).eq("organization_id", org_id).execute()
+
+        roles = []
+        if roles_response.data:
+            for r in roles_response.data:
+                role_info = r.get("role", {})
+                if role_info and role_info.get("code"):
+                    roles.append(role_info.get("code"))
+
+        if not roles:
+            return {
+                "success": True,
+                "user_name": user_name,
+                "roles": [],
+                "tasks": {},
+                "total_tasks": 0,
+                "message": "У вас пока нет назначенных ролей в системе."
+            }
+
+        tasks: Dict[str, List[UserTask]] = {}
+        total_tasks = 0
+
+        # ---- SALES role: drafts and pending_sales_review quotes they created ----
+        if "sales" in roles or "admin" in roles:
+            sales_quotes_response = supabase.table("quotes").select(
+                "id, idn, workflow_status, customer:customers(name)"
+            ).eq("organization_id", org_id).eq("created_by", user_id).in_(
+                "workflow_status", ["draft", "pending_sales_review"]
+            ).limit(20).execute()
+
+            if sales_quotes_response.data:
+                sales_tasks = []
+                for q in sales_quotes_response.data:
+                    customer = q.get("customer", {})
+                    status = q.get("workflow_status", "draft")
+                    task_type = "Мои КП" if status == "draft" else "Требует доработки"
+                    sales_tasks.append(UserTask(
+                        quote_id=q.get("id"),
+                        quote_idn=q.get("idn", "N/A"),
+                        customer_name=customer.get("name", "N/A") if customer else "N/A",
+                        status=status,
+                        status_name=_get_status_name_ru(status),
+                        task_type=task_type,
+                        url=f"{APP_BASE_URL}/quotes/{q.get('id')}"
+                    ))
+                if sales_tasks:
+                    tasks["sales"] = sales_tasks
+                    total_tasks += len(sales_tasks)
+
+        # ---- PROCUREMENT role: quotes with their brands ----
+        if "procurement" in roles or "admin" in roles:
+            # Get user's assigned brands
+            brands_response = supabase.table("brand_assignments").select(
+                "brand"
+            ).eq("organization_id", org_id).eq("user_id", user_id).execute()
+
+            user_brands = []
+            if brands_response.data:
+                user_brands = [b.get("brand", "").lower() for b in brands_response.data if b.get("brand")]
+
+            if user_brands:
+                # Get quotes in pending_procurement with items matching user's brands
+                proc_quotes_response = supabase.table("quotes").select(
+                    "id, idn, workflow_status, customer:customers(name), quote_items(brand)"
+                ).eq("organization_id", org_id).eq(
+                    "workflow_status", "pending_procurement"
+                ).limit(50).execute()
+
+                if proc_quotes_response.data:
+                    proc_tasks = []
+                    seen_quote_ids = set()
+                    for q in proc_quotes_response.data:
+                        if q.get("id") in seen_quote_ids:
+                            continue
+                        # Check if quote has items with user's brands
+                        items = q.get("quote_items", [])
+                        has_my_brand = any(
+                            item.get("brand", "").lower() in user_brands
+                            for item in items
+                        )
+                        if has_my_brand:
+                            customer = q.get("customer", {})
+                            proc_tasks.append(UserTask(
+                                quote_id=q.get("id"),
+                                quote_idn=q.get("idn", "N/A"),
+                                customer_name=customer.get("name", "N/A") if customer else "N/A",
+                                status="pending_procurement",
+                                status_name=_get_status_name_ru("pending_procurement"),
+                                task_type="Оценка закупок",
+                                url=f"{APP_BASE_URL}/procurement"
+                            ))
+                            seen_quote_ids.add(q.get("id"))
+                    if proc_tasks:
+                        tasks["procurement"] = proc_tasks
+                        total_tasks += len(proc_tasks)
+
+        # ---- LOGISTICS role: quotes in pending_logistics ----
+        if "logistics" in roles or "admin" in roles:
+            logistics_quotes_response = supabase.table("quotes").select(
+                "id, idn, workflow_status, customer:customers(name)"
+            ).eq("organization_id", org_id).eq(
+                "workflow_status", "pending_logistics"
+            ).limit(20).execute()
+
+            if logistics_quotes_response.data:
+                logistics_tasks = []
+                for q in logistics_quotes_response.data:
+                    customer = q.get("customer", {})
+                    logistics_tasks.append(UserTask(
+                        quote_id=q.get("id"),
+                        quote_idn=q.get("idn", "N/A"),
+                        customer_name=customer.get("name", "N/A") if customer else "N/A",
+                        status="pending_logistics",
+                        status_name=_get_status_name_ru("pending_logistics"),
+                        task_type="Логистика",
+                        url=f"{APP_BASE_URL}/logistics/{q.get('id')}"
+                    ))
+                if logistics_tasks:
+                    tasks["logistics"] = logistics_tasks
+                    total_tasks += len(logistics_tasks)
+
+        # ---- CUSTOMS role: quotes in pending_customs or pending_logistics (parallel) ----
+        if "customs" in roles or "admin" in roles:
+            customs_quotes_response = supabase.table("quotes").select(
+                "id, idn, workflow_status, customer:customers(name)"
+            ).eq("organization_id", org_id).in_(
+                "workflow_status", ["pending_customs", "pending_logistics"]
+            ).limit(20).execute()
+
+            if customs_quotes_response.data:
+                customs_tasks = []
+                for q in customs_quotes_response.data:
+                    customer = q.get("customer", {})
+                    customs_tasks.append(UserTask(
+                        quote_id=q.get("id"),
+                        quote_idn=q.get("idn", "N/A"),
+                        customer_name=customer.get("name", "N/A") if customer else "N/A",
+                        status=q.get("workflow_status"),
+                        status_name=_get_status_name_ru(q.get("workflow_status", "")),
+                        task_type="Таможня",
+                        url=f"{APP_BASE_URL}/customs/{q.get('id')}"
+                    ))
+                if customs_tasks:
+                    tasks["customs"] = customs_tasks
+                    total_tasks += len(customs_tasks)
+
+        # ---- QUOTE_CONTROLLER role: quotes in pending_quote_control ----
+        if "quote_controller" in roles or "admin" in roles:
+            qc_quotes_response = supabase.table("quotes").select(
+                "id, idn, workflow_status, customer:customers(name)"
+            ).eq("organization_id", org_id).eq(
+                "workflow_status", "pending_quote_control"
+            ).limit(20).execute()
+
+            if qc_quotes_response.data:
+                qc_tasks = []
+                for q in qc_quotes_response.data:
+                    customer = q.get("customer", {})
+                    qc_tasks.append(UserTask(
+                        quote_id=q.get("id"),
+                        quote_idn=q.get("idn", "N/A"),
+                        customer_name=customer.get("name", "N/A") if customer else "N/A",
+                        status="pending_quote_control",
+                        status_name=_get_status_name_ru("pending_quote_control"),
+                        task_type="Проверка КП",
+                        url=f"{APP_BASE_URL}/quote-control/{q.get('id')}"
+                    ))
+                if qc_tasks:
+                    tasks["quote_control"] = qc_tasks
+                    total_tasks += len(qc_tasks)
+
+        # ---- TOP_MANAGER role: pending approvals ----
+        if "top_manager" in roles or "admin" in roles:
+            approvals_response = supabase.table("approvals").select(
+                "id, quote_id, reason, quote:quotes(idn, customer:customers(name))"
+            ).eq("status", "pending").limit(20).execute()
+
+            if approvals_response.data:
+                approval_tasks = []
+                for a in approvals_response.data:
+                    quote = a.get("quote", {})
+                    customer = quote.get("customer", {}) if quote else {}
+                    approval_tasks.append(UserTask(
+                        quote_id=a.get("quote_id"),
+                        quote_idn=quote.get("idn", "N/A") if quote else "N/A",
+                        customer_name=customer.get("name", "N/A") if customer else "N/A",
+                        status="pending_approval",
+                        status_name=_get_status_name_ru("pending_approval"),
+                        task_type="Согласование",
+                        url=f"{APP_BASE_URL}/quotes/{a.get('quote_id')}"
+                    ))
+                if approval_tasks:
+                    tasks["approvals"] = approval_tasks
+                    total_tasks += len(approval_tasks)
+
+        return {
+            "success": True,
+            "user_name": user_name,
+            "roles": roles,
+            "tasks": tasks,
+            "total_tasks": total_tasks,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting user tasks: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+def _get_status_name_ru(status: str) -> str:
+    """Get Russian status name."""
+    status_names = {
+        "draft": "Черновик",
+        "pending_procurement": "Оценка закупок",
+        "pending_logistics": "Логистика",
+        "pending_customs": "Таможня",
+        "pending_sales_review": "Доработка",
+        "pending_quote_control": "Проверка КП",
+        "pending_approval": "Согласование",
+        "approved": "Одобрено",
+        "sent_to_client": "Отправлено клиенту",
+        "client_negotiation": "Торги",
+        "pending_spec_control": "Спецификация",
+        "pending_signature": "Подписание",
+        "deal": "Сделка",
+        "rejected": "Отклонено",
+        "cancelled": "Отменено",
+    }
+    return status_names.get(status, status)
+
+
+def _format_tasks_message(tasks_data: Dict[str, Any]) -> str:
+    """Format tasks data into a Telegram message.
+
+    Args:
+        tasks_data: Result from get_user_tasks()
+
+    Returns:
+        Formatted message string for Telegram
+    """
+    if not tasks_data.get("success"):
+        return f"❌ *Ошибка*\n\n{tasks_data.get('error', 'Не удалось получить задачи')}"
+
+    user_name = tasks_data.get("user_name", "Пользователь")
+    roles = tasks_data.get("roles", [])
+    tasks = tasks_data.get("tasks", {})
+    total_tasks = tasks_data.get("total_tasks", 0)
+
+    # Build message
+    lines = [f"👤 *{user_name}*\n"]
+
+    # Show roles
+    if roles:
+        role_names = {
+            "sales": "Продажи",
+            "procurement": "Закупки",
+            "logistics": "Логистика",
+            "customs": "Таможня",
+            "quote_controller": "Контроль КП",
+            "spec_controller": "Спецификации",
+            "finance": "Финансы",
+            "top_manager": "Руководство",
+            "admin": "Администратор"
+        }
+        role_str = ", ".join([role_names.get(r, r) for r in roles])
+        lines.append(f"🔑 Роли: {role_str}\n")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━\n")
+
+    if total_tasks == 0:
+        lines.append("✅ *Нет активных задач!*\n")
+        lines.append("\nВсе текущие задачи выполнены.")
+    else:
+        lines.append(f"📋 *Активных задач: {total_tasks}*\n")
+
+        # Task type icons
+        type_icons = {
+            "sales": "📝",
+            "procurement": "💰",
+            "logistics": "🚚",
+            "customs": "🛃",
+            "quote_control": "✓",
+            "approvals": "⏳"
+        }
+
+        # Group names
+        group_names = {
+            "sales": "Мои КП",
+            "procurement": "Оценка закупок",
+            "logistics": "Логистика",
+            "customs": "Таможня",
+            "quote_control": "Проверка КП",
+            "approvals": "Согласования"
+        }
+
+        for task_type, task_list in tasks.items():
+            if not task_list:
+                continue
+
+            icon = type_icons.get(task_type, "📌")
+            group_name = group_names.get(task_type, task_type)
+            lines.append(f"\n{icon} *{group_name}* ({len(task_list)}):\n")
+
+            # Show first 5 tasks per category
+            for i, task in enumerate(task_list[:5]):
+                lines.append(f"  • {task.quote_idn} — {task.customer_name}\n")
+                lines.append(f"    _{task.task_type}_\n")
+
+            if len(task_list) > 5:
+                lines.append(f"  ... и ещё {len(task_list) - 5}\n")
+
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"\n🌐 [Открыть систему]({APP_BASE_URL})")
+
+    return "".join(lines)
+
+
+async def handle_status_command(telegram_id: int) -> bool:
+    """Handle the /status command - show user's current tasks.
+
+    Feature #57: Команда /status (показать мои текущие задачи)
+
+    This function:
+    1. Checks if Telegram account is linked to a system user
+    2. If not linked, shows instructions to link account
+    3. If linked, queries all tasks for the user based on their roles
+    4. Sends a formatted message with task summary
+
+    Args:
+        telegram_id: User's Telegram ID
+
+    Returns:
+        True if message was sent successfully
+    """
+    bot = get_bot()
+    if not bot:
+        return False
+
+    # Check if Telegram is linked to a user
+    telegram_user = await get_telegram_user(telegram_id)
+
+    if not telegram_user:
+        # Not linked - show instructions
+        response_text = """📋 *Проверка статуса*
+
+Ваш Telegram аккаунт не привязан к системе OneStack.
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+*Как привязать:*
+1. Откройте OneStack в браузере
+2. Перейдите в Настройки → Telegram
+3. Нажмите "Получить код привязки"
+4. Отправьте код этому боту
+
+💡 После привязки вы сможете:
+• Просматривать свои задачи
+• Получать уведомления
+• Согласовывать КП"""
+
+        try:
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=response_text,
+                parse_mode="Markdown"
+            )
+            logger.info(f"Sent /status (not linked) response to {telegram_id}")
+            return True
+        except TelegramError as e:
+            logger.error(f"Failed to send /status response: {e}")
+            return False
+
+    # Account is linked - get user's tasks
+    user_id = telegram_user.get("user_id")
+    tasks_data = get_user_tasks(user_id)
+    response_text = _format_tasks_message(tasks_data)
+
+    try:
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=response_text,
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+        logger.info(f"Sent /status response to {telegram_id} (user_id={user_id}, tasks={tasks_data.get('total_tasks', 0)})")
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to send /status response: {e}")
         return False
