@@ -163,6 +163,26 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - International: SWIFT (8/11 chars), IBAN validation
    - Single default trigger, helper functions
 
+7. **DB-007** (locations table) - ✅ COMPLETE
+   - Created `migrations/024_create_locations_table.sql`
+   - Location directory for dropdown search with pg_trgm
+   - GIN index for fast partial text matching
+   - `search_locations()` function for HTMX dropdown
+   - Default seed function with China, Russia, CIS, Europe, Turkey locations
+
+8. **DB-008** (brand_supplier_assignments) - ✅ COMPLETE
+   - Created `migrations/025_create_brand_supplier_assignments_table.sql`
+   - Links BRANDS to SUPPLIERS (external companies)
+   - `is_primary` flag for preferred supplier per brand
+   - Helper functions for querying assignments
+
+9. **DB-009** (brand_procurement_assignments) - ✅ COMPLETE
+   - Created `migrations/026_create_brand_procurement_view.sql`
+   - View alias for existing `brand_assignments` table
+   - Assigns BRANDS to USERS (procurement managers)
+   - Updatable view rules for full CRUD
+   - Helper functions: get_procurement_manager_for_brand(), etc.
+
 ### Progress:
-- v3.0 features complete: **6/94**
-- Next feature: **DB-007** (locations table for dropdown search)
+- v3.0 features complete: **9/94**
+- Next feature: **DB-010** (route_logistics_assignments)
