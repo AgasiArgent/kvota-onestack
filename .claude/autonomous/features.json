@@ -1,1035 +1,762 @@
 {
-  "project": "OneStack Workflow Extension",
-  "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0435 OneStack \u0441 \u043c\u043d\u043e\u0433\u043e\u0440\u043e\u043b\u0435\u0432\u044b\u043c workflow, Telegram-\u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f\u043c\u0438 \u0438 \u043f\u043b\u0430\u043d-\u0444\u0430\u043a\u0442\u043e\u043c",
-  "created": "2025-01-14T00:00:00Z",
-  "stack": "Python FastHTML + HTMX + Supabase + python-telegram-bot",
+  "version": "3.0",
+  "project": "Kvota OneStack - Quote Workflow System with Supply Chain",
+  "description": "Расширение OneStack: 4 типа компаний в цепочке поставок, IDN система, реестр инвойсов поставщиков, 12 ролей",
+  "created": "2025-01-15T00:00:00Z",
+  "stack": "Python FastHTML + HTMX + Supabase",
   "spec_file": ".claude/autonomous/app_spec.xml",
   "features": [
     {
-      "id": 1,
+      "id": "DB-001",
+      "name": "Create suppliers table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 roles",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0430 \u0440\u043e\u043b\u0435\u0439 (sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin)",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T04:40:00Z",
-      "completed_at": "2025-01-15T04:45:00Z"
+      "passes": false,
+      "description": "Create suppliers table with supplier_code, country, city, inn, kpp, contact fields"
     },
     {
-      "id": 2,
+      "id": "DB-002",
+      "name": "Create buyer_companies table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 user_roles",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0441\u0432\u044f\u0437\u0438 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439 \u0441 \u0440\u043e\u043b\u044f\u043c\u0438 (user_id, organization_id, role_id)",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T05:00:00Z",
-      "completed_at": "2025-01-15T05:05:00Z"
+      "passes": false,
+      "description": "Create buyer_companies table (our legal entities for purchasing)"
     },
     {
-      "id": 3,
+      "id": "DB-003",
+      "name": "Verify seller_companies table exists",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 brand_assignments",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f \u0431\u0440\u0435\u043d\u0434\u043e\u0432 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430\u043c \u043f\u043e \u0437\u0430\u043a\u0443\u043f\u043a\u0430\u043c",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:00:00Z",
-      "completed_at": "2025-01-15T06:05:00Z"
+      "passes": false,
+      "description": "Verify seller_companies table from previous migration, add missing columns if needed"
     },
     {
-      "id": 4,
+      "id": "DB-004",
+      "name": "Create customer_contacts table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 workflow_transitions",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0430\u0443\u0434\u0438\u0442-\u043b\u043e\u0433\u0430 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432 \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u0432",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T07:00:00Z",
-      "completed_at": "2025-01-15T07:05:00Z"
+      "passes": false,
+      "description": "Create customer_contacts table for LPR contacts with is_signatory field"
     },
     {
-      "id": 5,
+      "id": "DB-005",
+      "name": "Create customer_contracts table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 approvals",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432 \u043d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0435",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T08:00:00Z",
-      "completed_at": "2025-01-15T08:05:00Z"
+      "passes": false,
+      "description": "Create customer_contracts table with next_specification_number counter"
     },
     {
-      "id": 6,
+      "id": "DB-006",
+      "name": "Create bank_accounts table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 specifications",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0434\u0430\u043d\u043d\u044b\u0445 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0439 (\u0432\u0441\u0435 \u043f\u043e\u043b\u044f \u0438\u0437 spec_controller)",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T09:00:00Z",
-      "completed_at": "2025-01-15T09:05:00Z"
+      "passes": false,
+      "description": "Create universal bank_accounts table with entity_type polymorphism"
     },
     {
-      "id": 7,
+      "id": "DB-007",
+      "name": "Create locations table migration",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 deals",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0441\u0434\u0435\u043b\u043e\u043a (\u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u043d\u044b\u0435 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438)",
       "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T10:00:00Z",
-      "completed_at": "2025-01-15T10:05:00Z"
+      "passes": false,
+      "description": "Create locations directory for dropdown with search (country, city, is_hub)"
     },
     {
-      "id": 8,
+      "id": "DB-008",
+      "name": "Create brand_supplier_assignments table",
       "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 plan_fact_categories",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0430 \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0439 \u043f\u043b\u0430\u0442\u0435\u0436\u0435\u0439",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T11:00:00Z",
-      "completed_at": "2025-01-15T11:05:00Z"
-    },
-    {
-      "id": 9,
-      "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 plan_fact_items",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0437\u0430\u043f\u0438\u0441\u0435\u0439 \u043f\u043b\u0430\u043d-\u0444\u0430\u043a\u0442\u0430",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T12:00:00Z",
-      "completed_at": "2025-01-15T12:05:00Z"
-    },
-    {
-      "id": 10,
-      "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 telegram_users",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0441\u0432\u044f\u0437\u0438 Telegram \u0441 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f\u043c\u0438",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T05:00:00Z",
-      "completed_at": "2025-01-15T05:10:00Z"
-    },
-    {
-      "id": 11,
-      "category": "database",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 notifications",
-      "description": "SQL \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u044f \u0434\u043b\u044f \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0439",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:00:00Z",
-      "completed_at": "2025-01-15T06:10:00Z"
-    },
-    {
-      "id": 12,
-      "category": "database",
-      "name": "\u0420\u0430\u0441\u0448\u0438\u0440\u0438\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 quotes",
-      "description": "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u043b\u044f workflow_status, deal_type, assigned_*_users, *_completed_at",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:30:00Z",
-      "completed_at": "2025-01-15T06:35:00Z"
-    },
-    {
-      "id": 13,
-      "category": "database",
-      "name": "\u0420\u0430\u0441\u0448\u0438\u0440\u0438\u0442\u044c \u0442\u0430\u0431\u043b\u0438\u0446\u0443 quote_items",
-      "description": "\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043f\u043e\u043b\u044f assigned_procurement_user, procurement_status, hs_code, customs_duty, customs_extra",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T07:00:00Z",
-      "completed_at": "2025-01-15T07:10:00Z"
-    },
-    {
-      "id": 14,
-      "category": "database",
-      "name": "\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a roles",
-      "description": "INSERT \u0434\u0430\u043d\u043d\u044b\u0445 \u0434\u043b\u044f \u0432\u0441\u0435\u0445 9 \u0440\u043e\u043b\u0435\u0439",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T07:30:00Z",
-      "completed_at": "2025-01-15T07:35:00Z",
-      "notes": "Already included in migration 001_create_roles_table.sql"
-    },
-    {
-      "id": 15,
-      "category": "database",
-      "name": "\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u044c \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a plan_fact_categories",
-      "description": "INSERT \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0439: client_payment, supplier_payment, logistics, customs, tax, finance_commission, other",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T07:40:00Z",
-      "completed_at": "2025-01-15T07:45:00Z"
-    },
-    {
-      "id": 16,
-      "category": "database",
-      "name": "\u041d\u0430\u0441\u0442\u0440\u043e\u0438\u0442\u044c RLS \u0434\u043b\u044f \u043d\u043e\u0432\u044b\u0445 \u0442\u0430\u0431\u043b\u0438\u0446",
-      "description": "Row Level Security \u043f\u043e\u043b\u0438\u0442\u0438\u043a\u0438 \u0434\u043b\u044f \u0432\u0441\u0435\u0445 \u043d\u043e\u0432\u044b\u0445 \u0442\u0430\u0431\u043b\u0438\u0446",
-      "priority": 1,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T08:00:00Z",
-      "completed_at": "2025-01-15T08:10:00Z",
-      "notes": "RLS policies were included in each table's migration file. Created verification migration 015 with helper functions."
-    },
-    {
-      "id": 17,
-      "category": "roles",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0440\u043e\u043b\u0435\u0439: \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u0440\u043e\u043b\u0435\u0439 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f get_user_roles(user_id, org_id) \u2192 \u0441\u043f\u0438\u0441\u043e\u043a \u0440\u043e\u043b\u0435\u0439",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T09:00:00Z",
-      "completed_at": "2025-01-15T09:10:00Z"
+      "passes": false,
+      "description": "Link brands to suppliers"
     },
     {
-      "id": 18,
-      "category": "roles",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0440\u043e\u043b\u0435\u0439: \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u043d\u0430\u043b\u0438\u0447\u0438\u044f \u0440\u043e\u043b\u0438",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f has_role(user_id, org_id, role_code) \u2192 bool",
+      "id": "DB-009",
+      "name": "Create brand_procurement_assignments table",
+      "category": "database",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T10:00:00Z",
-      "completed_at": "2025-01-15T10:15:00Z"
+      "passes": false,
+      "description": "Assign brands to procurement managers"
     },
     {
-      "id": 19,
-      "category": "roles",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0440\u043e\u043b\u0435\u0439: \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0440\u043e\u043b\u0438",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f assign_role(user_id, org_id, role_code, assigned_by)",
+      "id": "DB-010",
+      "name": "Create route_logistics_assignments table",
+      "category": "database",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T11:00:00Z",
-      "completed_at": "2025-01-15T11:10:00Z"
+      "passes": false,
+      "description": "Assign routes to logistics managers with pattern matching"
     },
     {
-      "id": 20,
-      "category": "roles",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0440\u043e\u043b\u0435\u0439: \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435 \u0440\u043e\u043b\u0438",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f remove_role(user_id, org_id, role_code)",
+      "id": "DB-011",
+      "name": "Extend quotes table with new columns",
+      "category": "database",
+      "priority": 1,
+      "passes": false,
+      "description": "Add idn, seller_company_id, workflow_status, deal_type, assigned users, timestamps"
+    },
+    {
+      "id": "DB-012",
+      "name": "Extend quote_items with supply chain columns",
+      "category": "database",
+      "priority": 1,
+      "passes": false,
+      "description": "Add supplier_id, buyer_company_id, pickup_location_id, procurement fields"
+    },
+    {
+      "id": "DB-013",
+      "name": "Extend quote_items with logistics fields",
+      "category": "database",
+      "priority": 1,
+      "passes": false,
+      "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days"
+    },
+    {
+      "id": "DB-014",
+      "name": "Extend quote_items with customs fields",
+      "category": "database",
+      "priority": 1,
+      "passes": false,
+      "description": "Add hs_code, customs_duty_percent, customs_extra_cost"
+    },
+    {
+      "id": "DB-015",
+      "name": "Create supplier_invoices table",
+      "category": "database",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T12:00:00Z",
-      "completed_at": "2025-01-15T12:10:00Z"
+      "passes": false,
+      "description": "Create supplier invoices registry with status tracking"
     },
     {
-      "id": 21,
-      "category": "roles",
-      "name": "Middleware require_role",
-      "description": "\u0414\u0435\u043a\u043e\u0440\u0430\u0442\u043e\u0440/\u0444\u0443\u043d\u043a\u0446\u0438\u044f \u0434\u043b\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0440\u043e\u043b\u0438 \u043d\u0430 route",
+      "id": "DB-016",
+      "name": "Create supplier_invoice_items table",
+      "category": "database",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T13:00:00Z",
-      "completed_at": "2025-01-15T13:15:00Z"
+      "passes": false,
+      "description": "Link invoice items to quote_items"
     },
     {
-      "id": 22,
-      "category": "roles",
-      "name": "\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f \u0441 \u0440\u043e\u043b\u044f\u043c\u0438",
-      "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0438\u0442\u044c session['user'] \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0435\u0439 \u043e \u0440\u043e\u043b\u044f\u0445",
+      "id": "DB-017",
+      "name": "Create supplier_invoice_payments table",
+      "category": "database",
       "priority": 2,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T14:00:00Z",
-      "completed_at": "2025-01-15T14:15:00Z"
+      "passes": false,
+      "description": "Track payments with payment_type, buyer_company_id"
     },
     {
-      "id": 23,
-      "category": "workflow",
-      "name": "Enum \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u0432 workflow",
-      "description": "\u041e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u0432\u0441\u0435 \u0441\u0442\u0430\u0442\u0443\u0441\u044b \u0438 \u0434\u043e\u043f\u0443\u0441\u0442\u0438\u043c\u044b\u0435 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u044b",
+      "id": "DB-018",
+      "name": "Create workflow_transitions table if not exists",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Audit log for status transitions - verify or create"
+    },
+    {
+      "id": "DB-019",
+      "name": "Create approvals table",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Track approval requests with modifications JSONB"
+    },
+    {
+      "id": "DB-020",
+      "name": "Create specifications table",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Store specification exports with all required fields"
+    },
+    {
+      "id": "DB-021",
+      "name": "Create deals table",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Track completed deals linked to specifications"
+    },
+    {
+      "id": "DB-022",
+      "name": "Create plan_fact_categories table with seed data",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Seed payment categories (client_payment, supplier_payment, logistics, customs, tax, etc.)"
+    },
+    {
+      "id": "DB-023",
+      "name": "Create plan_fact_items table",
+      "category": "database",
+      "priority": 2,
+      "passes": false,
+      "description": "Track planned vs actual payments with variance"
+    },
+    {
+      "id": "DB-024",
+      "name": "Create telegram_users table",
+      "category": "database",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T15:00:00Z",
-      "completed_at": "2025-01-15T15:30:00Z"
+      "passes": false,
+      "description": "Link Telegram accounts to system users"
     },
     {
-      "id": 24,
-      "category": "workflow",
-      "name": "\u041c\u0430\u0442\u0440\u0438\u0446\u0430 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432 \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u0432",
-      "description": "\u041a\u0442\u043e \u043c\u043e\u0436\u0435\u0442 \u043f\u0435\u0440\u0435\u0432\u0435\u0441\u0442\u0438 \u0438\u0437 \u043a\u0430\u043a\u043e\u0433\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u0430 \u0432 \u043a\u0430\u043a\u043e\u0439",
+      "id": "DB-025",
+      "name": "Create notifications table",
+      "category": "database",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T16:00:00Z",
-      "completed_at": "2025-01-15T16:30:00Z"
+      "passes": false,
+      "description": "Store notification history"
     },
     {
-      "id": 25,
-      "category": "workflow",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0430 \u0441\u0442\u0430\u0442\u0443\u0441\u0430",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f transition_quote_status(quote_id, to_status, actor_id, comment)",
+      "id": "DB-026",
+      "name": "Add RLS policies for all new tables",
+      "category": "database",
+      "priority": 1,
+      "passes": false,
+      "description": "Row-level security for organization isolation"
+    },
+    {
+      "id": "IDN-001",
+      "name": "Implement IDN generation for quotes",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Generate IDN in format SELLER-INN-YEAR-SEQ using idn_counters"
+    },
+    {
+      "id": "IDN-002",
+      "name": "Implement IDN generation for quote items",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Generate item IDN as QUOTE_IDN-POSITION"
+    },
+    {
+      "id": "API-001",
+      "name": "CRUD API for suppliers",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Create, read, update, delete suppliers with search"
+    },
+    {
+      "id": "API-002",
+      "name": "CRUD API for buyer_companies",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Create, read, update, delete buyer companies"
+    },
+    {
+      "id": "API-003",
+      "name": "CRUD API for seller_companies",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Create, read, update, delete seller companies"
+    },
+    {
+      "id": "API-004",
+      "name": "CRUD API for customers with contacts",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Manage customers and their contacts"
+    },
+    {
+      "id": "API-005",
+      "name": "CRUD API for customer_contracts",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Manage supply contracts"
+    },
+    {
+      "id": "API-006",
+      "name": "CRUD API for locations",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Manage locations directory"
+    },
+    {
+      "id": "API-007",
+      "name": "Locations search endpoint for dropdown",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Search locations with query parameter for HTMX dropdown"
+    },
+    {
+      "id": "API-008",
+      "name": "Brand assignments API",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Manage brand-supplier and brand-procurement assignments"
+    },
+    {
+      "id": "API-009",
+      "name": "Route assignments API",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Manage route-logistics assignments"
+    },
+    {
+      "id": "API-010",
+      "name": "Supplier invoices CRUD",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Manage supplier invoices with items"
+    },
+    {
+      "id": "API-011",
+      "name": "Supplier invoice payments API",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Register and track payments"
+    },
+    {
+      "id": "WF-001",
+      "name": "Workflow status transition service",
+      "category": "backend",
+      "priority": 1,
+      "passes": false,
+      "description": "Validate and execute status transitions based on role"
+    },
+    {
+      "id": "WF-002",
+      "name": "Auto-transition: procurement complete",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Auto-advance when all brands evaluated"
+    },
+    {
+      "id": "WF-003",
+      "name": "Auto-transition: logistics+customs complete",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Auto-advance when BOTH logistics and customs done"
+    },
+    {
+      "id": "WF-004",
+      "name": "Approval request creation",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Create approval request with reason detection"
+    },
+    {
+      "id": "WF-005",
+      "name": "Approval with modifications",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Allow top_manager to modify quote during approval"
+    },
+    {
+      "id": "WF-006",
+      "name": "Quote versioning service",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Create new versions during client_negotiation"
+    },
+    {
+      "id": "SPEC-001",
+      "name": "Specification creation service",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Create specification from selected quote version"
+    },
+    {
+      "id": "SPEC-002",
+      "name": "Specification PDF generation",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Generate PDF with all required fields"
+    },
+    {
+      "id": "SPEC-003",
+      "name": "Signed scan upload and storage",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Upload and store signed specification scans"
+    },
+    {
+      "id": "DEAL-001",
+      "name": "Deal creation from specification",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Create deal when specification is confirmed"
+    },
+    {
+      "id": "DEAL-002",
+      "name": "Plan-fact auto-generation",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Generate planned payments from deal terms"
+    },
+    {
+      "id": "DEAL-003",
+      "name": "Plan-fact actual payment registration",
+      "category": "backend",
+      "priority": 2,
+      "passes": false,
+      "description": "Register actual payments with variance calculation"
+    },
+    {
+      "id": "UI-001",
+      "name": "Suppliers list page",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "List, search, filter suppliers"
+    },
+    {
+      "id": "UI-002",
+      "name": "Supplier form (create/edit)",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Form with all supplier fields"
+    },
+    {
+      "id": "UI-003",
+      "name": "Buyer companies list page",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "List our purchasing legal entities"
+    },
+    {
+      "id": "UI-004",
+      "name": "Buyer company form",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Form with all buyer company fields"
+    },
+    {
+      "id": "UI-005",
+      "name": "Seller companies list page",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "List our selling legal entities"
+    },
+    {
+      "id": "UI-006",
+      "name": "Seller company form",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Form with all seller company fields"
+    },
+    {
+      "id": "UI-007",
+      "name": "Customers list with contacts preview",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "List customers showing primary contact"
+    },
+    {
+      "id": "UI-008",
+      "name": "Customer detail page with contacts",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Customer details with embedded contacts list"
+    },
+    {
+      "id": "UI-009",
+      "name": "Customer contracts list",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "List contracts for customer"
+    },
+    {
+      "id": "UI-010",
+      "name": "Locations directory page",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Manage locations"
+    },
+    {
+      "id": "UI-011",
+      "name": "Location dropdown component with HTMX search",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Reusable dropdown with search"
+    },
+    {
+      "id": "UI-012",
+      "name": "Supplier invoices registry page",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "List invoices with status filters"
+    },
+    {
+      "id": "UI-013",
+      "name": "Supplier invoice detail page",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Invoice with items and payments"
+    },
+    {
+      "id": "UI-014",
+      "name": "Invoice payment form",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Register payment with buyer_company selection"
+    },
+    {
+      "id": "UI-015",
+      "name": "Quote form: seller company selector",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Dropdown to select seller company at quote level"
+    },
+    {
+      "id": "UI-016",
+      "name": "Quote item form: supplier selector",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Dropdown to select supplier at item level"
+    },
+    {
+      "id": "UI-017",
+      "name": "Quote item form: buyer company selector",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Dropdown to select buyer company at item level"
+    },
+    {
+      "id": "UI-018",
+      "name": "Quote item form: pickup location selector",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Location dropdown with search for pickup"
+    },
+    {
+      "id": "UI-019",
+      "name": "Procurement workspace view",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "View filtered by assigned brands with editable procurement fields"
+    },
+    {
+      "id": "UI-020",
+      "name": "Logistics workspace view",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "View filtered by assigned routes with logistics fields"
+    },
+    {
+      "id": "UI-021",
+      "name": "Customs workspace view",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "View for customs stage with HS code, duty fields"
+    },
+    {
+      "id": "UI-022",
+      "name": "Quote controller checklist view",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Checklist UI for quote controller role"
+    },
+    {
+      "id": "UI-023",
+      "name": "Specification controller view (before send)",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Spec data entry form with PDF preview"
+    },
+    {
+      "id": "UI-024",
+      "name": "Specification controller view (after signature)",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Scan upload and verification"
+    },
+    {
+      "id": "UI-025",
+      "name": "Deal detail page",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Show deal info and plan-fact summary"
+    },
+    {
+      "id": "UI-026",
+      "name": "Plan-fact table view",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Planned vs actual payments with variance"
+    },
+    {
+      "id": "UI-027",
+      "name": "Payment registration form",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Register actual payment with exchange rate"
+    },
+    {
+      "id": "UI-028",
+      "name": "Admin: brand assignments page",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Assign brands to procurement managers"
+    },
+    {
+      "id": "UI-029",
+      "name": "Admin: route assignments page",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Assign routes to logistics managers"
+    },
+    {
+      "id": "UI-030",
+      "name": "Admin: role view switcher",
+      "category": "frontend",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T17:00:00Z",
-      "completed_at": "2025-01-15T17:30:00Z"
+      "passes": false,
+      "description": "Allow admin to preview UI as different roles"
     },
     {
-      "id": 26,
-      "category": "workflow",
-      "name": "\u0412\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0430 \u0441\u0442\u0430\u0442\u0443\u0441\u0430",
-      "description": "\u041f\u0440\u043e\u0432\u0435\u0440\u043a\u0430 \u0447\u0442\u043e \u043f\u0435\u0440\u0435\u0445\u043e\u0434 \u0440\u0430\u0437\u0440\u0435\u0448\u0451\u043d \u0434\u043b\u044f \u0434\u0430\u043d\u043d\u043e\u0439 \u0440\u043e\u043b\u0438 \u0438 \u0442\u0435\u043a\u0443\u0449\u0435\u0433\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u0430",
+      "id": "UI-031",
+      "name": "Workflow status badge component",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Visual status indicator with color coding"
+    },
+    {
+      "id": "UI-032",
+      "name": "Workflow progress bar component",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Visual workflow progress indicator"
+    },
+    {
+      "id": "UI-033",
+      "name": "Workflow transition history",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Timeline of status transitions"
+    },
+    {
+      "id": "UI-034",
+      "name": "Quote version selector",
+      "category": "frontend",
+      "priority": 2,
+      "passes": false,
+      "description": "Select version during client_negotiation"
+    },
+    {
+      "id": "UI-035",
+      "name": "IDN display component",
+      "category": "frontend",
+      "priority": 1,
+      "passes": false,
+      "description": "Display IDN with copy-to-clipboard"
+    },
+    {
+      "id": "TG-001",
+      "name": "Telegram bot setup",
+      "category": "integration",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T17:00:00Z",
-      "completed_at": "2025-01-15T17:30:00Z",
-      "notes": "Implemented within transition_quote_status() - can_transition() validates roles and status"
+      "passes": false,
+      "description": "Create bot, configure webhook"
     },
     {
-      "id": 27,
-      "category": "workflow",
-      "name": "\u041b\u043e\u0433\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432",
-      "description": "\u0417\u0430\u043f\u0438\u0441\u044c \u0432 workflow_transitions \u043f\u0440\u0438 \u043a\u0430\u0436\u0434\u043e\u043c \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0435",
+      "id": "TG-002",
+      "name": "Telegram account linking",
+      "category": "integration",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T17:00:00Z",
-      "completed_at": "2025-01-15T17:30:00Z",
-      "notes": "Implemented within transition_quote_status() - Step 5 logs to workflow_transitions table"
+      "passes": false,
+      "description": "Verification code flow"
     },
     {
-      "id": 28,
-      "category": "workflow",
-      "name": "\u0410\u0432\u0442\u043e\u043f\u0435\u0440\u0435\u0445\u043e\u0434 logistics+customs \u2192 sales_review",
-      "description": "\u041a\u043e\u0433\u0434\u0430 \u043e\u0431\u0430 \u044d\u0442\u0430\u043f\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u044b, \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u043f\u0435\u0440\u0435\u0445\u043e\u0434",
+      "id": "TG-003",
+      "name": "Task notification messages",
+      "category": "integration",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T18:00:00Z",
-      "completed_at": "2025-01-15T18:30:00Z"
+      "passes": false,
+      "description": "Send notifications when tasks assigned"
     },
     {
-      "id": 29,
-      "category": "workflow",
-      "name": "\u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0438\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u0435\u0439 \u043f\u0440\u0438 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0435",
-      "description": "\u0410\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0435 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 procurement users \u043f\u043e \u0431\u0440\u0435\u043d\u0434\u0430\u043c \u043f\u0440\u0438 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u0435 \u0432 pending_procurement",
+      "id": "TG-004",
+      "name": "Approval inline buttons",
+      "category": "integration",
       "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T19:00:00Z",
-      "completed_at": "2025-01-15T19:30:00Z"
+      "passes": false,
+      "description": "Approve/reject buttons for top_manager"
     },
     {
-      "id": 30,
-      "category": "brands",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0439 \u0431\u0440\u0435\u043d\u0434\u043e\u0432",
-      "description": "CRUD \u0434\u043b\u044f brand_assignments",
-      "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T20:00:00Z",
-      "completed_at": "2025-01-15T20:30:00Z"
+      "id": "TEST-001",
+      "name": "Database migration tests",
+      "category": "testing",
+      "priority": 1,
+      "passes": false,
+      "description": "Test all migrations apply cleanly"
     },
     {
-      "id": 31,
-      "category": "brands",
-      "name": "\u041f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430 \u043f\u043e \u0431\u0440\u0435\u043d\u0434\u0443",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f get_procurement_manager(org_id, brand) \u2192 user_id",
-      "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T20:30:00Z",
-      "completed_at": "2025-01-15T20:35:00Z"
+      "id": "TEST-002",
+      "name": "API endpoint tests",
+      "category": "testing",
+      "priority": 1,
+      "passes": false,
+      "description": "Test CRUD operations for all entities"
     },
     {
-      "id": 32,
-      "category": "brands",
-      "name": "\u041f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u0431\u0440\u0435\u043d\u0434\u043e\u0432 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f get_assigned_brands(user_id, org_id) \u2192 list[brand]",
-      "priority": 3,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T20:35:00Z",
-      "completed_at": "2025-01-15T20:40:00Z"
+      "id": "TEST-003",
+      "name": "Workflow transition tests",
+      "category": "testing",
+      "priority": 1,
+      "passes": false,
+      "description": "Test valid and invalid transitions"
     },
     {
-      "id": 33,
-      "category": "ui_procurement",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /procurement",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430 \u043f\u043e \u0437\u0430\u043a\u0443\u043f\u043a\u0430\u043c",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T05:52:00Z",
-      "completed_at": "2025-01-15T06:00:00Z"
-    },
-    {
-      "id": 34,
-      "category": "ui_procurement",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u041a\u041f \u0441 \u043c\u043e\u0438\u043c\u0438 \u0431\u0440\u0435\u043d\u0434\u0430\u043c\u0438",
-      "description": "\u0424\u0438\u043b\u044c\u0442\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u0441\u043f\u0438\u0441\u043e\u043a \u041a\u041f \u0433\u0434\u0435 \u0435\u0441\u0442\u044c \u043f\u043e\u0437\u0438\u0446\u0438\u0438 \u0441 \u043c\u043e\u0438\u043c\u0438 \u0431\u0440\u0435\u043d\u0434\u0430\u043c\u0438",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:15:00Z",
-      "completed_at": "2025-01-15T06:30:00Z"
-    },
-    {
-      "id": 35,
-      "category": "ui_procurement",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0432\u0432\u043e\u0434\u0430 \u0437\u0430\u043a\u0443\u043f\u043e\u0447\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445",
-      "description": "\u0426\u0435\u043d\u0430, \u0441\u0442\u0440\u0430\u043d\u0430/\u0433\u043e\u0440\u043e\u0434, \u0432\u0435\u0441, \u0441\u0440\u043e\u043a \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u0434\u0441\u0442\u0432\u0430, \u0443\u0441\u043b\u043e\u0432\u0438\u044f \u043e\u043f\u043b\u0430\u0442\u044b \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0443",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T12:00:00Z",
-      "completed_at": "2025-01-15T12:30:00Z"
-    },
-    {
-      "id": 36,
-      "category": "ui_procurement",
-      "name": "\u0421\u043a\u0430\u0447\u0438\u0432\u0430\u043d\u0438\u0435 \u0441\u043f\u0438\u0441\u043a\u0430 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438",
-      "description": "Excel export \u043f\u043e\u0437\u0438\u0446\u0438\u0439 \u041a\u041f \u0434\u043b\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0443",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T13:00:00Z",
-      "completed_at": "2025-01-15T13:30:00Z"
-    },
-    {
-      "id": 37,
-      "category": "ui_procurement",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f \u043e\u0446\u0435\u043d\u043a\u0438",
-      "description": "\u041e\u0442\u043c\u0435\u0442\u0438\u0442\u044c \u0441\u0432\u043e\u044e \u0447\u0430\u0441\u0442\u044c \u043a\u0430\u043a \u0432\u044b\u043f\u043e\u043b\u043d\u0435\u043d\u043d\u0443\u044e",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T22:00:00Z",
-      "completed_at": "2025-01-15T22:30:00Z"
-    },
-    {
-      "id": 38,
-      "category": "ui_logistics",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /logistics",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u043b\u043e\u0433\u0438\u0441\u0442\u0430",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T23:00:00Z",
-      "completed_at": "2025-01-15T23:30:00Z"
-    },
-    {
-      "id": 39,
-      "category": "ui_logistics",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u041a\u041f \u043d\u0430 \u044d\u0442\u0430\u043f\u0435 \u043b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0438",
-      "description": "\u041a\u041f \u0441\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u043c pending_logistics",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T23:30:00Z",
-      "completed_at": "2025-01-15T23:31:00Z",
-      "notes": "Already implemented in Feature #38 - /logistics page shows quotes filtered by pending_logistics status"
-    },
-    {
-      "id": 40,
-      "category": "ui_logistics",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0432\u0432\u043e\u0434\u0430 \u043b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0438",
-      "description": "\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u043f\u043e \u0441\u0435\u0433\u043c\u0435\u043d\u0442\u0430\u043c, \u0441\u0440\u043e\u043a \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0438",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T23:35:00Z",
-      "completed_at": "2025-01-15T23:50:00Z",
-      "notes": "Created /logistics/{quote_id} page with form for logistics costs and delivery time. Data stored in quote_calculation_variables."
-    },
-    {
-      "id": 41,
-      "category": "ui_logistics",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f \u043b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0438",
-      "description": "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u044d\u0442\u0430\u043f \u043b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0438",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T23:50:00Z",
-      "completed_at": "2025-01-15T23:51:00Z",
-      "notes": "Implemented in Feature #40 - form includes '\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u043b\u043e\u0433\u0438\u0441\u0442\u0438\u043a\u0443' button that calls complete_logistics()"
-    },
-    {
-      "id": 42,
-      "category": "ui_customs",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /customs",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430 \u0422\u041e",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:30:00Z",
-      "completed_at": "2025-01-15T06:32:00Z",
-      "notes": "Created /customs route with customs workspace page. Includes parallel stages status, filtering, role check for customs/admin."
-    },
-    {
-      "id": 43,
-      "category": "ui_customs",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u041a\u041f \u043d\u0430 \u044d\u0442\u0430\u043f\u0435 \u0442\u0430\u043c\u043e\u0436\u043d\u0438",
-      "description": "\u041a\u041f \u0441\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u043c pending_customs",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T06:30:00Z",
-      "completed_at": "2025-01-15T06:32:00Z",
-      "notes": "Already implemented in Feature #42 - /customs page shows quotes filtered by pending_customs and pending_logistics status"
-    },
-    {
-      "id": 44,
-      "category": "ui_customs",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0432\u0432\u043e\u0434\u0430 \u0442\u0430\u043c\u043e\u0436\u0435\u043d\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445",
-      "description": "\u041a\u043e\u0434\u044b \u0422\u041d \u0412\u042d\u0414, \u043f\u043e\u0448\u043b\u0438\u043d\u044b, \u0434\u043e\u043f. \u0440\u0430\u0441\u0445\u043e\u0434\u044b",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T09:00:00Z",
-      "completed_at": "2025-01-15T09:30:00Z",
-      "notes": "Created /customs/{quote_id} GET page with per-item form for HS codes, duty %, and extra charges. Includes progress tracking and parallel stage status."
-    },
-    {
-      "id": 45,
-      "category": "ui_customs",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043d\u0438\u044f \u0442\u0430\u043c\u043e\u0436\u043d\u0438",
-      "description": "\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u044d\u0442\u0430\u043f \u0442\u0430\u043c\u043e\u0436\u043d\u0438",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T09:30:00Z",
-      "completed_at": "2025-01-15T09:35:00Z",
-      "notes": "Implemented in Feature #44 - form includes '\u0417\u0430\u0432\u0435\u0440\u0448\u0438\u0442\u044c \u0442\u0430\u043c\u043e\u0436\u043d\u044e' button that calls complete_customs()"
-    },
-    {
-      "id": 46,
-      "category": "ui_quote_control",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /quote-control",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u0430 \u041a\u041f (\u0416\u0430\u043d\u043d\u0430)",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T12:00:00Z",
-      "completed_at": "2025-01-15T12:30:00Z",
-      "notes": "Created /quote-control route with stats, status filter, pending/awaiting/approved quote lists. Added quote_controller link to nav bar."
-    },
-    {
-      "id": 47,
-      "category": "ui_quote_control",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u041a\u041f \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435",
-      "description": "\u041a\u041f \u0441\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u043c pending_quote_control",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T12:30:00Z",
-      "completed_at": "2025-01-15T12:31:00Z",
-      "notes": "Already implemented in Feature #46 - /quote-control page shows quotes filtered by pending_quote_control status"
-    },
-    {
-      "id": 48,
-      "category": "ui_quote_control",
-      "name": "\u0427\u0435\u043a-\u043b\u0438\u0441\u0442 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u041a\u041f",
-      "description": "\u0412\u0441\u0435 \u043f\u0443\u043d\u043a\u0442\u044b \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0416\u0430\u043d\u043d\u044b \u0441 \u0447\u0435\u043a\u0431\u043e\u043a\u0441\u0430\u043c\u0438",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T16:00:00Z",
-      "completed_at": "2025-01-15T16:30:00Z",
-      "notes": "Created /quote-control/{quote_id} page with full 10-item checklist. Auto-detects approval requirements (RUB currency, <100% prepayment, low markup, LPR reward). Shows color-coded status for each item."
-    },
-    {
-      "id": 49,
-      "category": "ui_quote_control",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0442\u0430 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443",
-      "description": "\u041a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0439 \u0438 \u043a\u043d\u043e\u043f\u043a\u0430 \u0432\u043e\u0437\u0432\u0440\u0430\u0442\u0430",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T18:00:00Z",
-      "completed_at": "2025-01-15T18:30:00Z",
-      "notes": "Created /quote-control/{quote_id}/return GET route for return form and POST handler. Form requires comment, uses transition_quote_status to move to PENDING_SALES_REVIEW."
-    },
-    {
-      "id": 50,
-      "category": "ui_quote_control",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438 \u043d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0435",
-      "description": "\u0417\u0430\u043f\u0440\u043e\u0441 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u044f \u0442\u043e\u043f-\u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430 \u0441 \u043f\u0440\u0438\u0447\u0438\u043d\u043e\u0439",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T18:35:00Z",
-      "completed_at": "2025-01-15T19:00:00Z",
-      "notes": "Created /quote-control/{quote_id}/request-approval GET route for form and POST handler. Auto-detects approval reasons, pre-fills comment. Transitions to PENDING_APPROVAL."
-    },
-    {
-      "id": 51,
-      "category": "ui_quote_control",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044f \u041a\u041f",
-      "description": "\u041e\u0434\u043e\u0431\u0440\u0438\u0442\u044c \u0438 \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0443 \u043f\u0440\u043e\u0434\u0430\u0436",
-      "priority": 4,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T19:05:00Z",
-      "completed_at": "2025-01-15T19:30:00Z",
-      "notes": "Created /quote-control/{quote_id}/approve GET/POST routes. Checks if approval is needed, redirects to request-approval if yes. Direct approval to APPROVED status."
-    },
-    {
-      "id": 52,
-      "category": "telegram",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 Telegram-\u0431\u043e\u0442\u0430",
-      "description": "\u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044f \u0431\u043e\u0442\u0430 \u0432 BotFather, \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u0442\u043e\u043a\u0435\u043d\u0430",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T20:00:00Z",
-      "completed_at": "2025-01-15T20:30:00Z",
-      "notes": "Created services/telegram_service.py with full bot infrastructure: Bot initialization, NotificationType enum, message templates, inline keyboards for approvals, send_message/send_notification/send_approval_request functions, webhook management, callback data parsing. Added python-telegram-bot>=21.0 to requirements.txt. Updated .env.example with TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_URL variables."
-    },
-    {
-      "id": 53,
-      "category": "telegram",
-      "name": "Webhook endpoint",
-      "description": "POST /api/telegram/webhook \u0434\u043b\u044f \u043f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u044f \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2025-01-15T21:00:00Z",
-      "completed_at": "2025-01-15T21:30:00Z",
-      "notes": "Created POST /api/telegram/webhook route in main.py. Added WebhookResult, parse_telegram_update, process_webhook_update, respond_to_command functions to telegram_service.py. Handles text messages, commands (/start, /status, /help), and callback queries (approve, reject, details). Returns JSON responses, always returns 200 OK to prevent Telegram retries."
-    },
-    {
-      "id": 54,
-      "category": "telegram",
-      "name": "\u041a\u043e\u043c\u0430\u043d\u0434\u0430 /start",
-      "description": "\u041f\u0440\u0438\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0435 \u0438 \u0438\u043d\u0441\u0442\u0440\u0443\u043a\u0446\u0438\u044f \u043f\u043e \u043f\u0440\u0438\u0432\u044f\u0437\u043a\u0435",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T07:03:34.246951",
-      "completed_at": "2026-01-15T07:05:17.816974"
-    },
-    {
-      "id": 55,
-      "category": "telegram",
-      "name": "\u0412\u0435\u0440\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0430",
-      "description": "\u041f\u0440\u0438\u0432\u044f\u0437\u043a\u0430 telegram_id \u043a user \u0447\u0435\u0440\u0435\u0437 \u043a\u043e\u0434",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T07:15:00Z",
-      "completed_at": "2026-01-15T07:35:00Z"
-    },
-    {
-      "id": 56,
-      "category": "telegram",
-      "name": "UI \u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u0438 \u043a\u043e\u0434\u0430 \u0432\u0435\u0440\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
-      "description": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /settings/telegram \u0441 \u043a\u043e\u0434\u043e\u043c",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T08:00:00Z",
-      "completed_at": "2026-01-15T08:30:00Z"
-    },
-    {
-      "id": 57,
-      "category": "telegram",
-      "name": "\u041a\u043e\u043c\u0430\u043d\u0434\u0430 /status",
-      "description": "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c \u043c\u043e\u0438 \u0442\u0435\u043a\u0443\u0449\u0438\u0435 \u0437\u0430\u0434\u0430\u0447\u0438",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T12:00:00Z",
-      "completed_at": "2026-01-15T12:30:00Z",
-      "notes": "Implemented /status command with role-based task display. Shows tasks for sales, procurement, logistics, customs, quote_controller, and top_manager roles. Includes user info, role badges, task counts by category, and links to system."
-    },
-    {
-      "id": 58,
-      "category": "telegram",
-      "name": "\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f task_assigned",
-      "description": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043e \u043d\u043e\u0432\u043e\u0439 \u0437\u0430\u0434\u0430\u0447\u0435",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T13:00:00Z",
-      "completed_at": "2026-01-15T13:30:00Z",
-      "notes": "Created send_task_assigned_notification() and related functions. Records notifications in DB, sends via Telegram if user has linked account. Added notify_users_of_task_assignment() for multiple users and notify_role_users_of_task() for role-based notifications."
-    },
-    {
-      "id": 59,
-      "category": "telegram",
-      "name": "\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f approval_required",
-      "description": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u0442\u043e\u043f-\u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0443 \u0441 \u043a\u043d\u043e\u043f\u043a\u0430\u043c\u0438",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T14:00:00Z",
-      "completed_at": "2026-01-15T14:30:00Z",
-      "notes": "Created send_approval_required_notification() and send_approval_notification_for_quote() functions. Sends to all top_manager/admin users with inline approve/reject/details buttons. Records notifications in DB."
-    },
-    {
-      "id": 60,
-      "category": "telegram",
-      "name": "Inline-\u043a\u043d\u043e\u043f\u043a\u0430 \u0421\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u0442\u044c",
-      "description": "Callback handler \u0434\u043b\u044f approve_{quote_id}",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T07:17:00Z",
-      "completed_at": "2026-01-15T07:45:00Z",
-      "notes": "Implemented handle_approve_callback() and send_callback_response() functions. Validates Telegram link, user role (top_manager/admin), quote status (pending_approval), then transitions to approved. Updates original message to show result."
-    },
-    {
-      "id": 61,
-      "category": "telegram",
-      "name": "Inline-\u043a\u043d\u043e\u043f\u043a\u0430 \u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c",
-      "description": "Callback handler \u0434\u043b\u044f reject_{quote_id}",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T08:00:00Z",
-      "completed_at": "2026-01-15T08:30:00Z",
-      "notes": "Implemented handle_reject_callback() function. Validates Telegram link, user role (top_manager/admin), quote status (pending_approval), then transitions to rejected. Uses default rejection comment for Telegram rejections. Updates original message to show result."
-    },
-    {
-      "id": 62,
-      "category": "telegram",
-      "name": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 status_changed",
-      "description": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043e\u0431 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0438 \u0441\u0442\u0430\u0442\u0443\u0441\u0430",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T09:00:00Z",
-      "completed_at": "2026-01-15T09:30:00Z",
-      "notes": "Implemented status_changed notification functionality: StatusChangedNotification dataclass, send_status_changed_notification() for sending to individual users, notify_quote_creator_of_status_change() for notifying quote creator, and notify_assigned_users_of_status_change() for notifying all assigned users (creator, procurement, logistics, customs). Skips actor from notification (they made the change). Records in DB and sends via Telegram if linked."
-    },
-    {
-      "id": 63,
-      "category": "telegram",
-      "name": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 returned_for_revision",
-      "description": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u0435 \u043e \u0432\u043e\u0437\u0432\u0440\u0430\u0442\u0435 \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T10:00:00Z",
-      "completed_at": "2026-01-15T10:30:00Z",
-      "notes": "Implemented returned_for_revision notification functionality: ReturnedForRevisionNotification dataclass, send_returned_for_revision_notification() for sending to individual users with Telegram message and DB recording, notify_creator_of_return() convenience function that fetches quote details and notifies creator. Integrated into /quote-control/{quote_id}/return POST handler to send notification on successful return."
-    },
-    {
-      "id": 64,
-      "category": "approvals",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0439",
-      "description": "CRUD \u0434\u043b\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u044b approvals",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T11:00:00Z",
-      "completed_at": "2026-01-15T11:30:00Z",
-      "notes": "Created approval_service.py with full CRUD operations: Approval dataclass, create_approval(), create_approvals_for_role(), get_approval(), get_approval_by_quote(), get_approvals_for_quote(), get_pending_approval_for_quote(), get_pending_approvals_for_user(), get_approvals_requested_by(), get_approvals_with_details(), count_pending_approvals(), update_approval_status(), approve_quote_approval(), reject_quote_approval(), cancel_pending_approvals_for_quote(), has_pending_approval(), get_latest_approval_decision(), get_approval_stats_for_user(). Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 65,
-      "category": "approvals",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u0437\u0430\u043f\u0440\u043e\u0441\u0430 \u043d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0435",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f request_approval(quote_id, approver_id, reason)",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T12:00:00Z",
-      "completed_at": "2026-01-15T12:30:00Z",
-      "notes": "Created request_approval() function in approval_service.py with ApprovalRequestResult dataclass. Function performs complete workflow: validates quote status, transitions to pending_approval, creates approval records for top_manager/admin users via create_approvals_for_role(), sends Telegram notifications via send_approval_notification_for_quote(). Updated main.py POST handler at /quote-control/{quote_id}/request-approval to use the new function. Now shows approvals_created and notifications_sent counts on success."
-    },
-    {
-      "id": 66,
-      "category": "approvals",
-      "name": "\u041e\u0431\u0440\u0430\u0431\u043e\u0442\u043a\u0430 \u0440\u0435\u0448\u0435\u043d\u0438\u044f \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u044f",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f process_approval_decision(approval_id, decision, comment)",
-      "priority": 5,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T14:00:00Z",
-      "completed_at": "2026-01-15T14:30:00Z",
-      "notes": "Created process_approval_decision() function with ApprovalDecisionResult dataclass. Complete workflow: validates approval exists and is pending, validates quote is in pending_approval status, updates approval record, transitions quote to approved/rejected, cancels other pending approvals, sends notifications to creator and requester. Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 67,
-      "category": "ui_spec_control",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /spec-control",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u043b\u0435\u0440\u0430 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0439",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T15:00:00Z",
-      "completed_at": "2026-01-15T15:30:00Z",
-      "notes": "Created /spec-control route with workspace page for spec_controller role. Shows quotes pending specification creation (pending_spec_control status), specifications grouped by status (draft, pending_review, approved, signed). Added '\u0421\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438' link to nav_bar for spec_controller/admin roles. Stats cards, status filter, action buttons for each item."
-    },
-    {
-      "id": 68,
-      "category": "ui_spec_control",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0439 \u043d\u0430 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435",
-      "description": "\u0421\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 \u0441\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u043c pending_review",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T15:00:00Z",
-      "completed_at": "2026-01-15T15:30:00Z",
-      "notes": "Already implemented in Feature #67 - /spec-control page shows specifications at pending_review status in dedicated section with filtering support."
-    },
-    {
-      "id": 69,
-      "category": "ui_spec_control",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0432\u0432\u043e\u0434\u0430 \u0434\u0430\u043d\u043d\u044b\u0445 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
-      "description": "\u0412\u0441\u0435 18 \u043f\u043e\u043b\u0435\u0439 \u0438\u0437 specifications",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T16:00:00Z",
-      "completed_at": "2026-01-15T16:45:00Z",
-      "notes": "Implemented /spec-control/create/{quote_id} for creating new specifications and /spec-control/{spec_id} for viewing/editing. Form includes all 18 fields organized in 5 sections: Identification, Dates/Validity, Currency/Payment, Origin/Shipping, Legal Entities. Supports status transitions: draft \u2192 pending_review \u2192 approved."
-    },
-    {
-      "id": 70,
-      "category": "ui_spec_control",
-      "name": "Preview PDF \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
-      "description": "\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0441\u0433\u0435\u043d\u0435\u0440\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u043e\u0433\u043e PDF",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T17:00:00Z",
-      "completed_at": "2026-01-15T17:45:00Z",
-      "notes": "Implemented /spec-control/{spec_id}/preview-pdf route. Enhanced specification_export.py with SpecificationData class, fetch_specification_data(), generate_spec_pdf_html(), and generate_spec_pdf_from_spec_id(). Uses all 18 specification fields from the specifications table. Added '\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 PDF' button to spec edit page. PDF opens in new tab with inline display."
-    },
-    {
-      "id": 71,
-      "category": "ui_spec_control",
-      "name": "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u043d\u043e\u0433\u043e \u0441\u043a\u0430\u043d\u0430",
-      "description": "Upload \u0441\u043a\u0430\u043d\u0430 + \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435 URL",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T19:00:00Z",
-      "completed_at": "2026-01-15T19:30:00Z",
-      "notes": "Implemented /spec-control/{spec_id}/upload-signed POST endpoint. Accepts PDF/JPG/PNG up to 10MB. Stores in Supabase Storage bucket 'specifications'. Updates signed_scan_url field. Added upload UI section to spec edit page (visible when status is approved/signed). Created migration 017 with storage bucket setup instructions."
-    },
-    {
-      "id": 72,
-      "category": "ui_spec_control",
-      "name": "\u041a\u043d\u043e\u043f\u043a\u0430 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u044f \u043f\u043e\u0434\u043f\u0438\u0441\u0438",
-      "description": "\u041f\u0435\u0440\u0435\u0432\u043e\u0434 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 \u0432 \u0441\u0442\u0430\u0442\u0443\u0441 signed \u2192 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u0435 deal",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T21:00:00Z",
-      "completed_at": "2026-01-15T21:30:00Z",
-      "notes": "Implemented confirm signature button and deal creation. Added '\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c \u043f\u043e\u0434\u043f\u0438\u0441\u044c' button to spec edit page (visible when status=approved + signed_scan exists). Created POST /spec-control/{spec_id}/confirm-signature endpoint. Handler: validates status=approved + has signed_scan, creates deal record with auto-generated deal_number (DEAL-YYYY-NNNN), updates spec status to 'signed', optionally transitions quote to deal_signed. Complete error handling and success feedback."
-    },
-    {
-      "id": 73,
-      "category": "specifications",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0439",
-      "description": "CRUD \u0434\u043b\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u044b specifications",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T22:00:00Z",
-      "completed_at": "2026-01-15T22:30:00Z",
-      "notes": "Created services/specification_service.py with full CRUD operations: Specification dataclass with all 18 fields, SPEC_STATUSES/SPEC_STATUS_NAMES/SPEC_STATUS_COLORS/SPEC_TRANSITIONS constants, status helpers (get_spec_status_name, get_spec_status_color, can_transition_spec, get_allowed_spec_transitions), create_specification(), get_specification(), get_specification_by_quote(), get_specifications_by_status(), get_all_specifications(), get_specifications_with_details(), count_specifications_by_status(), specification_exists_for_quote(), update_specification(), update_specification_status(), set_signed_scan_url(), delete_specification(), generate_specification_number(), get_specification_stats(), get_specifications_for_signing(), get_recently_signed_specifications(). Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 74,
-      "category": "specifications",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438 \u0438\u0437 \u041a\u041f",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f create_specification_from_quote(quote_id, version_id)",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T23:00:00Z",
-      "completed_at": "2026-01-15T23:30:00Z",
-      "notes": "Created create_specification_from_quote() function in specification_service.py with CreateSpecFromQuoteResult dataclass. Function fetches quote data, optionally uses specific version data, pre-fills 15+ specification fields from quote and calculation variables (proposal_idn, currency, exchange rate, payment terms, countries, legal entities, periods). Returns result with success flag, specification object, error message, and prefilled_fields dict. Updated services/__init__.py with exports."
-    },
-    {
-      "id": 75,
-      "category": "deals",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u0441\u0434\u0435\u043b\u043e\u043a",
-      "description": "CRUD \u0434\u043b\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u044b deals",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T08:20:00Z",
-      "completed_at": "2026-01-15T08:45:00Z",
-      "notes": "Created services/deal_service.py with full CRUD operations: Deal dataclass with all fields (id, specification_id, quote_id, organization_id, deal_number, signed_at, total_amount, currency, status, created_by, created_at, updated_at), DEAL_STATUSES/DEAL_STATUS_NAMES/DEAL_STATUS_COLORS/DEAL_TRANSITIONS constants, status helpers (get_deal_status_name, get_deal_status_color, can_transition_deal, get_allowed_deal_transitions, is_deal_terminal), create_deal(), get_deal(), get_deal_by_specification(), get_deal_by_quote(), get_deals_by_status(), get_all_deals(), get_deals_with_details(), count_deals_by_status(), deal_exists_for_specification(), deal_exists_for_quote(), update_deal(), update_deal_status(), complete_deal(), cancel_deal(), update_deal_amount(), delete_deal(), generate_deal_number(), get_deal_stats(), get_active_deals(), get_recent_deals(), get_deals_by_date_range(), search_deals(). Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 76,
-      "category": "deals",
-      "name": "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 \u0441\u0434\u0435\u043b\u043a\u0438 \u0438\u0437 \u0441\u043f\u0435\u0446\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
-      "description": "\u0424\u0443\u043d\u043a\u0446\u0438\u044f create_deal_from_specification(specification_id)",
-      "priority": 6,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T09:00:00Z",
-      "completed_at": "2026-01-15T09:30:00Z",
-      "notes": "Created create_deal_from_specification() function in deal_service.py with CreateDealFromSpecResult dataclass. Function fetches specification with quote/customer details, validates spec status (approved/signed) and signed_scan, extracts financial data (total_amount, currency), generates deal_number, creates deal record in 'active' status, optionally updates spec status to 'signed'. Returns result with success flag, Deal object, error message, specification_updated flag, and extracted_data dict. Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 77,
-      "category": "ui_finance",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /finance",
-      "description": "\u0420\u0430\u0431\u043e\u0447\u0430\u044f \u0437\u043e\u043d\u0430 \u0444\u0438\u043d\u0430\u043d\u0441\u043e\u0432\u043e\u0433\u043e \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T10:00:00Z",
-      "completed_at": "2026-01-15T10:30:00Z",
-      "notes": "Created /finance route for finance role workspace. Shows deal statistics (active, completed, total amounts), filterable deals list with status badges. Navigation link added for finance/admin roles. Includes specs/quote/customer join, formatted amounts with currency."
-    },
-    {
-      "id": 78,
-      "category": "ui_finance",
-      "name": "\u0421\u043f\u0438\u0441\u043e\u043a \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u0441\u0434\u0435\u043b\u043e\u043a",
-      "description": "\u0421\u0434\u0435\u043b\u043a\u0438 \u0441\u043e \u0441\u0442\u0430\u0442\u0443\u0441\u043e\u043c active",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T10:00:00Z",
-      "completed_at": "2026-01-15T10:30:00Z",
-      "notes": "Already implemented in Feature #77 - /finance page shows active deals list by default with status filter, includes deal_number, spec_number, customer, amount, signed_at date, status badge and '\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435' action button."
-    },
-    {
-      "id": 79,
-      "category": "ui_finance",
-      "name": "\u0422\u0430\u0431\u043b\u0438\u0446\u0430 \u043f\u043b\u0430\u043d-\u0444\u0430\u043a\u0442 \u043f\u043e \u0441\u0434\u0435\u043b\u043a\u0435",
-      "description": "\u0412\u0441\u0435 \u0437\u0430\u043f\u0438\u0441\u0438 plan_fact_items \u0434\u043b\u044f \u0441\u0434\u0435\u043b\u043a\u0438",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T11:00:00Z",
-      "completed_at": "2026-01-15T11:30:00Z",
-      "notes": "Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items. Table shows category, description, planned/actual dates and amounts, variance with color coding, payment status (paid/pending), and edit button for unpaid items."
-    },
-    {
-      "id": 80,
-      "category": "ui_finance",
-      "name": "\u0424\u043e\u0440\u043c\u0430 \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438 \u043f\u043b\u0430\u0442\u0435\u0436\u0430",
-      "description": "\u0412\u0432\u043e\u0434 \u0444\u0430\u043a\u0442\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u043f\u043b\u0430\u0442\u0435\u0436\u0430",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T12:00:00Z",
-      "completed_at": "2026-01-15T12:30:00Z",
-      "notes": "Created payment registration form at /finance/{deal_id}/plan-fact/{item_id}. GET shows form with planned data card (category, amount, date, status) and actual data form (amount, currency, exchange rate, date, payment document, notes). POST validates and updates plan_fact_items with actual payment data. Database trigger automatically calculates variance. Full validation for role (finance/admin), organization access, and data integrity."
-    },
-    {
-      "id": 81,
-      "category": "plan_fact",
-      "name": "\u0421\u0435\u0440\u0432\u0438\u0441 \u043f\u043b\u0430\u043d-\u0444\u0430\u043a\u0442\u0430",
-      "description": "CRUD \u0434\u043b\u044f plan_fact_items",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T13:00:00Z",
-      "completed_at": "2026-01-15T13:30:00Z",
-      "notes": "Created services/plan_fact_service.py with full CRUD operations: PlanFactCategory and PlanFactItem dataclasses, category functions (get_all_categories, get_category, get_category_by_code, get_income_categories, get_expense_categories), create operations (create_plan_fact_item, create_plan_fact_item_with_category_code, bulk_create_plan_fact_items), read operations (get_plan_fact_item, get_plan_fact_items_for_deal, get_plan_fact_items_by_category, get_unpaid_items_for_deal, get_paid_items_for_deal, get_overdue_items_for_deal, count_items_for_deal), update operations (update_plan_fact_item, record_actual_payment, clear_actual_payment, update_planned_payment), delete operations (delete_plan_fact_item, delete_all_items_for_deal), summary and statistics (get_deal_plan_fact_summary, get_items_grouped_by_category, get_upcoming_payments, get_payments_for_period), validation (validate_item_for_payment, validate_deal_plan_fact). Updated services/__init__.py with all exports."
-    },
-    {
-      "id": 82,
-      "category": "plan_fact",
-      "name": "\u0410\u0432\u0442\u043e\u0433\u0435\u043d\u0435\u0440\u0430\u0446\u0438\u044f \u043f\u043b\u0430\u043d\u043e\u0432\u044b\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0435\u0439",
-      "description": "\u0421\u043e\u0437\u0434\u0430\u043d\u0438\u0435 plan_fact_items \u0438\u0437 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0441\u0434\u0435\u043b\u043a\u0438",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T08:42:23.603497",
-      "completed_at": "2026-01-15T08:45:39.923368",
-      "notes": "Created generate_plan_fact_from_deal(), regenerate_plan_fact_for_deal(), get_plan_fact_generation_preview() functions. Added GeneratePlanFactResult dataclass. Created UI routes: GET/POST /finance/{deal_id}/generate-plan-fact for preview and execution. Updated deal detail page with auto-generation buttons. Generates payments for: client_payment (advance + final), supplier_payment (advance + final), logistics, customs, finance_commission based on quote calculation variables."
-    },
-    {
-      "id": 83,
-      "category": "plan_fact",
-      "name": "Расчёт отклонений",
-      "description": "Вычисление variance_amount при регистрации факта",
-      "priority": 7,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T09:00:00.000000",
-      "completed_at": "2026-01-15T09:10:00.000000",
-      "notes": "Already implemented in migration 009: database trigger 'calculate_plan_fact_variance()' automatically computes variance_amount = actual - planned (or with exchange rate conversion for foreign currencies). UI in /finance/{deal_id} displays variance per item with color coding (red for overspend, green for savings) and total variance in summary."
-    },
-    {
-      "id": 84,
-      "category": "ui_admin",
-      "name": "Страница /admin/users",
-      "description": "Управление пользователями и ролями",
-      "priority": 8,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T09:15:00.000000",
-      "completed_at": "2026-01-15T09:35:00.000000",
-      "notes": "Created /admin/users page for admin-only user management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles GET/POST for role assignment with checkboxes. Color-coded role badges, stats cards (users, Telegram, roles count), role legend. Added 'Админ' nav link for admin users."
-    },
-    {
-      "id": 85,
-      "category": "ui_admin",
-      "name": "\u0421\u0442\u0440\u0430\u043d\u0438\u0446\u0430 /admin/brands",
-      "description": "\u041d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u0431\u0440\u0435\u043d\u0434\u043e\u0432 \u043c\u0435\u043d\u0435\u0434\u0436\u0435\u0440\u0430\u043c",
-      "priority": 8,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T10:00:00.000000",
-      "completed_at": "2026-01-15T10:35:00.000000",
-      "notes": "Created /admin/brands page for brand assignment management. Features: GET /admin/brands (list all assignments + unassigned brands from quotes), GET/POST /admin/brands/new (create assignment with brand name + procurement manager dropdown), GET/POST /admin/brands/{id}/edit (change assigned manager), POST /admin/brands/{id}/delete (remove assignment). Stats cards show: assigned brands, unassigned brands, procurement managers, total brands in quotes. Imports brands from quote_items. Admin-only access."
-    },
-    {
-      "id": 86,
-      "category": "dashboard",
-      "name": "\u041e\u0431\u043d\u043e\u0432\u0438\u0442\u044c dashboard \u0434\u043b\u044f \u0440\u043e\u043b\u0435\u0439",
-      "description": "\u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0442\u044c \u0437\u0430\u0434\u0430\u0447\u0438 \u0432 \u0437\u0430\u0432\u0438\u0441\u0438\u043c\u043e\u0441\u0442\u0438 \u043e\u0442 \u0440\u043e\u043b\u0438",
-      "priority": 8,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T14:00:00.000000",
-      "completed_at": "2026-01-15T14:30:00.000000",
-      "notes": "Completely redesigned /dashboard route to show role-specific task sections. Added _get_role_tasks_sections() helper function. Features: (1) TOP_MANAGER/ADMIN: pending approvals with quote details and 'Согласовать' buttons, (2) PROCUREMENT: quotes pending procurement evaluation, (3) LOGISTICS: quotes pending logistics data, (4) CUSTOMS: quotes pending customs clearance, (5) QUOTE_CONTROLLER: quotes pending review with amounts, (6) SPEC_CONTROLLER: specifications stats (drafts, pending review, quotes pending spec creation), (7) FINANCE: active deals with totals and action buttons, (8) SALES: quotes pending sales review. Each section has color-coded border, count badge, table with action buttons, and link to dedicated section. Dashboard header shows user's roles as color-coded badges. Stats cards now show workflow-aware counts (total KP, revenue from approved/deals, quotes 'В работе'). Recent quotes table uses workflow_status_badge(). Fixed approval_service.py to use correct field name idn_quote. Added new imports: count_pending_approvals, get_pending_approvals_for_user, get_approvals_with_details, count_deals_by_status, get_deals_by_status, count_specifications_by_status."
-    },
-    {
-      "id": 87,
-      "category": "dashboard",
-      "name": "\u041f\u0440\u043e\u0433\u0440\u0435\u0441\u0441-\u0431\u0430\u0440 workflow \u043d\u0430 \u041a\u041f",
-      "description": "\u0412\u0438\u0437\u0443\u0430\u043b\u0438\u0437\u0430\u0446\u0438\u044f \u0442\u0435\u043a\u0443\u0449\u0435\u0433\u043e \u044d\u0442\u0430\u043f\u0430 workflow",
-      "priority": 8,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T09:05:00.000000",
-      "completed_at": "2026-01-15T09:20:00.000000",
-      "notes": "Created workflow_progress_bar() function in main.py that visualizes the current stage of a quote's workflow. Shows 9 stages: Черновик → Закупки → Лог+Там → Продажи → Контроль → Согласование → Клиент → Спец-я → Сделка. Completed stages show green checkmarks, current stage has pulsing blue animation, future stages are gray. Rejected/cancelled quotes show special indicators. Added to 5 detail pages: /procurement/{quote_id}, /logistics/{quote_id}, /customs/{quote_id}, /quote-control/{quote_id}, /spec-control/{spec_id}."
-    },
-    {
-      "id": 88,
-      "category": "audit",
-      "name": "\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432",
-      "description": "UI \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 workflow_transitions \u043f\u043e \u041a\u041f",
-      "priority": 8,
-      "passes": true,
-      "in_progress": false,
-      "started_at": "2026-01-15T10:00:00.000000",
-      "completed_at": "2026-01-15T10:30:00.000000",
-      "notes": "Created workflow_transition_history() function in main.py (lines 3523-3703) showing workflow transitions as a timeline. Features: collapsible toggle button, status badges with colors, timestamps, actor role names, comments display. Integrated into 6 detail pages: /procurement/{quote_id}, /logistics/{quote_id}, /customs/{quote_id}, /quote-control/{quote_id}, /spec-control/{spec_id} (using quote_id from spec), /finance/{deal_id} (using quote_id from deal)."
+      "id": "TEST-004",
+      "name": "Role permission tests",
+      "category": "testing",
+      "priority": 1,
+      "passes": false,
+      "description": "Test field access by role"
     }
-  ],
-  "completion_criteria": {
-    "all_tests_pass": true,
-    "no_lint_errors": true,
-    "e2e_verified": false
-  },
-  "session_count": 0,
-  "last_session": null
+  ]
 }
