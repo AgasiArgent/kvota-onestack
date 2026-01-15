@@ -13627,6 +13627,415 @@ def post(company_id: str, session):
 
 
 # ============================================================================
+# CUSTOMERS MANAGEMENT (UI-007, UI-008) - Feature v3.0
+# ============================================================================
+
+@rt("/customers")
+def get(session, q: str = "", status: str = ""):
+    """
+    Customers list page with search, filters, and contacts preview.
+
+    Customers are external companies that buy from us (at quote level).
+    Each customer can have multiple contacts (ЛПР - decision makers).
+    The is_signatory contact is used for specification PDF generation.
+
+    Query Parameters:
+        q: Search query (matches name or INN)
+        status: Filter by status ("active", "inactive", or "" for all)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - sales, admin, or top_manager can view customers
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра справочника клиентов."),
+                P("Требуется одна из ролей: admin, sales, top_manager"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import customer service functions
+    from services.customer_service import (
+        get_all_customers, search_customers, get_customer_stats,
+        get_contacts_for_customer, count_contacts
+    )
+
+    # Get customers based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            is_active_filter = None if status == "" else (status == "active")
+            customers = search_customers(
+                organization_id=org_id,
+                query=q.strip(),
+                is_active=is_active_filter,
+                limit=100
+            )
+        else:
+            # Get all with filters
+            is_active_filter = None if status == "" else (status == "active")
+            customers = get_all_customers(
+                organization_id=org_id,
+                is_active=is_active_filter,
+                limit=100
+            )
+
+        # Get stats for summary
+        stats = get_customer_stats(organization_id=org_id)
+
+        # Fetch contacts for each customer for preview
+        customer_contacts_map = {}
+        for customer in customers:
+            contacts = get_contacts_for_customer(customer.id)
+            customer_contacts_map[customer.id] = contacts
+
+    except Exception as e:
+        print(f"Error loading customers: {e}")
+        customers = []
+        stats = {"total": 0, "active": 0, "inactive": 0, "with_contacts": 0, "with_signatory": 0}
+        customer_contacts_map = {}
+
+    # Status options for filter
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+        Option("Активные", value="active", selected=(status == "active")),
+        Option("Неактивные", value="inactive", selected=(status == "inactive")),
+    ]
+
+    # Build customer rows with contacts preview
+    customer_rows = []
+    for c in customers:
+        status_class = "status-approved" if c.is_active else "status-rejected"
+        status_text = "Активен" if c.is_active else "Неактивен"
+
+        # Build contacts preview
+        contacts = customer_contacts_map.get(c.id, [])
+        contacts_preview = []
+        if contacts:
+            for contact in contacts[:3]:  # Show up to 3 contacts
+                badges = []
+                if contact.is_signatory:
+                    badges.append(Span("✍️ подписант", cls="badge badge-primary", style="font-size: 0.7em; margin-left: 0.3rem;"))
+                if contact.is_primary:
+                    badges.append(Span("★ основной", cls="badge badge-info", style="font-size: 0.7em; margin-left: 0.3rem;"))
+
+                contact_line = Div(
+                    Span(contact.name, style="font-weight: 500;"),
+                    *badges,
+                    Small(f" — {contact.position}" if contact.position else "", style="color: #666;"),
+                    style="margin-bottom: 0.2rem;"
+                )
+                contacts_preview.append(contact_line)
+
+            if len(contacts) > 3:
+                contacts_preview.append(Small(f"... ещё {len(contacts) - 3}", style="color: #888;"))
+        else:
+            contacts_preview.append(Small("Нет контактов", style="color: #999;"))
+
+        customer_rows.append(
+            Tr(
+                Td(
+                    Div(
+                        Strong(c.name),
+                        Small(f" (ИНН: {c.inn})" if c.inn else "", style="color: #666; margin-left: 0.3rem;")
+                    )
+                ),
+                Td(c.legal_address[:50] + "..." if c.legal_address and len(c.legal_address) > 50 else c.legal_address or "—"),
+                Td(
+                    Div(*contacts_preview),
+                    style="min-width: 200px;"
+                ),
+                Td(c.general_director_name or "—"),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/customers/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/customers/{c.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    return page_layout("Клиенты",
+        # Header
+        Div(
+            H1("👥 Клиенты (покупатели)"),
+            A("+ Добавить клиента", href="/customers/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Клиенты — это внешние компании, которые покупают у нас товары. ",
+            "Каждое КП (quote) привязывается к одному клиенту. ",
+            "У клиента могут быть несколько контактов (ЛПР). Контакт с флагом ",
+            Span("✍️ подписант", style="font-weight: bold;"),
+            " используется для генерации спецификации (PDF).",
+            cls="alert alert-info"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value"),
+                Div("Активных"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("with_contacts", 0)), cls="stat-value"),
+                Div("С контактами"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("with_signatory", 0)), cls="stat-value"),
+                Div("С подписантом"),
+                cls="stat-card card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filter form
+        Div(
+            Form(
+                Div(
+                    Label(
+                        "Поиск по названию или ИНН:",
+                        Input(type="text", name="q", value=q, placeholder="Например: ООО Ромашка или 7712345678"),
+                    ),
+                    Label(
+                        "Статус:",
+                        Select(*status_options, name="status"),
+                    ),
+                    Button("Найти", type="submit"),
+                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                ),
+                method="get",
+                action="/customers"
+            ),
+            cls="card"
+        ),
+
+        # Customers table
+        Div(
+            Table(
+                Thead(
+                    Tr(
+                        Th("Название"),
+                        Th("Юридический адрес"),
+                        Th("Контакты (ЛПР)"),
+                        Th("Директор"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*customer_rows) if customer_rows else Tbody(
+                    Tr(Td("Клиенты не найдены", colspan="6", style="text-align: center; color: #666;"))
+                )
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/customers/{customer_id}")
+def get(customer_id: str, session):
+    """Customer detail view page with full information and contacts."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - sales, admin, or top_manager can view customers
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра данной страницы.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.customer_service import get_customer_with_contacts
+
+    customer = get_customer_with_contacts(customer_id)
+    if not customer:
+        return page_layout("Не найдено",
+            Div("Клиент не найден.", cls="alert alert-error"),
+            A("← К списку клиентов", href="/customers", role="button"),
+            session=session
+        )
+
+    # Build contacts list
+    contacts_rows = []
+    for contact in customer.contacts:
+        badges = []
+        if contact.is_signatory:
+            badges.append(Span("✍️ Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem;"))
+        if contact.is_primary:
+            badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+
+        contacts_rows.append(
+            Tr(
+                Td(Strong(contact.name), *badges),
+                Td(contact.position or "—"),
+                Td(
+                    A(contact.email, href=f"mailto:{contact.email}") if contact.email else "—"
+                ),
+                Td(
+                    A(contact.phone, href=f"tel:{contact.phone}") if contact.phone else "—"
+                ),
+                Td(contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes or "—"),
+                Td(
+                    A("✏️", href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
+                )
+            )
+        )
+
+    # Build warehouse addresses list
+    warehouse_items = []
+    if customer.warehouse_addresses:
+        for addr in customer.warehouse_addresses:
+            warehouse_items.append(Li(addr))
+
+    return page_layout(f"Клиент: {customer.name}",
+        # Header with actions
+        Div(
+            H1(f"👤 {customer.name}"),
+            Div(
+                A("✏️ Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
+                A("← К списку", href="/customers", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Status badge
+        Div(
+            Span("✅ Активен" if customer.is_active else "❌ Неактивен",
+                 cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Main info card
+        Div(
+            H3("📋 Основная информация"),
+            Div(
+                Div(
+                    Div(Strong("Название компании"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.name),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("ИНН"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.inn or "Не указан"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("КПП"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.kpp or "Не указан"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.ogrn or "Не указан"),
+                    cls="info-item"
+                ),
+                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Addresses card
+        Div(
+            H3("📍 Адреса"),
+            Div(
+                Div(
+                    Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.legal_address or "Не указан"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.actual_address or "Не указан"),
+                    cls="info-item"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em;"),
+                Ul(*warehouse_items) if warehouse_items else Div("Нет адресов складов", style="color: #999;"),
+            ) if customer.warehouse_addresses or True else "",
+            cls="card"
+        ),
+
+        # Director card
+        Div(
+            H3("👔 Руководство"),
+            Div(
+                Div(
+                    Div(Strong("Должность"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.general_director_position or "Генеральный директор"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("ФИО"), style="color: #666; font-size: 0.9em;"),
+                    Div(customer.general_director_name or "Не указан"),
+                    cls="info-item"
+                ),
+                cls="info-grid", style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Contacts card
+        Div(
+            Div(
+                H3(f"👥 Контакты (ЛПР) — {len(customer.contacts)}"),
+                A("+ Добавить контакт", href=f"/customers/{customer_id}/contacts/new", role="button", cls="outline"),
+                style="display: flex; justify-content: space-between; align-items: center;"
+            ),
+            Div(
+                "💡 Отметьте одного контакта как ",
+                Span("✍️ Подписант", style="font-weight: bold;"),
+                " — его имя будет использоваться в спецификациях (PDF). ",
+                "Контакт ",
+                Span("★ Основной", style="font-weight: bold;"),
+                " — для основной коммуникации.",
+                cls="alert alert-info", style="margin: 1rem 0;"
+            ),
+            Table(
+                Thead(
+                    Tr(
+                        Th("ФИО"),
+                        Th("Должность"),
+                        Th("Email"),
+                        Th("Телефон"),
+                        Th("Заметки"),
+                        Th(""),
+                    )
+                ),
+                Tbody(*contacts_rows) if contacts_rows else Tbody(
+                    Tr(Td("Контакты не добавлены. Добавьте первого контакта.", colspan="6", style="text-align: center; color: #666;"))
+                )
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

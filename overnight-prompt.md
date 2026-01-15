@@ -236,6 +236,23 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - Notification preferences per type
    - Helper functions for verification and recipients
 
+25-56. (Features DB-025 to UI-006 completed in previous sessions - see features.json for details)
+
+57. **UI-007** (Customers list with contacts preview) - ✅ COMPLETE
+   - Created `GET /customers` route at line 13633 in main.py with v3.0 features:
+     - Search by name or INN
+     - Status filter (all/active/inactive)
+     - Stats cards: total, active, with_contacts, with_signatory
+     - Contacts preview showing up to 3 contacts per customer with badges (✍️ подписант, ★ основной)
+   - Created `GET /customers/{id}` detail page at line 13854 with:
+     - Full customer info (name, INN, KPP, OGRN)
+     - Addresses section (legal, actual, warehouses list)
+     - Director info (position, name)
+     - Contacts table with edit links
+   - Permission check: admin, sales, or top_manager roles
+   - Uses customer_service functions properly
+   - Russian localization
+
 ### Progress:
-- v3.0 features complete: **24/94**
-- Next feature: **DB-025** (notifications table)
+- v3.0 features complete: **57/94**
+- Next feature: **UI-008** (Customer create/edit form)

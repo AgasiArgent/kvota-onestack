@@ -568,8 +568,10 @@
       "name": "Customers list with contacts preview",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "List customers showing primary contact"
+      "passes": true,
+      "completed_at": "2026-01-15T21:00:00Z",
+      "description": "List customers showing primary contact",
+      "notes": "Created GET /customers route with v3.0 features: search by name/INN, status filter, stats cards (total/active/with_contacts/with_signatory), contacts preview with signatory and primary badges. Created GET /customers/{id} detail page with: full customer info, addresses (including warehouses), director info, and contacts table with edit links. Uses customer_service functions. Russian localization. Permission check: admin, sales, or top_manager roles."
     },
     {
       "id": "UI-008",
