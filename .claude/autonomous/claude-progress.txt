@@ -867,3 +867,28 @@
     - Enhanced UI with status cards and smart buttons
 - Status: COMPLETE
 
+## Session 2025-01-15 - Feature #38: Страница /logistics
+- Created /logistics route for logistics role workspace
+- Page shows:
+  - Stats cards (pending, completed, total quotes)
+  - Status filter dropdown (all, pending_logistics, pending_customs, pending_sales_review)
+  - Pending quotes section (quotes needing logistics work)
+  - Completed quotes section (quotes where logistics is done)
+  - Parallel stage status indicators (logistics + customs progress)
+- Added logistics link to navigation bar for logistics/admin roles
+- Role check: only users with logistics or admin role can access
+- Queries:
+  - Fetches quotes with workflow_status in logistics-relevant stages
+  - Shows logistics_completed_at and customs_completed_at status
+- UI features:
+  - Russian labels
+  - Color-coded workflow status badges
+  - Parallel stage progress (✅/⏳ indicators for both logistics and customs)
+  - "Работать" button for pending quotes, "Просмотр" for completed
+- Files changed:
+  - main.py (~200 lines added):
+    - Added complete_logistics import from workflow_service
+    - Added /logistics route
+    - Added "Логистика" link to nav_bar for logistics/admin roles
+- Status: COMPLETE
+
