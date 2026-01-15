@@ -233,3 +233,33 @@
 - Note: Seed data (Feature #15) commented out in migration file
 - Files changed: migrations/008_create_plan_fact_categories_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #9: Создать таблицу plan_fact_items
+- Created SQL migration: `migrations/009_create_plan_fact_items_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - deal_id (UUID FK -> deals, CASCADE on delete)
+  - category_id (UUID FK -> plan_fact_categories, RESTRICT on delete)
+  - description (TEXT) - payment description
+  - planned_amount (DECIMAL 15,2), planned_currency, planned_date
+  - actual_amount (DECIMAL 15,2 NULL), actual_currency, actual_date
+  - actual_exchange_rate (DECIMAL 15,6) - exchange rate to RUB at payment date
+  - variance_amount (DECIMAL 15,2) - calculated deviation in RUB
+  - payment_document (VARCHAR 255) - payment reference number
+  - notes (TEXT)
+  - created_by, created_at, updated_at (audit fields)
+- Indexes created:
+  - deal_id, category_id (FK lookups)
+  - planned_date, actual_date (date-based queries)
+  - created_at DESC (time-ordered listing)
+  - (deal_id, category_id), (deal_id, planned_date) composites
+  - Partial index on unpaid items (actual_amount IS NULL)
+- RLS policies:
+  - Users can view plan_fact_items for deals in their organization
+  - Only finance or admin can insert plan_fact_items
+  - Only finance or admin can update plan_fact_items
+  - Only admin can delete plan_fact_items
+- Added trigger for automatic updated_at timestamp
+- Added function calculate_plan_fact_variance() for automatic variance calculation
+- Files changed: migrations/009_create_plan_fact_items_table.sql (new)
+- Status: COMPLETE

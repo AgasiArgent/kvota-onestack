@@ -99,10 +99,10 @@
       "name": "Создать таблицу plan_fact_items",
       "description": "SQL миграция для записей план-факта",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T12:00:00Z",
+      "completed_at": "2025-01-15T12:05:00Z"
     },
     {
       "id": 10,
