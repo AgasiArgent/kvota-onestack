@@ -1410,3 +1410,26 @@
   - services/telegram_service.py (~300 lines added)
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #58 done
+
+
+## Session 2025-01-15 - Feature #59: Отправка уведомления approval_required
+- Implemented approval_required notification functionality:
+  - ApprovalRequiredNotification dataclass for notification data
+  - send_approval_required_notification(organization_id, quote_id, ...) → Dict:
+    - Gets all users with top_manager or admin role in organization
+    - Sends Telegram notification with inline approve/reject/details buttons
+    - Uses existing send_approval_request() for formatted message
+    - Records notification in database for each manager
+    - Returns total_managers, telegram_sent, failed counts
+  - send_approval_notification_for_quote(quote_id, approval_reason, ...) → Dict:
+    - Convenience function that loads quote details from DB
+    - Extracts customer name, total amount, markup, payment terms
+    - Calls send_approval_required_notification with all data
+- Updated services/__init__.py exports:
+  - ApprovalRequiredNotification, send_approval_required_notification, send_approval_notification_for_quote
+- All syntax verified with py_compile
+- Files changed:
+  - services/telegram_service.py (~200 lines added)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #59 done
+

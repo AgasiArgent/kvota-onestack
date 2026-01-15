@@ -164,6 +164,10 @@ from .telegram_service import (
     send_task_assigned_notification,
     notify_users_of_task_assignment,
     notify_role_users_of_task,
+    # Approval required notification (Feature #59)
+    ApprovalRequiredNotification,
+    send_approval_required_notification,
+    send_approval_notification_for_quote,
 )
 
 __all__ = [
@@ -311,4 +315,8 @@ __all__ = [
     "send_task_assigned_notification",
     "notify_users_of_task_assignment",
     "notify_role_users_of_task",
+    # Approval required notification (Feature #59)
+    "ApprovalRequiredNotification",
+    "send_approval_required_notification",
+    "send_approval_notification_for_quote",
 ]

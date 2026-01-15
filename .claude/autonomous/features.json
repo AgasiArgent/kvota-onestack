@@ -670,10 +670,11 @@
       "name": "Отправка уведомления approval_required",
       "description": "Уведомление топ-менеджеру с кнопками",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T14:00:00Z",
+      "completed_at": "2026-01-15T14:30:00Z",
+      "notes": "Created send_approval_required_notification() and send_approval_notification_for_quote() functions. Sends to all top_manager/admin users with inline approve/reject/details buttons. Records notifications in DB."
     },
     {
       "id": 60,

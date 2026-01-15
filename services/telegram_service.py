@@ -2112,3 +2112,299 @@ async def notify_role_users_of_task(
             "failed": 0,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Approval Required Notification (Feature #59)
+# ============================================================================
+
+@dataclass
+class ApprovalRequiredNotification:
+    """Data for approval_required notification."""
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    total_amount: str  # Formatted total (e.g., "1 000 000 RUB")
+    approval_reason: str  # Why approval is needed
+    markup_percent: str  # Current markup percentage
+    payment_terms: str  # Payment conditions
+    requested_by: str  # Who requested the approval
+    organization_id: str
+
+
+async def send_approval_required_notification(
+    organization_id: str,
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    total_amount: str,
+    approval_reason: str,
+    markup_percent: str = "N/A",
+    payment_terms: str = "N/A",
+    requested_by: str = "Система"
+) -> Dict[str, Any]:
+    """Send approval_required notifications to all top managers in the organization.
+
+    Feature #59: Отправка уведомления approval_required (уведомление топ-менеджеру с кнопками)
+
+    This function:
+    1. Gets all users with top_manager or admin role in the organization
+    2. Sends Telegram notifications with inline approve/reject buttons
+    3. Records notifications in the database
+
+    Args:
+        organization_id: UUID of the organization
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier (e.g., "КП-2025-001")
+        customer_name: Customer name
+        total_amount: Formatted total amount (e.g., "1 000 000 RUB")
+        approval_reason: Why approval is required (e.g., "Валюта в рублях")
+        markup_percent: Markup percentage (e.g., "15")
+        payment_terms: Payment conditions (e.g., "50% предоплата")
+        requested_by: Name of person who requested approval
+
+    Returns:
+        Dict with:
+        - success: bool
+        - total_managers: int - Number of top managers found
+        - telegram_sent: int - Successfully sent via Telegram
+        - failed: int - Failed to send
+        - results: list - Individual results for each manager
+
+    Example:
+        >>> result = await send_approval_required_notification(
+        ...     organization_id="org-uuid",
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     total_amount="1 500 000 USD",
+        ...     approval_reason="Валюта в рублях, Наценка ниже 15%",
+        ...     markup_percent="12",
+        ...     payment_terms="30% предоплата, 70% по отгрузке"
+        ... )
+        >>> print(f"Sent to {result['telegram_sent']} of {result['total_managers']} managers")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "success": False,
+                "total_managers": 0,
+                "telegram_sent": 0,
+                "failed": 0,
+                "error": "Database connection error"
+            }
+
+        # Get users with top_manager or admin role
+        manager_user_ids = set()
+
+        for role_code in ["top_manager", "admin"]:
+            # Get role ID
+            role_response = supabase.table("roles").select("id").eq("code", role_code).execute()
+            if not role_response.data:
+                continue
+
+            role_id = role_response.data[0].get("id")
+
+            # Get users with this role in the organization
+            users_response = supabase.table("user_roles").select(
+                "user_id"
+            ).eq("organization_id", organization_id).eq("role_id", role_id).execute()
+
+            if users_response.data:
+                for u in users_response.data:
+                    manager_user_ids.add(u.get("user_id"))
+
+        if not manager_user_ids:
+            logger.warning(f"No top_manager/admin users found in org {organization_id} for approval notification")
+            return {
+                "success": True,  # Not an error, just no managers
+                "total_managers": 0,
+                "telegram_sent": 0,
+                "failed": 0,
+                "error": None,
+                "warning": "No top_manager or admin users found in organization"
+            }
+
+        # Send notifications to each manager
+        results = []
+        sent_count = 0
+        failed_count = 0
+        title = "Требуется согласование"
+
+        for user_id in manager_user_ids:
+            telegram_sent = False
+            telegram_error = None
+            notification_id = None
+
+            # Get user's Telegram ID
+            telegram_id = await get_user_telegram_id(user_id)
+
+            if telegram_id:
+                try:
+                    # Send using the existing send_approval_request function
+                    message_id = await send_approval_request(
+                        telegram_id=telegram_id,
+                        quote_id=quote_id,
+                        quote_idn=quote_idn,
+                        customer_name=customer_name,
+                        total_amount=total_amount,
+                        approval_reason=approval_reason,
+                        markup=markup_percent,
+                        payment_terms=payment_terms
+                    )
+                    telegram_sent = message_id is not None
+                    if not telegram_sent:
+                        telegram_error = "Failed to send message"
+                except Exception as e:
+                    telegram_error = str(e)
+                    logger.error(f"Error sending approval notification to manager {user_id}: {e}")
+            else:
+                telegram_error = "User has no linked Telegram account"
+                logger.info(f"Manager {user_id} has no linked Telegram - notification will be in-app only")
+
+            # Record the notification in database
+            notification_id = record_notification(
+                user_id=user_id,
+                notification_type="approval_required",
+                title=title,
+                message=f"{quote_idn} - {customer_name}\n{approval_reason}\nСумма: {total_amount}",
+                channel="telegram" if telegram_sent else "in_app",
+                quote_id=quote_id,
+                sent=telegram_sent,
+                error_message=telegram_error if not telegram_sent else None
+            )
+
+            if telegram_sent:
+                sent_count += 1
+            else:
+                failed_count += 1
+
+            results.append({
+                "user_id": user_id,
+                "telegram_id": telegram_id,
+                "telegram_sent": telegram_sent,
+                "notification_id": notification_id,
+                "error": telegram_error
+            })
+
+        logger.info(f"Approval notification sent: {sent_count}/{len(manager_user_ids)} managers for quote {quote_idn}")
+
+        return {
+            "success": True,
+            "total_managers": len(manager_user_ids),
+            "telegram_sent": sent_count,
+            "failed": failed_count,
+            "results": results,
+            "error": None
+        }
+
+    except Exception as e:
+        logger.error(f"Error sending approval notifications: {e}")
+        return {
+            "success": False,
+            "total_managers": 0,
+            "telegram_sent": 0,
+            "failed": 0,
+            "error": str(e)
+        }
+
+
+async def send_approval_notification_for_quote(
+    quote_id: str,
+    approval_reason: str,
+    requested_by_user_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Convenience function to send approval notification for a quote.
+
+    This function loads quote details from the database and sends approval
+    notifications to all top managers. Use this when you have just the quote_id.
+
+    Args:
+        quote_id: UUID of the quote
+        approval_reason: Why approval is required
+        requested_by_user_id: Optional user ID who requested the approval
+
+    Returns:
+        Result of send_approval_required_notification
+
+    Example:
+        >>> result = await send_approval_notification_for_quote(
+        ...     quote_id="quote-uuid",
+        ...     approval_reason="Валюта в рублях",
+        ...     requested_by_user_id="user-uuid"
+        ... )
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "success": False,
+                "error": "Database connection error"
+            }
+
+        # Get quote details
+        quote_response = supabase.table("quotes").select(
+            "id, idn, organization_id, total_client_price, currency, payment_condition_prepayment, customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data or len(quote_response.data) == 0:
+            return {
+                "success": False,
+                "error": f"Quote {quote_id} not found"
+            }
+
+        quote = quote_response.data[0]
+        organization_id = quote.get("organization_id")
+        quote_idn = quote.get("idn", "N/A")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        # Format total amount
+        total_price = quote.get("total_client_price", 0) or 0
+        currency = quote.get("currency", "USD")
+        total_amount = f"{total_price:,.0f} {currency}".replace(",", " ")
+
+        # Get markup (calculate from quote_calculation_variables or default)
+        # For now, use payment condition as payment_terms
+        prepayment = quote.get("payment_condition_prepayment", 100)
+        payment_terms = f"{prepayment}% предоплата"
+
+        # Get requester name
+        requested_by = "Система"
+        if requested_by_user_id:
+            profile_response = supabase.table("profiles").select(
+                "full_name, email"
+            ).eq("id", requested_by_user_id).execute()
+            if profile_response.data and len(profile_response.data) > 0:
+                profile = profile_response.data[0]
+                requested_by = profile.get("full_name") or profile.get("email", "Система")
+
+        # Try to get markup from calculation variables
+        markup_percent = "N/A"
+        calc_response = supabase.table("quote_calculation_variables").select(
+            "markup_percent"
+        ).eq("quote_id", quote_id).execute()
+        if calc_response.data and len(calc_response.data) > 0:
+            mp = calc_response.data[0].get("markup_percent")
+            if mp is not None:
+                markup_percent = str(mp)
+
+        return await send_approval_required_notification(
+            organization_id=organization_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            customer_name=customer_name,
+            total_amount=total_amount,
+            approval_reason=approval_reason,
+            markup_percent=markup_percent,
+            payment_terms=payment_terms,
+            requested_by=requested_by
+        )
+
+    except Exception as e:
+        logger.error(f"Error sending approval notification for quote {quote_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
