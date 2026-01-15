@@ -125,6 +125,9 @@ from .approval_service import (
     Approval,
     ApprovalRequestResult,
     ApprovalDecisionResult,
+    ModificationValidationResult,
+    ApprovalWithModificationsResult,
+    ApplyModificationsResult,
     # Create operations
     create_approval,
     create_approvals_for_role,
@@ -150,6 +153,15 @@ from .approval_service import (
     # High-level workflow functions (Feature #65, #66)
     request_approval,
     process_approval_decision,
+    # WF-005: Approval with modifications (v3.0)
+    ALLOWED_QUOTE_MODIFICATIONS,
+    ALLOWED_ITEM_MODIFICATIONS,
+    validate_modifications,
+    approve_with_modifications,
+    apply_modifications_to_quote,
+    get_approval_modifications,
+    get_modifications_summary,
+    get_approvals_with_modifications,
 )
 from .specification_service import (
     # Data class

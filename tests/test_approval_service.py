@@ -518,5 +518,414 @@ class TestServiceIntegration:
         assert callable(send_approval_notification_for_quote)
 
 
+# =============================================================================
+# WF-005: APPROVAL WITH MODIFICATIONS TESTS (v3.0)
+# =============================================================================
+
+from services.approval_service import (
+    # New v3.0 exports
+    ModificationValidationResult,
+    ApprovalWithModificationsResult,
+    ApplyModificationsResult,
+    ALLOWED_QUOTE_MODIFICATIONS,
+    ALLOWED_ITEM_MODIFICATIONS,
+    validate_modifications,
+    approve_with_modifications,
+    apply_modifications_to_quote,
+    get_approval_modifications,
+    get_modifications_summary,
+    get_approvals_with_modifications,
+)
+
+
+class TestModificationValidation:
+    """Tests for validate_modifications function."""
+
+    def test_validate_empty_modifications(self):
+        """Empty dict should be valid."""
+        result = validate_modifications({})
+        assert result.is_valid is True
+        assert result.sanitized_modifications == {} or result.sanitized_modifications is None
+
+    def test_validate_non_dict_should_fail(self):
+        """Non-dict input should fail validation."""
+        result = validate_modifications("not a dict")
+        assert result.is_valid is False
+        assert "dictionary" in result.errors[0].lower()
+
+    def test_validate_margin_percent_valid(self):
+        """Valid margin_percent should pass."""
+        result = validate_modifications({'margin_percent': 15.5})
+        assert result.is_valid is True
+        assert result.sanitized_modifications['margin_percent'] == 15.5
+
+    def test_validate_margin_percent_invalid_type(self):
+        """Non-numeric margin_percent should fail."""
+        result = validate_modifications({'margin_percent': 'fifteen'})
+        assert result.is_valid is False
+        assert any('margin_percent' in e for e in result.errors)
+
+    def test_validate_margin_percent_out_of_range(self):
+        """margin_percent > 100 should fail."""
+        result = validate_modifications({'margin_percent': 150})
+        assert result.is_valid is False
+        assert any('100' in e for e in result.errors)
+
+    def test_validate_margin_percent_negative(self):
+        """Negative margin_percent should fail."""
+        result = validate_modifications({'margin_percent': -5})
+        assert result.is_valid is False
+
+    def test_validate_payment_terms_valid(self):
+        """Valid payment_terms string should pass."""
+        result = validate_modifications({'payment_terms': '50% advance'})
+        assert result.is_valid is True
+        assert result.sanitized_modifications['payment_terms'] == '50% advance'
+
+    def test_validate_payment_terms_strips_whitespace(self):
+        """Payment terms should be stripped."""
+        result = validate_modifications({'payment_terms': '  50% advance  '})
+        assert result.sanitized_modifications['payment_terms'] == '50% advance'
+
+    def test_validate_unknown_field_warning(self):
+        """Unknown fields should generate warnings, not errors."""
+        result = validate_modifications({'unknown_field': 'value', 'margin_percent': 10})
+        assert result.is_valid is True
+        assert len(result.warnings) > 0
+        assert 'unknown' in result.warnings[0].lower()
+
+    def test_validate_items_valid_structure(self):
+        """Valid items array should pass."""
+        result = validate_modifications({
+            'items': [
+                {'item_id': 'uuid-1', 'sale_price': 1500.00},
+                {'item_id': 'uuid-2', 'quantity': 10}
+            ]
+        })
+        assert result.is_valid is True
+        assert len(result.sanitized_modifications['items']) == 2
+
+    def test_validate_items_missing_item_id(self):
+        """Items without item_id should fail."""
+        result = validate_modifications({
+            'items': [
+                {'sale_price': 1500.00}  # Missing item_id
+            ]
+        })
+        assert result.is_valid is False
+        assert any('item_id' in e for e in result.errors)
+
+    def test_validate_items_invalid_sale_price(self):
+        """Negative sale_price should fail."""
+        result = validate_modifications({
+            'items': [
+                {'item_id': 'uuid-1', 'sale_price': -100}
+            ]
+        })
+        assert result.is_valid is False
+
+    def test_validate_items_invalid_quantity(self):
+        """Zero or negative quantity should fail."""
+        result = validate_modifications({
+            'items': [
+                {'item_id': 'uuid-1', 'quantity': 0}
+            ]
+        })
+        assert result.is_valid is False
+
+    def test_validate_items_not_array(self):
+        """items as non-array should fail."""
+        result = validate_modifications({
+            'items': {'item_id': 'uuid-1'}  # Should be array
+        })
+        assert result.is_valid is False
+        assert any('array' in e for e in result.errors)
+
+    def test_validate_complex_modifications(self):
+        """Complex valid modifications should pass."""
+        result = validate_modifications({
+            'margin_percent': 12.5,
+            'payment_terms': '30% advance, 70% on delivery',
+            'notes': 'Approved with adjustments',
+            'items': [
+                {'item_id': 'uuid-1', 'sale_price': 1500.00, 'notes': 'Reduced price'},
+                {'item_id': 'uuid-2', 'quantity': 100}
+            ]
+        })
+        assert result.is_valid is True
+        assert result.sanitized_modifications['margin_percent'] == 12.5
+        assert len(result.sanitized_modifications['items']) == 2
+
+
+class TestModificationsSummary:
+    """Tests for get_modifications_summary function."""
+
+    def test_summary_empty(self):
+        """Empty modifications should return 'Без изменений'."""
+        result = get_modifications_summary({})
+        assert result == "Без изменений"
+
+    def test_summary_none(self):
+        """None should return 'Без изменений'."""
+        result = get_modifications_summary(None)
+        assert result == "Без изменений"
+
+    def test_summary_margin_only(self):
+        """Margin-only modification should show margin."""
+        result = get_modifications_summary({'margin_percent': 15})
+        assert 'маржа' in result.lower()
+        assert '15' in result
+
+    def test_summary_payment_terms(self):
+        """Payment terms modification should be mentioned."""
+        result = get_modifications_summary({'payment_terms': '50% advance'})
+        assert 'оплаты' in result.lower()
+
+    def test_summary_items_count(self):
+        """Items modifications should show count."""
+        result = get_modifications_summary({
+            'items': [
+                {'item_id': 'a', 'sale_price': 100},
+                {'item_id': 'b', 'sale_price': 200}
+            ]
+        })
+        assert '2' in result
+        assert 'позиц' in result.lower()
+
+    def test_summary_multiple_modifications(self):
+        """Multiple modifications should all be mentioned."""
+        result = get_modifications_summary({
+            'margin_percent': 10,
+            'payment_terms': '100% advance',
+            'items': [{'item_id': 'a', 'sale_price': 100}]
+        })
+        assert 'маржа' in result.lower()
+        assert 'оплаты' in result.lower()
+        assert '1' in result
+
+    def test_summary_notes_only(self):
+        """Notes-only should show truncated notes."""
+        result = get_modifications_summary({
+            'notes': 'This is a very long note that explains the approval decision in detail'
+        })
+        assert 'примечание' in result.lower()
+
+
+class TestApprovalWithModificationsResult:
+    """Tests for ApprovalWithModificationsResult dataclass."""
+
+    def test_result_success(self):
+        """Success result should have expected fields."""
+        result = ApprovalWithModificationsResult(
+            success=True,
+            approval_id='approval-uuid',
+            quote_id='quote-uuid',
+            modifications_applied=True,
+            items_modified=2,
+            new_status='approved'
+        )
+        assert result.success is True
+        assert result.items_modified == 2
+        assert result.error_message is None
+
+    def test_result_failure(self):
+        """Failure result should have error message."""
+        result = ApprovalWithModificationsResult(
+            success=False,
+            approval_id='approval-uuid',
+            quote_id=None,
+            modifications_applied=False,
+            items_modified=0,
+            new_status=None,
+            error_message="Approval not found"
+        )
+        assert result.success is False
+        assert result.error_message == "Approval not found"
+
+
+class TestApproveWithModifications:
+    """Tests for approve_with_modifications function."""
+
+    def test_invalid_modifications_should_fail(self):
+        """Invalid modifications structure should fail early."""
+        result = approve_with_modifications(
+            approval_id='approval-uuid',
+            modifications={'margin_percent': 'invalid'}
+        )
+        assert result.success is False
+        assert 'Invalid modifications' in result.error_message
+
+    @patch('services.approval_service.get_approval')
+    def test_approval_not_found(self, mock_get):
+        """Missing approval should fail."""
+        mock_get.return_value = None
+
+        result = approve_with_modifications(
+            approval_id='nonexistent-uuid',
+            modifications={'margin_percent': 15}
+        )
+        assert result.success is False
+        assert 'не найден' in result.error_message.lower()
+
+    @patch('services.approval_service.get_approval')
+    def test_already_processed_approval(self, mock_get):
+        """Already processed approval should fail."""
+        mock_approval = Approval(
+            id='approval-uuid',
+            quote_id='quote-uuid',
+            requested_by='user-uuid',
+            approver_id='manager-uuid',
+            approval_type='top_manager',
+            reason='Test',
+            status='approved',  # Already processed
+            decision_comment=None,
+            requested_at=datetime.now(timezone.utc),
+            decided_at=datetime.now(timezone.utc)
+        )
+        mock_get.return_value = mock_approval
+
+        result = approve_with_modifications(
+            approval_id='approval-uuid',
+            modifications={'margin_percent': 15}
+        )
+        assert result.success is False
+        assert 'обработан' in result.error_message.lower()
+
+
+class TestApplyModificationsResult:
+    """Tests for ApplyModificationsResult dataclass."""
+
+    def test_result_success(self):
+        """Success result should have expected fields."""
+        result = ApplyModificationsResult(
+            success=True,
+            quote_id='quote-uuid',
+            fields_updated=['margin_percent', 'payment_terms'],
+            items_modified=3,
+            errors=[]
+        )
+        assert result.success is True
+        assert len(result.fields_updated) == 2
+        assert result.items_modified == 3
+
+    def test_result_with_errors(self):
+        """Result with errors should report them."""
+        result = ApplyModificationsResult(
+            success=False,
+            quote_id='quote-uuid',
+            fields_updated=['margin_percent'],
+            items_modified=0,
+            errors=['Failed to update item uuid-1']
+        )
+        assert result.success is False
+        assert len(result.errors) == 1
+
+
+class TestAllowedModifications:
+    """Tests for allowed modification constants."""
+
+    def test_quote_modifications_list(self):
+        """ALLOWED_QUOTE_MODIFICATIONS should be a non-empty list."""
+        assert isinstance(ALLOWED_QUOTE_MODIFICATIONS, list)
+        assert len(ALLOWED_QUOTE_MODIFICATIONS) > 0
+        assert 'margin_percent' in ALLOWED_QUOTE_MODIFICATIONS
+        assert 'payment_terms' in ALLOWED_QUOTE_MODIFICATIONS
+
+    def test_item_modifications_list(self):
+        """ALLOWED_ITEM_MODIFICATIONS should be a non-empty list."""
+        assert isinstance(ALLOWED_ITEM_MODIFICATIONS, list)
+        assert len(ALLOWED_ITEM_MODIFICATIONS) > 0
+        assert 'sale_price' in ALLOWED_ITEM_MODIFICATIONS
+        assert 'quantity' in ALLOWED_ITEM_MODIFICATIONS
+
+
+class TestModificationValidationResult:
+    """Tests for ModificationValidationResult dataclass."""
+
+    def test_valid_result(self):
+        """Valid result should have no errors."""
+        result = ModificationValidationResult(
+            is_valid=True,
+            errors=[],
+            warnings=['Unknown field ignored'],
+            sanitized_modifications={'margin_percent': 15}
+        )
+        assert result.is_valid is True
+        assert len(result.errors) == 0
+
+    def test_invalid_result(self):
+        """Invalid result should have errors."""
+        result = ModificationValidationResult(
+            is_valid=False,
+            errors=['margin_percent must be a number'],
+            warnings=[],
+            sanitized_modifications=None
+        )
+        assert result.is_valid is False
+        assert len(result.errors) > 0
+
+
+# =============================================================================
+# IMPORTS FOR NEW EXPORTS TESTS
+# =============================================================================
+
+class TestNewExports:
+    """Tests to verify new v3.0 exports are available."""
+
+    def test_import_modification_result_classes(self):
+        """v3.0 result classes should be importable."""
+        from services.approval_service import (
+            ModificationValidationResult,
+            ApprovalWithModificationsResult,
+            ApplyModificationsResult
+        )
+        assert ModificationValidationResult is not None
+        assert ApprovalWithModificationsResult is not None
+        assert ApplyModificationsResult is not None
+
+    def test_import_modification_constants(self):
+        """v3.0 constants should be importable."""
+        from services.approval_service import (
+            ALLOWED_QUOTE_MODIFICATIONS,
+            ALLOWED_ITEM_MODIFICATIONS
+        )
+        assert isinstance(ALLOWED_QUOTE_MODIFICATIONS, list)
+        assert isinstance(ALLOWED_ITEM_MODIFICATIONS, list)
+
+    def test_import_modification_functions(self):
+        """v3.0 functions should be importable."""
+        from services.approval_service import (
+            validate_modifications,
+            approve_with_modifications,
+            apply_modifications_to_quote,
+            get_approval_modifications,
+            get_modifications_summary,
+            get_approvals_with_modifications
+        )
+        assert all(callable(f) for f in [
+            validate_modifications,
+            approve_with_modifications,
+            apply_modifications_to_quote,
+            get_approval_modifications,
+            get_modifications_summary,
+            get_approvals_with_modifications
+        ])
+
+    def test_import_from_services_init(self):
+        """New exports should be available from services package."""
+        from services import (
+            ModificationValidationResult,
+            ApprovalWithModificationsResult,
+            ApplyModificationsResult,
+            ALLOWED_QUOTE_MODIFICATIONS,
+            ALLOWED_ITEM_MODIFICATIONS,
+            validate_modifications,
+            approve_with_modifications,
+            get_modifications_summary
+        )
+        assert validate_modifications is not None
+        assert approve_with_modifications is not None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
