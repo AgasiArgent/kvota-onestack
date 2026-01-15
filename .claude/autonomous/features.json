@@ -838,10 +838,11 @@
       "name": "Сервис спецификаций",
       "description": "CRUD для таблицы specifications",
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T22:00:00Z",
+      "completed_at": "2026-01-15T22:30:00Z",
+      "notes": "Created services/specification_service.py with full CRUD operations: Specification dataclass with all 18 fields, SPEC_STATUSES/SPEC_STATUS_NAMES/SPEC_STATUS_COLORS/SPEC_TRANSITIONS constants, status helpers (get_spec_status_name, get_spec_status_color, can_transition_spec, get_allowed_spec_transitions), create_specification(), get_specification(), get_specification_by_quote(), get_specifications_by_status(), get_all_specifications(), get_specifications_with_details(), count_specifications_by_status(), specification_exists_for_quote(), update_specification(), update_specification_status(), set_signed_scan_url(), delete_specification(), generate_specification_number(), get_specification_stats(), get_specifications_for_signing(), get_recently_signed_specifications(). Updated services/__init__.py with all exports."
     },
     {
       "id": 74,

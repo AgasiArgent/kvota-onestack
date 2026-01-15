@@ -151,6 +151,41 @@ from .approval_service import (
     request_approval,
     process_approval_decision,
 )
+from .specification_service import (
+    # Data class
+    Specification,
+    # Constants
+    SPEC_STATUSES,
+    SPEC_STATUS_NAMES,
+    SPEC_STATUS_COLORS,
+    SPEC_TRANSITIONS,
+    # Status helpers
+    get_spec_status_name,
+    get_spec_status_color,
+    can_transition_spec,
+    get_allowed_spec_transitions,
+    # Create operations
+    create_specification,
+    # Read operations
+    get_specification,
+    get_specification_by_quote,
+    get_specifications_by_status,
+    get_all_specifications,
+    get_specifications_with_details,
+    count_specifications_by_status,
+    specification_exists_for_quote,
+    # Update operations
+    update_specification,
+    update_specification_status,
+    set_signed_scan_url,
+    # Delete operations
+    delete_specification,
+    # Utility functions
+    generate_specification_number,
+    get_specification_stats,
+    get_specifications_for_signing,
+    get_recently_signed_specifications,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -411,4 +446,30 @@ __all__ = [
     "request_approval",
     "ApprovalDecisionResult",
     "process_approval_decision",
+    # Specification service (Feature #73)
+    "Specification",
+    "SPEC_STATUSES",
+    "SPEC_STATUS_NAMES",
+    "SPEC_STATUS_COLORS",
+    "SPEC_TRANSITIONS",
+    "get_spec_status_name",
+    "get_spec_status_color",
+    "can_transition_spec",
+    "get_allowed_spec_transitions",
+    "create_specification",
+    "get_specification",
+    "get_specification_by_quote",
+    "get_specifications_by_status",
+    "get_all_specifications",
+    "get_specifications_with_details",
+    "count_specifications_by_status",
+    "specification_exists_for_quote",
+    "update_specification",
+    "update_specification_status",
+    "set_signed_scan_url",
+    "delete_specification",
+    "generate_specification_number",
+    "get_specification_stats",
+    "get_specifications_for_signing",
+    "get_recently_signed_specifications",
 ]

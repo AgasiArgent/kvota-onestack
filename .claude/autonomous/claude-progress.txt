@@ -1826,3 +1826,47 @@
 - Files changed:
   - main.py (~220 lines added: UI updates + confirm endpoint)
 - Status: COMPLETE - Feature #72 done
+
+
+## Session 2026-01-15 - Feature #73: Сервис спецификаций (Specification Service)
+- Created services/specification_service.py with full CRUD operations
+- Data class:
+  - Specification dataclass with all 18 spec fields (id, quote_id, org_id, spec_number, proposal_idn, item_ind_sku, sign_date, validity_period, readiness_period, logistics_period, currency, exchange_rate, payment_term, payment_terms, cargo_pickup_country, goods_shipment_country, delivery_city, cargo_type, supplier_payment_country, our_legal_entity, client_legal_entity, status, signed_scan_url, created_by, created_at, updated_at)
+  - to_dict() and from_dict() methods for serialization
+- Constants:
+  - SPEC_STATUSES = ['draft', 'pending_review', 'approved', 'signed']
+  - SPEC_STATUS_NAMES for Russian display names
+  - SPEC_STATUS_COLORS for UI styling
+  - SPEC_TRANSITIONS defining allowed status changes
+- Status helpers:
+  - get_spec_status_name() - get human-readable name
+  - get_spec_status_color() - get CSS color
+  - can_transition_spec() - validate status transition
+  - get_allowed_spec_transitions() - list possible next statuses
+- Create operations:
+  - create_specification() - create new spec with all 18 fields
+- Read operations:
+  - get_specification() - get by ID with optional org check
+  - get_specification_by_quote() - get spec for a quote
+  - get_specifications_by_status() - filter by status
+  - get_all_specifications() - list all with optional status filter
+  - get_specifications_with_details() - include quote and customer info
+  - count_specifications_by_status() - get counts per status
+  - specification_exists_for_quote() - check if spec exists
+- Update operations:
+  - update_specification() - update any fields
+  - update_specification_status() - change status with validation
+  - set_signed_scan_url() - convenience for setting scan URL
+- Delete operations:
+  - delete_specification() - delete (only drafts)
+- Utility functions:
+  - generate_specification_number() - generate SPEC-YYYY-NNNN format
+  - get_specification_stats() - get dashboard statistics
+  - get_specifications_for_signing() - approved but unsigned
+  - get_recently_signed_specifications() - recently completed
+- Updated services/__init__.py with all exports to __all__ list
+- Syntax verified with python3 -m py_compile
+- Files changed:
+  - services/specification_service.py (new file, ~650 lines)
+  - services/__init__.py (added imports and exports)
+- Status: COMPLETE - Feature #73 done
