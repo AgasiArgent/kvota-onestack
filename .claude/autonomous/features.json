@@ -11,10 +11,10 @@
       "name": "Создать таблицу roles",
       "description": "SQL миграция для справочника ролей (sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin)",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T04:40:00Z",
+      "completed_at": "2025-01-15T04:45:00Z"
     },
     {
       "id": 2,

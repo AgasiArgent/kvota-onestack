@@ -52,4 +52,11 @@
 ---
 ## Sessions
 
-[Sessions will be logged below]
+## Session 2025-01-15 - Feature #1: Создать таблицу roles
+- Created SQL migration: `migrations/001_create_roles_table.sql`
+- Table structure: id (UUID PK), code (VARCHAR UNIQUE), name, description, created_at
+- Inserted all 9 predefined roles: sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin
+- Added RLS policy for read-only access by authenticated users
+- Added index on code column for fast lookups
+- Files changed: migrations/001_create_roles_table.sql (new)
+- Status: COMPLETE
