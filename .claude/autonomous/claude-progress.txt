@@ -2297,3 +2297,46 @@ CreateDealFromSpecResult(
 - main.py: +125 lines for workflow_progress_bar function, +6 lines for integrations, +2 lines for spec-control query update
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #88: Просмотр истории переходов
+
+### What was implemented
+- Created `workflow_transition_history()` function in main.py (lines 3523-3703)
+- Displays workflow transitions as a vertical timeline with:
+  - Collapsible toggle button showing number of transitions
+  - Status badges with proper colors matching workflow_status_badge
+  - Timestamps formatted as DD.MM.YYYY HH:MM
+  - Actor role names translated to Russian
+  - Comments/reasons displayed with speech bubble emoji
+  - Timeline dots (blue for latest, gray for older)
+
+### Visual features
+- Collapsed by default - shows "📋 История переходов (N)" button
+- Click to expand shows timeline of all transitions
+- Each transition shows: timestamp, role, from_status → to_status badges
+- Comments displayed below transition if present
+- CSS .hidden class for toggle functionality
+
+### Integration points (6 pages updated)
+1. `/procurement/{quote_id}` - After form, before session
+2. `/logistics/{quote_id}` - After styles, before session
+3. `/customs/{quote_id}` - After items form, before styles
+4. `/quote-control/{quote_id}` - After quote link, before session
+5. `/spec-control/{spec_id}` - After form, using quote_id from spec
+6. `/finance/{deal_id}` - After plan-fact table, using quote_id from deal
+
+### Technical notes
+- Uses existing `get_quote_transition_history()` from workflow_service.py
+- Added import to main.py: `get_quote_transition_history`
+- Role name translations in component for Russian display
+- Status color mapping same as workflow_status_badge for consistency
+- Timeline design with dots and connecting lines
+
+### Files changed
+- main.py:
+  - Added `get_quote_transition_history` to imports (line 39)
+  - Added `workflow_transition_history()` function (~180 lines)
+  - Added integration to 6 detail pages (6 × 3 lines)
+
+### Status: COMPLETE - ALL 88 FEATURES DONE 🎉
+

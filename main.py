@@ -36,7 +36,7 @@ from services.brand_service import get_assigned_brands
 from services.workflow_service import (
     WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
     check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs,
-    transition_quote_status
+    transition_quote_status, get_quote_transition_history
 )
 
 # Import approval service (Feature #65, #86)
@@ -3520,6 +3520,189 @@ def workflow_progress_bar(status_str: str):
     )
 
 
+def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool = True):
+    """
+    Create a UI component showing the workflow transition history for a quote.
+
+    Feature #88: Просмотр истории переходов
+
+    Shows an audit log of all status changes with:
+    - From/to status (with colored badges)
+    - Who made the transition (actor)
+    - When it happened
+    - Any comments/reasons
+
+    Args:
+        quote_id: UUID of the quote
+        limit: Max number of transitions to show (default 20)
+        collapsed: If True, history is collapsed by default with toggle button
+
+    Returns:
+        FastHTML Div component with transition history
+    """
+    from datetime import datetime
+
+    # Get transition history
+    history = get_quote_transition_history(quote_id, limit=limit)
+
+    if not history:
+        if collapsed:
+            return Div()  # Don't show anything if no history and collapsed mode
+        return Div(
+            H4("📋 История переходов", style="margin: 0 0 0.5rem;"),
+            P("История переходов пуста", style="color: #666; font-size: 0.875rem;"),
+            cls="card",
+            style="background: #f9fafb;"
+        )
+
+    # Format timestamp
+    def format_date(date_str):
+        if not date_str:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            return dt.strftime("%d.%m.%Y %H:%M")
+        except:
+            return date_str[:16] if date_str else "—"
+
+    # Build transition rows
+    def transition_row(record, is_first=False):
+        from_status = record.get("from_status", "—")
+        to_status = record.get("to_status", "—")
+        from_name = record.get("from_status_name", from_status)
+        to_name = record.get("to_status_name", to_status)
+        comment = record.get("comment", "")
+        actor_role = record.get("actor_role", "")
+        created_at = format_date(record.get("created_at"))
+
+        # Get colors for status badges
+        def get_badge_colors(status_str):
+            try:
+                status = WorkflowStatus(status_str) if status_str else None
+            except ValueError:
+                status = None
+
+            color_map = {
+                WorkflowStatus.DRAFT: ("#f3f4f6", "#1f2937"),
+                WorkflowStatus.PENDING_PROCUREMENT: ("#fef3c7", "#92400e"),
+                WorkflowStatus.PENDING_LOGISTICS: ("#dbeafe", "#1e40af"),
+                WorkflowStatus.PENDING_CUSTOMS: ("#e9d5ff", "#6b21a8"),
+                WorkflowStatus.PENDING_SALES_REVIEW: ("#ffedd5", "#9a3412"),
+                WorkflowStatus.PENDING_QUOTE_CONTROL: ("#fce7f3", "#9d174d"),
+                WorkflowStatus.PENDING_APPROVAL: ("#fef3c7", "#b45309"),
+                WorkflowStatus.APPROVED: ("#dcfce7", "#166534"),
+                WorkflowStatus.SENT_TO_CLIENT: ("#cffafe", "#0e7490"),
+                WorkflowStatus.CLIENT_NEGOTIATION: ("#ccfbf1", "#115e59"),
+                WorkflowStatus.PENDING_SPEC_CONTROL: ("#e0e7ff", "#3730a3"),
+                WorkflowStatus.PENDING_SIGNATURE: ("#ede9fe", "#5b21b6"),
+                WorkflowStatus.DEAL: ("#d1fae5", "#065f46"),
+                WorkflowStatus.REJECTED: ("#fee2e2", "#991b1b"),
+                WorkflowStatus.CANCELLED: ("#f5f5f4", "#57534e"),
+            }
+            if status:
+                return color_map.get(status, ("#f3f4f6", "#1f2937"))
+            return ("#f3f4f6", "#1f2937")
+
+        from_bg, from_text = get_badge_colors(from_status)
+        to_bg, to_text = get_badge_colors(to_status)
+
+        # Role name translation
+        role_names = {
+            "sales": "Продажи",
+            "procurement": "Закупки",
+            "logistics": "Логистика",
+            "customs": "Таможня",
+            "quote_controller": "Контролёр КП",
+            "spec_controller": "Контролёр спец.",
+            "finance": "Финансы",
+            "top_manager": "Руководство",
+            "admin": "Админ",
+            "system": "Система",
+        }
+        role_display = role_names.get(actor_role, actor_role) if actor_role else "—"
+
+        return Div(
+            # Timeline dot and line
+            Div(
+                # Dot
+                Div(
+                    style=f"width: 10px; height: 10px; border-radius: 50%; background: {'#3b82f6' if is_first else '#cbd5e1'}; margin-top: 5px;"
+                ),
+                # Line (except for last item)
+                Div(style="width: 2px; flex: 1; background: #e5e7eb; margin-left: 4px;"),
+                style="display: flex; flex-direction: column; align-items: center; margin-right: 12px;"
+            ),
+            # Content
+            Div(
+                # Header: timestamp and role
+                Div(
+                    Span(created_at, style="font-size: 0.75rem; color: #666;"),
+                    Span(f" • {role_display}", style="font-size: 0.75rem; color: #9ca3af;") if role_display != "—" else None,
+                    style="margin-bottom: 4px;"
+                ),
+                # Status transition
+                Div(
+                    Span(from_name, style=f"display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: {from_bg}; color: {from_text};"),
+                    Span(" → ", style="margin: 0 6px; color: #9ca3af;"),
+                    Span(to_name, style=f"display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: {to_bg}; color: {to_text};"),
+                    style="margin-bottom: 4px;"
+                ),
+                # Comment if exists
+                Div(
+                    Span(f"💬 {comment}", style="font-size: 0.8rem; color: #4b5563; font-style: italic;"),
+                    style="margin-top: 4px;"
+                ) if comment else None,
+                style="flex: 1; padding-bottom: 12px;"
+            ),
+            style="display: flex; align-items: stretch;"
+        )
+
+    # Build history list
+    history_items = [transition_row(record, idx == 0) for idx, record in enumerate(history)]
+
+    # Container ID for toggle functionality
+    container_id = f"transition-history-{quote_id[:8]}"
+
+    if collapsed:
+        # Collapsible version with toggle button
+        return Div(
+            # Toggle button
+            Div(
+                Button(
+                    f"📋 История переходов ({len(history)})",
+                    type="button",
+                    cls="secondary",
+                    style="font-size: 0.875rem; padding: 0.5rem 1rem;",
+                    onclick=f"document.getElementById('{container_id}').classList.toggle('hidden');"
+                ),
+                style="margin-bottom: 0.5rem;"
+            ),
+            # Hidden history container
+            Div(
+                *history_items,
+                id=container_id,
+                cls="hidden",  # Hidden by default
+                style="padding: 0.75rem; background: #fafafa; border-radius: 8px; border: 1px solid #e5e7eb;"
+            ),
+            # CSS for hidden class
+            Style("""
+                .hidden { display: none; }
+            """),
+            style="margin: 0.5rem 0;"
+        )
+    else:
+        # Always visible version
+        return Div(
+            H4("📋 История переходов", style="margin: 0 0 0.75rem;"),
+            Div(
+                *history_items,
+                style="padding: 0.75rem; background: #fafafa; border-radius: 8px; border: 1px solid #e5e7eb;"
+            ),
+            cls="card",
+            style="background: #f9fafb;"
+        )
+
+
 @rt("/procurement")
 def get(session, status_filter: str = None):
     """
@@ -4110,6 +4293,9 @@ def get(quote_id: str, session):
             method="post",
             action=f"/procurement/{quote_id}"
         ),
+
+        # Transition history (Feature #88)
+        workflow_transition_history(quote_id),
 
         session=session
     )
@@ -4832,6 +5018,9 @@ def get(session, quote_id: str):
             }
         """),
 
+        # Transition history (Feature #88)
+        workflow_transition_history(quote_id),
+
         session=session
     )
 
@@ -5401,6 +5590,9 @@ def get(session, quote_id: str):
             items_form,
             cls="card"
         ),
+
+        # Transition history (Feature #88)
+        workflow_transition_history(quote_id),
 
         # Additional styles
         Style("""
@@ -6107,6 +6299,9 @@ def get(session, quote_id: str):
               style="background: #6b7280; border-color: #6b7280;"),
             style="margin-top: 1rem; text-align: center;"
         ),
+
+        # Transition history (Feature #88)
+        workflow_transition_history(quote_id),
 
         session=session
     )
@@ -8072,6 +8267,9 @@ def get(session, spec_id: str):
             method="POST"
         ),
 
+        # Transition history (Feature #88) - uses quote_id from the spec
+        workflow_transition_history(quote_id) if quote_id else None,
+
         session=session
     )
 
@@ -9221,6 +9419,9 @@ def get(session, deal_id: str):
             ),
             plan_fact_table,
         ),
+
+        # Transition history (Feature #88) - uses quote_id from the deal
+        workflow_transition_history(quote.get("id")) if quote.get("id") else None,
 
         session=session
     )

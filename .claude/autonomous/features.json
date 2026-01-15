@@ -1018,10 +1018,11 @@
       "name": "\u041f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0438\u0441\u0442\u043e\u0440\u0438\u0438 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u043e\u0432",
       "description": "UI \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 workflow_transitions \u043f\u043e \u041a\u041f",
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T10:00:00.000000",
+      "completed_at": "2026-01-15T10:30:00.000000",
+      "notes": "Created workflow_transition_history() function in main.py (lines 3523-3703) showing workflow transitions as a timeline. Features: collapsible toggle button, status badges with colors, timestamps, actor role names, comments display. Integrated into 6 detail pages: /procurement/{quote_id}, /logistics/{quote_id}, /customs/{quote_id}, /quote-control/{quote_id}, /spec-control/{spec_id} (using quote_id from spec), /finance/{deal_id} (using quote_id from deal)."
     }
   ],
   "completion_criteria": {
