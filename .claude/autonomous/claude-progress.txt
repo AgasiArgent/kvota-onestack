@@ -327,3 +327,30 @@
   - get_pending_notifications() - gets pending notifications for channel (service role)
 - Files changed: migrations/011_create_notifications_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #12: Расширить таблицу quotes
+- Created SQL migration: `migrations/012_extend_quotes_table.sql`
+- New columns added:
+  - workflow_status (VARCHAR 50) - default 'draft', with CHECK constraint for 15 valid statuses
+  - deal_type (VARCHAR 20) - 'supply' or 'transit', nullable
+  - assigned_procurement_users (UUID[]) - array of procurement manager user IDs
+  - assigned_logistics_user (UUID FK -> auth.users)
+  - assigned_customs_user (UUID FK -> auth.users)
+  - procurement_completed_at (TIMESTAMP WITH TIME ZONE)
+  - logistics_completed_at (TIMESTAMP WITH TIME ZONE)
+  - customs_completed_at (TIMESTAMP WITH TIME ZONE)
+  - current_version_id (UUID FK -> quote_versions)
+- Constraints added:
+  - quotes_workflow_status_check - validates 15 workflow statuses
+  - quotes_deal_type_check - validates 'supply' or 'transit'
+  - FK constraints for assigned_logistics_user, assigned_customs_user, current_version_id
+- Indexes created:
+  - idx_quotes_workflow_status - for status filtering
+  - idx_quotes_deal_type - for deal type filtering
+  - idx_quotes_assigned_logistics_user (partial) - for logistics assignment queries
+  - idx_quotes_assigned_customs_user (partial) - for customs assignment queries
+  - idx_quotes_organization_workflow_status (composite) - for org+status filtering
+  - idx_quotes_assigned_procurement_users (GIN) - for array membership search
+- Existing quotes updated to have workflow_status = 'draft'
+- Files changed: migrations/012_extend_quotes_table.sql (new)
+- Status: COMPLETE

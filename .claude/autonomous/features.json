@@ -132,10 +132,10 @@
       "name": "Расширить таблицу quotes",
       "description": "Добавить поля workflow_status, deal_type, assigned_*_users, *_completed_at",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T06:30:00Z",
+      "completed_at": "2025-01-15T06:35:00Z"
     },
     {
       "id": 13,
