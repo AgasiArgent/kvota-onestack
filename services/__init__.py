@@ -114,8 +114,9 @@ from .workflow_service import (
     get_quote_procurement_status,
 )
 from .approval_service import (
-    # Data class
+    # Data classes
     Approval,
+    ApprovalRequestResult,
     # Create operations
     create_approval,
     create_approvals_for_role,
@@ -138,6 +139,8 @@ from .approval_service import (
     has_pending_approval,
     get_latest_approval_decision,
     get_approval_stats_for_user,
+    # High-level workflow function (Feature #65)
+    request_approval,
 )
 from .telegram_service import (
     # Configuration
@@ -394,4 +397,7 @@ __all__ = [
     "has_pending_approval",
     "get_latest_approval_decision",
     "get_approval_stats_for_user",
+    # Request approval function (Feature #65)
+    "ApprovalRequestResult",
+    "request_approval",
 ]

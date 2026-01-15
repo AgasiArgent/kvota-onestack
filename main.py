@@ -39,6 +39,9 @@ from services.workflow_service import (
     transition_quote_status
 )
 
+# Import approval service (Feature #65)
+from services.approval_service import request_approval
+
 # Import calculation engine
 from calculation_engine import calculate_multiproduct_quote
 from calculation_mapper import map_variables_to_calculation_input, safe_decimal, safe_int
@@ -5966,9 +5969,13 @@ def get(session, quote_id: str):
 def post(session, quote_id: str, comment: str = ""):
     """
     Handle the request approval form submission.
-    Transitions the quote from PENDING_QUOTE_CONTROL to PENDING_APPROVAL.
+    Uses request_approval() to:
+    1. Transition quote from PENDING_QUOTE_CONTROL to PENDING_APPROVAL
+    2. Create approval records for all top_manager/admin users
+    3. Send Telegram notifications to approvers
 
     Feature #50: Кнопка отправки на согласование - POST handler
+    Feature #65: Uses request_approval function for complete workflow
     """
     redirect = require_login(session)
     if redirect:
@@ -5998,7 +6005,7 @@ def post(session, quote_id: str, comment: str = ""):
 
     # Verify quote exists and belongs to this org
     quote_result = supabase.table("quotes") \
-        .select("workflow_status, idn_quote") \
+        .select("workflow_status, idn_quote, customer_name, total_amount, currency") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -6012,33 +6019,41 @@ def post(session, quote_id: str, comment: str = ""):
         )
 
     quote = quote_result.data[0]
-    current_status = quote.get("workflow_status", "draft")
     idn_quote = quote.get("idn_quote", "")
+    customer_name = quote.get("customer_name", "")
+    total_amount = quote.get("total_amount")
 
-    # Check if quote is in correct status
-    if current_status != "pending_quote_control":
-        return page_layout("Согласование невозможно",
-            H1("Согласование невозможно"),
-            P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}' и не может быть отправлено на согласование."),
-            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}"),
-            session=session
-        )
-
-    # Perform the workflow transition to PENDING_APPROVAL
-    result = transition_quote_status(
+    # Use the new request_approval function (Feature #65)
+    # This handles:
+    # - Status validation
+    # - Workflow transition
+    # - Creating approval records for top_manager/admin users
+    # - Sending Telegram notifications
+    result = request_approval(
         quote_id=quote_id,
-        to_status=WorkflowStatus.PENDING_APPROVAL,
-        actor_id=user_id,
+        requested_by=user_id,
+        reason=comment.strip(),
+        organization_id=org_id,
         actor_roles=user_roles,
-        comment=comment.strip()
+        quote_idn=idn_quote,
+        customer_name=customer_name,
+        total_amount=float(total_amount) if total_amount else None,
+        send_notifications=True
     )
 
     if result.success:
-        # Success - redirect to quote control list
+        # Success - show details about what was created
+        details = []
+        if result.approvals_created > 0:
+            details.append(P(f"Создано запросов на согласование: {result.approvals_created}"))
+        if result.notifications_sent > 0:
+            details.append(P(f"Отправлено уведомлений в Telegram: {result.notifications_sent}"))
+
         return page_layout("Успешно",
             H1("✓ КП отправлено на согласование"),
             P(f"КП {idn_quote} было успешно отправлено на согласование топ-менеджеру."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
+            *details,
             P("Вы получите уведомление о решении.", style="color: #666;"),
             A("← Вернуться к списку КП", href="/quote-control", role="button"),
             session=session

@@ -1593,3 +1593,27 @@
   - services/approval_service.py (new - ~400 lines)
   - services/__init__.py (updated - added approval service imports and exports)
 - Status: COMPLETE - Feature #64 done
+
+
+## Session 2026-01-15 - Feature #65: Создание запроса на согласование (request_approval function)
+- Created high-level request_approval() function in approval_service.py (~170 lines)
+- ApprovalRequestResult dataclass:
+  - success, quote_id, approvals_created, notifications_sent, transition_success, error_message
+- request_approval() function performs complete workflow:
+  1. Validates quote is in pending_quote_control status
+  2. Fetches quote details if not provided (idn, customer_name, total_amount)
+  3. Transitions quote to pending_approval using transition_quote_status()
+  4. Creates approval records for all top_manager/admin users using create_approvals_for_role()
+  5. Sends Telegram notifications using send_approval_notification_for_quote()
+- Updated services/__init__.py to export:
+  - ApprovalRequestResult, request_approval
+- Updated main.py:
+  - Added import for request_approval from approval_service
+  - Updated POST /quote-control/{quote_id}/request-approval handler to use request_approval()
+  - Now shows approvals_created and notifications_sent counts on success page
+- Verified syntax with py_compile
+- Files changed:
+  - services/approval_service.py (added ~170 lines)
+  - services/__init__.py (updated exports)
+  - main.py (~20 lines modified)
+- Status: COMPLETE - Feature #65 done

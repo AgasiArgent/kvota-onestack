@@ -742,10 +742,11 @@
       "name": "Создание запроса на согласование",
       "description": "Функция request_approval(quote_id, approver_id, reason)",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T12:00:00Z",
+      "completed_at": "2026-01-15T12:30:00Z",
+      "notes": "Created request_approval() function in approval_service.py with ApprovalRequestResult dataclass. Function performs complete workflow: validates quote status, transitions to pending_approval, creates approval records for top_manager/admin users via create_approvals_for_role(), sends Telegram notifications via send_approval_notification_for_quote(). Updated main.py POST handler at /quote-control/{quote_id}/request-approval to use the new function. Now shows approvals_created and notifications_sent counts on success."
     },
     {
       "id": 66,
