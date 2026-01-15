@@ -267,6 +267,17 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - Uses `register_payment()` from supplier_invoice_payment_service
    - Tests: 37 passing tests in `tests/test_ui_invoice_payment.py`
 
+69. **UI-016** (Quote item form: supplier selector) - ✅ COMPLETE
+    - Added supplier_dropdown() to quote item (product) add form after Brand/Quantity row
+    - Updated POST handler to accept and save supplier_id parameter
+    - Updated product_row() function to display supplier badge when assigned:
+      - Shows supplier code or name (📦 TSC)
+      - Hover shows full supplier name
+    - Updated GET handler to fetch supplier info for existing items
+    - Russian UI labels ("Поставщик", "Внешний поставщик для данной позиции")
+    - Tests: tests/test_ui_quote_item_supplier.py (7 passed, 8 skipped due to import)
+
 ### Progress:
-- v3.0 features complete: **65/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 14 UI features done!)
-- Next feature: **UI-015** (Quote form: seller company selector)
+- v3.0 features complete: **67/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 16 UI features done!)
+- Completed: UI-016 (Quote item form: supplier selector)
+- Next feature: **UI-017** (Quote item form: buyer company selector)

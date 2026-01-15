@@ -659,8 +659,10 @@
       "name": "Quote item form: supplier selector",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Dropdown to select supplier at item level"
+      "passes": true,
+      "description": "Dropdown to select supplier at item level",
+      "completed_at": "2026-01-15T23:44:48.253385Z",
+      "notes": "Implemented supplier dropdown in quote item (product) form:\n- Added supplier_dropdown() component to product add form after Brand/Quantity row\n- Updated POST handler to accept and save supplier_id to quote_items table\n- Updated product_row() function to accept supplier_info parameter\n- Product row shows supplier badge (code or name) when supplier assigned\n- GET handler fetches supplier info for existing items and passes to product_row\n- All changes use Russian UI labels\n- Tests: tests/test_ui_quote_item_supplier.py with 15 tests (7 pass, 8 skip due to import)"
     },
     {
       "id": "UI-017",
