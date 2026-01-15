@@ -910,10 +910,11 @@
       "name": "Таблица план-факт по сделке",
       "description": "Все записи plan_fact_items для сделки",
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T11:00:00Z",
+      "completed_at": "2026-01-15T11:30:00Z",
+      "notes": "Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items. Table shows category, description, planned/actual dates and amounts, variance with color coding, payment status (paid/pending), and edit button for unpaid items."
     },
     {
       "id": 80,

@@ -8396,6 +8396,318 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# FINANCE DEAL DETAIL PAGE (Feature #79)
+# ============================================================================
+
+@rt("/finance/{deal_id}")
+def get(session, deal_id: str):
+    """
+    Finance deal detail page - shows deal info and plan-fact table.
+
+    Feature #79: Таблица план-факт по сделке
+
+    This page shows:
+    1. Deal information (number, customer, specification, dates)
+    2. Plan-fact table with all payment items
+    3. Summary of planned vs actual amounts
+    4. Variance tracking
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch deal with related data
+    try:
+        deal_result = supabase.table("deals").select(
+            "id, deal_number, signed_at, total_amount, currency, status, created_at, "
+            "specifications(id, specification_number, proposal_idn, sign_date, validity_period, "
+            "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
+            "  our_legal_entity, client_legal_entity), "
+            "quotes(id, idn_quote, customer_name, customers(name, company_name))"
+        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+
+        deal = deal_result.data
+        if not deal:
+            return page_layout("Ошибка",
+                H1("Сделка не найдена"),
+                P(f"Сделка с ID {deal_id} не найдена или у вас нет доступа."),
+                A("← Назад к списку сделок", href="/finance", role="button"),
+                session=session
+            )
+    except Exception as e:
+        print(f"Error fetching deal: {e}")
+        return page_layout("Ошибка",
+            H1("Ошибка загрузки"),
+            P(f"Не удалось загрузить сделку: {str(e)}"),
+            A("← Назад к списку сделок", href="/finance", role="button"),
+            session=session
+        )
+
+    # Fetch plan_fact_items for this deal
+    try:
+        plan_fact_result = supabase.table("plan_fact_items").select(
+            "id, description, planned_amount, planned_currency, planned_date, "
+            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
+            "variance_amount, payment_document, notes, created_at, "
+            "plan_fact_categories(id, code, name, is_income, sort_order)"
+        ).eq("deal_id", deal_id).order("planned_date").execute()
+
+        plan_fact_items = plan_fact_result.data or []
+    except Exception as e:
+        print(f"Error fetching plan_fact_items: {e}")
+        plan_fact_items = []
+
+    # Fetch all categories for reference
+    try:
+        categories_result = supabase.table("plan_fact_categories").select(
+            "id, code, name, is_income, sort_order"
+        ).order("sort_order").execute()
+        categories = categories_result.data or []
+    except Exception as e:
+        print(f"Error fetching categories: {e}")
+        categories = []
+
+    # Extract deal info
+    spec = deal.get("specifications", {}) or {}
+    quote = deal.get("quotes", {}) or {}
+    customer = quote.get("customers", {}) or {}
+    customer_name = customer.get("company_name") or customer.get("name") or quote.get("customer_name", "Неизвестно")
+
+    deal_number = deal.get("deal_number", "-")
+    spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
+    deal_amount = float(deal.get("total_amount", 0) or 0)
+    deal_currency = deal.get("currency", "RUB")
+    signed_at = deal.get("signed_at", "")[:10] if deal.get("signed_at") else "-"
+
+    # Status badge
+    status_map = {
+        "active": ("В работе", "bg-green-200 text-green-800", "#10b981"),
+        "completed": ("Завершена", "bg-blue-200 text-blue-800", "#3b82f6"),
+        "cancelled": ("Отменена", "bg-red-200 text-red-800", "#ef4444"),
+    }
+    status = deal.get("status", "active")
+    status_label, status_class, status_color = status_map.get(status, (status, "bg-gray-200 text-gray-800", "#6b7280"))
+    status_badge = Span(status_label, cls=f"px-2 py-1 rounded text-sm {status_class}")
+
+    # Calculate plan-fact summary
+    total_planned_income = sum(
+        float(item.get("planned_amount", 0) or 0)
+        for item in plan_fact_items
+        if item.get("plan_fact_categories", {}).get("is_income", False)
+    )
+    total_planned_expense = sum(
+        float(item.get("planned_amount", 0) or 0)
+        for item in plan_fact_items
+        if not item.get("plan_fact_categories", {}).get("is_income", True)
+    )
+    total_actual_income = sum(
+        float(item.get("actual_amount", 0) or 0)
+        for item in plan_fact_items
+        if item.get("plan_fact_categories", {}).get("is_income", False) and item.get("actual_amount") is not None
+    )
+    total_actual_expense = sum(
+        float(item.get("actual_amount", 0) or 0)
+        for item in plan_fact_items
+        if not item.get("plan_fact_categories", {}).get("is_income", True) and item.get("actual_amount") is not None
+    )
+    total_variance = sum(
+        float(item.get("variance_amount", 0) or 0)
+        for item in plan_fact_items
+        if item.get("variance_amount") is not None
+    )
+
+    # Count paid vs unpaid items
+    paid_count = sum(1 for item in plan_fact_items if item.get("actual_amount") is not None)
+    unpaid_count = len(plan_fact_items) - paid_count
+
+    # Build plan-fact table row
+    def plan_fact_row(item):
+        category = item.get("plan_fact_categories", {}) or {}
+        is_income = category.get("is_income", False)
+        category_name = category.get("name", "Прочее")
+
+        # Format amounts
+        planned_amount = float(item.get("planned_amount", 0) or 0)
+        planned_currency = item.get("planned_currency", "RUB")
+        planned_str = f"{planned_amount:,.2f} {planned_currency}"
+
+        actual_amount = item.get("actual_amount")
+        actual_currency = item.get("actual_currency", "RUB")
+        if actual_amount is not None:
+            actual_str = f"{float(actual_amount):,.2f} {actual_currency}"
+        else:
+            actual_str = "—"
+
+        variance = item.get("variance_amount")
+        if variance is not None:
+            variance_val = float(variance)
+            if variance_val > 0:
+                variance_str = f"+{variance_val:,.2f}"
+                variance_color = "#ef4444" if not is_income else "#10b981"  # Red for overspend, green for extra income
+            elif variance_val < 0:
+                variance_str = f"{variance_val:,.2f}"
+                variance_color = "#10b981" if not is_income else "#ef4444"  # Green for underspend, red for less income
+            else:
+                variance_str = "0.00"
+                variance_color = "#6b7280"
+        else:
+            variance_str = "—"
+            variance_color = "#6b7280"
+
+        # Format dates
+        planned_date = item.get("planned_date", "")[:10] if item.get("planned_date") else "-"
+        actual_date = item.get("actual_date", "")[:10] if item.get("actual_date") else "-"
+
+        # Payment status
+        if actual_amount is not None:
+            payment_status = Span("✓ Оплачено", style="color: #10b981; font-weight: 500;")
+        else:
+            payment_status = Span("○ Ожидает", style="color: #f59e0b;")
+
+        # Category badge color
+        category_color = "#10b981" if is_income else "#6366f1"
+
+        return Tr(
+            Td(
+                Span(category_name, style=f"color: {category_color}; font-weight: 500;"),
+                Br(),
+                Small(item.get("description", "-") or "-", style="color: #666;")
+            ),
+            Td(planned_date),
+            Td(planned_str, style="text-align: right; font-weight: 500;"),
+            Td(actual_date if actual_amount is not None else "-"),
+            Td(actual_str, style="text-align: right;"),
+            Td(variance_str, style=f"text-align: right; color: {variance_color}; font-weight: 500;"),
+            Td(payment_status),
+            Td(
+                A("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", role="button",
+                  style="font-size: 0.75rem; padding: 0.2rem 0.5rem; background: #6b7280;") if actual_amount is None else "",
+            ),
+        )
+
+    # Build plan-fact table
+    if plan_fact_items:
+        plan_fact_table = Table(
+            Thead(
+                Tr(
+                    Th("Категория / Описание"),
+                    Th("План. дата"),
+                    Th("План. сумма", style="text-align: right;"),
+                    Th("Факт. дата"),
+                    Th("Факт. сумма", style="text-align: right;"),
+                    Th("Отклонение", style="text-align: right;"),
+                    Th("Статус"),
+                    Th(""),
+                )
+            ),
+            Tbody(*[plan_fact_row(item) for item in plan_fact_items]),
+            cls="striped"
+        )
+    else:
+        plan_fact_table = Div(
+            P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic;"),
+            A("+ Добавить плановый платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
+              style="background: #10b981;"),
+            style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 8px;"
+        )
+
+    return page_layout(f"Сделка {deal_number}",
+        # Header with back button
+        Div(
+            A("← Назад к списку сделок", href="/finance", style="color: #6b7280; text-decoration: none;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Deal header
+        Div(
+            H1(f"Сделка {deal_number}", style="margin-bottom: 0.5rem;"),
+            Div(status_badge, style="margin-bottom: 1rem;"),
+            style="margin-bottom: 1.5rem;"
+        ),
+
+        # Deal info cards
+        Div(
+            # Left column - Deal info
+            Div(
+                H3("Информация о сделке", style="margin-top: 0;"),
+                Table(
+                    Tr(Td(Strong("Номер сделки:"), style="width: 180px;"), Td(deal_number)),
+                    Tr(Td(Strong("Спецификация:")), Td(spec_number)),
+                    Tr(Td(Strong("Клиент:")), Td(customer_name)),
+                    Tr(Td(Strong("Сумма сделки:")), Td(f"{deal_amount:,.2f} {deal_currency}", style="font-weight: 600;")),
+                    Tr(Td(Strong("Дата подписания:")), Td(signed_at)),
+                    Tr(Td(Strong("Условия оплаты:")), Td(spec.get("client_payment_terms", "-") or "-")),
+                    Tr(Td(Strong("Наше юр. лицо:")), Td(spec.get("our_legal_entity", "-") or "-")),
+                    Tr(Td(Strong("Юр. лицо клиента:")), Td(spec.get("client_legal_entity", "-") or "-")),
+                ),
+                style="flex: 1; padding: 1rem; background: #f9fafb; border-radius: 8px; margin-right: 1rem;"
+            ),
+            # Right column - Plan-fact summary
+            Div(
+                H3("Сводка план-факт", style="margin-top: 0;"),
+                Table(
+                    Tr(
+                        Td(Strong("Плановые поступления:"), style="width: 180px;"),
+                        Td(f"{total_planned_income:,.2f} ₽", style="color: #10b981; font-weight: 500; text-align: right;")
+                    ),
+                    Tr(
+                        Td(Strong("Фактические поступления:")),
+                        Td(f"{total_actual_income:,.2f} ₽", style="text-align: right;")
+                    ),
+                    Tr(
+                        Td(Strong("Плановые расходы:")),
+                        Td(f"{total_planned_expense:,.2f} ₽", style="color: #6366f1; font-weight: 500; text-align: right;")
+                    ),
+                    Tr(
+                        Td(Strong("Фактические расходы:")),
+                        Td(f"{total_actual_expense:,.2f} ₽", style="text-align: right;")
+                    ),
+                    Tr(
+                        Td(Strong("Плановая маржа:")),
+                        Td(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-weight: 600; text-align: right;")
+                    ),
+                    Tr(
+                        Td(Strong("Общее отклонение:")),
+                        Td(f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
+                           style=f"font-weight: 600; text-align: right; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#6b7280'};")
+                    ),
+                ),
+                Div(
+                    Span(f"Оплачено: {paid_count}", style="color: #10b981; margin-right: 1rem;"),
+                    Span(f"Ожидает: {unpaid_count}", style="color: #f59e0b;"),
+                    style="margin-top: 1rem; font-size: 0.875rem;"
+                ),
+                style="flex: 1; padding: 1rem; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;"
+            ),
+            style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;"
+        ),
+
+        # Plan-fact table section
+        Div(
+            Div(
+                H2("План-факт платежей", style="display: inline-block; margin-right: 1rem;"),
+                A("+ Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
+                  style="background: #10b981; font-size: 0.875rem;") if plan_fact_items else "",
+                style="display: flex; align-items: center; margin-bottom: 1rem;"
+            ),
+            plan_fact_table,
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

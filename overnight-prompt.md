@@ -161,12 +161,13 @@ App runs at http://localhost:5001
 - [x] Feature #76: Создание сделки из спецификации (2026-01-15) - Created create_deal_from_specification() function in deal_service.py with CreateDealFromSpecResult dataclass. Function fetches specification with quote/customer details, validates spec status (approved/signed) and signed_scan, extracts financial data (total_amount, currency), generates deal_number, creates deal record in 'active' status, optionally updates spec status to 'signed'.
 - [x] Feature #77: Страница /finance (2026-01-15) - Created /finance route for finance manager workspace. Shows deal statistics (active, completed, total amounts), status filter buttons, deals table with spec/customer joins. Added "Финансы" link to nav_bar for finance/admin roles.
 - [x] Feature #78: Список активных сделок (2026-01-15) - Already in #77: deals list shows active/completed/cancelled with status badges, amounts, dates, action buttons.
+- [x] Feature #79: Таблица план-факт по сделке (2026-01-15) - Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items grouped by category with color coding and status indicators.
 
 ### Next Up
-- Feature #79: Таблица план-факт по сделке (Plan-fact table for deals)
+- Feature #80: Форма регистрации платежа (Payment registration form)
 
 ### Progress
-- **78 of 88 features completed** (89%)
+- **79 of 88 features completed** (90%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
