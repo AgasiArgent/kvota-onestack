@@ -302,8 +302,10 @@
       "name": "CRUD API for seller_companies",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Create, read, update, delete seller companies"
+      "passes": true,
+      "completed_at": "2026-01-15T23:00:00Z",
+      "description": "Create, read, update, delete seller companies",
+      "notes": "Created services/seller_company_service.py with: SellerCompany dataclass (supplier_code for 3-letter code, supports 10/12-digit INN for legal entities/IE, 13/15-digit OGRN), validation functions (validate_supplier_code, validate_inn, validate_kpp, validate_ogrn), CRUD operations (create_seller_company, get_seller_company, get_seller_company_by_code, get_seller_company_by_inn, get_all_seller_companies, count_seller_companies, search_seller_companies, update_seller_company, activate/deactivate, delete_seller_company), dropdown helpers (get_seller_companies_for_dropdown, format_seller_company_for_dropdown), document generation helper (get_seller_company_for_document with full_requisites formatting including country), IDN helper (get_seller_company_for_idn), stats function with by_country breakdown, get_unique_countries() utility. Updated services/__init__.py with exports. Tests in tests/test_seller_company_service.py with 46 passing tests."
     },
     {
       "id": "API-004",

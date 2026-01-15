@@ -370,6 +370,40 @@ from .buyer_company_service import (
     get_buyer_companies_for_dropdown,
     get_buyer_company_for_document,
 )
+from .seller_company_service import (
+    # Data class (Feature #API-003)
+    SellerCompany,
+    # Validation functions
+    validate_supplier_code as validate_seller_supplier_code,
+    validate_inn as validate_seller_inn,
+    validate_kpp as validate_seller_kpp,
+    validate_ogrn as validate_seller_ogrn,
+    # Create operations
+    create_seller_company,
+    # Read operations
+    get_seller_company,
+    get_seller_company_by_code,
+    get_seller_company_by_inn,
+    get_all_seller_companies,
+    count_seller_companies,
+    search_seller_companies,
+    get_active_seller_companies,
+    seller_company_exists,
+    # Update operations
+    update_seller_company,
+    activate_seller_company,
+    deactivate_seller_company,
+    # Delete operations
+    delete_seller_company,
+    # Utility functions
+    get_seller_company_stats,
+    get_seller_company_display_name,
+    format_seller_company_for_dropdown,
+    get_seller_companies_for_dropdown,
+    get_seller_company_for_document,
+    get_seller_company_for_idn,
+    get_unique_countries as get_seller_unique_countries,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -808,4 +842,30 @@ __all__ = [
     "format_buyer_company_for_dropdown",
     "get_buyer_companies_for_dropdown",
     "get_buyer_company_for_document",
+    # Seller company service (Feature #API-003)
+    "SellerCompany",
+    "validate_seller_supplier_code",
+    "validate_seller_inn",
+    "validate_seller_kpp",
+    "validate_seller_ogrn",
+    "create_seller_company",
+    "get_seller_company",
+    "get_seller_company_by_code",
+    "get_seller_company_by_inn",
+    "get_all_seller_companies",
+    "count_seller_companies",
+    "search_seller_companies",
+    "get_active_seller_companies",
+    "seller_company_exists",
+    "update_seller_company",
+    "activate_seller_company",
+    "deactivate_seller_company",
+    "delete_seller_company",
+    "get_seller_company_stats",
+    "get_seller_company_display_name",
+    "format_seller_company_for_dropdown",
+    "get_seller_companies_for_dropdown",
+    "get_seller_company_for_document",
+    "get_seller_company_for_idn",
+    "get_seller_unique_countries",
 ]
