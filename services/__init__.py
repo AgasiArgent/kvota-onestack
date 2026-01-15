@@ -4,6 +4,7 @@ OneStack Services
 Export and versioning services for quote management.
 Role management services for workflow system.
 Workflow service for quote status management.
+Telegram bot service for notifications and approvals.
 """
 
 from .database import get_supabase, get_anon_client
@@ -112,6 +113,32 @@ from .workflow_service import (
     transition_to_pending_procurement,
     get_quote_procurement_status,
 )
+from .telegram_service import (
+    # Configuration
+    is_bot_configured,
+    get_bot,
+    # Notification types
+    NotificationType,
+    NotificationPayload,
+    # Message functions
+    format_notification,
+    send_message,
+    send_notification,
+    send_approval_request,
+    edit_message,
+    # Keyboard builders
+    build_approval_keyboard,
+    build_open_quote_keyboard,
+    # Webhook management
+    setup_webhook,
+    delete_webhook,
+    get_webhook_info,
+    # Bot info
+    get_bot_info,
+    # Callback data
+    CallbackData,
+    parse_callback_data,
+)
 
 __all__ = [
     # Database
@@ -214,4 +241,22 @@ __all__ = [
     "assign_procurement_users_to_quote",
     "transition_to_pending_procurement",
     "get_quote_procurement_status",
+    # Telegram bot (Feature #52)
+    "is_bot_configured",
+    "get_bot",
+    "NotificationType",
+    "NotificationPayload",
+    "format_notification",
+    "send_message",
+    "send_notification",
+    "send_approval_request",
+    "edit_message",
+    "build_approval_keyboard",
+    "build_open_quote_keyboard",
+    "setup_webhook",
+    "delete_webhook",
+    "get_webhook_info",
+    "get_bot_info",
+    "CallbackData",
+    "parse_callback_data",
 ]

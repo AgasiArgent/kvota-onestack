@@ -1147,3 +1147,52 @@
     - Added POST /quote-control/{quote_id}/approve handler
 - Status: COMPLETE - Feature #51 done
 - **QUOTE CONTROL UI PHASE COMPLETE** (all 6 features done: 46-51)
+
+
+## Session 2025-01-15 - Feature #52: Создание Telegram-бота
+- Created comprehensive Telegram bot infrastructure in services/telegram_service.py (~450 lines)
+- Bot configuration:
+  - TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_URL environment variables
+  - is_bot_configured() function to check if bot is ready
+  - get_bot() function to get Bot instance
+  - Graceful handling when python-telegram-bot not installed
+- Notification types (NotificationType enum):
+  - TASK_ASSIGNED - New task notification
+  - APPROVAL_REQUIRED - Top manager approval request
+  - APPROVAL_DECISION - Approval/rejection result
+  - STATUS_CHANGED - Quote status change notification
+  - RETURNED_FOR_REVISION - Returned for fixes
+  - COMMENT_ADDED, DEADLINE_REMINDER, SYSTEM_MESSAGE
+- Message templates (NOTIFICATION_TEMPLATES dict):
+  - Russian-language templates with Markdown formatting
+  - Template variables: quote_idn, customer_name, actor_name, etc.
+  - format_notification() function for template rendering
+- Inline keyboards:
+  - build_approval_keyboard(quote_id) - Approve/Reject/Details buttons
+  - build_open_quote_keyboard(quote_id) - Open in system button
+- Message sending functions (async):
+  - send_message() - Low-level message sending
+  - send_notification() - Formatted notification with optional button
+  - send_approval_request() - Specialized approval request with buttons
+  - edit_message() - Edit existing message
+- Webhook management:
+  - setup_webhook(url) - Set webhook URL
+  - delete_webhook() - Remove webhook (switch to polling)
+  - get_webhook_info() - Get current webhook status
+- Bot info:
+  - get_bot_info() - Get bot username, capabilities
+- Callback data parsing:
+  - CallbackData dataclass
+  - parse_callback_data() - Parse approve_xxx, reject_xxx, details_xxx
+- Dependencies updated:
+  - requirements.txt: added python-telegram-bot>=21.0
+  - .env.example: added TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_URL
+- Updated services/__init__.py to export all telegram functions
+- Verified imports work correctly
+- Files changed:
+  - services/telegram_service.py (new - ~450 lines)
+  - services/__init__.py (updated - added telegram exports)
+  - requirements.txt (updated - added python-telegram-bot)
+  - .env.example (updated - added telegram config variables)
+- Status: COMPLETE - Feature #52 done
+- Note: Actual bot registration with BotFather is a manual step done in production

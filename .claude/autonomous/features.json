@@ -589,10 +589,11 @@
       "name": "Создание Telegram-бота",
       "description": "Регистрация бота в BotFather, получение токена",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T20:00:00Z",
+      "completed_at": "2025-01-15T20:30:00Z",
+      "notes": "Created services/telegram_service.py with full bot infrastructure: Bot initialization, NotificationType enum, message templates, inline keyboards for approvals, send_message/send_notification/send_approval_request functions, webhook management, callback data parsing. Added python-telegram-bot>=21.0 to requirements.txt. Updated .env.example with TELEGRAM_BOT_TOKEN and TELEGRAM_WEBHOOK_URL variables."
     },
     {
       "id": 53,

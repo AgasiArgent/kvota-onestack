@@ -134,13 +134,14 @@ App runs at http://localhost:5001
 - [x] Feature #49: Форма возврата на доработку (2025-01-15)
 - [x] Feature #50: Кнопка отправки на согласование (2025-01-15)
 - [x] Feature #51: Кнопка одобрения КП (2025-01-15)
+- [x] Feature #52: Создание Telegram-бота (2025-01-15) - Created telegram_service.py with bot infrastructure
 
 ### Next Up
-- Feature #52: Создание Telegram-бота (Telegram bot creation)
+- Feature #53: Webhook endpoint (POST /api/telegram/webhook)
 
 ### Progress
-- **51 of 88 features completed** (58%)
-- **QUOTE CONTROL UI PHASE COMPLETE** (all 6 features done: 46-51)
+- **52 of 88 features completed** (59%)
+- **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
