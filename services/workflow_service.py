@@ -2221,3 +2221,202 @@ def get_quote_procurement_status(quote_id: str) -> Dict:
 
     except Exception as e:
         return {"error": str(e)}
+
+
+# =============================================================================
+# PROCUREMENT COMPLETION FUNCTIONS (Feature #37)
+# =============================================================================
+# Handles checking if all procurement is complete and auto-transitioning
+
+
+def check_all_procurement_complete(quote_id: str) -> Dict:
+    """
+    Check if all procurement items for a quote are complete.
+
+    This function checks if ALL quote_items (not just one user's brands)
+    have procurement_status = 'completed'.
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict with:
+        - is_complete: bool - True if all items are complete
+        - total_items: int - Total number of items
+        - completed_items: int - Number of completed items
+        - pending_items: int - Number of pending items
+
+    Example:
+        >>> status = check_all_procurement_complete(quote_id)
+        >>> if status["is_complete"]:
+        ...     print("All procurement complete!")
+    """
+    supabase = get_supabase()
+
+    try:
+        # Get all items for this quote
+        items_response = supabase.table("quote_items") \
+            .select("id, procurement_status") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        items = items_response.data or []
+
+        total_items = len(items)
+        completed_items = sum(1 for i in items if i.get("procurement_status") == "completed")
+        pending_items = total_items - completed_items
+
+        return {
+            "is_complete": completed_items == total_items and total_items > 0,
+            "total_items": total_items,
+            "completed_items": completed_items,
+            "pending_items": pending_items
+        }
+
+    except Exception as e:
+        return {
+            "is_complete": False,
+            "total_items": 0,
+            "completed_items": 0,
+            "pending_items": 0,
+            "error": str(e)
+        }
+
+
+def complete_procurement(
+    quote_id: str,
+    actor_id: str,
+    actor_roles: List[str]
+) -> TransitionResult:
+    """
+    Complete the procurement phase for a quote and trigger auto-transition.
+
+    This function:
+    1. Validates the user has procurement or admin role
+    2. Checks if ALL procurement items are complete
+    3. If complete, sets procurement_completed_at timestamp
+    4. Transitions quote to pending_logistics (and pending_customs starts in parallel)
+
+    Note: The workflow handles logistics and customs as parallel stages.
+    When procurement completes, the quote goes to pending_logistics status,
+    but customs can be worked on simultaneously.
+
+    Args:
+        quote_id: UUID of the quote
+        actor_id: UUID of the user completing procurement
+        actor_roles: List of role codes the user has
+
+    Returns:
+        TransitionResult indicating success or failure
+
+    Example:
+        >>> result = complete_procurement(quote_id, user_id, ["procurement"])
+        >>> if result.success:
+        ...     print(f"Procurement complete! New status: {result.to_status}")
+    """
+    supabase = get_supabase()
+
+    # Validate role
+    if not any(role in ["procurement", "admin"] for role in actor_roles):
+        return TransitionResult(
+            success=False,
+            error_message="Only procurement or admin can complete procurement",
+            quote_id=quote_id
+        )
+
+    # Get current quote status
+    try:
+        response = supabase.table("quotes") \
+            .select("id, workflow_status, procurement_completed_at") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    if not response.data:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    quote = response.data
+    current_status = quote.get("workflow_status")
+
+    # Validate current status - must be pending_procurement
+    if current_status != WorkflowStatus.PENDING_PROCUREMENT.value:
+        return TransitionResult(
+            success=False,
+            error_message=f"Cannot complete procurement from status: {get_status_name(current_status)}. Quote must be in 'Ожидает оценки закупок' status.",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Check if already completed
+    if quote.get("procurement_completed_at"):
+        return TransitionResult(
+            success=False,
+            error_message="Procurement already completed for this quote",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Check if ALL procurement items are complete
+    completion_status = check_all_procurement_complete(quote_id)
+
+    if not completion_status["is_complete"]:
+        pending = completion_status["pending_items"]
+        total = completion_status["total_items"]
+        return TransitionResult(
+            success=False,
+            error_message=f"Not all procurement items are complete. {pending} of {total} items still pending.",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # All items complete! Set procurement_completed_at and transition to pending_logistics
+    try:
+        update_response = supabase.table("quotes") \
+            .update({
+                "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
+                "workflow_status": WorkflowStatus.PENDING_LOGISTICS.value
+            }) \
+            .eq("id", quote_id) \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Failed to update quote: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Log the transition in workflow_transitions
+    try:
+        actor_role = "procurement" if "procurement" in actor_roles else "admin"
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": current_status,
+            "to_status": WorkflowStatus.PENDING_LOGISTICS.value,
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "comment": "Оценка закупок завершена. Все позиции оценены."
+        }
+        log_response = supabase.table("workflow_transitions").insert(transition_data).execute()
+        transition_id = log_response.data[0].get("id") if log_response.data else None
+    except Exception:
+        transition_id = None  # Non-critical, continue
+
+    return TransitionResult(
+        success=True,
+        error_message=None,
+        quote_id=quote_id,
+        from_status=current_status,
+        to_status=WorkflowStatus.PENDING_LOGISTICS.value,
+        transition_id=transition_id
+    )

@@ -411,10 +411,10 @@
       "name": "Кнопка завершения оценки",
       "description": "Отметить свою часть как выполненную",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T22:00:00Z",
+      "completed_at": "2025-01-15T22:30:00Z"
     },
     {
       "id": 38,

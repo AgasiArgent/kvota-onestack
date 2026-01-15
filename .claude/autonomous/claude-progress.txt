@@ -842,3 +842,28 @@
   - services/procurement_export.py (new - ~200 lines)
   - main.py (updated - added import, ~75 lines for export route and UI button)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #37: Кнопка завершения оценки
+- Added workflow functions in services/workflow_service.py:
+  - check_all_procurement_complete() - Checks if ALL items (all brands) have completed procurement
+  - complete_procurement() - Validates role, checks completion status, triggers workflow transition
+- Updated main.py procurement POST handler:
+  - After marking items complete, calls complete_procurement() to check if all procurement is done
+  - If all items across all brands are complete, auto-transitions quote to pending_logistics
+- Enhanced procurement detail page UI:
+  - Shows "My Progress" card with user's item completion status
+  - Added success message when user completes their items: "✅ Вы завершили оценку своих позиций!"
+  - Added "Overall Procurement Status" card showing all brands completion progress
+  - Shows waiting message when user is done but other brands still pending
+  - Smart button behavior: "Complete" button becomes disabled "My assessment complete" when done
+- Files changed:
+  - services/workflow_service.py (~150 lines added):
+    - check_all_procurement_complete()
+    - complete_procurement()
+  - main.py (~50 lines modified):
+    - Added imports for new functions
+    - Updated GET handler to calculate overall procurement status
+    - Updated POST handler to trigger workflow transition
+    - Enhanced UI with status cards and smart buttons
+- Status: COMPLETE
+

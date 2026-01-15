@@ -34,7 +34,8 @@ from services.brand_service import get_assigned_brands
 
 # Import workflow service for status display
 from services.workflow_service import (
-    WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS
+    WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
+    check_all_procurement_complete, complete_procurement
 )
 
 # Import calculation engine
@@ -3066,9 +3067,15 @@ def get(quote_id: str, session):
     my_items = [item for item in all_items
                 if item.get("brand", "").lower() in my_brands_lower]
 
-    # Calculate progress
+    # Calculate progress for MY items
     total_items = len(my_items)
     completed_items = len([i for i in my_items if i.get("procurement_status") == "completed"])
+    my_items_complete = (completed_items == total_items) and total_items > 0
+
+    # Calculate progress for ALL items (Feature #37: overall procurement status)
+    overall_total = len(all_items)
+    overall_completed = len([i for i in all_items if i.get("procurement_status") == "completed"])
+    all_procurement_complete = (overall_completed == overall_total) and overall_total > 0
 
     customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
     workflow_status = quote.get("workflow_status", "draft")
@@ -3238,7 +3245,7 @@ def get(quote_id: str, session):
         # Progress card with export button
         Div(
             Div(
-                H3("Прогресс оценки", style="margin: 0;"),
+                H3("Мой прогресс", style="margin: 0;"),
                 A("📥 Скачать Excel", href=f"/procurement/{quote_id}/export", role="button",
                   cls="secondary", style="font-size: 0.875rem;") if total_items > 0 else None,
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
@@ -3250,8 +3257,33 @@ def get(quote_id: str, session):
                     style="width: 100%; height: 12px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;"
                 ),
             ),
+            # Show success when all MY items are complete
+            Div(
+                P("✅ Вы завершили оценку своих позиций!", style="color: #166534; margin: 0.5rem 0 0;"),
+                style="padding: 0.5rem; background: #dcfce7; border-radius: 0.5rem; margin-top: 0.75rem;"
+            ) if my_items_complete else None,
             cls="card"
         ),
+
+        # Overall procurement status (Feature #37)
+        Div(
+            H4("Общий статус закупок", style="margin: 0 0 0.5rem;"),
+            Div(
+                Div(f"{overall_completed}/{overall_total} позиций оценено всеми менеджерами", style="margin-bottom: 0.5rem; font-size: 0.875rem;"),
+                Div(
+                    Div(style=f"width: {(overall_completed/overall_total*100) if overall_total > 0 else 0}%; height: 8px; background: #3b82f6;"),
+                    style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;"
+                ),
+            ),
+            # Show status message
+            Div(
+                P("✅ Все закупки оценены! КП перешло на следующий этап.", style="color: #166534; margin: 0;") if all_procurement_complete and workflow_status != "pending_procurement" else
+                P("⏳ Ожидается оценка от других менеджеров по закупкам.", style="color: #92400e; margin: 0;") if my_items_complete and not all_procurement_complete else None,
+                style=f"padding: 0.5rem; background: {'#dcfce7' if all_procurement_complete and workflow_status != 'pending_procurement' else '#fef3c7'}; border-radius: 0.5rem; margin-top: 0.5rem;"
+            ) if (my_items_complete and not all_procurement_complete) or (all_procurement_complete and workflow_status != "pending_procurement") else None,
+            cls="card",
+            style="background: #f8fafc; border: 1px dashed #cbd5e1;"
+        ) if overall_total > total_items else None,  # Only show if there are other brands
 
         # Warning if not in correct status
         Div(
@@ -3277,13 +3309,16 @@ def get(quote_id: str, session):
                 cls="card"
             ),
 
-            # Action buttons
+            # Action buttons (Feature #37: Smart completion button)
             Div(
                 Button("💾 Сохранить данные", type="submit", name="action", value="save",
-                       style="margin-right: 1rem;") if can_edit else None,
+                       style="margin-right: 1rem;") if can_edit and not my_items_complete else None,
                 Button("✓ Завершить оценку", type="submit", name="action", value="complete",
-                       style="background: #16a34a;") if can_edit and total_items > 0 else None,
-                A("Отмена", href="/procurement", role="button", cls="secondary",
+                       style="background: #16a34a;") if can_edit and total_items > 0 and not my_items_complete else None,
+                # Show a disabled "already complete" button when user's items are done
+                Button("✓ Моя оценка завершена", disabled=True,
+                       style="background: #6b7280; cursor: default;") if can_edit and my_items_complete else None,
+                A("← Назад к списку", href="/procurement", role="button", cls="secondary",
                   style="margin-left: auto;"),
                 style="display: flex; align-items: center; margin-top: 1rem;"
             ),
@@ -3410,6 +3445,25 @@ def post(quote_id: str, session, action: str = "save", **kwargs):
                 .eq("id", item_id) \
                 .execute()
             updated_items += 1
+
+    # Feature #37: If completing, check if ALL procurement is done and trigger workflow transition
+    if action == "complete" and updated_items > 0:
+        # Get user's roles for the workflow transition
+        user_roles = get_user_roles_from_session(session)
+
+        # Try to complete procurement and transition to next status
+        completion_result = complete_procurement(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles
+        )
+
+        # Note: Even if not all items are complete (other users' brands still pending),
+        # the user's items are saved. The workflow transition only happens when ALL
+        # items across ALL brands are complete.
+
+        # If transition was successful, show success message (via redirect)
+        # If not (other items still pending), user sees updated progress on the page
 
     # Redirect back to the procurement detail page
     return RedirectResponse(f"/procurement/{quote_id}", status_code=303)

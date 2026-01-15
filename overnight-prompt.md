@@ -119,12 +119,13 @@ App runs at http://localhost:5001
 - [x] Feature #34: Список КП с моими брендами (2025-01-15)
 - [x] Feature #35: Форма ввода закупочных данных (2025-01-15)
 - [x] Feature #36: Скачивание списка для оценки (2025-01-15)
+- [x] Feature #37: Кнопка завершения оценки (2025-01-15)
 
 ### Next Up
-- Feature #37: Кнопка завершения оценки
+- Feature #38: Страница /logistics
 
 ### Progress
-- **36 of 88 features completed** (41%)
+- **37 of 88 features completed** (42%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
