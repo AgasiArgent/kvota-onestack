@@ -2894,3 +2894,25 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - get_quote_invoicing_summary(quote_id) - invoicing status for all quote items
 - Created v_supplier_invoice_items_full view with complete context
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-017: Create supplier_invoice_payments table
+- Created migration 034_create_supplier_invoice_payments_table.sql
+- Payment tracking for supplier invoices:
+  - payment_type: advance, partial, final, refund
+  - buyer_company_id FK: links to our legal entity that made the payment
+  - exchange_rate: for RUB conversion at payment time
+  - payment_document: bank transfer reference number
+- Auto-update trigger: Updates parent invoice status (pending → partially_paid → paid)
+  - Handles refunds correctly (subtracts from total paid)
+  - Checks overdue status based on due_date
+- RLS policies: Inherit access from parent supplier_invoice
+  - procurement, finance, admin can insert/update payments
+  - admin, finance can delete payments
+- Helper functions:
+  - get_invoice_payments_summary(invoice_id) - aggregated payment stats by type
+  - get_payments_for_invoice(invoice_id) - list with buyer company details
+  - get_payments_by_buyer_company(org_id, from_date, to_date) - grouped by payer
+  - get_supplier_payment_summary(supplier_id, from_date, to_date) - invoice/payment totals
+- View: v_supplier_invoice_payments_full with complete context
+- Status: COMPLETE

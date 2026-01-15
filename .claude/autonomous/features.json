@@ -162,8 +162,10 @@
       "name": "Create supplier_invoice_payments table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Track payments with payment_type, buyer_company_id"
+      "passes": true,
+      "completed_at": "2026-01-15T19:10:00Z",
+      "description": "Track payments with payment_type, buyer_company_id",
+      "notes": "Created migration 034_create_supplier_invoice_payments_table.sql with: payment_type (advance/partial/final/refund), buyer_company_id FK (which legal entity paid), exchange_rate for RUB conversion. Auto-update invoice status trigger. RLS policies inherit from parent invoice. Helper functions: get_invoice_payments_summary(), get_payments_for_invoice(), get_payments_by_buyer_company(), get_supplier_payment_summary(). View: v_supplier_invoice_payments_full"
     },
     {
       "id": "DB-018",
