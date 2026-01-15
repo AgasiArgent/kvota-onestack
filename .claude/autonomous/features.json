@@ -212,8 +212,10 @@
       "name": "Create plan_fact_categories table with seed data",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Seed payment categories (client_payment, supplier_payment, logistics, customs, tax, etc.)"
+      "passes": true,
+      "completed_at": "2026-01-15T20:00:00Z",
+      "description": "Seed payment categories (client_payment, supplier_payment, logistics, customs, tax, etc.)",
+      "notes": "Created migration 038_create_plan_fact_categories_table.sql with 21 seed categories (8 core from spec + detailed subcategories). Categories include: client_payment/advance/final (income), supplier_payment/advance/balance, logistics segments, customs (duty/fee/broker), tax/VAT, finance_commission, lpr_reward, bank_commission, currency_conversion, other_expense. Helper functions: get_plan_fact_categories(), get_category_by_code(), get_income_categories(), get_expense_categories(), get_deal_category_stats(). RLS allows all reads, admin-only writes."
     },
     {
       "id": "DB-023",

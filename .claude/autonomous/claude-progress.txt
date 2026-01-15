@@ -2997,3 +2997,23 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - cancel_deal(deal_id, reason?, cancelled_by?) - cancels deal, updates quote workflow
 - View: v_deals_list with full context (specification, quote, customer, seller_company, plan-fact summary)
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-022: Create plan_fact_categories table with seed data
+- Purpose: Reference table for categorizing planned and actual payments in deal tracking
+- Created migration 038_create_plan_fact_categories_table.sql
+- Table columns: id, code (unique), name, name_ru, is_income, display_order, is_active, created_at
+- Seed data (21 categories total):
+  - Income (3): client_payment, client_advance, client_final
+  - Supplier expenses (3): supplier_payment, supplier_advance, supplier_balance
+  - Logistics expenses (4): logistics_cost, logistics_supplier_hub, logistics_hub_customs, logistics_customs_customer
+  - Customs expenses (4): customs_cost, customs_duty, customs_fee, customs_broker
+  - Other expenses (7): tax, vat, finance_commission, lpr_reward, bank_commission, currency_conversion, other_expense
+- Helper functions:
+  - get_plan_fact_categories(is_income?) - Get all/income/expense categories
+  - get_category_by_code(code) - Get single category by code
+  - get_income_categories() - Get all income categories for dropdown
+  - get_expense_categories() - Get all expense categories for dropdown
+  - get_deal_category_stats(deal_id) - Get plan-fact stats by category
+- RLS: All authenticated users can read, only service_role can modify
+- Status: COMPLETE
