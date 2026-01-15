@@ -3395,6 +3395,131 @@ def workflow_status_badge(status_str: str):
     return Span(status_str or "—", cls="status-badge")
 
 
+def workflow_progress_bar(status_str: str):
+    """
+    Create a visual workflow progress bar showing the current stage of a quote.
+
+    Feature #87: Прогресс-бар workflow на КП
+
+    Shows workflow stages as a horizontal bar with steps:
+    1. Черновик (draft)
+    2. Закупки (procurement)
+    3. Лог + Там (logistics + customs parallel)
+    4. Продажи (sales review)
+    5. Контроль (quote control)
+    6. Согласование (approval)
+    7. Клиент (sent/negotiation)
+    8. Спецификация (spec control)
+    9. Сделка (deal)
+
+    For rejected/cancelled shows a different indicator.
+    """
+    try:
+        status = WorkflowStatus(status_str) if status_str else None
+    except ValueError:
+        status = None
+
+    if not status:
+        return Div()
+
+    # Handle final negative states separately
+    if status == WorkflowStatus.REJECTED:
+        return Div(
+            Span("❌ Отклонено", style="color: #dc2626; font-weight: 600;"),
+            style="padding: 0.75rem 1rem; background: #fef2f2; border-radius: 8px; border-left: 4px solid #dc2626; margin: 0.5rem 0;"
+        )
+    if status == WorkflowStatus.CANCELLED:
+        return Div(
+            Span("⊘ Отменено", style="color: #57534e; font-weight: 600;"),
+            style="padding: 0.75rem 1rem; background: #f5f5f4; border-radius: 8px; border-left: 4px solid #78716c; margin: 0.5rem 0;"
+        )
+
+    # Define workflow stages in order (main path)
+    # Some stages are parallel (logistics + customs) - we show them as one combined step
+    stages = [
+        ("draft", "Черновик", [WorkflowStatus.DRAFT]),
+        ("procurement", "Закупки", [WorkflowStatus.PENDING_PROCUREMENT]),
+        ("logistics_customs", "Лог+Там", [WorkflowStatus.PENDING_LOGISTICS, WorkflowStatus.PENDING_CUSTOMS]),
+        ("sales", "Продажи", [WorkflowStatus.PENDING_SALES_REVIEW]),
+        ("control", "Контроль", [WorkflowStatus.PENDING_QUOTE_CONTROL]),
+        ("approval", "Согласование", [WorkflowStatus.PENDING_APPROVAL, WorkflowStatus.APPROVED]),
+        ("client", "Клиент", [WorkflowStatus.SENT_TO_CLIENT, WorkflowStatus.CLIENT_NEGOTIATION]),
+        ("spec", "Спец-я", [WorkflowStatus.PENDING_SPEC_CONTROL, WorkflowStatus.PENDING_SIGNATURE]),
+        ("deal", "Сделка", [WorkflowStatus.DEAL]),
+    ]
+
+    # Find current stage index
+    current_stage_idx = -1
+    for idx, (stage_id, name, statuses) in enumerate(stages):
+        if status in statuses:
+            current_stage_idx = idx
+            break
+
+    # Build progress bar
+    steps = []
+    for idx, (stage_id, name, statuses) in enumerate(stages):
+        is_current = status in statuses
+        is_completed = idx < current_stage_idx
+        is_future = idx > current_stage_idx
+
+        # Determine step styling
+        if is_completed:
+            # Completed step - green
+            circle_style = "background: #22c55e; color: white; border: 2px solid #22c55e;"
+            text_style = "color: #22c55e; font-weight: 500;"
+            icon = "✓"
+        elif is_current:
+            # Current step - blue with pulse animation
+            circle_style = "background: #3b82f6; color: white; border: 2px solid #3b82f6; animation: pulse 2s infinite;"
+            text_style = "color: #3b82f6; font-weight: 600;"
+            icon = str(idx + 1)
+        else:
+            # Future step - gray
+            circle_style = "background: #e5e7eb; color: #9ca3af; border: 2px solid #e5e7eb;"
+            text_style = "color: #9ca3af;"
+            icon = str(idx + 1)
+
+        # Connector line (not for first step)
+        connector = None
+        if idx > 0:
+            line_color = "#22c55e" if is_completed or is_current else "#e5e7eb"
+            connector = Div(
+                style=f"flex: 1; height: 2px; background: {line_color}; margin: 0 -2px;"
+            )
+
+        step = Div(
+            # Circle with number or checkmark
+            Div(
+                icon,
+                style=f"width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; {circle_style}"
+            ),
+            # Label
+            Div(name, style=f"font-size: 11px; margin-top: 4px; text-align: center; white-space: nowrap; {text_style}"),
+            style="display: flex; flex-direction: column; align-items: center; min-width: 50px;"
+        )
+
+        if connector:
+            steps.append(Div(connector, style="display: flex; align-items: center; flex: 1; padding-bottom: 20px;"))
+        steps.append(step)
+
+    # CSS for pulse animation
+    pulse_animation = Style("""
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            50% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+        }
+    """)
+
+    return Div(
+        pulse_animation,
+        Div(
+            *steps,
+            style="display: flex; align-items: flex-start; justify-content: space-between; width: 100%; padding: 0.5rem 0;"
+        ),
+        style="background: #f9fafb; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; overflow-x: auto;"
+    )
+
+
 @rt("/procurement")
 def get(session, status_filter: str = None):
     """
@@ -3897,6 +4022,9 @@ def get(quote_id: str, session):
             ),
             style="margin-bottom: 1rem;"
         ),
+
+        # Workflow progress bar (Feature #87)
+        workflow_progress_bar(workflow_status),
 
         # Progress card with export button
         Div(
@@ -4650,6 +4778,9 @@ def get(session, quote_id: str):
             style="margin-bottom: 1rem;"
         ),
 
+        # Workflow progress bar (Feature #87)
+        workflow_progress_bar(workflow_status),
+
         # Status banners
         success_banner,
         status_banner,
@@ -5210,6 +5341,9 @@ def get(session, quote_id: str):
             ),
             style="margin-bottom: 1rem;"
         ),
+
+        # Workflow progress bar (Feature #87)
+        workflow_progress_bar(workflow_status),
 
         # Status banners
         success_banner,
@@ -5898,6 +6032,9 @@ def get(session, quote_id: str):
             P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #666;"),
             style="margin-bottom: 1rem;"
         ),
+
+        # Workflow progress bar (Feature #87)
+        workflow_progress_bar(workflow_status),
 
         # Status banner
         status_banner,
@@ -7531,7 +7668,7 @@ def get(session, spec_id: str):
 
     # Fetch specification with quote and customer info
     spec_result = supabase.table("specifications") \
-        .select("*, quotes(id, idn_quote, total_amount, currency, customers(name, inn))") \
+        .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(name, inn))") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -7550,6 +7687,7 @@ def get(session, spec_id: str):
     customer_name = customer.get("name", "Unknown")
     quote_id = spec.get("quote_id")
     status = spec.get("status", "draft")
+    quote_workflow_status = quote.get("workflow_status", "draft")
 
     # Check if editable
     is_editable = status in ["draft", "pending_review"]
@@ -7576,6 +7714,9 @@ def get(session, spec_id: str):
 
     return page_layout("Редактирование спецификации",
         H1("Редактирование спецификации"),
+
+        # Workflow progress bar (Feature #87)
+        workflow_progress_bar(quote_workflow_status),
 
         # Status and info banner
         Div(

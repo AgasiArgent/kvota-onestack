@@ -2255,3 +2255,45 @@ CreateDealFromSpecResult(
 - Link from /admin/users page already existed (line 9512)
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #87: Прогресс-бар workflow на КП
+
+### What was implemented
+- Created `workflow_progress_bar()` function in main.py (lines 3398-3520)
+- Visual horizontal progress bar showing 9 workflow stages:
+  1. Черновик (draft)
+  2. Закупки (pending_procurement)
+  3. Лог+Там (pending_logistics + pending_customs - parallel stages)
+  4. Продажи (pending_sales_review)
+  5. Контроль (pending_quote_control)
+  6. Согласование (pending_approval + approved)
+  7. Клиент (sent_to_client + client_negotiation)
+  8. Спец-я (pending_spec_control + pending_signature)
+  9. Сделка (deal)
+
+### Visual features
+- Completed stages show green checkmarks (✓) with green connector lines
+- Current stage has pulsing blue animation with stage number
+- Future stages show gray numbers with gray connector lines
+- Rejected quotes show red banner: "❌ Отклонено"
+- Cancelled quotes show gray banner: "⊘ Отменено"
+
+### Integration points (5 pages updated)
+1. `/procurement/{quote_id}` - After header, before progress card
+2. `/logistics/{quote_id}` - After header, before status banners
+3. `/customs/{quote_id}` - After header, before status banners
+4. `/quote-control/{quote_id}` - After header, before status banner
+5. `/spec-control/{spec_id}` - After H1, before status info banner
+   - Updated query to include quotes.workflow_status
+   - Added quote_workflow_status variable
+
+### Technical notes
+- Uses CSS keyframes animation for pulse effect
+- All styling is inline (no Tailwind required)
+- Responsive: overflow-x: auto for small screens
+- Parallel stages (logistics + customs) shown as single combined step
+
+### Files changed
+- main.py: +125 lines for workflow_progress_bar function, +6 lines for integrations, +2 lines for spec-control query update
+
+### Status: COMPLETE

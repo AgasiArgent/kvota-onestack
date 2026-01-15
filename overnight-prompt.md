@@ -169,12 +169,13 @@ App runs at http://localhost:5001
 - [x] Feature #84: Страница /admin/users (2026-01-15) - Created /admin/users page for user and role management. Shows all org members with roles, Telegram status, join date. Added /admin/users/{user_id}/roles for role assignment with checkboxes. Color-coded badges, stats cards, role legend. Added 'Админ' nav link for admin users.
 - [x] Feature #85: Страница /admin/brands (2026-01-15) - Created /admin/brands page for brand assignment management. Full CRUD: list all assignments + unassigned brands from quotes, create new (brand + procurement manager dropdown), edit manager, delete. Stats cards, auto-import from quote_items, admin-only access.
 - [x] Feature #86: Обновить dashboard для ролей (2026-01-15) - Completely redesigned /dashboard to show role-specific task sections. Added _get_role_tasks_sections() helper. Features: (1) TOP_MANAGER/ADMIN: pending approvals, (2) PROCUREMENT: quotes pending evaluation, (3) LOGISTICS: quotes pending logistics, (4) CUSTOMS: quotes pending customs, (5) QUOTE_CONTROLLER: quotes pending review, (6) SPEC_CONTROLLER: spec stats, (7) FINANCE: active deals, (8) SALES: quotes pending sales review. Color-coded sections, role badges in header, workflow-aware stats.
+- [x] Feature #87: Прогресс-бар workflow на КП (2026-01-15) - Created workflow_progress_bar() function showing 9-stage visual progress. Stages: Черновик → Закупки → Лог+Там → Продажи → Контроль → Согласование → Клиент → Спец-я → Сделка. Green checkmarks for completed, pulsing blue for current, gray for future. Special indicators for rejected/cancelled. Added to 5 detail pages: /procurement, /logistics, /customs, /quote-control, /spec-control.
 
 ### Next Up
-- Feature #87: Прогресс-бар workflow на КП (Workflow progress bar visualization)
+- Feature #88: Просмотр истории переходов (UI for viewing workflow_transitions history per quote)
 
 ### Progress
-- **86 of 88 features completed** (98%)
+- **87 of 88 features completed** (99%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
