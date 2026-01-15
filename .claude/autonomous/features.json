@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "Kvota OneStack - Quote Workflow System with Supply Chain",
-  "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0435 OneStack: 4 \u0442\u0438\u043f\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439 \u0432 \u0446\u0435\u043f\u043e\u0447\u043a\u0435 \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a, IDN \u0441\u0438\u0441\u0442\u0435\u043c\u0430, \u0440\u0435\u0435\u0441\u0442\u0440 \u0438\u043d\u0432\u043e\u0439\u0441\u043e\u0432 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432, 12 \u0440\u043e\u043b\u0435\u0439",
+  "description": "Расширение OneStack: 4 типа компаний в цепочке поставок, IDN система, реестр инвойсов поставщиков, 12 ролей",
   "created": "2025-01-15T00:00:00Z",
   "stack": "Python FastHTML + HTMX + Supabase",
   "spec_file": ".claude/autonomous/app_spec.xml",
@@ -37,7 +37,7 @@
       "name": "Create customer_contacts table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "description": "Create customer_contacts table for LPR contacts with is_signatory field"
     },
     {

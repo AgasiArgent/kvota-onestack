@@ -138,6 +138,12 @@ Start with DB-001 (suppliers table) and work through sequentially.
    - Our legal entities for purchasing with company_code, inn, kpp, ogrn
    - Director info for document signing
 
+3. **DB-003** (seller_companies table) - ✅ COMPLETE
+   - Created `migrations/020_create_seller_companies_table.sql`
+   - Our legal entities for selling (quote level)
+   - supplier_code, inn, kpp, ogrn, director info
+   - Examples: MBR, RAR, CMT, GES, TEX
+
 ### Progress:
-- v3.0 features complete: **2/94**
-- Next feature: **DB-003** (Verify seller_companies table exists)
+- v3.0 features complete: **3/94**
+- Next feature: **DB-004** (customer_contacts table with is_signatory)

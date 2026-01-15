@@ -2615,3 +2615,41 @@ CREATE TABLE seller_companies (
 
 **Status:** COMPLETE
 **Next:** DB-004 (customer_contacts table with is_signatory)
+
+## Session 2026-01-15 - Feature DB-004: Create customer_contacts table
+
+**What was done:**
+- Created migration `migrations/021_create_customer_contacts_table.sql`
+- Table stores contact persons (ЛПР) for customers
+- Key feature: `is_signatory` flag for specification PDF generation
+
+**Schema:**
+```sql
+CREATE TABLE customer_contacts (
+    id UUID PK,
+    customer_id UUID FK → customers.id,
+    name VARCHAR(255) NOT NULL,
+    position VARCHAR(255),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    is_signatory BOOLEAN DEFAULT FALSE,  -- For specification signatory
+    is_primary BOOLEAN DEFAULT FALSE,    -- Main contact for communication
+    notes TEXT,
+    created_at, updated_at TIMESTAMPTZ
+);
+```
+
+**Features:**
+- RLS policies for organization isolation via customers table
+- Only sales/admin can create/update contacts
+- Only admin can delete
+- Indexes for customer_id, is_signatory, is_primary lookups
+- Helper function `get_customer_signatory(customer_id)` for specification PDF generation
+- Auto-update timestamp trigger
+
+**Business Rule:**
+When generating specification PDF, the system uses `customer_contacts.is_signatory = TRUE` 
+to determine the signatory name that appears on the document.
+
+**Status:** COMPLETE
+**Next:** DB-005 (customer_contracts table with next_specification_number)
