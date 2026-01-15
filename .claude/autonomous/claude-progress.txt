@@ -290,3 +290,40 @@
   - verify_telegram_account(code, telegram_id, username) - verifies account
 - Files changed: migrations/010_create_telegram_users_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #11: Создать таблицу notifications
+- Created SQL migration: `migrations/011_create_notifications_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - user_id (UUID FK -> auth.users, CASCADE DELETE) - recipient
+  - quote_id (UUID FK -> quotes, SET NULL) - related quote (nullable)
+  - deal_id (UUID FK -> deals, SET NULL) - related deal (nullable)
+  - type (VARCHAR 50) - notification type with CHECK constraint
+  - title (VARCHAR 255) - notification title
+  - message (TEXT) - full notification text
+  - channel (VARCHAR 20) - delivery channel (telegram, email, in_app)
+  - status (VARCHAR 20) - delivery status (pending, sent, delivered, read, failed)
+  - telegram_message_id (BIGINT) - for updating Telegram messages
+  - email_message_id (VARCHAR 255) - for email tracking
+  - error_message (TEXT) - error details if failed
+  - sent_at, delivered_at, read_at, created_at (TIMESTAMP WITH TIME ZONE)
+- Notification types supported:
+  - task_assigned, approval_required, approval_decision, status_changed
+  - returned_for_revision, comment_added, deadline_reminder, system_message
+- Indexes created:
+  - user_id, quote_id (partial), deal_id (partial) - FK lookups
+  - type, status, channel - filtering
+  - created_at DESC - time-ordered listing
+  - (user_id, status), (user_id, created_at DESC where unread) - dashboard queries
+  - (channel, created_at where pending) - for notification sending queue
+- RLS policies:
+  - Users can view/update their own notifications
+  - Users can insert notifications for users in their organization
+- Helper functions:
+  - create_notification() - creates new notification
+  - mark_notification_sent() - marks as sent with message ID (service role)
+  - mark_notification_failed() - marks as failed with error (service role)
+  - mark_notification_read() - marks as read by user
+  - get_pending_notifications() - gets pending notifications for channel (service role)
+- Files changed: migrations/011_create_notifications_table.sql (new)
+- Status: COMPLETE

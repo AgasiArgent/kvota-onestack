@@ -121,10 +121,10 @@
       "name": "Создать таблицу notifications",
       "description": "SQL миграция для истории уведомлений",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T06:00:00Z",
+      "completed_at": "2025-01-15T06:10:00Z"
     },
     {
       "id": 12,
