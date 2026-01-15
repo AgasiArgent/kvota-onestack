@@ -354,3 +354,28 @@
 - Existing quotes updated to have workflow_status = 'draft'
 - Files changed: migrations/012_extend_quotes_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #13: Расширить таблицу quote_items
+- Created SQL migration: `migrations/013_extend_quote_items_table.sql`
+- New columns added:
+  - assigned_procurement_user (UUID FK -> auth.users) - procurement manager for this item
+  - procurement_status (VARCHAR 20) - 'pending', 'in_progress', 'completed'
+  - procurement_completed_at (TIMESTAMP WITH TIME ZONE)
+  - procurement_completed_by (UUID FK -> auth.users)
+  - hs_code (VARCHAR 20) - customs HS code (ТН ВЭД)
+  - customs_duty (DECIMAL 15,4) - duty percentage/amount
+  - customs_extra (DECIMAL 15,2) - additional customs charges
+- Constraints added:
+  - quote_items_procurement_status_check - validates status values
+- Indexes created:
+  - idx_quote_items_assigned_procurement_user (partial)
+  - idx_quote_items_procurement_status
+  - idx_quote_items_procurement_user_status (composite, partial)
+  - idx_quote_items_quote_procurement_status (composite)
+- Helper functions added:
+  - assign_procurement_user_by_brand() - trigger function for auto-assignment
+  - complete_item_procurement(item_id, user_id) - marks item procurement complete
+  - check_quote_procurement_complete(quote_id) - checks if all items are done
+- Trigger: trigger_assign_procurement_user - auto-assigns procurement user based on brand
+- Files changed: migrations/013_extend_quote_items_table.sql (new)
+- Status: COMPLETE

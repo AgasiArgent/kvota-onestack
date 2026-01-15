@@ -143,10 +143,10 @@
       "name": "Расширить таблицу quote_items",
       "description": "Добавить поля assigned_procurement_user, procurement_status, hs_code, customs_duty, customs_extra",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T07:00:00Z",
+      "completed_at": "2025-01-15T07:10:00Z"
     },
     {
       "id": 14,
