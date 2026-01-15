@@ -11264,6 +11264,155 @@ def post(assignment_id: str, session):
 
 
 # ============================================================================
+# API ENDPOINTS - HTMX Search Endpoints
+# ============================================================================
+
+# Import location service for API endpoint
+from services.location_service import get_locations_for_dropdown, search_locations, format_location_for_dropdown
+
+
+@rt("/api/locations/search")
+def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit: int = 20):
+    """
+    Search locations for HTMX dropdown autocomplete.
+
+    This endpoint provides location search functionality for HTMX-powered
+    dropdown components used in quote item forms (pickup_location_id).
+
+    Query Parameters:
+        q: Search query (matches code, city, country, address)
+        hub_only: If "true", return only logistics hub locations
+        customs_only: If "true", return only customs point locations
+        limit: Maximum number of results (default 20)
+
+    Returns:
+        HTML fragment with <option> elements for dropdown
+
+    Usage in HTMX:
+        <input type="text"
+               hx-get="/api/locations/search"
+               hx-trigger="input changed delay:300ms"
+               hx-target="#location-options"
+               name="q">
+        <select id="location-options">
+            <!-- Options populated by HTMX -->
+        </select>
+
+    Example Response (HTML):
+        <option value="">Выберите локацию...</option>
+        <option value="uuid-1">MSK - Москва, Россия [хаб]</option>
+        <option value="uuid-2">SPB - Санкт-Петербург, Россия [хаб]</option>
+    """
+    # Check authentication
+    redirect = require_login(session)
+    if redirect:
+        # Return empty for HTMX partial
+        return Option("Требуется авторизация", value="", disabled=True)
+
+    user = session["user"]
+    org_id = user.get("organization_id")
+
+    if not org_id:
+        return Option("Организация не найдена", value="", disabled=True)
+
+    # Parse boolean flags
+    is_hub_only = hub_only.lower() == "true"
+    is_customs_only = customs_only.lower() == "true"
+
+    # Search locations using location service
+    try:
+        if q and len(q.strip()) > 0:
+            # Search with query
+            from services.location_service import search_locations
+            locations = search_locations(
+                organization_id=org_id,
+                query=q.strip(),
+                is_hub_only=is_hub_only,
+                is_customs_only=is_customs_only,
+                limit=min(limit, 50),  # Cap at 50 for safety
+            )
+            dropdown_items = [format_location_for_dropdown(loc) for loc in locations]
+        else:
+            # Get all locations (limited) when no query
+            dropdown_items = get_locations_for_dropdown(
+                organization_id=org_id,
+                query=None,
+                is_hub_only=is_hub_only,
+                is_customs_only=is_customs_only,
+                limit=min(limit, 50),
+            )
+
+        # Build HTML options
+        options = [Option("Выберите локацию...", value="")]
+        for item in dropdown_items:
+            options.append(Option(item["label"], value=item["value"]))
+
+        # If no results found
+        if len(dropdown_items) == 0 and q:
+            options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
+
+        return Group(*options)
+
+    except Exception as e:
+        print(f"Error in location search API: {e}")
+        return Option(f"Ошибка поиска: {str(e)}", value="", disabled=True)
+
+
+@rt("/api/locations/search/json")
+def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit: int = 20):
+    """
+    Search locations for HTMX dropdown - JSON response format.
+
+    Same as /api/locations/search but returns JSON instead of HTML.
+    Useful for custom dropdown implementations.
+
+    Returns:
+        JSON array of {value, label} objects
+    """
+    # Check authentication
+    redirect = require_login(session)
+    if redirect:
+        return {"error": "Unauthorized", "items": []}
+
+    user = session["user"]
+    org_id = user.get("organization_id")
+
+    if not org_id:
+        return {"error": "Organization not found", "items": []}
+
+    # Parse boolean flags
+    is_hub_only = hub_only.lower() == "true"
+    is_customs_only = customs_only.lower() == "true"
+
+    # Search locations
+    try:
+        if q and len(q.strip()) > 0:
+            from services.location_service import search_locations
+            locations = search_locations(
+                organization_id=org_id,
+                query=q.strip(),
+                is_hub_only=is_hub_only,
+                is_customs_only=is_customs_only,
+                limit=min(limit, 50),
+            )
+            items = [format_location_for_dropdown(loc) for loc in locations]
+        else:
+            items = get_locations_for_dropdown(
+                organization_id=org_id,
+                query=None,
+                is_hub_only=is_hub_only,
+                is_customs_only=is_customs_only,
+                limit=min(limit, 50),
+            )
+
+        return {"items": items, "count": len(items), "query": q}
+
+    except Exception as e:
+        print(f"Error in location search JSON API: {e}")
+        return {"error": str(e), "items": []}
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
