@@ -112,15 +112,17 @@ App runs at http://localhost:5001
 - [x] Feature #27: Логирование переходов (2025-01-15) - Already in Feature #25
 - [x] Feature #28: Автопереход logistics+customs → sales_review (2025-01-15)
 - [x] Feature #29: Назначение исполнителей при переходе (2025-01-15)
+- [x] Feature #30: Сервис назначений брендов (2025-01-15)
 
 ### Next Up
-- Feature #30: Сервис назначений брендов
+- Feature #31: Получение менеджера по бренду
+- Feature #32: Получение брендов менеджера
 
 ### Progress
-- **29 of 88 features completed** (33%)
+- **30 of 88 features completed** (34%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
-- **WORKFLOW ENGINE IN PROGRESS** (features 23-29 done, 3 more to go: 30-32)
+- **WORKFLOW ENGINE IN PROGRESS** (features 23-30 done, 2 more to go: 31-32)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -152,12 +154,18 @@ App runs at http://localhost:5001
     - complete_logistics() - Mark logistics complete and trigger auto-check
     - complete_customs() - Mark customs complete and trigger auto-check
     - get_parallel_stages_status() - Get completion status of parallel stages
-  - **NEW (Feature #29)**: Procurement assignment functions:
+  - Procurement assignment functions (Feature #29):
     - get_procurement_users_for_quote() - Get brand → user mapping
     - assign_procurement_users_to_quote() - Auto-assign users to items and quote
     - transition_to_pending_procurement() - Specialized transition with auto-assignment
     - get_quote_procurement_status() - Get detailed procurement status
+- **NEW (Feature #30)**: Brand assignment service (services/brand_service.py):
+  - Full CRUD: create_brand_assignment, upsert_brand_assignment, bulk_create_assignments
+  - Read: get_brand_assignment, get_brand_assignment_by_brand, get_all_brand_assignments
+  - Update: update_brand_assignment, reassign_brand
+  - Delete: delete_brand_assignment, delete_brand_assignment_by_brand, delete_all_user_assignments
+  - Utilities: get_unique_brands_in_org, get_unassigned_brands, get_brand_manager_mapping, count_assignments_by_user, is_brand_assigned
 - Added /unauthorized route in main.py
 - Session now includes roles: session["user"]["roles"] = ["sales", "admin", ...]
 - Added session-based helpers: user_has_role, user_has_any_role, get_user_roles_from_session
-- Next: Feature #30 - CRUD service for brand_assignments table
+- Next: Feature #31 - get_procurement_manager(org_id, brand) function

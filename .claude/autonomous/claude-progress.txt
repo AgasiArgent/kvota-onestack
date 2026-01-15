@@ -691,3 +691,27 @@
   - services/workflow_service.py (updated - added ~460 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #30: Сервис назначений брендов
+- Created new service file: services/brand_service.py
+- Implemented complete CRUD operations for brand_assignments table:
+  - CREATE: create_brand_assignment, upsert_brand_assignment, bulk_create_assignments
+  - READ: get_brand_assignment, get_brand_assignment_by_brand, get_all_brand_assignments,
+          get_user_brand_assignments, get_assignments_with_user_details
+  - UPDATE: update_brand_assignment, reassign_brand
+  - DELETE: delete_brand_assignment, delete_brand_assignment_by_brand, delete_all_user_assignments
+- Added utility functions:
+  - get_unique_brands_in_org() - Get all assigned brand names
+  - get_unassigned_brands() - Find brands without managers
+  - get_brand_manager_mapping() - Dict mapping brand → user_id
+  - count_assignments_by_user() - Count brands per manager
+  - is_brand_assigned() - Check if brand has manager
+- Created BrandAssignment dataclass for type-safe returns
+- Uses case-insensitive brand matching (ilike) for consistency
+- All functions use service role key for admin operations
+- Updated services/__init__.py to export all 20 new functions
+- Verified imports work correctly
+- Files changed:
+  - services/brand_service.py (new - ~580 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

@@ -32,6 +32,33 @@ from .role_service import (
     require_all_roles,
     get_session_user_roles,
 )
+from .brand_service import (
+    # Data class
+    BrandAssignment,
+    # Create operations
+    create_brand_assignment,
+    upsert_brand_assignment,
+    bulk_create_assignments,
+    # Read operations
+    get_brand_assignment,
+    get_brand_assignment_by_brand,
+    get_all_brand_assignments,
+    get_user_brand_assignments,
+    get_assignments_with_user_details,
+    # Update operations
+    update_brand_assignment,
+    reassign_brand,
+    # Delete operations
+    delete_brand_assignment,
+    delete_brand_assignment_by_brand,
+    delete_all_user_assignments,
+    # Utility functions
+    get_unique_brands_in_org,
+    get_unassigned_brands,
+    get_brand_manager_mapping,
+    count_assignments_by_user,
+    is_brand_assigned,
+)
 from .workflow_service import (
     # Enum and data classes
     WorkflowStatus,
@@ -116,6 +143,26 @@ __all__ = [
     "require_any_role",
     "require_all_roles",
     "get_session_user_roles",
+    # Brand assignments (Feature #30)
+    "BrandAssignment",
+    "create_brand_assignment",
+    "upsert_brand_assignment",
+    "bulk_create_assignments",
+    "get_brand_assignment",
+    "get_brand_assignment_by_brand",
+    "get_all_brand_assignments",
+    "get_user_brand_assignments",
+    "get_assignments_with_user_details",
+    "update_brand_assignment",
+    "reassign_brand",
+    "delete_brand_assignment",
+    "delete_brand_assignment_by_brand",
+    "delete_all_user_assignments",
+    "get_unique_brands_in_org",
+    "get_unassigned_brands",
+    "get_brand_manager_mapping",
+    "count_assignments_by_user",
+    "is_brand_assigned",
     # Workflow
     "WorkflowStatus",
     "StatusTransition",
