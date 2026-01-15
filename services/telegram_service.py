@@ -654,11 +654,12 @@ def parse_callback_data(callback_data: str) -> Optional[CallbackData]:
 class WebhookResult:
     """Result of processing a webhook update."""
     success: bool
-    update_type: str  # "message", "callback_query", "unknown"
+    update_type: str  # "message", "callback_query", "command", "unknown"
     message: Optional[str] = None
     callback_data: Optional[CallbackData] = None
     telegram_id: Optional[int] = None
     text: Optional[str] = None
+    args: Optional[List[str]] = None  # Command arguments (e.g., /start ABC123 → args=["ABC123"])
     error: Optional[str] = None
 
 
@@ -762,6 +763,7 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
                 update_type="command",
                 telegram_id=telegram_id,
                 text=command,
+                args=args if args else None,
                 message=f"Command {command} received" + (f" with args: {args}" if args else "")
             )
         else:
@@ -785,7 +787,10 @@ async def process_webhook_update(json_data: Dict[str, Any]) -> WebhookResult:
 async def respond_to_command(telegram_id: int, command: str, args: List[str] = None) -> bool:
     """Send a response to a bot command.
 
-    This is a placeholder that will be expanded in later features.
+    Handles the main bot commands:
+    - /start: Greeting and verification instructions (Feature #54)
+    - /status: Show current tasks (Feature #57 placeholder)
+    - /help: Show help information (Feature #57 placeholder)
 
     Args:
         telegram_id: User's Telegram ID
@@ -794,9 +799,6 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 
     Returns:
         True if response was sent successfully
-
-    Note: Full implementations for /start, /status, /help will be
-    added in Features #54, #55, #57.
     """
     bot = get_bot()
     if not bot:
@@ -804,14 +806,41 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 
     args = args or []
 
-    # Basic command responses (placeholders - will be enhanced in later features)
+    # Handle /start command specially (Feature #54)
+    if command == "/start":
+        return await handle_start_command(telegram_id, args)
+
+    # Other commands
     responses = {
-        "/start": "👋 Добро пожаловать в OneStack Bot!\n\nДля привязки аккаунта введите ваш код верификации.",
-        "/help": "📚 Справка по боту:\n\n/start - Начало работы, привязка аккаунта\n/status - Показать мои текущие задачи\n/help - Показать эту справку",
-        "/status": "📋 Для просмотра задач необходимо привязать ваш аккаунт.\n\nИспользуйте /start для начала.",
+        "/help": """📚 *Справка по боту OneStack*
+
+*Доступные команды:*
+• /start — Начало работы, привязка аккаунта
+• /status — Показать мои текущие задачи
+• /help — Показать эту справку
+
+*Как привязать аккаунт:*
+1. Откройте OneStack в браузере
+2. Перейдите в Настройки → Telegram
+3. Нажмите "Получить код привязки"
+4. Отправьте код боту
+
+*Уведомления:*
+После привязки вы будете получать:
+• Уведомления о новых задачах
+• Запросы на согласование
+• Изменения статусов КП
+
+По вопросам работы бота обратитесь к администратору.""",
+
+        "/status": """📋 *Проверка статуса*
+
+Для просмотра ваших задач необходимо привязать Telegram аккаунт к системе.
+
+Используйте /start для получения инструкций по привязке.""",
     }
 
-    response_text = responses.get(command, f"Неизвестная команда: {command}\n\nИспользуйте /help для справки.")
+    response_text = responses.get(command, f"❓ Неизвестная команда: `{command}`\n\nИспользуйте /help для списка доступных команд.")
 
     try:
         await bot.send_message(
@@ -823,4 +852,87 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
         return True
     except TelegramError as e:
         logger.error(f"Failed to send command response: {e}")
+        return False
+
+
+async def handle_start_command(telegram_id: int, args: List[str] = None) -> bool:
+    """Handle the /start command with greeting and verification instructions.
+
+    Feature #54: Команда /start (приветствие и инструкция по привязке)
+
+    The /start command can be called in two ways:
+    1. /start - Shows welcome message and instructions
+    2. /start <code> - Attempts to verify account with the provided code
+       (Actual verification is handled in Feature #55)
+
+    Args:
+        telegram_id: User's Telegram ID
+        args: Optional arguments (verification code)
+
+    Returns:
+        True if message was sent successfully
+    """
+    bot = get_bot()
+    if not bot:
+        return False
+
+    args = args or []
+
+    # If a code is provided, show message that verification will be attempted
+    # Actual verification logic is in Feature #55
+    if args:
+        code = args[0].strip().upper()
+        # This will be expanded in Feature #55 (Верификация аккаунта)
+        response_text = f"""🔄 *Проверка кода привязки*
+
+Код: `{code}`
+
+⏳ Проверяю ваш код верификации...
+
+_Если код неверный или устарел, получите новый в настройках системы._"""
+
+        # For now, just show the message. Feature #55 will add actual verification
+        logger.info(f"Verification code received from {telegram_id}: {code}")
+    else:
+        # Standard greeting without code
+        response_text = """👋 *Добро пожаловать в OneStack Bot!*
+
+Этот бот поможет вам:
+• Получать уведомления о новых задачах
+• Согласовывать КП прямо в Telegram
+• Отслеживать статусы ваших заявок
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+*Как привязать аккаунт:*
+
+1️⃣ Откройте OneStack в браузере
+   → Войдите в свой аккаунт
+
+2️⃣ Перейдите в Настройки
+   → Раздел "Telegram"
+
+3️⃣ Нажмите "Получить код привязки"
+   → Скопируйте 6-значный код
+
+4️⃣ Отправьте код этому боту
+   → Или нажмите кнопку в системе
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💡 *Подсказка:* Код действует 15 минут.
+Если код устарел, получите новый.
+
+📚 Используйте /help для справки."""
+
+    try:
+        await bot.send_message(
+            chat_id=telegram_id,
+            text=response_text,
+            parse_mode="Markdown"
+        )
+        logger.info(f"Sent /start response to {telegram_id}" + (" (with code)" if args else ""))
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to send /start response: {e}")
         return False

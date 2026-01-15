@@ -6078,8 +6078,8 @@ async def telegram_webhook(request):
         if result.success:
             # Handle different update types
             if result.update_type == "command" and result.telegram_id and result.text:
-                # Respond to commands
-                await respond_to_command(result.telegram_id, result.text)
+                # Respond to commands, passing any arguments (e.g., /start ABC123)
+                await respond_to_command(result.telegram_id, result.text, result.args)
 
             elif result.update_type == "callback_query" and result.callback_data:
                 # Callback query handling will be expanded in Features #60, #61

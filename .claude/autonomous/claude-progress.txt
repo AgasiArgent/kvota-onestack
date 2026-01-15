@@ -1231,3 +1231,31 @@
   - services/telegram_service.py (~200 lines added for webhook processing)
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #53 done
+
+
+## Session 2025-01-15 - Feature #54: Команда /start (приветствие и инструкция по привязке)
+- Enhanced handle_start_command() function in telegram_service.py:
+  - Shows welcome message with step-by-step instructions for account linking
+  - Lists bot capabilities (notifications, approvals, status tracking)
+  - Explains 4-step process to get and use verification code
+  - Notes 15-minute code validity period
+- Added support for /start with verification code argument:
+  - Parses argument from /start ABC123 format
+  - Shows "checking code" message (actual verification in Feature #55)
+  - Logs received codes for debugging
+- Enhanced WebhookResult dataclass:
+  - Added args: Optional[List[str]] field for command arguments
+  - Now properly extracts and passes arguments through the pipeline
+- Updated process_webhook_update() to include args in command results
+- Updated main.py webhook handler to pass args to respond_to_command()
+- Improved /help command response:
+  - Lists all available commands with descriptions
+  - Includes account linking instructions
+  - Describes notification types user will receive
+- Improved /status command response:
+  - Shows message that account linking is required
+  - Points to /start for instructions
+- Files changed:
+  - services/telegram_service.py (~100 lines modified/added)
+  - main.py (1 line - pass args to respond_to_command)
+- Status: COMPLETE - Feature #54 done
