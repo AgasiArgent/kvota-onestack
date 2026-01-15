@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project_specification>
-  <project_name>OneStack Workflow Extension</project_name>
-  <version>2.0</version>
-  <created>2025-01-14</created>
+  <project_name>Kvota OneStack - Quote Workflow System</project_name>
+  <version>3.0</version>
+  <created>2025-01-15</created>
 
   <overview>
-    Расширение существующей системы OneStack для управления полным циклом
-    коммерческих предложений (КП) с многоролевым workflow, уведомлениями
-    через Telegram и финансовым учётом план-факт.
+    Полноценная система управления коммерческими предложениями (КП) с многоролевым
+    workflow, цепочкой поставок из 4 типов компаний, уведомлениями через Telegram
+    и финансовым учётом план-факт.
 
-    Текущая система: расчёт КП одним пользователем.
-    Целевая система: полный бизнес-процесс от заявки до сделки с участием
-    8 ролей и автоматическими уведомлениями.
+    Цепочка поставок: ПОСТАВЩИК → КОМПАНИЯ-ЗАКУПЩИК → КОМПАНИЯ-ПРОДАВЕЦ → КЛИЕНТ
+
+    - Поставщик (Supplier): Внешняя компания, у которой покупаем товар
+    - Компания-закупщик (Buyer Company): Наше юрлицо для закупок
+    - Компания-продавец (Seller Company): Наше юрлицо для продаж
+    - Клиент (Customer): Внешняя компания, которой продаём
   </overview>
 
   <technology_stack>
@@ -19,858 +22,1046 @@
       <language>Python 3.14</language>
       <framework>FastHTML + HTMX</framework>
       <database>Supabase PostgreSQL</database>
-      <existing_code>main.py (2100+ lines), calculation_engine.py</existing_code>
     </backend>
     <integrations>
       <telegram>python-telegram-bot для уведомлений и согласований</telegram>
     </integrations>
   </technology_stack>
 
-  <business_process>
-    <step number="1" name="request">
-      <actor>sales</actor>
-      <description>Менеджер по продажам загружает список товаров от клиента</description>
-      <actions>
-        - Создание КП (quote) со статусом draft
-        - Загрузка товаров (quote_items)
-        - Отправка на оценку закупок
-      </actions>
-      <next_status>pending_procurement</next_status>
-    </step>
+  <!-- ============================================ -->
+  <!-- SUPPLY CHAIN: 4 COMPANY TYPES -->
+  <!-- ============================================ -->
 
-    <step number="2" name="procurement">
-      <actor>procurement</actor>
-      <description>Менеджер по закупкам оценивает позиции по своим брендам</description>
-      <actions>
-        - Получает уведомление в Telegram
-        - Скачивает список позиций по своим брендам
-        - Заполняет: цена, страна/город поставщика, вес
-        - Заполняет: срок производства, наша компания-плательщик
-        - Заполняет: % аванса поставщику, условия оплаты поставщику
-        - Загружает данные в систему
-      </actions>
-      <trigger>Все бренды в КП оценены</trigger>
-      <next_status>pending_logistics, pending_customs (параллельно)</next_status>
-    </step>
-
-    <step number="3a" name="logistics">
-      <actor>logistics</actor>
-      <description>Логист рассчитывает стоимость доставки</description>
-      <actions>
-        - Получает уведомление в Telegram
-        - Заполняет стоимость логистики по сегментам:
-          * От поставщика до хаба
-          * От хаба до таможни
-          * От таможни до клиента
-        - Указывает срок на логистику
-      </actions>
-      <next_status>pending_sales_review (когда и logistics и customs готовы)</next_status>
-    </step>
-
-    <step number="3b" name="customs">
-      <actor>customs</actor>
-      <description>Менеджер ТО (Олег Князев) заполняет таможенные данные</description>
-      <actions>
-        - Получает уведомление в Telegram
-        - Заполняет коды ТН ВЭД для каждой позиции
-        - Указывает пошлины и доп. расходы на таможне
-      </actions>
-      <next_status>pending_sales_review (когда и logistics и customs готовы)</next_status>
-    </step>
-
-    <step number="4" name="sales_review">
-      <actor>sales</actor>
-      <description>Менеджер по продажам формирует КП</description>
-      <actions>
-        - Видит полную себестоимость и сроки
-        - Выбирает наценку
-        - Выбирает условия оплаты с клиентом (отсрочки, разбивка)
-        - Видит preview итоговых цен
-        - Отправляет на проверку контроллеру КП
-      </actions>
-      <next_status>pending_quote_control</next_status>
-    </step>
-
-    <step number="5" name="quote_control">
-      <actor>quote_controller</actor>
-      <description>Жанна проверяет КП перед отправкой клиенту</description>
-      <checks>
-        <check name="deal_type">Тип сделки (поставка/транзит) - разная наценка</check>
-        <check name="incoterms">Базис поставки (чаще DDP)</check>
-        <check name="currency">Валюта КП, корректность конвертации</check>
-        <check name="payment_terms">Условия расчётов с клиентом</check>
-        <check name="supplier_advance">Размер аванса поставщику</check>
-        <check name="purchase_prices">Корректность закупочных цен, НДС</check>
-        <check name="logistics_cost">Корректность логистики (не из головы)</check>
-        <check name="min_markup">Минимальные наценки</check>
-        <check name="lpr_reward">Вознаграждения ЛПРа</check>
-        <check name="forex_risk">% курсовой разницы</check>
-      </checks>
-      <actions>
-        - Возврат на доработку менеджеру по продажам
-        - ИЛИ отправка на согласование топ-менеджеру (если нужно)
-        - ИЛИ одобрение
-      </actions>
-      <approval_triggers>
-        - Валюта КП = рубли
-        - Условия не 100% предоплата
-        - Наценка ниже минимума
-        - Есть вознаграждение ЛПРа
-      </approval_triggers>
-      <next_status>pending_approval ИЛИ approved</next_status>
-    </step>
-
-    <step number="6" name="top_manager_approval">
-      <actor>top_manager</actor>
-      <description>Согласование топ-менеджером через Telegram</description>
-      <actions>
-        - Получает уведомление в Telegram с деталями
-        - Нажимает "Согласовать" или "Отклонить"
-        - Может добавить комментарий
-      </actions>
-      <next_status>approved ИЛИ rejected</next_status>
-    </step>
-
-    <step number="7" name="client_negotiation">
-      <actor>sales</actor>
-      <description>Торговля с клиентом, версии КП</description>
-      <actions>
-        - Отправка КП клиенту
-        - Создание версий (v1, v2, v3...)
-        - Выбор финальной версии
-        - Запрос на генерацию спецификации
-      </actions>
-      <next_status>pending_spec_control</next_status>
-    </step>
-
-    <step number="8" name="spec_control">
-      <actor>spec_controller</actor>
-      <description>Контроллер спецификаций проверяет и вводит данные</description>
+  <supply_chain>
+    <entity type="supplier" name="Поставщик">
+      <description>Внешняя компания-поставщик товаров</description>
+      <level>item</level>
+      <note>Каждая позиция в КП может иметь своего поставщика</note>
       <fields>
-        <field name="proposalIdn" type="String">IDN КП</field>
-        <field name="itemIndSku" type="String">IDN-SKU</field>
-        <field name="specificationNumber" type="String">Номер спецификации</field>
-        <field name="signDate" type="DateTime">Дата подписания</field>
-        <field name="validityPeriod" type="String">Срок действия</field>
-        <field name="specificationCurrency" type="String">Валюта спецификации</field>
-        <field name="exchangeRateToRuble" type="Float">Курс к рублю</field>
-        <field name="clientPaymentTermAfterUPD" type="Int">Срок оплаты после УПД</field>
-        <field name="clientPaymentTerms" type="String">Условия оплаты клиента</field>
-        <field name="cargoPickupCountry" type="String">Страна забора груза</field>
-        <field name="readinessPeriod" type="String">Срок готовности</field>
-        <field name="goodsShipmentCountry" type="String">Страна товара к отгрузке</field>
-        <field name="deliveryCityInRussia" type="String">Город доставки в РФ</field>
-        <field name="cargoType" type="String">Тип груза</field>
-        <field name="logisticsPeriod" type="String">Срок на логистику</field>
-        <field name="ourLegalEntity" type="String">Наше юридическое лицо</field>
-        <field name="clientLegalEntity" type="String">Юридическое лицо клиента</field>
-        <field name="supplierPaymentCountry" type="String">Страна оплаты поставщику</field>
+        - id, organization_id
+        - name (название компании)
+        - supplier_code (3 буквы, например CMT, RAR)
+        - country, city
+        - inn, kpp (если российский)
+        - contact_person, contact_email, contact_phone
+        - payment_terms (условия оплаты по умолчанию)
+        - is_active, created_at, updated_at
       </fields>
-      <actions>
-        - Проверка и ввод данных
-        - Генерация PDF спецификации
-        - Отправка клиенту
-      </actions>
-      <next_status>pending_signature</next_status>
-    </step>
+      <relations>
+        - brand_supplier_assignments: связь с брендами
+        - bank_accounts: банковские реквизиты
+      </relations>
+    </entity>
 
-    <step number="9" name="signature">
-      <actor>sales</actor>
-      <description>Подписание спецификации</description>
-      <actions>
-        - Получение подписанного скана от клиента
-        - Загрузка скана в систему
-        - Проверка соответствия (человек или AI)
-        - Перевод в статус "Сделка"
-      </actions>
-      <next_status>deal</next_status>
-    </step>
+    <entity type="buyer_company" name="Компания-закупщик">
+      <description>Наше юридическое лицо для закупок</description>
+      <level>item</level>
+      <note>Каждая позиция может закупаться через разные наши юрлица</note>
+      <fields>
+        - id, organization_id
+        - name (название юрлица)
+        - company_code (3 буквы)
+        - country
+        - inn, kpp, ogrn (российские реквизиты)
+        - registration_address
+        - general_director_name, general_director_position
+        - is_active, created_at, updated_at
+      </fields>
+      <relations>
+        - bank_accounts: банковские реквизиты
+      </relations>
+    </entity>
 
-    <step number="10" name="plan_fact">
-      <actor>finance</actor>
-      <description>Ведение план-факта по сделке</description>
-      <actions>
-        - Создание плановых платежей на основе условий сделки
-        - Регистрация фактических платежей
-        - Отслеживание отклонений
-      </actions>
-      <payment_types>
-        - Платежи от клиента (несколько траншей)
-        - Платежи поставщику
-        - Платежи за логистику
-        - Платежи за таможню
-        - Налоги
-        - Комиссия финагента
-        - Прочие расходы из себестоимости
-      </payment_types>
-    </step>
-  </business_process>
+    <entity type="seller_company" name="Компания-продавец">
+      <description>Наше юридическое лицо для продаж клиенту</description>
+      <level>quote</level>
+      <note>Одна компания-продавец на весь КП</note>
+      <fields>
+        - id, organization_id
+        - name (название юрлица)
+        - supplier_code (3 буквы: MBR, RAR, GES, TEX, CMT)
+        - country
+        - inn, kpp, ogrn
+        - registration_address
+        - general_director_name, general_director_position
+        - is_active, created_at, updated_at
+      </fields>
+      <relations>
+        - bank_accounts: банковские реквизиты
+      </relations>
+      <examples>
+        - МАСТЕР БЭРИНГ ООО (MBR) - Россия
+        - РадРесурс ООО (RAR) - Россия
+        - ЦМТО1 ООО (CMT) - Россия
+        - GESTUS DIŞ TİCARET (GES) - Турция
+        - TEXCEL OTOMOTİV (TEX) - Турция
+      </examples>
+    </entity>
+
+    <entity type="customer" name="Клиент">
+      <description>Внешняя компания-покупатель</description>
+      <level>quote</level>
+      <fields>
+        - id, organization_id
+        - name (название компании)
+        - inn, kpp, ogrn
+        - legal_address, actual_address
+        - general_director_name, general_director_position (ЛПР-подписант)
+        - warehouse_addresses (JSONB массив складов)
+        - is_active, created_at, updated_at
+      </fields>
+      <relations>
+        - customer_contacts: контактные лица (ЛПР)
+        - customer_contracts: договоры поставки
+        - bank_accounts: банковские реквизиты
+      </relations>
+    </entity>
+  </supply_chain>
+
+  <!-- ============================================ -->
+  <!-- IDN SYSTEM: IDENTIFICATION NUMBERS -->
+  <!-- ============================================ -->
+
+  <idn_system>
+    <description>Система идентификационных номеров для КП и позиций</description>
+
+    <quote_idn format="SUPPLIER-INN-YEAR-SEQ">
+      <example>CMT-1234567890-2025-1</example>
+      <parts>
+        - SUPPLIER: 3-буквенный код компании-продавца
+        - INN: ИНН клиента (10 цифр)
+        - YEAR: Год (4 цифры)
+        - SEQ: Порядковый номер в году
+      </parts>
+      <storage>organizations.idn_counters JSONB {year: {customer_inn: seq}}</storage>
+    </quote_idn>
+
+    <item_idn format="QUOTE_IDN-POSITION">
+      <example>CMT-1234567890-2025-1-001</example>
+      <note>Позиция в рамках КП (001, 002, ...)</note>
+    </item_idn>
+  </idn_system>
+
+  <!-- ============================================ -->
+  <!-- DATABASE SCHEMA -->
+  <!-- ============================================ -->
+
+  <database_schema>
+    <!-- COMPANY ENTITIES -->
+
+    <table name="suppliers">
+      <description>Поставщики (внешние компании)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="name" type="VARCHAR(255)" required="true"/>
+        <column name="supplier_code" type="VARCHAR(3)" required="true" unique="per_org"/>
+        <column name="country" type="VARCHAR(100)"/>
+        <column name="city" type="VARCHAR(100)"/>
+        <column name="inn" type="VARCHAR(12)"/>
+        <column name="kpp" type="VARCHAR(9)"/>
+        <column name="contact_person" type="VARCHAR(255)"/>
+        <column name="contact_email" type="VARCHAR(255)"/>
+        <column name="contact_phone" type="VARCHAR(50)"/>
+        <column name="default_payment_terms" type="TEXT"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+      <constraints>
+        <unique>organization_id, supplier_code</unique>
+        <check>supplier_code ~ '^[A-Z]{3}$'</check>
+      </constraints>
+    </table>
+
+    <table name="buyer_companies">
+      <description>Компании-закупщики (наши юрлица для закупок)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="name" type="VARCHAR(255)" required="true"/>
+        <column name="company_code" type="VARCHAR(3)" required="true" unique="per_org"/>
+        <column name="country" type="VARCHAR(100)"/>
+        <column name="inn" type="VARCHAR(12)"/>
+        <column name="kpp" type="VARCHAR(9)"/>
+        <column name="ogrn" type="VARCHAR(15)"/>
+        <column name="registration_address" type="TEXT"/>
+        <column name="general_director_name" type="VARCHAR(255)"/>
+        <column name="general_director_position" type="VARCHAR(100)" default="Генеральный директор"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="seller_companies">
+      <description>Компании-продавцы (наши юрлица для продаж)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="name" type="VARCHAR(255)" required="true"/>
+        <column name="supplier_code" type="VARCHAR(3)" required="true" unique="per_org"/>
+        <column name="country" type="VARCHAR(100)"/>
+        <column name="inn" type="VARCHAR(12)"/>
+        <column name="kpp" type="VARCHAR(9)"/>
+        <column name="ogrn" type="VARCHAR(15)"/>
+        <column name="registration_address" type="TEXT"/>
+        <column name="general_director_name" type="VARCHAR(255)"/>
+        <column name="general_director_position" type="VARCHAR(100)" default="Генеральный директор"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="customers">
+      <description>Клиенты (внешние компании-покупатели)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="name" type="VARCHAR(255)" required="true"/>
+        <column name="inn" type="VARCHAR(12)"/>
+        <column name="kpp" type="VARCHAR(9)"/>
+        <column name="ogrn" type="VARCHAR(15)"/>
+        <column name="legal_address" type="TEXT"/>
+        <column name="actual_address" type="TEXT"/>
+        <column name="general_director_name" type="VARCHAR(255)"/>
+        <column name="general_director_position" type="VARCHAR(100)" default="Генеральный директор"/>
+        <column name="warehouse_addresses" type="JSONB" default="[]"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="customer_contacts">
+      <description>Контактные лица клиента (ЛПР)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="customer_id" type="UUID" fk="customers.id"/>
+        <column name="name" type="VARCHAR(255)" required="true"/>
+        <column name="position" type="VARCHAR(255)"/>
+        <column name="email" type="VARCHAR(255)"/>
+        <column name="phone" type="VARCHAR(50)"/>
+        <column name="is_signatory" type="BOOLEAN" default="false"/>
+        <column name="is_primary" type="BOOLEAN" default="false"/>
+        <column name="notes" type="TEXT"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="customer_contracts">
+      <description>Договоры поставки с клиентами</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="customer_id" type="UUID" fk="customers.id"/>
+        <column name="contract_number" type="TEXT" required="true"/>
+        <column name="contract_date" type="DATE" required="true"/>
+        <column name="status" type="TEXT" default="active"/>
+        <column name="next_specification_number" type="INTEGER" default="1"/>
+        <column name="notes" type="TEXT"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+      </columns>
+      <constraints>
+        <check>status IN ('active', 'expired', 'terminated')</check>
+        <unique>organization_id, contract_number</unique>
+      </constraints>
+    </table>
+
+    <table name="bank_accounts">
+      <description>Банковские реквизиты для всех типов компаний</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="entity_type" type="VARCHAR(50)" required="true"/>
+        <column name="entity_id" type="UUID" required="true"/>
+        <column name="bank_name" type="VARCHAR(255)" required="true"/>
+        <column name="account_number" type="VARCHAR(50)" required="true"/>
+        <column name="bik" type="VARCHAR(9)"/>
+        <column name="correspondent_account" type="VARCHAR(20)"/>
+        <column name="swift" type="VARCHAR(11)"/>
+        <column name="iban" type="VARCHAR(34)"/>
+        <column name="currency" type="VARCHAR(3)" default="RUB"/>
+        <column name="is_default" type="BOOLEAN" default="false"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+      <constraints>
+        <check>entity_type IN ('supplier', 'buyer_company', 'seller_company', 'customer')</check>
+      </constraints>
+    </table>
+
+    <!-- LOCATIONS DIRECTORY -->
+
+    <table name="locations">
+      <description>Справочник локаций (города/страны) для выпадающих списков</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="country" type="VARCHAR(100)" required="true"/>
+        <column name="city" type="VARCHAR(100)"/>
+        <column name="code" type="VARCHAR(10)"/>
+        <column name="is_hub" type="BOOLEAN" default="false"/>
+        <column name="is_active" type="BOOLEAN" default="true"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+      <note>Используется для dropdown с поиском при выборе локации забора/доставки</note>
+    </table>
+
+    <!-- BRAND AND ROUTE ASSIGNMENTS -->
+
+    <table name="brand_supplier_assignments">
+      <description>Связь брендов с поставщиками</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="brand" type="VARCHAR(255)" required="true"/>
+        <column name="supplier_id" type="UUID" fk="suppliers.id"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="brand_procurement_assignments">
+      <description>Назначение брендов менеджерам по закупкам</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="brand" type="VARCHAR(255)" required="true"/>
+        <column name="user_id" type="UUID" fk="auth.users.id"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+      </columns>
+      <constraints>
+        <unique>organization_id, brand</unique>
+      </constraints>
+    </table>
+
+    <table name="route_logistics_assignments">
+      <description>Назначение маршрутов логистам</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="route_pattern" type="VARCHAR(255)" required="true"/>
+        <column name="user_id" type="UUID" fk="auth.users.id"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+      </columns>
+      <note>route_pattern: "Китай-*", "Турция-Москва", etc.</note>
+    </table>
+
+    <!-- QUOTES EXTENSION -->
+
+    <table name="quotes" action="extend">
+      <description>Расширение таблицы КП</description>
+      <new_columns>
+        <column name="idn" type="VARCHAR(100)"/>
+        <column name="seller_company_id" type="UUID" fk="seller_companies.id"/>
+        <column name="workflow_status" type="VARCHAR(50)" default="draft"/>
+        <column name="deal_type" type="VARCHAR(20)"/>
+        <column name="assigned_logistics_user_id" type="UUID" fk="auth.users.id"/>
+        <column name="assigned_customs_user_id" type="UUID" fk="auth.users.id"/>
+        <column name="procurement_completed_at" type="TIMESTAMPTZ"/>
+        <column name="logistics_completed_at" type="TIMESTAMPTZ"/>
+        <column name="customs_completed_at" type="TIMESTAMPTZ"/>
+        <column name="current_version" type="INTEGER" default="1"/>
+        <column name="selected_version_id" type="UUID" fk="quote_versions.id"/>
+      </new_columns>
+      <constraints>
+        <check>deal_type IN ('supply', 'transit')</check>
+      </constraints>
+    </table>
+
+    <!-- QUOTE ITEMS EXTENSION -->
+
+    <table name="quote_items" action="extend">
+      <description>Расширение таблицы позиций КП</description>
+      <new_columns>
+        <!-- IDN -->
+        <column name="item_idn" type="VARCHAR(120)"/>
+
+        <!-- Supply chain references (item level) -->
+        <column name="supplier_id" type="UUID" fk="suppliers.id"/>
+        <column name="buyer_company_id" type="UUID" fk="buyer_companies.id"/>
+
+        <!-- Procurement fields -->
+        <column name="assigned_procurement_user_id" type="UUID" fk="auth.users.id"/>
+        <column name="procurement_status" type="VARCHAR(20)" default="pending"/>
+        <column name="procurement_completed_at" type="TIMESTAMPTZ"/>
+        <column name="procurement_completed_by" type="UUID" fk="auth.users.id"/>
+        <column name="pickup_location_id" type="UUID" fk="locations.id"/>
+        <column name="supplier_payment_terms" type="TEXT"/>
+        <column name="supplier_advance_percent" type="DECIMAL(5,2)"/>
+        <column name="production_time_days" type="INTEGER"/>
+        <column name="weight_kg" type="DECIMAL(10,3)"/>
+        <column name="volume_m3" type="DECIMAL(10,4)"/>
+
+        <!-- Customs fields -->
+        <column name="hs_code" type="VARCHAR(20)"/>
+        <column name="customs_duty_percent" type="DECIMAL(5,2)"/>
+        <column name="customs_extra_cost" type="DECIMAL(15,2)"/>
+
+        <!-- Logistics fields (multi-segment) -->
+        <column name="logistics_supplier_to_hub" type="DECIMAL(15,2)"/>
+        <column name="logistics_hub_to_customs" type="DECIMAL(15,2)"/>
+        <column name="logistics_customs_to_customer" type="DECIMAL(15,2)"/>
+        <column name="logistics_total_days" type="INTEGER"/>
+      </new_columns>
+    </table>
+
+    <!-- SUPPLIER INVOICES REGISTRY -->
+
+    <table name="supplier_invoices">
+      <description>Реестр инвойсов от поставщиков</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="supplier_id" type="UUID" fk="suppliers.id"/>
+        <column name="invoice_number" type="VARCHAR(100)" required="true"/>
+        <column name="invoice_date" type="DATE" required="true"/>
+        <column name="due_date" type="DATE"/>
+        <column name="total_amount" type="DECIMAL(15,2)" required="true"/>
+        <column name="currency" type="VARCHAR(3)" default="USD"/>
+        <column name="status" type="VARCHAR(20)" default="pending"/>
+        <column name="notes" type="TEXT"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+      </columns>
+      <constraints>
+        <check>status IN ('pending', 'partially_paid', 'paid', 'overdue', 'cancelled')</check>
+        <unique>organization_id, supplier_id, invoice_number</unique>
+      </constraints>
+    </table>
+
+    <table name="supplier_invoice_items">
+      <description>Позиции инвойса (связь с позициями КП)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="invoice_id" type="UUID" fk="supplier_invoices.id"/>
+        <column name="quote_item_id" type="UUID" fk="quote_items.id"/>
+        <column name="quantity" type="DECIMAL(10,2)"/>
+        <column name="unit_price" type="DECIMAL(15,4)"/>
+        <column name="total_price" type="DECIMAL(15,2)"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="supplier_invoice_payments">
+      <description>Платежи по инвойсам поставщиков</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="invoice_id" type="UUID" fk="supplier_invoices.id"/>
+        <column name="payment_date" type="DATE" required="true"/>
+        <column name="amount" type="DECIMAL(15,2)" required="true"/>
+        <column name="currency" type="VARCHAR(3)" default="USD"/>
+        <column name="exchange_rate" type="DECIMAL(10,4)"/>
+        <column name="payment_type" type="VARCHAR(20)" default="advance"/>
+        <column name="buyer_company_id" type="UUID" fk="buyer_companies.id"/>
+        <column name="payment_document" type="VARCHAR(100)"/>
+        <column name="notes" type="TEXT"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+      </columns>
+      <constraints>
+        <check>payment_type IN ('advance', 'partial', 'final', 'refund')</check>
+      </constraints>
+    </table>
+
+    <!-- WORKFLOW -->
+
+    <table name="workflow_transitions">
+      <description>Аудит-лог всех переходов статусов</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="quote_id" type="UUID" fk="quotes.id"/>
+        <column name="from_status" type="VARCHAR(50)"/>
+        <column name="to_status" type="VARCHAR(50)"/>
+        <column name="actor_id" type="UUID" fk="auth.users.id"/>
+        <column name="actor_role" type="VARCHAR(50)"/>
+        <column name="comment" type="TEXT"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="approvals">
+      <description>Запросы на согласование</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="quote_id" type="UUID" fk="quotes.id"/>
+        <column name="requested_by" type="UUID" fk="auth.users.id"/>
+        <column name="approver_id" type="UUID" fk="auth.users.id"/>
+        <column name="approval_type" type="VARCHAR(50)"/>
+        <column name="reason" type="TEXT"/>
+        <column name="status" type="VARCHAR(20)" default="pending"/>
+        <column name="decision_comment" type="TEXT"/>
+        <column name="modifications" type="JSONB"/>
+        <column name="requested_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="decided_at" type="TIMESTAMPTZ"/>
+      </columns>
+      <note>modifications: JSON с изменениями, внесёнными топ-менеджером при согласовании</note>
+    </table>
+
+    <!-- SPECIFICATIONS -->
+
+    <table name="specifications">
+      <description>Спецификации (экспорт КП)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="quote_id" type="UUID" fk="quotes.id"/>
+        <column name="quote_version_id" type="UUID" fk="quote_versions.id"/>
+        <column name="contract_id" type="UUID" fk="customer_contracts.id"/>
+        <column name="specification_number" type="INTEGER"/>
+        <column name="specification_date" type="DATE" default="CURRENT_DATE"/>
+        <column name="proposal_idn" type="VARCHAR(100)"/>
+        <column name="sign_date" type="DATE"/>
+        <column name="validity_period" type="VARCHAR(50)"/>
+        <column name="specification_currency" type="VARCHAR(3)"/>
+        <column name="exchange_rate_to_ruble" type="DECIMAL(10,4)"/>
+        <column name="client_payment_term_after_upd" type="INTEGER"/>
+        <column name="client_payment_terms" type="TEXT"/>
+        <column name="delivery_city_russia" type="VARCHAR(100)"/>
+        <column name="our_legal_entity" type="VARCHAR(255)"/>
+        <column name="client_legal_entity" type="VARCHAR(255)"/>
+        <column name="signed_scan_url" type="TEXT"/>
+        <column name="status" type="VARCHAR(20)" default="draft"/>
+        <column name="export_data" type="JSONB" default="{}"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+      <constraints>
+        <check>status IN ('draft', 'pending_review', 'approved', 'signed', 'cancelled')</check>
+      </constraints>
+    </table>
+
+    <!-- DEALS AND PLAN-FACT -->
+
+    <table name="deals">
+      <description>Сделки (подписанные спецификации)</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="organization_id" type="UUID" fk="organizations.id"/>
+        <column name="specification_id" type="UUID" fk="specifications.id"/>
+        <column name="quote_id" type="UUID" fk="quotes.id"/>
+        <column name="deal_number" type="VARCHAR(100)"/>
+        <column name="signed_at" type="DATE"/>
+        <column name="total_amount" type="DECIMAL(15,2)"/>
+        <column name="currency" type="VARCHAR(3)"/>
+        <column name="status" type="VARCHAR(20)" default="active"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <table name="plan_fact_categories">
+      <description>Справочник категорий платежей</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="code" type="VARCHAR(50)" unique="true"/>
+        <column name="name" type="VARCHAR(100)"/>
+        <column name="is_income" type="BOOLEAN"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+      <seed_data>
+        - client_payment (Платёж от клиента, income=true)
+        - supplier_payment (Платёж поставщику, income=false)
+        - logistics_cost (Логистика, income=false)
+        - customs_cost (Таможня, income=false)
+        - tax (Налоги, income=false)
+        - finance_commission (Комиссия финагента, income=false)
+        - lpr_reward (Вознаграждение ЛПР, income=false)
+        - other_expense (Прочие расходы, income=false)
+      </seed_data>
+    </table>
+
+    <table name="plan_fact_items">
+      <description>Записи план-факта</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="deal_id" type="UUID" fk="deals.id"/>
+        <column name="category_id" type="UUID" fk="plan_fact_categories.id"/>
+        <column name="description" type="VARCHAR(255)"/>
+        <column name="planned_amount" type="DECIMAL(15,2)"/>
+        <column name="planned_currency" type="VARCHAR(3)"/>
+        <column name="planned_date" type="DATE"/>
+        <column name="actual_amount" type="DECIMAL(15,2)"/>
+        <column name="actual_currency" type="VARCHAR(3)"/>
+        <column name="actual_date" type="DATE"/>
+        <column name="actual_exchange_rate" type="DECIMAL(10,4)"/>
+        <column name="variance_amount" type="DECIMAL(15,2)"/>
+        <column name="payment_document" type="VARCHAR(100)"/>
+        <column name="notes" type="TEXT"/>
+        <column name="created_by" type="UUID" fk="auth.users.id"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="updated_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+
+    <!-- TELEGRAM -->
+
+    <table name="telegram_users">
+      <description>Связь Telegram с пользователями системы</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="user_id" type="UUID" fk="auth.users.id"/>
+        <column name="telegram_id" type="BIGINT" unique="true"/>
+        <column name="telegram_username" type="VARCHAR(100)"/>
+        <column name="is_verified" type="BOOLEAN" default="false"/>
+        <column name="verification_code" type="VARCHAR(10)"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+        <column name="verified_at" type="TIMESTAMPTZ"/>
+      </columns>
+    </table>
+
+    <table name="notifications">
+      <description>История уведомлений</description>
+      <columns>
+        <column name="id" type="UUID" pk="true"/>
+        <column name="user_id" type="UUID" fk="auth.users.id"/>
+        <column name="quote_id" type="UUID" fk="quotes.id"/>
+        <column name="deal_id" type="UUID" fk="deals.id"/>
+        <column name="type" type="VARCHAR(50)"/>
+        <column name="title" type="VARCHAR(255)"/>
+        <column name="message" type="TEXT"/>
+        <column name="channel" type="VARCHAR(20)"/>
+        <column name="status" type="VARCHAR(20)" default="pending"/>
+        <column name="telegram_message_id" type="BIGINT"/>
+        <column name="sent_at" type="TIMESTAMPTZ"/>
+        <column name="read_at" type="TIMESTAMPTZ"/>
+        <column name="created_at" type="TIMESTAMPTZ" default="NOW()"/>
+      </columns>
+    </table>
+  </database_schema>
+
+  <!-- ============================================ -->
+  <!-- ROLES AND PERMISSIONS -->
+  <!-- ============================================ -->
 
   <roles>
     <role code="sales" name="Менеджер по продажам">
-      <permissions>
-        - Создание КП
-        - Редактирование своих КП
-        - Просмотр своих КП и сделок
-        - Выбор наценки и условий клиента
-        - Загрузка сканов подписей
-      </permissions>
+      <description>Создаёт КП, работает с клиентами</description>
+      <workspace>
+        <views>Мои КП, Мои сделки, Клиенты</views>
+        <actions>
+          - Создание КП (draft)
+          - Загрузка товаров
+          - Редактирование ТОЛЬКО: наценка, условия клиента, срок действия
+          - НЕ может редактировать: закупочные цены, данные поставщика
+          - Отправка на оценку закупок
+          - Создание версий КП (v1, v2, v3)
+          - Отправка КП клиенту
+          - Запрос на генерацию спецификации
+          - Загрузка подписанного скана
+        </actions>
+        <versioning>
+          При изменении согласованного КП создаётся новая версия.
+          История версий сохраняется.
+        </versioning>
+      </workspace>
+    </role>
+
+    <role code="head_of_sales" name="Руководитель отдела продаж">
+      <description>Видит КП всех менеджеров отдела</description>
+      <workspace>
+        <views>Все КП отдела, Аналитика по менеджерам</views>
+        <actions>
+          - Всё что может sales
+          - Просмотр КП своих подчинённых
+          - Переназначение КП между менеджерами
+        </actions>
+      </workspace>
     </role>
 
     <role code="procurement" name="Менеджер по закупкам">
-      <permissions>
-        - Просмотр КП с назначенными брендами
-        - Редактирование закупочных данных
-        - Скачивание списков для оценки
-      </permissions>
+      <description>Оценивает позиции по назначенным брендам</description>
+      <workspace>
+        <views>КП с моими брендами</views>
+        <fields_editable>
+          - Закупочная цена
+          - Поставщик (supplier_id) - выбор из справочника
+          - Компания-закупщик (buyer_company_id) - выбор из наших юрлиц
+          - Город/страна забора (pickup_location_id) - dropdown с поиском
+          - Вес (кг), Объём (м³)
+          - Срок производства (дней)
+          - Условия оплаты поставщику
+          - % аванса поставщику
+        </fields_editable>
+        <fields_readonly>
+          - Цена продажи (видит, не редактирует)
+        </fields_readonly>
+        <actions>
+          - Скачивание списка позиций для оценки
+          - Загрузка оценённых данных
+          - Завершение оценки по бренду
+        </actions>
+      </workspace>
+    </role>
+
+    <role code="head_of_procurement" name="Руководитель отдела закупок">
+      <description>Видит все закупочные данные</description>
+      <workspace>
+        <views>Все КП на закупках, Аналитика по брендам</views>
+        <actions>
+          - Всё что может procurement
+          - Назначение брендов менеджерам
+          - Переназначение позиций
+        </actions>
+      </workspace>
     </role>
 
     <role code="logistics" name="Логист">
-      <permissions>
-        - Просмотр КП на этапе логистики
-        - Редактирование данных логистики
-      </permissions>
+      <description>Рассчитывает стоимость доставки по маршрутам</description>
+      <workspace>
+        <views>КП на моих маршрутах</views>
+        <fields_editable>
+          - Стоимость: поставщик → хаб
+          - Стоимость: хаб → таможня
+          - Стоимость: таможня → клиент
+          - Общий срок на логистику (дней)
+          - Способ доставки (авто/море/ж/д/авиа)
+        </fields_editable>
+        <assignment>По маршрутам (route_logistics_assignments)</assignment>
+        <calculation>
+          Может использовать разные методы расчёта:
+          - По позиции
+          - По объёму
+          - По весу
+          - Фиксированная ставка
+        </calculation>
+      </workspace>
     </role>
 
-    <role code="customs" name="Менеджер ТО">
-      <permissions>
-        - Просмотр КП на этапе таможни
-        - Редактирование таможенных данных
-        - Согласование пошлин
-      </permissions>
+    <role code="head_of_logistics" name="Руководитель логистики">
+      <description>Видит все логистические данные</description>
+      <workspace>
+        <views>Все КП на логистике</views>
+        <actions>
+          - Всё что может logistics
+          - Назначение маршрутов логистам
+        </actions>
+      </workspace>
+    </role>
+
+    <role code="customs" name="Менеджер ТО (таможенного оформления)">
+      <description>Заполняет таможенные данные</description>
+      <workspace>
+        <views>КП на таможенном оформлении</views>
+        <fields_editable>
+          - Код ТН ВЭД (hs_code)
+          - Ставка пошлины (%)
+          - Дополнительные таможенные расходы
+        </fields_editable>
+        <actions>
+          - Заполнение таможенных данных
+          - Завершение этапа таможни
+        </actions>
+      </workspace>
     </role>
 
     <role code="quote_controller" name="Контроллер КП">
-      <permissions>
-        - Просмотр КП на проверке
-        - Возврат на доработку
-        - Отправка на согласование
-        - Одобрение КП
-      </permissions>
+      <description>Проверяет КП перед отправкой клиенту (Жанна)</description>
+      <workspace>
+        <views>КП на проверке</views>
+        <checklist>
+          - Тип сделки (поставка/транзит)
+          - Базис поставки (Incoterms)
+          - Валюта КП
+          - Условия расчётов с клиентом
+          - Размер аванса поставщику
+          - Корректность закупочных цен
+          - Наличие счетов от поставщиков
+          - Корректность логистики
+          - Минимальные наценки
+          - Вознаграждение ЛПР
+          - % курсовой разницы
+        </checklist>
+        <actions>
+          - Возврат на доработку (с комментарием)
+          - Одобрение
+          - Отправка на согласование топ-менеджеру
+        </actions>
+        <invoice_verification>
+          Проверяет наличие инвойсов от поставщиков в реестре.
+          Сверяет суммы и позиции.
+        </invoice_verification>
+      </workspace>
     </role>
 
     <role code="spec_controller" name="Контроллер спецификаций">
-      <permissions>
-        - Просмотр спецификаций на проверке
-        - Ввод данных спецификации
-        - Генерация PDF
-        - Проверка подписей
-      </permissions>
+      <description>Два этапа: проверка перед отправкой + проверка после подписания</description>
+      <workspace>
+        <views>Спецификации на проверке</views>
+        <checkpoint_1 name="before_send">
+          <description>Перед отправкой клиенту</description>
+          <fields_input>
+            - Номер спецификации
+            - IDN КП
+            - Дата
+            - Срок действия
+            - Валюта и курс
+            - Условия оплаты
+            - Юрлицо продавца
+            - Юрлицо клиента
+          </fields_input>
+          <actions>
+            - Генерация PDF
+            - Отправка клиенту
+          </actions>
+        </checkpoint_1>
+        <checkpoint_2 name="after_signature">
+          <description>После получения подписанного скана</description>
+          <actions>
+            - Проверка соответствия скана оригиналу
+            - Подтверждение подписи
+            - Перевод в статус "Сделка"
+          </actions>
+        </checkpoint_2>
+      </workspace>
     </role>
 
     <role code="finance" name="Финансовый менеджер">
-      <permissions>
-        - Просмотр всех сделок
-        - Ведение план-факта
-        - Регистрация платежей
-      </permissions>
+      <description>Ведёт план-факт по сделкам. НЕ согласует КП!</description>
+      <workspace>
+        <views>Активные сделки, План-факт</views>
+        <note>НЕ участвует в согласовании КП - только учёт платежей</note>
+        <actions>
+          - Просмотр всех сделок
+          - Ведение план-факта
+          - Регистрация фактических платежей
+          - Отслеживание отклонений план/факт
+          - Отчёты по периодам
+        </actions>
+        <payment_categories>
+          - Платежи от клиента (несколько траншей)
+          - Платежи поставщикам
+          - Платежи за логистику
+          - Платежи за таможню
+          - Налоги
+          - Комиссия финагента
+          - Вознаграждение ЛПР
+          - Прочие расходы
+        </payment_categories>
+      </workspace>
     </role>
 
     <role code="top_manager" name="Топ-менеджер">
-      <permissions>
-        - Согласование через Telegram
-        - Просмотр всех КП и сделок
-        - Отчёты и аналитика
-      </permissions>
+      <description>Согласует КП при отклонениях от стандартов</description>
+      <workspace>
+        <views>КП на согласовании, Все КП, Аналитика</views>
+        <approval_triggers>
+          - Валюта КП не рубли
+          - Условия не 100% предоплата
+          - Наценка ниже минимума
+          - Есть вознаграждение ЛПР
+        </approval_triggers>
+        <actions>
+          - Согласование через Telegram/Web
+          - Отклонение с комментарием
+          - МОЖЕТ ВНЕСТИ ИЗМЕНЕНИЯ при согласовании
+          - Модификации сохраняются в approvals.modifications
+        </actions>
+        <telegram_buttons>
+          - ✅ Согласовать
+          - ❌ Отклонить
+          - 📝 Подробнее
+        </telegram_buttons>
+      </workspace>
     </role>
 
     <role code="admin" name="Администратор">
-      <permissions>
-        - Управление пользователями
-        - Назначение ролей
-        - Назначение брендов менеджерам
-        - Настройки системы
-      </permissions>
+      <description>Управление системой и пользователями</description>
+      <workspace>
+        <views>Все данные системы</views>
+        <special_ability>
+          ПЕРЕКЛЮЧЕНИЕ ВИДА: может переключаться между ролями
+          для просмотра системы глазами конкретной роли.
+          Это симуляция - админ не получает фактические права роли,
+          только видит интерфейс как эта роль.
+        </special_ability>
+        <actions>
+          - Управление пользователями
+          - Назначение ролей
+          - Назначение брендов закупщикам
+          - Назначение маршрутов логистам
+          - Управление справочниками (локации, поставщики, юрлица)
+          - Настройка компаний-продавцов и закупщиков
+          - Просмотр аудит-лога
+        </actions>
+      </workspace>
     </role>
   </roles>
 
-  <database_schema>
-    <existing_tables>
-      <table name="organizations">Организации (уже есть)</table>
-      <table name="organization_members">Участники организаций (уже есть)</table>
-      <table name="customers">Клиенты (уже есть)</table>
-      <table name="quotes">КП (уже есть, расширяем)</table>
-      <table name="quote_items">Позиции КП (уже есть, расширяем)</table>
-      <table name="quote_versions">Версии КП (уже есть)</table>
-      <table name="quote_calculation_variables">Переменные расчёта (уже есть)</table>
-      <table name="quote_calculation_results">Результаты расчёта (уже есть)</table>
-      <table name="quote_calculation_summaries">Сводка расчёта (уже есть)</table>
-    </existing_tables>
+  <!-- ============================================ -->
+  <!-- WORKFLOW STATUSES -->
+  <!-- ============================================ -->
 
-    <new_tables>
-      <table name="roles">
-        <description>Справочник ролей</description>
-        <fields>
-          - id: UUID PK
-          - code: String UNIQUE (sales, procurement, logistics, customs, quote_controller, spec_controller, finance, top_manager, admin)
-          - name: String (человекочитаемое название)
-          - description: String
-          - created_at: DateTime
-        </fields>
-      </table>
+  <workflow_statuses>
+    <status code="draft" name="Черновик">
+      <allowed_transitions>pending_procurement</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-      <table name="user_roles">
-        <description>Роли пользователей</description>
-        <fields>
-          - id: UUID PK
-          - user_id: UUID FK → auth.users
-          - organization_id: UUID FK → organizations
-          - role_id: UUID FK → roles
-          - created_at: DateTime
-          - created_by: UUID FK → auth.users
-        </fields>
-        <constraints>UNIQUE(user_id, organization_id, role_id)</constraints>
-      </table>
+    <status code="pending_procurement" name="Ожидает оценки закупок">
+      <allowed_transitions>pending_logistics_customs</allowed_transitions>
+      <actors>procurement</actors>
+      <note>Автопереход когда все бренды оценены</note>
+    </status>
 
-      <table name="brand_assignments">
-        <description>Назначение брендов менеджерам по закупкам</description>
-        <fields>
-          - id: UUID PK
-          - organization_id: UUID FK → organizations
-          - brand: String (название бренда)
-          - user_id: UUID FK → auth.users (менеджер по закупкам)
-          - created_at: DateTime
-          - created_by: UUID FK → auth.users
-        </fields>
-        <constraints>UNIQUE(organization_id, brand)</constraints>
-      </table>
+    <status code="pending_logistics_customs" name="Логистика и таможня (параллельно)">
+      <allowed_transitions>pending_sales_review</allowed_transitions>
+      <actors>logistics, customs</actors>
+      <note>Автопереход когда ОБА этапа завершены</note>
+    </status>
 
-      <table name="workflow_transitions">
-        <description>Аудит-лог всех переходов статусов</description>
-        <fields>
-          - id: UUID PK
-          - quote_id: UUID FK → quotes
-          - from_status: String
-          - to_status: String
-          - actor_id: UUID FK → auth.users
-          - actor_role: String
-          - comment: Text (причина перехода)
-          - created_at: DateTime
-        </fields>
-      </table>
+    <status code="pending_sales_review" name="Формирование КП">
+      <allowed_transitions>pending_quote_control</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-      <table name="approvals">
-        <description>Запросы на согласование</description>
-        <fields>
-          - id: UUID PK
-          - quote_id: UUID FK → quotes
-          - requested_by: UUID FK → auth.users
-          - approver_id: UUID FK → auth.users
-          - approval_type: String (top_manager, customs, etc.)
-          - reason: Text (почему требуется согласование)
-          - status: String (pending, approved, rejected)
-          - decision_comment: Text
-          - requested_at: DateTime
-          - decided_at: DateTime
-        </fields>
-      </table>
+    <status code="pending_quote_control" name="Проверка КП">
+      <allowed_transitions>pending_sales_review, pending_approval, approved</allowed_transitions>
+      <actors>quote_controller</actors>
+    </status>
 
-      <table name="specifications">
-        <description>Данные спецификации (расширение quote_versions)</description>
-        <fields>
-          - id: UUID PK
-          - quote_id: UUID FK → quotes
-          - quote_version_id: UUID FK → quote_versions
-          - specification_number: String
-          - proposal_idn: String
-          - item_ind_sku: String
-          - sign_date: Date
-          - validity_period: String
-          - specification_currency: String
-          - exchange_rate_to_ruble: Decimal
-          - client_payment_term_after_upd: Int
-          - client_payment_terms: String
-          - cargo_pickup_country: String
-          - readiness_period: String
-          - goods_shipment_country: String
-          - delivery_city_russia: String
-          - cargo_type: String
-          - logistics_period: String
-          - our_legal_entity: String
-          - client_legal_entity: String
-          - supplier_payment_country: String
-          - signed_scan_url: String (URL скана подписанной спецификации)
-          - status: String (draft, pending_review, approved, signed)
-          - created_by: UUID FK → auth.users
-          - created_at: DateTime
-          - updated_at: DateTime
-        </fields>
-      </table>
+    <status code="pending_approval" name="На согласовании">
+      <allowed_transitions>approved, rejected</allowed_transitions>
+      <actors>top_manager</actors>
+    </status>
 
-      <table name="deals">
-        <description>Сделки (подписанные спецификации)</description>
-        <fields>
-          - id: UUID PK
-          - specification_id: UUID FK → specifications
-          - quote_id: UUID FK → quotes
-          - deal_number: String
-          - signed_at: Date
-          - total_amount: Decimal
-          - currency: String
-          - status: String (active, completed, cancelled)
-          - created_at: DateTime
-          - updated_at: DateTime
-        </fields>
-      </table>
+    <status code="approved" name="Одобрено">
+      <allowed_transitions>sent_to_client</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-      <table name="plan_fact_categories">
-        <description>Справочник категорий платежей</description>
-        <fields>
-          - id: UUID PK
-          - code: String UNIQUE (client_payment, supplier_payment, logistics, customs, tax, finance_commission, other)
-          - name: String
-          - is_income: Boolean (true = доход, false = расход)
-          - created_at: DateTime
-        </fields>
-      </table>
+    <status code="sent_to_client" name="Отправлено клиенту">
+      <allowed_transitions>client_negotiation, rejected_by_client</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-      <table name="plan_fact_items">
-        <description>Записи план-факта</description>
-        <fields>
-          - id: UUID PK
-          - deal_id: UUID FK → deals
-          - category_id: UUID FK → plan_fact_categories
-          - description: String
-          - planned_amount: Decimal
-          - planned_currency: String
-          - planned_date: Date
-          - actual_amount: Decimal (null если ещё не оплачено)
-          - actual_currency: String
-          - actual_date: Date
-          - actual_exchange_rate: Decimal (курс на дату платежа)
-          - variance_amount: Decimal (отклонение в рублях)
-          - payment_document: String (номер платёжки)
-          - notes: Text
-          - created_by: UUID FK → auth.users
-          - created_at: DateTime
-          - updated_at: DateTime
-        </fields>
-      </table>
+    <status code="client_negotiation" name="Торги с клиентом">
+      <allowed_transitions>pending_spec_control_before, lost</allowed_transitions>
+      <actors>sales</actors>
+      <note>Создание версий КП происходит здесь</note>
+    </status>
 
-      <table name="telegram_users">
-        <description>Связь Telegram с пользователями системы</description>
-        <fields>
-          - id: UUID PK
-          - user_id: UUID FK → auth.users
-          - telegram_id: BigInt UNIQUE
-          - telegram_username: String
-          - is_verified: Boolean
-          - verification_code: String
-          - created_at: DateTime
-          - verified_at: DateTime
-        </fields>
-      </table>
+    <status code="pending_spec_control_before" name="Проверка спецификации (до отправки)">
+      <allowed_transitions>pending_signature</allowed_transitions>
+      <actors>spec_controller</actors>
+    </status>
 
-      <table name="notifications">
-        <description>История уведомлений</description>
-        <fields>
-          - id: UUID PK
-          - user_id: UUID FK → auth.users
-          - quote_id: UUID FK → quotes (nullable)
-          - deal_id: UUID FK → deals (nullable)
-          - type: String (task_assigned, approval_required, status_changed, etc.)
-          - title: String
-          - message: Text
-          - channel: String (telegram, email, in_app)
-          - status: String (pending, sent, delivered, read, failed)
-          - telegram_message_id: BigInt (для обновления сообщений)
-          - sent_at: DateTime
-          - read_at: DateTime
-          - created_at: DateTime
-        </fields>
-      </table>
-    </new_tables>
+    <status code="pending_signature" name="Ожидает подписания">
+      <allowed_transitions>pending_spec_control_after</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-    <quote_extensions>
-      <description>Расширение существующей таблицы quotes</description>
-      <new_fields>
-        - workflow_status: String (см. статусы ниже)
-        - deal_type: String (supply, transit)
-        - assigned_procurement_users: UUID[] (менеджеры по закупкам)
-        - assigned_logistics_user: UUID
-        - assigned_customs_user: UUID
-        - procurement_completed_at: DateTime
-        - logistics_completed_at: DateTime
-        - customs_completed_at: DateTime
-        - current_version_id: UUID FK → quote_versions (выбранная версия для спецификации)
-      </new_fields>
-    </quote_extensions>
+    <status code="pending_spec_control_after" name="Проверка подписи">
+      <allowed_transitions>deal</allowed_transitions>
+      <actors>spec_controller</actors>
+    </status>
 
-    <quote_items_extensions>
-      <description>Расширение существующей таблицы quote_items</description>
-      <new_fields>
-        - brand: String (уже есть)
-        - assigned_procurement_user: UUID (менеджер по этому бренду)
-        - procurement_status: String (pending, completed)
-        - procurement_completed_at: DateTime
-        - procurement_completed_by: UUID
-        - hs_code: String (код ТН ВЭД)
-        - customs_duty: Decimal (пошлина)
-        - customs_extra: Decimal (доп. расходы таможни)
-      </new_fields>
-    </quote_items_extensions>
+    <status code="deal" name="Сделка">
+      <allowed_transitions>completed, cancelled</allowed_transitions>
+      <actors>finance</actors>
+      <note>Финальный статус, ведётся план-факт</note>
+    </status>
 
-    <workflow_statuses>
-      <status code="draft">Черновик</status>
-      <status code="pending_procurement">Ожидает оценки закупок</status>
-      <status code="pending_logistics">Ожидает логистики</status>
-      <status code="pending_customs">Ожидает таможни</status>
-      <status code="pending_sales_review">Ожидает менеджера продаж</status>
-      <status code="pending_quote_control">Ожидает проверки КП</status>
-      <status code="pending_approval">Ожидает согласования</status>
-      <status code="approved">Одобрено</status>
-      <status code="sent_to_client">Отправлено клиенту</status>
-      <status code="client_negotiation">Торги с клиентом</status>
-      <status code="pending_spec_control">Ожидает проверки спецификации</status>
-      <status code="pending_signature">Ожидает подписания</status>
-      <status code="deal">Сделка</status>
-      <status code="rejected">Отклонено</status>
-      <status code="cancelled">Отменено</status>
-    </workflow_statuses>
-  </database_schema>
+    <status code="rejected" name="Отклонено">
+      <allowed_transitions>draft</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-  <telegram_bot>
-    <description>Telegram-бот для уведомлений и согласований</description>
+    <status code="rejected_by_client" name="Отклонено клиентом">
+      <allowed_transitions>client_negotiation, lost</allowed_transitions>
+      <actors>sales</actors>
+    </status>
 
-    <commands>
-      <command name="/start">Начало, привязка аккаунта по коду верификации</command>
-      <command name="/status">Мои текущие задачи</command>
-      <command name="/help">Справка</command>
-    </commands>
+    <status code="lost" name="Проигран">
+      <terminal>true</terminal>
+    </status>
 
-    <notification_types>
-      <type code="task_assigned">
-        <description>Новая задача назначена</description>
-        <template>
-          📋 Новая задача
-          КП: {quote_idn}
-          Клиент: {customer_name}
-          Действие: {action_required}
-          [Открыть в системе]
-        </template>
-      </type>
+    <status code="completed" name="Завершено">
+      <terminal>true</terminal>
+    </status>
 
-      <type code="approval_required">
-        <description>Требуется согласование (для топ-менеджера)</description>
-        <template>
-          🔔 Требуется согласование
-          КП: {quote_idn}
-          Клиент: {customer_name}
-          Сумма: {total_amount}
-          Причина: {approval_reason}
+    <status code="cancelled" name="Отменено">
+      <terminal>true</terminal>
+    </status>
+  </workflow_statuses>
 
-          Детали:
-          - Наценка: {markup}%
-          - Условия: {payment_terms}
-
-          [✅ Согласовать] [❌ Отклонить]
-        </template>
-        <inline_buttons>
-          - approve: Согласовать
-          - reject: Отклонить
-          - details: Подробнее
-        </inline_buttons>
-      </type>
-
-      <type code="status_changed">
-        <description>Статус изменился</description>
-        <template>
-          📝 Статус изменён
-          КП: {quote_idn}
-          Новый статус: {new_status}
-          Изменил: {actor_name}
-        </template>
-      </type>
-
-      <type code="returned_for_revision">
-        <description>Возвращено на доработку</description>
-        <template>
-          ⚠️ Возвращено на доработку
-          КП: {quote_idn}
-          Причина: {comment}
-          Вернул: {actor_name}
-        </template>
-      </type>
-    </notification_types>
-
-    <callback_handlers>
-      <handler prefix="approve_">Обработка согласования</handler>
-      <handler prefix="reject_">Обработка отклонения</handler>
-      <handler prefix="details_">Показать детали КП</handler>
-    </callback_handlers>
-  </telegram_bot>
+  <!-- ============================================ -->
+  <!-- UI SCREENS -->
+  <!-- ============================================ -->
 
   <ui_screens>
     <screen name="dashboard" path="/dashboard">
-      <description>Главная страница с задачами по ролям</description>
-      <components>
-        - Карточки статистики (мои задачи, ожидают меня, завершено сегодня)
-        - Список задач отфильтрованный по роли
-        - Быстрые действия
-      </components>
+      <description>Главная страница - задачи по роли</description>
+      <role_specific>true</role_specific>
     </screen>
 
-    <screen name="quote_workflow" path="/quotes/{id}/workflow">
-      <description>Страница КП с workflow</description>
-      <components>
-        - Прогресс-бар workflow (визуализация этапов)
-        - Текущий статус и ответственный
-        - Форма для ввода данных (зависит от роли)
-        - История переходов (аудит-лог)
-        - Кнопки действий (отправить дальше, вернуть, согласовать)
-      </components>
+    <screen name="quotes_list" path="/quotes">
+      <description>Список КП с фильтрами по роли</description>
     </screen>
 
-    <screen name="procurement_view" path="/procurement">
-      <description>Рабочая зона менеджера по закупкам</description>
-      <components>
-        - Список КП с моими брендами
-        - Фильтр по статусу
-        - Массовое скачивание для оценки
-        - Форма загрузки цен
-      </components>
+    <screen name="quote_detail" path="/quotes/{id}">
+      <description>Детали КП с формой по роли</description>
+      <role_forms>
+        - sales: наценка, условия клиента
+        - procurement: закупочные поля
+        - logistics: логистические поля
+        - customs: таможенные поля
+        - quote_controller: чек-лист
+        - spec_controller: данные спецификации
+      </role_forms>
     </screen>
 
-    <screen name="logistics_view" path="/logistics">
-      <description>Рабочая зона логиста</description>
-      <components>
-        - Список КП на этапе логистики
-        - Форма ввода стоимости доставки по сегментам
-        - Калькулятор логистики
-      </components>
+    <screen name="suppliers" path="/suppliers">
+      <description>Справочник поставщиков</description>
     </screen>
 
-    <screen name="customs_view" path="/customs">
-      <description>Рабочая зона менеджера ТО</description>
-      <components>
-        - Список КП на этапе таможни
-        - Форма ввода кодов ТН ВЭД
-        - Справочник кодов
-        - Калькулятор пошлин
-      </components>
+    <screen name="buyer_companies" path="/buyer-companies">
+      <description>Наши компании-закупщики</description>
     </screen>
 
-    <screen name="quote_control_view" path="/quote-control">
-      <description>Рабочая зона контроллера КП (Жанна)</description>
-      <components>
-        - Список КП на проверке
-        - Чек-лист проверки (все пункты)
-        - Форма возврата с комментарием
-        - Кнопка отправки на согласование
-        - Кнопка одобрения
-      </components>
+    <screen name="seller_companies" path="/seller-companies">
+      <description>Наши компании-продавцы</description>
     </screen>
 
-    <screen name="spec_control_view" path="/spec-control">
-      <description>Рабочая зона контроллера спецификаций</description>
-      <components>
-        - Список спецификаций на проверке
-        - Форма ввода всех полей спецификации
-        - Preview PDF
-        - Загрузка подписанного скана
-        - Сравнение скана с оригиналом
-      </components>
+    <screen name="customers" path="/customers">
+      <description>Клиенты с контактами и договорами</description>
     </screen>
 
-    <screen name="finance_view" path="/finance">
-      <description>Рабочая зона финансового менеджера</description>
-      <components>
-        - Список активных сделок
-        - План-факт таблица по сделке
-        - Форма регистрации платежа
-        - Отчёт отклонений
-        - Сводка по периоду
-      </components>
+    <screen name="locations" path="/locations">
+      <description>Справочник локаций</description>
+    </screen>
+
+    <screen name="supplier_invoices" path="/supplier-invoices">
+      <description>Реестр инвойсов от поставщиков</description>
+    </screen>
+
+    <screen name="deals" path="/deals">
+      <description>Список сделок</description>
+    </screen>
+
+    <screen name="plan_fact" path="/deals/{id}/plan-fact">
+      <description>План-факт по сделке</description>
     </screen>
 
     <screen name="admin_users" path="/admin/users">
-      <description>Управление пользователями</description>
-      <components>
-        - Список пользователей
-        - Назначение ролей
-        - Привязка Telegram
-      </components>
+      <description>Управление пользователями и ролями</description>
     </screen>
 
     <screen name="admin_brands" path="/admin/brands">
-      <description>Назначение брендов</description>
-      <components>
-        - Список брендов
-        - Назначение менеджера по закупкам
-        - Импорт брендов из КП
-      </components>
+      <description>Назначение брендов закупщикам</description>
     </screen>
 
-    <screen name="settings_telegram" path="/settings/telegram">
-      <description>Настройка Telegram-уведомлений</description>
-      <components>
-        - Код верификации для привязки
-        - Статус привязки
-        - Настройки типов уведомлений
-      </components>
+    <screen name="admin_routes" path="/admin/routes">
+      <description>Назначение маршрутов логистам</description>
     </screen>
   </ui_screens>
 
-  <api_endpoints>
-    <category name="workflow">
-      <endpoint method="POST" path="/api/quotes/{id}/submit-to-procurement">Отправить на оценку закупок</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/complete-procurement">Завершить оценку закупок</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/complete-logistics">Завершить логистику</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/complete-customs">Завершить таможню</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/submit-to-control">Отправить на проверку КП</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/return-for-revision">Вернуть на доработку</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/request-approval">Запросить согласование</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/approve">Одобрить</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/reject">Отклонить</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/send-to-client">Отправить клиенту</endpoint>
-      <endpoint method="POST" path="/api/quotes/{id}/request-specification">Запросить спецификацию</endpoint>
-    </category>
-
-    <category name="specifications">
-      <endpoint method="GET" path="/api/specifications">Список спецификаций</endpoint>
-      <endpoint method="GET" path="/api/specifications/{id}">Детали спецификации</endpoint>
-      <endpoint method="PUT" path="/api/specifications/{id}">Обновить данные спецификации</endpoint>
-      <endpoint method="POST" path="/api/specifications/{id}/generate-pdf">Сгенерировать PDF</endpoint>
-      <endpoint method="POST" path="/api/specifications/{id}/upload-signed">Загрузить подписанный скан</endpoint>
-      <endpoint method="POST" path="/api/specifications/{id}/confirm-signature">Подтвердить подпись</endpoint>
-    </category>
-
-    <category name="deals">
-      <endpoint method="GET" path="/api/deals">Список сделок</endpoint>
-      <endpoint method="GET" path="/api/deals/{id}">Детали сделки</endpoint>
-      <endpoint method="GET" path="/api/deals/{id}/plan-fact">План-факт по сделке</endpoint>
-    </category>
-
-    <category name="plan_fact">
-      <endpoint method="GET" path="/api/plan-fact">Все записи план-факта</endpoint>
-      <endpoint method="POST" path="/api/plan-fact">Создать плановый платёж</endpoint>
-      <endpoint method="PUT" path="/api/plan-fact/{id}">Обновить запись</endpoint>
-      <endpoint method="POST" path="/api/plan-fact/{id}/register-actual">Зарегистрировать факт</endpoint>
-    </category>
-
-    <category name="admin">
-      <endpoint method="GET" path="/api/admin/users">Список пользователей</endpoint>
-      <endpoint method="POST" path="/api/admin/users/{id}/roles">Назначить роль</endpoint>
-      <endpoint method="DELETE" path="/api/admin/users/{id}/roles/{role_id}">Удалить роль</endpoint>
-      <endpoint method="GET" path="/api/admin/brands">Список брендов</endpoint>
-      <endpoint method="POST" path="/api/admin/brands">Создать назначение бренда</endpoint>
-      <endpoint method="PUT" path="/api/admin/brands/{id}">Изменить назначение</endpoint>
-      <endpoint method="DELETE" path="/api/admin/brands/{id}">Удалить назначение</endpoint>
-    </category>
-
-    <category name="telegram">
-      <endpoint method="POST" path="/api/telegram/webhook">Webhook для Telegram-бота</endpoint>
-      <endpoint method="GET" path="/api/telegram/verification-code">Получить код верификации</endpoint>
-      <endpoint method="POST" path="/api/telegram/verify">Подтвердить привязку</endpoint>
-    </category>
-
-    <category name="notifications">
-      <endpoint method="GET" path="/api/notifications">Мои уведомления</endpoint>
-      <endpoint method="POST" path="/api/notifications/{id}/read">Отметить прочитанным</endpoint>
-    </category>
-  </api_endpoints>
-
-  <implementation_phases>
-    <phase number="1" name="Database Schema">
-      <description>Создание новых таблиц и расширение существующих</description>
-      <tasks>
-        - Создать SQL миграции для всех новых таблиц
-        - Добавить новые поля в quotes и quote_items
-        - Заполнить справочники (roles, plan_fact_categories)
-        - Настроить RLS политики
-      </tasks>
-    </phase>
-
-    <phase number="2" name="Role System">
-      <description>Система ролей и авторизации</description>
-      <tasks>
-        - Сервис управления ролями
-        - Middleware проверки прав
-        - UI назначения ролей (админ)
-        - Фильтрация данных по ролям
-      </tasks>
-    </phase>
-
-    <phase number="3" name="Workflow Engine">
-      <description>Движок workflow</description>
-      <tasks>
-        - Сервис переходов статусов
-        - Валидация переходов (кто может куда)
-        - Автоматические переходы (logistics + customs → sales_review)
-        - Аудит-лог переходов
-      </tasks>
-    </phase>
-
-    <phase number="4" name="Role-Specific Views">
-      <description>Рабочие зоны для каждой роли</description>
-      <tasks>
-        - Procurement view (закупки)
-        - Logistics view (логистика)
-        - Customs view (таможня)
-        - Quote control view (Жанна)
-        - Spec control view (спецификации)
-        - Finance view (план-факт)
-      </tasks>
-    </phase>
-
-    <phase number="5" name="Telegram Bot">
-      <description>Telegram-бот для уведомлений</description>
-      <tasks>
-        - Настройка бота (BotFather)
-        - Webhook endpoint
-        - Привязка аккаунтов
-        - Уведомления о задачах
-        - Inline-кнопки согласования
-      </tasks>
-    </phase>
-
-    <phase number="6" name="Specifications">
-      <description>Система спецификаций</description>
-      <tasks>
-        - Форма ввода данных спецификации
-        - Расширенная генерация PDF
-        - Загрузка и хранение сканов
-        - Проверка соответствия (опционально AI)
-      </tasks>
-    </phase>
-
-    <phase number="7" name="Plan-Fact">
-      <description>Финансовый регистр план-факт</description>
-      <tasks>
-        - Автогенерация плановых платежей из сделки
-        - Форма регистрации фактических платежей
-        - Расчёт отклонений
-        - Отчёты
-      </tasks>
-    </phase>
-
-    <phase number="8" name="Polish">
-      <description>Доработка и тестирование</description>
-      <tasks>
-        - E2E тестирование workflow
-        - Оптимизация производительности
-        - Исправление багов
-        - Документация
-      </tasks>
-    </phase>
-  </implementation_phases>
-
-  <feature_count>~85 features</feature_count>
-
-  <success_criteria>
-    <functionality>
-      - Полный workflow от заявки до сделки работает
-      - Все роли имеют свои рабочие зоны
-      - Уведомления приходят в Telegram
-      - Согласования работают через Telegram
-      - План-факт ведётся по каждой сделке
-      - Все изменения логируются
-    </functionality>
-    <technical>
-      - Нет регрессий в существующем функционале
-      - RLS настроен для всех таблиц
-      - Время отклика < 2 сек
-      - Тесты покрывают критические пути
-    </technical>
-  </success_criteria>
+  <feature_count>~95 features</feature_count>
 </project_specification>
