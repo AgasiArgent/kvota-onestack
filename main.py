@@ -14036,6 +14036,340 @@ def get(customer_id: str, session):
 
 
 # ============================================================================
+# UI-009: Customer Contracts List
+# ============================================================================
+
+@rt("/customer-contracts")
+def get(session, q: str = "", status: str = "", customer_id: str = ""):
+    """
+    Customer contracts list page with search and filters.
+
+    Contracts track supply agreements with customers and manage
+    specification numbering (next_specification_number counter).
+
+    Query Parameters:
+        q: Search query (matches contract_number or customer name)
+        status: Filter by status ("active", "suspended", "terminated", or "" for all)
+        customer_id: Filter by specific customer
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin, sales, or top_manager can view contracts
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра договоров."),
+                P("Требуется одна из ролей: admin, sales, top_manager"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import contract service functions
+    from services.customer_contract_service import (
+        get_all_contracts, get_contracts_for_customer, get_contracts_with_customer_names,
+        search_contracts, get_contract_stats,
+        CONTRACT_STATUS_NAMES, CONTRACT_STATUS_COLORS
+    )
+    from services.customer_service import get_all_customers, get_customer
+
+    # Get contracts based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            status_filter = None if status == "" else status
+            contracts = search_contracts(
+                organization_id=org_id,
+                query=q.strip(),
+                status=status_filter,
+                limit=100
+            )
+        elif customer_id:
+            # Filter by customer
+            status_filter = None if status == "" else status
+            contracts = get_contracts_for_customer(
+                customer_id=customer_id,
+                status=status_filter,
+                limit=100
+            )
+        else:
+            # Get all with filters
+            status_filter = status if status else None
+            contracts = get_contracts_with_customer_names(
+                organization_id=org_id,
+                status=status_filter,
+                limit=100
+            )
+
+        # Get stats for summary
+        stats = get_contract_stats(organization_id=org_id)
+
+        # Get customers for filter dropdown
+        customers = get_all_customers(organization_id=org_id, is_active=True, limit=200)
+
+        # If filtering by customer, get customer name for display
+        filter_customer = None
+        if customer_id:
+            filter_customer = get_customer(customer_id)
+
+    except Exception as e:
+        print(f"Error loading contracts: {e}")
+        contracts = []
+        stats = {"total": 0, "active": 0, "suspended": 0, "terminated": 0}
+        customers = []
+        filter_customer = None
+
+    # Status options for filter
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+        Option("Действующие", value="active", selected=(status == "active")),
+        Option("Приостановленные", value="suspended", selected=(status == "suspended")),
+        Option("Расторгнутые", value="terminated", selected=(status == "terminated")),
+    ]
+
+    # Customer options for filter
+    customer_options = [Option("Все клиенты", value="", selected=(customer_id == ""))]
+    for c in customers:
+        customer_options.append(Option(
+            c.name[:40] + "..." if len(c.name) > 40 else c.name,
+            value=c.id,
+            selected=(customer_id == c.id)
+        ))
+
+    # Build contract rows
+    contract_rows = []
+    for c in contracts:
+        status_class = {
+            "active": "status-approved",
+            "suspended": "status-pending",
+            "terminated": "status-rejected"
+        }.get(c.status, "")
+        status_text = CONTRACT_STATUS_NAMES.get(c.status, c.status)
+
+        contract_rows.append(
+            Tr(
+                Td(
+                    Strong(c.contract_number),
+                    style="font-family: monospace;"
+                ),
+                Td(c.customer_name or "—"),
+                Td(c.contract_date.strftime("%d.%m.%Y") if c.contract_date else "—"),
+                Td(str(c.next_specification_number - 1 if c.next_specification_number > 1 else 0)),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/customer-contracts/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/customer-contracts/{c.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    # Build page title with filter info
+    page_title = "Договоры с клиентами"
+    if filter_customer:
+        page_title = f"Договоры: {filter_customer.name}"
+
+    return page_layout(page_title,
+        # Header
+        Div(
+            H1(f"📄 {page_title}"),
+            A("+ Добавить договор", href="/customer-contracts/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Договоры — это рамочные соглашения на поставку с клиентами. ",
+            "Каждый договор содержит счётчик для нумерации спецификаций. ",
+            "При создании спецификации номер автоматически увеличивается.",
+            cls="alert alert-info"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value", style="color: green;"),
+                Div("Действующих"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("suspended", 0)), cls="stat-value", style="color: orange;"),
+                Div("Приостановлено"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("terminated", 0)), cls="stat-value", style="color: red;"),
+                Div("Расторгнуто"),
+                cls="stat-card card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filter form
+        Div(
+            Form(
+                Div(
+                    Label(
+                        "Поиск по номеру:",
+                        Input(type="text", name="q", value=q, placeholder="Например: ДП-2025-001"),
+                    ),
+                    Label(
+                        "Клиент:",
+                        Select(*customer_options, name="customer_id"),
+                    ),
+                    Label(
+                        "Статус:",
+                        Select(*status_options, name="status"),
+                    ),
+                    Button("Найти", type="submit"),
+                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                ),
+                method="get",
+                action="/customer-contracts"
+            ),
+            cls="card"
+        ),
+
+        # Contracts table
+        Div(
+            Table(
+                Thead(
+                    Tr(
+                        Th("Номер договора"),
+                        Th("Клиент"),
+                        Th("Дата"),
+                        Th("Спецификаций"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*contract_rows) if contract_rows else Tbody(
+                    Tr(Td("Договоры не найдены", colspan="6", style="text-align: center; color: #666;"))
+                )
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/customer-contracts/{contract_id}")
+def get(contract_id: str, session):
+    """Customer contract detail view page."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра данной страницы.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.customer_contract_service import (
+        get_contract_with_customer, CONTRACT_STATUS_NAMES, CONTRACT_STATUS_COLORS
+    )
+
+    contract = get_contract_with_customer(contract_id)
+    if not contract:
+        return page_layout("Не найдено",
+            Div("Договор не найден.", cls="alert alert-error"),
+            A("← К списку договоров", href="/customer-contracts", role="button"),
+            session=session
+        )
+
+    status_class = {
+        "active": "status-approved",
+        "suspended": "status-pending",
+        "terminated": "status-rejected"
+    }.get(contract.status, "")
+    status_text = CONTRACT_STATUS_NAMES.get(contract.status, contract.status)
+
+    specs_count = contract.next_specification_number - 1 if contract.next_specification_number > 1 else 0
+
+    return page_layout(f"Договор: {contract.contract_number}",
+        # Header with actions
+        Div(
+            H1(f"📄 {contract.contract_number}"),
+            Div(
+                A("✏️ Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
+                A("← К списку", href="/customer-contracts", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Status badge
+        Div(
+            Span(status_text, cls=f"status-badge {status_class}"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Main info card
+        Div(
+            H3("📋 Основная информация"),
+            Div(
+                Div(
+                    Div(Strong("Номер договора"), style="color: #666; font-size: 0.9em;"),
+                    Div(contract.contract_number, style="font-family: monospace; font-size: 1.2em;"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Клиент"), style="color: #666; font-size: 0.9em;"),
+                    Div(
+                        A(contract.customer_name, href=f"/customers/{contract.customer_id}") if contract.customer_name else "—"
+                    ),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Дата договора"), style="color: #666; font-size: 0.9em;"),
+                    Div(contract.contract_date.strftime("%d.%m.%Y") if contract.contract_date else "—"),
+                    cls="info-item"
+                ),
+                Div(
+                    Div(Strong("Спецификаций создано"), style="color: #666; font-size: 0.9em;"),
+                    Div(str(specs_count)),
+                    cls="info-item"
+                ),
+                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Notes card (if has notes)
+        Div(
+            H3("📝 Примечания"),
+            P(contract.notes or "Нет примечаний"),
+            cls="card"
+        ) if contract.notes else "",
+
+        # Specifications link
+        Div(
+            H3("📑 Спецификации по договору"),
+            P(f"По данному договору создано {specs_count} спецификаций."),
+            P("Следующий номер спецификации: ", Strong(f"№{contract.next_specification_number}")),
+            A("Смотреть спецификации →", href=f"/specifications?contract_id={contract_id}", role="button", cls="outline"),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

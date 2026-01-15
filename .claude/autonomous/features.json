@@ -578,16 +578,20 @@
       "name": "Customer detail page with contacts",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "Customer details with embedded contacts list"
+      "passes": true,
+      "completed_at": "2026-01-15T22:00:00Z",
+      "description": "Customer details with embedded contacts list",
+      "notes": "Already implemented as part of UI-007 - GET /customers/{id} shows: status badge, main info (name/INN/KPP/OGRN), addresses (legal/actual/warehouse), director info, and contacts table with signatory/primary badges, edit links, and add contact button. Info alert explaining signatory usage for specification PDF."
     },
     {
       "id": "UI-009",
       "name": "Customer contracts list",
       "category": "frontend",
       "priority": 2,
-      "passes": false,
-      "description": "List contracts for customer"
+      "passes": true,
+      "completed_at": "2026-01-15T22:30:00Z",
+      "description": "List contracts for customer",
+      "notes": "Created GET /customer-contracts list page and GET /customer-contracts/{id} detail page. List shows: contract number, customer name, date, specs count, status with badges. Filter by search, customer dropdown, status. Stats cards (total/active/suspended/terminated). Detail page shows contract info with link to specifications. Uses customer_contract_service functions. Permission: admin, sales, top_manager roles. Russian localization."
     },
     {
       "id": "UI-010",
