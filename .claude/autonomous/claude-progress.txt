@@ -2679,3 +2679,26 @@ to determine the signatory name that appears on the document.
 **Progress:**
 - v3.0 features complete: **5/94**
 - **Next**: DB-006 (bank_accounts table - polymorphic for all entity types)
+
+## Session 2026-01-15 - Feature DB-006: Create bank_accounts table
+- Created SQL migration: `migrations/023_create_bank_accounts_table.sql`
+- **Polymorphic design**: entity_type + entity_id pattern supports all company types
+- Supported entity types: supplier, buyer_company, seller_company, customer
+- **Bank details fields**:
+  - Russian: bank_name, account_number, bik (9 digits), correspondent_account (20 digits)
+  - International: swift (8/11 chars), iban (up to 34 chars)
+  - currency (ISO 4217: RUB, USD, EUR, TRY, CNY)
+  - is_default, is_active flags
+- **Validation constraints**:
+  - BIK: must be 9 digits
+  - Correspondent account: must be 20 digits
+  - SWIFT: must be 8 or 11 alphanumeric chars
+  - IBAN: basic format validation
+  - Currency: 3 uppercase letters (ISO 4217)
+- **Helper functions**:
+  - get_default_bank_account(entity_type, entity_id)
+  - get_entity_bank_accounts(entity_type, entity_id)
+- **Single default trigger**: ensures only one default account per entity
+- **RLS policies**: select for org members, insert/update for admin+finance, delete for admin only
+- Files changed: migrations/023_create_bank_accounts_table.sql (new)
+- Status: COMPLETE

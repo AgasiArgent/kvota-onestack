@@ -53,8 +53,9 @@
       "name": "Create bank_accounts table migration",
       "category": "database",
       "priority": 1,
-      "passes": false,
-      "description": "Create universal bank_accounts table with entity_type polymorphism"
+      "passes": true,
+      "description": "Create universal bank_accounts table with entity_type polymorphism",
+      "notes": "Created migration 023_create_bank_accounts_table.sql with polymorphic design (entity_type/entity_id), BIK/SWIFT/IBAN validation, single-default trigger"
     },
     {
       "id": "DB-007",
