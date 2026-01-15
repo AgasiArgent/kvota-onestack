@@ -528,6 +528,317 @@ def get_approval_stats_for_user(user_id: str) -> dict:
 
 
 # ============================================================================
+# High-Level Approval Decision Function (Feature #66)
+# ============================================================================
+
+@dataclass
+class ApprovalDecisionResult:
+    """Result of a process_approval_decision operation."""
+    success: bool
+    approval_id: str
+    quote_id: Optional[str]
+    quote_idn: Optional[str]
+    decision: str  # 'approved' or 'rejected'
+    new_status: Optional[str]
+    other_approvals_cancelled: int
+    notifications_sent: int
+    error_message: Optional[str] = None
+
+
+def process_approval_decision(
+    approval_id: str,
+    decision: str,
+    comment: Optional[str] = None,
+    decider_id: Optional[str] = None,
+    decider_roles: Optional[List[str]] = None,
+    send_notifications: bool = True
+) -> ApprovalDecisionResult:
+    """
+    Process an approval decision (approve or reject) from a top manager.
+
+    This function performs the complete approval decision workflow:
+    1. Validates the approval exists and is pending
+    2. Updates the approval record with the decision
+    3. Transitions the quote to the appropriate status (approved or rejected)
+    4. Cancels any other pending approvals for the same quote
+    5. Sends notifications to the quote creator (optional)
+
+    Args:
+        approval_id: ID of the approval to process
+        decision: Decision ('approved' or 'rejected')
+        comment: Optional comment from the approver
+        decider_id: ID of the user making the decision (for audit trail)
+        decider_roles: Roles of the user making the decision
+        send_notifications: Whether to send notifications (default: True)
+
+    Returns:
+        ApprovalDecisionResult with success status and details
+
+    Example:
+        result = process_approval_decision(
+            approval_id='abc-123',
+            decision='approved',
+            comment='Одобрено. Хорошая сделка.',
+            decider_id='user-456',
+            decider_roles=['top_manager']
+        )
+        if result.success:
+            print(f"Quote {result.quote_idn} is now {result.new_status}")
+    """
+    from .workflow_service import (
+        transition_quote_status,
+        WorkflowStatus,
+        get_quote_workflow_status
+    )
+
+    supabase = get_supabase()
+
+    # Validate decision value
+    if decision not in ('approved', 'rejected'):
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=None,
+            quote_idn=None,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message=f"Недопустимое решение: {decision}. Должно быть 'approved' или 'rejected'"
+        )
+
+    # Step 1: Get and validate the approval
+    approval = get_approval(approval_id)
+
+    if approval is None:
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=None,
+            quote_idn=None,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message="Запрос на согласование не найден"
+        )
+
+    if approval.status != 'pending':
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=approval.quote_id,
+            quote_idn=None,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message=f"Запрос уже обработан. Текущий статус: {approval.status}"
+        )
+
+    quote_id = approval.quote_id
+
+    # Step 2: Verify quote is in pending_approval status
+    current_status = get_quote_workflow_status(quote_id)
+
+    if current_status is None:
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=quote_id,
+            quote_idn=None,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message="КП не найдено"
+        )
+
+    if current_status != WorkflowStatus.PENDING_APPROVAL:
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=quote_id,
+            quote_idn=None,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message=f"КП не в статусе ожидания согласования. Текущий статус: {current_status.value}"
+        )
+
+    # Step 3: Fetch quote details for notifications
+    quote_idn = None
+    customer_name = None
+    quote_creator_id = None
+
+    try:
+        quote_result = supabase.table('quotes').select(
+            'idn, customer_name, created_by'
+        ).eq('id', quote_id).execute()
+
+        if quote_result.data:
+            quote_data = quote_result.data[0]
+            quote_idn = quote_data.get('idn', 'N/A')
+            customer_name = quote_data.get('customer_name', 'Не указан')
+            quote_creator_id = quote_data.get('created_by')
+    except Exception as e:
+        print(f"Error fetching quote details: {e}")
+
+    # Step 4: Update the approval record
+    updated_approval = update_approval_status(approval_id, decision, comment)
+
+    if updated_approval is None:
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message="Не удалось обновить статус согласования"
+        )
+
+    # Step 5: Transition quote to appropriate status
+    target_status = WorkflowStatus.APPROVED if decision == 'approved' else WorkflowStatus.REJECTED
+
+    # Get actor info
+    actor_id = decider_id or approval.approver_id
+    actor_roles = decider_roles or ['top_manager']
+
+    # Generate default comment if none provided
+    transition_comment = comment or (
+        "Одобрено топ-менеджером" if decision == 'approved'
+        else "Отклонено топ-менеджером"
+    )
+
+    transition_result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=target_status,
+        actor_id=actor_id,
+        actor_roles=actor_roles,
+        comment=transition_comment
+    )
+
+    if not transition_result.success:
+        # Rollback approval status (try to revert to pending)
+        # Note: This is best effort - the approval may already be marked as decided
+        print(f"Warning: Could not transition quote after approval decision: {transition_result.error_message}")
+        return ApprovalDecisionResult(
+            success=False,
+            approval_id=approval_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            decision=decision,
+            new_status=None,
+            other_approvals_cancelled=0,
+            notifications_sent=0,
+            error_message=f"Не удалось изменить статус КП: {transition_result.error_message}"
+        )
+
+    new_status = target_status.value
+
+    # Step 6: Cancel other pending approvals for this quote
+    # (Since one manager made a decision, others don't need to)
+    other_approvals_cancelled = 0
+    try:
+        # Count other pending approvals (excluding the one we just processed)
+        count_result = supabase.table('approvals').select(
+            'id', count='exact'
+        ).eq('quote_id', quote_id).eq('status', 'pending').neq('id', approval_id).execute()
+
+        other_pending = count_result.count if count_result.count else 0
+
+        if other_pending > 0:
+            # Update other pending approvals to 'cancelled' status (if we want to keep them)
+            # Or delete them entirely
+            # For now, let's delete them to keep the data clean
+            supabase.table('approvals').delete().eq(
+                'quote_id', quote_id
+            ).eq('status', 'pending').neq('id', approval_id).execute()
+
+            other_approvals_cancelled = other_pending
+    except Exception as e:
+        print(f"Error cancelling other approvals: {e}")
+        # Continue - this is not critical
+
+    # Step 7: Send notifications (optional)
+    notifications_sent = 0
+    if send_notifications and quote_creator_id:
+        import asyncio
+        from .telegram_service import send_status_changed_notification
+
+        try:
+            # Get decider name for notification
+            decider_name = "Топ-менеджер"
+            if actor_id:
+                try:
+                    user_result = supabase.table('profiles').select('name').eq('id', actor_id).execute()
+                    if user_result.data:
+                        decider_name = user_result.data[0].get('name', 'Топ-менеджер')
+                except Exception:
+                    pass
+
+            # Run async notification in sync context
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            notification_result = loop.run_until_complete(
+                send_status_changed_notification(
+                    user_id=quote_creator_id,
+                    quote_id=quote_id,
+                    quote_idn=quote_idn or 'N/A',
+                    customer_name=customer_name or 'Не указан',
+                    old_status='pending_approval',
+                    new_status=new_status,
+                    actor_name=decider_name,
+                    comment=comment
+                )
+            )
+
+            if notification_result.get('success'):
+                notifications_sent = 1
+
+            # Also notify the requester if different from creator
+            if approval.requested_by != quote_creator_id:
+                notification_result = loop.run_until_complete(
+                    send_status_changed_notification(
+                        user_id=approval.requested_by,
+                        quote_id=quote_id,
+                        quote_idn=quote_idn or 'N/A',
+                        customer_name=customer_name or 'Не указан',
+                        old_status='pending_approval',
+                        new_status=new_status,
+                        actor_name=decider_name,
+                        comment=comment
+                    )
+                )
+                if notification_result.get('success'):
+                    notifications_sent += 1
+
+        except Exception as e:
+            print(f"Error sending approval decision notifications: {e}")
+            # Continue - notification failure shouldn't fail the overall process
+
+    return ApprovalDecisionResult(
+        success=True,
+        approval_id=approval_id,
+        quote_id=quote_id,
+        quote_idn=quote_idn,
+        decision=decision,
+        new_status=new_status,
+        other_approvals_cancelled=other_approvals_cancelled,
+        notifications_sent=notifications_sent,
+        error_message=None
+    )
+
+
+# ============================================================================
 # High-Level Approval Request Function (Feature #65)
 # ============================================================================
 

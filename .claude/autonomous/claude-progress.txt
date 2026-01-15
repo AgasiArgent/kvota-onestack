@@ -1617,3 +1617,33 @@
   - services/__init__.py (updated exports)
   - main.py (~20 lines modified)
 - Status: COMPLETE - Feature #65 done
+
+
+## Session 2026-01-15 - Feature #66: Обработка решения согласования (process_approval_decision function)
+- Created process_approval_decision() function in approval_service.py (~300 lines)
+- New dataclass:
+  - ApprovalDecisionResult: success, approval_id, quote_id, quote_idn, decision, new_status, other_approvals_cancelled, notifications_sent, error_message
+- Function performs complete approval decision workflow:
+  1. Validates decision is 'approved' or 'rejected'
+  2. Gets and validates the approval exists and is pending
+  3. Verifies quote is in pending_approval status
+  4. Fetches quote details (idn, customer_name, created_by) for notifications
+  5. Updates the approval record with decision and comment
+  6. Transitions quote to appropriate status (approved or rejected)
+  7. Cancels (deletes) other pending approvals for the same quote
+  8. Sends notifications to quote creator and requester (if different)
+- Returns detailed result with success/error information
+- Uses existing functions:
+  - get_approval() - to fetch approval record
+  - update_approval_status() - to update approval
+  - transition_quote_status() - to change quote status
+  - send_status_changed_notification() - for Telegram notifications
+- Updated services/__init__.py to export:
+  - ApprovalDecisionResult, process_approval_decision
+- All syntax verified with py_compile
+- Imports verified working in venv
+- Files changed:
+  - services/approval_service.py (added ~300 lines)
+  - services/__init__.py (updated exports)
+- Status: COMPLETE - Feature #66 done
+- **APPROVALS PHASE COMPLETE** (all 3 features done: 64-66)

@@ -148,12 +148,13 @@ App runs at http://localhost:5001
 - [x] Feature #63: Уведомление returned_for_revision (2026-01-15) - ReturnedForRevisionNotification dataclass, send_returned_for_revision_notification(), notify_creator_of_return(), integrated into /quote-control/{quote_id}/return handler
 - [x] Feature #64: Сервис согласований (2026-01-15) - approval_service.py with full CRUD: Approval dataclass, create_approval, create_approvals_for_role, get_approval, get_approval_by_quote, get_approvals_for_quote, get_pending_approval_for_quote, get_pending_approvals_for_user, get_approvals_requested_by, get_approvals_with_details, count_pending_approvals, update_approval_status, approve_quote_approval, reject_quote_approval, cancel_pending_approvals_for_quote, has_pending_approval, get_latest_approval_decision, get_approval_stats_for_user
 - [x] Feature #65: Создание запроса на согласование (2026-01-15) - request_approval() function with ApprovalRequestResult dataclass. Complete workflow: validates status, transitions to pending_approval, creates approval records for top_manager/admin, sends Telegram notifications. Updated main.py POST handler.
+- [x] Feature #66: Обработка решения согласования (2026-01-15) - process_approval_decision() function with ApprovalDecisionResult dataclass. Complete workflow: validates approval exists and is pending, validates quote status, updates approval record, transitions quote to approved/rejected, cancels other pending approvals, sends notifications to creator and requester.
 
 ### Next Up
-- Feature #66: Обработка решения согласования (process_approval_decision function)
+- Feature #67: Страница /spec-control (Specification controller workspace page)
 
 ### Progress
-- **65 of 88 features completed** (74%)
+- **66 of 88 features completed** (75%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
