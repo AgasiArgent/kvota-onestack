@@ -44,10 +44,10 @@
       "name": "Создать таблицу workflow_transitions",
       "description": "SQL миграция для аудит-лога переходов статусов",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T07:00:00Z",
+      "completed_at": "2025-01-15T07:05:00Z"
     },
     {
       "id": 5,

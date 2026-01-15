@@ -95,3 +95,27 @@
   - Only admins can insert/update/delete brand assignments
 - Files changed: migrations/003_create_brand_assignments_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #4: Создать таблицу workflow_transitions
+- Created SQL migration: `migrations/004_create_workflow_transitions_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - quote_id (UUID FK -> quotes, CASCADE DELETE)
+  - from_status (VARCHAR 50) - previous workflow status
+  - to_status (VARCHAR 50) - new workflow status
+  - actor_id (UUID FK -> auth.users)
+  - actor_role (VARCHAR 50) - role of actor at time of transition
+  - comment (TEXT) - optional reason for transition
+  - created_at (TIMESTAMP)
+- Indexes created:
+  - quote_id - for looking up transitions by quote
+  - actor_id - for filtering by who made the change
+  - to_status - for analytics on status transitions
+  - (quote_id, created_at DESC) - for time-ordered history
+- RLS policies:
+  - Users can view transitions for quotes in their organization
+  - Users can insert transitions for quotes in their organization
+  - No UPDATE/DELETE - audit log is immutable
+- Added table and column comments for documentation
+- Files changed: migrations/004_create_workflow_transitions_table.sql (new)
+- Status: COMPLETE

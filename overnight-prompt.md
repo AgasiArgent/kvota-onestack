@@ -86,8 +86,9 @@ App runs at http://localhost:5001
 - [x] Feature #1: Create roles table (2025-01-15)
 - [x] Feature #2: Create user_roles table (2025-01-15)
 - [x] Feature #3: Create brand_assignments table (2025-01-15)
+- [x] Feature #4: Create workflow_transitions table (2025-01-15)
 
 ### Next Up
-- Feature #4: Create workflow_transitions table
 - Feature #5: Create approvals table
 - Feature #6: Create specifications table
+- Feature #7: Create deals table
