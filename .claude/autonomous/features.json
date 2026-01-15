@@ -382,8 +382,10 @@
       "name": "Supplier invoice payments API",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Register and track payments"
+      "passes": true,
+      "completed_at": "2026-01-15T23:00:00Z",
+      "description": "Register and track payments",
+      "notes": "Created services/supplier_invoice_payment_service.py with: SupplierInvoicePayment/PaymentSummary/SupplierPaymentSummary/BuyerCompanyPaymentSummary dataclasses, validation functions (validate_payment_type, validate_payment_amount, validate_exchange_rate, validate_currency, validate_payment_document), payment type helpers (get_payment_type_name, get_payment_type_color, is_refund, is_advance, is_final_payment), CRUD operations (register_payment, register_advance_payment, register_final_payment, register_refund, get_payment, get_payment_with_details, get_payments_for_invoice, get_payments_for_invoice_with_details, get_all_payments, count_payments, get_recent_payments, get_payments_by_buyer_company, get_refunds_for_invoice, update_payment, update_payment_document, update_payment_exchange_rate, delete_payment, delete_all_payments_for_invoice), summary functions (get_invoice_payment_summary, get_supplier_payment_summary, get_payments_summary_by_buyer_company, get_payment_stats), utility functions (get_remaining_amount, is_invoice_fully_paid, format_payment_for_display, get_payments_for_display). Uses DB RPC functions for summaries. Tests: tests/test_supplier_invoice_payment_service.py with 69 passing tests. Updated services/__init__.py with all exports."
     },
     {
       "id": "WF-001",
