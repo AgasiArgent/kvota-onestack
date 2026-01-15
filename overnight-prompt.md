@@ -77,3 +77,16 @@ Output `OVERNIGHT_COMPLETE` when:
 
 Run `./.claude/autonomous/init.sh` to start the dev server.
 App runs at http://localhost:5001
+
+---
+
+## Progress Tracking
+
+### Completed Features
+- [x] Feature #1: Create roles table (2025-01-15)
+- [x] Feature #2: Create user_roles table (2025-01-15)
+
+### Next Up
+- Feature #3: Create brand_assignments table
+- Feature #4: Create workflow_transitions table
+- Feature #5: Create approvals table

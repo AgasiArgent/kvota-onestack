@@ -22,10 +22,10 @@
       "name": "Создать таблицу user_roles",
       "description": "SQL миграция для связи пользователей с ролями (user_id, organization_id, role_id)",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T05:00:00Z",
+      "completed_at": "2025-01-15T05:05:00Z"
     },
     {
       "id": 3,

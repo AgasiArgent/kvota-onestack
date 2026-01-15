@@ -60,3 +60,21 @@
 - Added index on code column for fast lookups
 - Files changed: migrations/001_create_roles_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #2: Создать таблицу user_roles
+- Created SQL migration: `migrations/002_create_user_roles_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - user_id (UUID FK → auth.users)
+  - organization_id (UUID FK → organizations)
+  - role_id (UUID FK → roles)
+  - created_at (TIMESTAMP)
+  - created_by (UUID FK → auth.users)
+- Added unique constraint on (user_id, organization_id, role_id)
+- Created indexes: user_id, organization_id, role_id, (user_id, organization_id) composite
+- RLS policies:
+  - Users can see their own roles
+  - Users can see roles of others in their organization
+  - Only admins can insert/delete roles
+- Files changed: migrations/002_create_user_roles_table.sql (new)
+- Status: COMPLETE
