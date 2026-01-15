@@ -3307,3 +3307,19 @@ Features:
 - Quote-level seller_company_id (v3.0 requirement)
 - Replaced hardcoded dropdown with dynamic data
 - Links calculate page to edit form for seller company changes
+
+
+=== 2026-01-15 20:49:11 - UI-017 COMPLETE ===
+Feature: Quote item form: buyer company selector
+Implementation:
+- Added buyer_company_dropdown() to Add Product form (UI-017)
+- Parameters: name="buyer_company_id", label="Компания-покупатель"
+- Help text: "Наше юрлицо для закупки данной позиции"
+- Added buyer_company_id parameter to POST /quotes/{id}/products handler
+- Added buyer_company_map for fetching buyer company info in GET handler
+- Added get_item_buyer_company() helper function
+- Updated product_row() to accept buyer_company_info parameter
+- Display 🏢 buyer company badge in green (#008800) - distinct from supplier blue
+- Placeholder badge shown when buyer_company_id set but info not loaded
+Tests: 22 passing (test_ui_quote_buyer_company.py)
+

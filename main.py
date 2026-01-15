@@ -1662,9 +1662,27 @@ def get(quote_id: str, session):
         except ImportError:
             pass
 
+    # Fetch buyer company info for items that have buyer_company_id (UI-017 v3.0)
+    buyer_company_map = {}
+    buyer_company_ids = [item.get("buyer_company_id") for item in items if item.get("buyer_company_id")]
+    if buyer_company_ids:
+        try:
+            from services.buyer_company_service import get_buyer_company
+            for buyer_company_id in set(buyer_company_ids):
+                try:
+                    buyer_company_map[buyer_company_id] = get_buyer_company(buyer_company_id)
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
     # Helper to get supplier info for an item
     def get_item_supplier(item):
         return supplier_map.get(item.get("supplier_id"))
+
+    # Helper to get buyer company info for an item (UI-017)
+    def get_item_buyer_company(item):
+        return buyer_company_map.get(item.get("buyer_company_id"))
 
     return page_layout(f"Products - {quote.get('idn_quote', '')}",
         H1(f"Add Products to {quote.get('idn_quote', '')}"),
@@ -1673,7 +1691,7 @@ def get(quote_id: str, session):
         Div(
             H3(f"Products ({len(items)})"),
             Div(id="products-list",
-                *[product_row(item, quote["currency"], supplier_info=get_item_supplier(item)) for item in items]
+                *[product_row(item, quote["currency"], supplier_info=get_item_supplier(item), buyer_company_info=get_item_buyer_company(item)) for item in items]
             ) if items else Div(P("No products yet. Add your first product below."), id="products-list"),
             cls="card"
         ),
@@ -1700,6 +1718,17 @@ def get(quote_id: str, session):
                         required=False,
                         placeholder="Выберите поставщика...",
                         help_text="Внешний поставщик для данной позиции"
+                    ),
+                    cls="form-row"
+                ),
+                # Supply chain: Buyer company selector (UI-017)
+                Div(
+                    buyer_company_dropdown(
+                        name="buyer_company_id",
+                        label="Компания-покупатель",
+                        required=False,
+                        placeholder="Выберите компанию...",
+                        help_text="Наше юрлицо для закупки данной позиции"
                     ),
                     cls="form-row"
                 ),
@@ -1755,17 +1784,17 @@ def get(quote_id: str, session):
     )
 
 
-def product_row(item, currency="RUB", supplier_info=None):
-    """Render a single product row with optional supplier info (UI-016)"""
+def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=None):
+    """Render a single product row with optional supplier and buyer company info (UI-016, UI-017)"""
     total = (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else Decimal(0)
 
-    # Build product info with supplier badge if available
+    # Build product info with supplier/buyer company badges if available
     product_content = [
         Strong(item.get("product_name", "—")),
         Small(f" ({item.get('product_code', 'No SKU')})", style="color: #666;"),
     ]
 
-    # Add supplier badge if supplier is assigned (v3.0)
+    # Add supplier badge if supplier is assigned (v3.0 - UI-016)
     if supplier_info:
         supplier_name = supplier_info.name if hasattr(supplier_info, 'name') else supplier_info.get('name', '')
         supplier_code = supplier_info.supplier_code if hasattr(supplier_info, 'supplier_code') else supplier_info.get('supplier_code', '')
@@ -1779,6 +1808,22 @@ def product_row(item, currency="RUB", supplier_info=None):
         product_content.append(
             Span(" 📦", style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem;",
                  title="Поставщик назначен")
+        )
+
+    # Add buyer company badge if buyer company is assigned (v3.0 - UI-017)
+    if buyer_company_info:
+        buyer_name = buyer_company_info.name if hasattr(buyer_company_info, 'name') else buyer_company_info.get('name', '')
+        buyer_code = buyer_company_info.company_code if hasattr(buyer_company_info, 'company_code') else buyer_company_info.get('company_code', '')
+        buyer_display = buyer_code or buyer_name[:20]
+        product_content.append(
+            Span(f" 🏢 {buyer_display}", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem;",
+                 title=f"Покупатель: {buyer_name}")
+        )
+    elif item.get("buyer_company_id"):
+        # Buyer company ID exists but info not passed - show placeholder
+        product_content.append(
+            Span(" 🏢", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem;",
+                 title="Компания-покупатель назначена")
         )
 
     return Div(
@@ -1804,7 +1849,7 @@ def product_row(item, currency="RUB", supplier_info=None):
 @rt("/quotes/{quote_id}/products")
 def post(quote_id: str, product_name: str, product_code: str, brand: str, quantity: int,
          base_price_vat: float, weight_in_kg: float, supplier_country: str, customs_code: str,
-         supplier_id: str = None, session=None):
+         supplier_id: str = None, buyer_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -1838,15 +1883,19 @@ def post(quote_id: str, product_name: str, product_code: str, brand: str, quanti
             "customs_code": customs_code or None,
         }
 
-        # Add supplier_id if provided (v3.0 supply chain)
+        # Add supplier_id if provided (v3.0 supply chain - UI-016)
         if supplier_id and supplier_id.strip():
             item_data["supplier_id"] = supplier_id.strip()
+
+        # Add buyer_company_id if provided (v3.0 supply chain - UI-017)
+        if buyer_company_id and buyer_company_id.strip():
+            item_data["buyer_company_id"] = buyer_company_id.strip()
 
         result = supabase.table("quote_items").insert(item_data).execute()
 
         new_item = result.data[0]
 
-        # Fetch supplier info for display if supplier_id was set
+        # Fetch supplier info for display if supplier_id was set (UI-016)
         supplier_info = None
         if new_item.get("supplier_id"):
             try:
@@ -1855,8 +1904,17 @@ def post(quote_id: str, product_name: str, product_code: str, brand: str, quanti
             except Exception:
                 pass
 
+        # Fetch buyer company info for display if buyer_company_id was set (UI-017)
+        buyer_company_info = None
+        if new_item.get("buyer_company_id"):
+            try:
+                from services.buyer_company_service import get_buyer_company
+                buyer_company_info = get_buyer_company(new_item["buyer_company_id"])
+            except Exception:
+                pass
+
         # Return just the new row for HTMX to append
-        return product_row(new_item, quote["currency"], supplier_info=supplier_info)
+        return product_row(new_item, quote["currency"], supplier_info=supplier_info, buyer_company_info=buyer_company_info)
 
     except Exception as e:
         return Div(f"Error: {str(e)}", cls="alert alert-error")
