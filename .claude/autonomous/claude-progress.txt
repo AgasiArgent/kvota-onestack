@@ -961,3 +961,42 @@
     - Added "Таможня" link to nav_bar for customs/admin roles
 - Status: COMPLETE - 2 features done (42, 43)
 
+
+## Session 2025-01-15 - Features #44 & #45: Customs Data Entry Form & Completion Button
+- Created /customs/{quote_id} GET route for customs detail page:
+  - Displays quote header with customer name and workflow status
+  - Shows summary stats: total items, items with HS codes, total duty %, total extra charges
+  - Progress bar showing HS code completion percentage
+  - Instruction card for customs manager
+  - Table with all quote items, each having editable fields:
+    - HS code (ТН ВЭД) - text input, max 20 chars
+    - Customs duty % - number input
+    - Extra charges - number input
+  - Notes textarea for customs manager comments
+  - Editing disabled when quote is not in editable status or already completed
+  - Action buttons: "Сохранить данные" and "Завершить таможню"
+  - Success/warning banners based on completion status
+- Created /customs/{quote_id} POST handler:
+  - Validates user has customs/admin role
+  - Verifies quote is in correct workflow status for editing
+  - Updates hs_code, customs_duty, customs_extra for each quote_item
+  - If action=complete, calls complete_customs() which:
+    - Sets customs_completed_at timestamp
+    - Triggers auto-transition to sales_review if logistics also complete
+- Data storage: Customs data is stored per-item in quote_items table
+  - hs_code: VARCHAR(20) - ТН ВЭД code
+  - customs_duty: DECIMAL(15,4) - duty percentage
+  - customs_extra: DECIMAL(15,2) - additional charges
+- UI features:
+  - Russian labels
+  - Disabled fields when not editable
+  - Green success banner when customs is complete
+  - Yellow warning banner when editing not available
+  - Progress bar with HS code completion status
+  - Back link to /customs
+- **CUSTOMS UI PHASE COMPLETE** (all 4 features done: 42-45)
+- Files changed:
+  - main.py (~350 lines added):
+    - Added GET /customs/{quote_id} route
+    - Added POST /customs/{quote_id} handler
+- Status: COMPLETE - 2 features done (44, 45)

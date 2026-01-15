@@ -126,16 +126,19 @@ App runs at http://localhost:5001
 - [x] Feature #41: Кнопка завершения логистики (2025-01-15) - In #40
 - [x] Feature #42: Страница /customs (2025-01-15)
 - [x] Feature #43: Список КП на этапе таможни (2025-01-15) - In #42
+- [x] Feature #44: Форма ввода таможенных данных (2025-01-15)
+- [x] Feature #45: Кнопка завершения таможни (2025-01-15) - In #44
 
 ### Next Up
-- Feature #44: Форма ввода таможенных данных (customs data entry form)
+- Feature #46: Страница /quote-control (quote controller workspace for Zhanna)
 
 ### Progress
-- **43 of 88 features completed** (49%)
+- **45 of 88 features completed** (51%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
 - **LOGISTICS UI PHASE COMPLETE** (all 4 features done: 38-41)
+- **CUSTOMS UI PHASE COMPLETE** (all 4 features done: 42-45)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted

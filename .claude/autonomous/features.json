@@ -493,10 +493,11 @@
       "name": "Форма ввода таможенных данных",
       "description": "Коды ТН ВЭД, пошлины, доп. расходы",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T09:00:00Z",
+      "completed_at": "2025-01-15T09:30:00Z",
+      "notes": "Created /customs/{quote_id} GET page with per-item form for HS codes, duty %, and extra charges. Includes progress tracking and parallel stage status."
     },
     {
       "id": 45,
@@ -504,10 +505,11 @@
       "name": "Кнопка завершения таможни",
       "description": "Завершить этап таможни",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T09:30:00Z",
+      "completed_at": "2025-01-15T09:35:00Z",
+      "notes": "Implemented in Feature #44 - form includes 'Завершить таможню' button that calls complete_customs()"
     },
     {
       "id": 46,

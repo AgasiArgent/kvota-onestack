@@ -4372,6 +4372,356 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# CUSTOMS DETAIL PAGE (Feature #44, #45)
+# ============================================================================
+
+@rt("/customs/{quote_id}")
+def get(session, quote_id: str):
+    """
+    Customs detail page - view and edit customs data for each item in a quote.
+
+    Feature #44: Customs data entry form
+    - Shows quote summary and all items
+    - Editable fields for HS codes (ТН ВЭД), duty, and extra charges
+    - Only editable when quote is in pending_customs or pending_logistics status
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has customs role
+    if not user_has_any_role(session, ["customs", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("Quote Not Found",
+            H1("Quote Not Found"),
+            P("The requested quote was not found or you don't have access."),
+            A("← Back to Customs", href="/customs"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+    customer_name = quote.get("customers", {}).get("name", "Unknown")
+
+    # Fetch quote items
+    items_result = supabase.table("quote_items") \
+        .select("id, brand, article_number, name, quantity, unit, base_price, weight, supplier_country, hs_code, customs_duty, customs_extra") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    items = items_result.data or []
+
+    # Check if customs is editable
+    editable_statuses = ["pending_customs", "pending_logistics", "draft", "pending_procurement"]
+    is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
+    customs_done = quote.get("customs_completed_at") is not None
+
+    # Calculate summary stats
+    total_items = len(items)
+    items_with_hs = sum(1 for item in items if item.get("hs_code"))
+    total_duty = sum(float(item.get("customs_duty", 0) or 0) for item in items)
+    total_extra = sum(float(item.get("customs_extra", 0) or 0) for item in items)
+
+    # Build items form - each item has fields for HS code, duty, extra
+    def item_row(item, index):
+        item_id = item.get("id")
+        return Tr(
+            Td(str(index + 1)),
+            Td(
+                Div(item.get("brand", "—"), style="font-weight: 500;"),
+                Div(item.get("article_number", ""), style="font-size: 0.75rem; color: #666;")
+            ),
+            Td(item.get("name", "—")[:40] + "..." if len(item.get("name", "")) > 40 else item.get("name", "—")),
+            Td(f"{item.get('quantity', 0)} {item.get('unit', 'шт')}"),
+            Td(item.get("supplier_country", "—")),
+            Td(
+                Input(
+                    name=f"hs_code_{item_id}",
+                    type="text",
+                    value=item.get("hs_code", ""),
+                    placeholder="0000000000",
+                    maxlength="20",
+                    disabled=not is_editable,
+                    style="width: 120px; font-size: 0.875rem;"
+                )
+            ),
+            Td(
+                Input(
+                    name=f"customs_duty_{item_id}",
+                    type="number",
+                    value=str(item.get("customs_duty", 0) or 0),
+                    min="0",
+                    step="0.01",
+                    disabled=not is_editable,
+                    style="width: 80px; font-size: 0.875rem;"
+                )
+            ),
+            Td(
+                Input(
+                    name=f"customs_extra_{item_id}",
+                    type="number",
+                    value=str(item.get("customs_extra", 0) or 0),
+                    min="0",
+                    step="0.01",
+                    disabled=not is_editable,
+                    style="width: 80px; font-size: 0.875rem;"
+                )
+            )
+        )
+
+    # Items table in a form
+    items_form = Form(
+        Table(
+            Thead(Tr(
+                Th("#"),
+                Th("Бренд/Артикул"),
+                Th("Наименование"),
+                Th("Кол-во"),
+                Th("Страна"),
+                Th("Код ТН ВЭД"),
+                Th("Пошлина %"),
+                Th("Доп. расходы")
+            )),
+            Tbody(
+                *[item_row(item, i) for i, item in enumerate(items)]
+            ) if items else Tbody(Tr(Td("Нет позиций в КП", colspan="8", style="text-align: center; color: #666;"))),
+            style="width: 100%; font-size: 0.875rem;"
+        ),
+
+        # Notes field
+        Div(
+            Label("Примечания таможенника",
+                Textarea(
+                    quote.get("customs_notes", ""),
+                    name="customs_notes",
+                    rows="3",
+                    disabled=not is_editable,
+                    style="width: 100%;"
+                ),
+                style="display: block; margin-top: 1rem;"
+            ),
+        ) if is_editable else None,
+
+        # Action buttons
+        Div(
+            Button("💾 Сохранить данные", type="submit", name="action", value="save",
+                   style="margin-right: 0.5rem;") if is_editable else None,
+            Button("✅ Завершить таможню", type="submit", name="action", value="complete",
+                   cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
+            Span("✅ Таможня завершена", style="color: #22c55e; font-weight: bold;") if customs_done else None,
+            style="margin-top: 1rem;"
+        ) if is_editable or customs_done else None,
+
+        method="post",
+        action=f"/customs/{quote_id}"
+    )
+
+    # Status banner
+    status_banner = Div(
+        P(f"⚠️ Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование таможни недоступно.",
+          style="margin: 0;"),
+        style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if not is_editable and not customs_done else None
+
+    success_banner = Div(
+        P(f"✅ Таможня по данному КП завершена.",
+          style="margin: 0;"),
+        style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if customs_done else None
+
+    # Progress indicator
+    progress_percent = int(items_with_hs / total_items * 100) if total_items > 0 else 0
+
+    return page_layout(f"Customs - {quote.get('idn_quote', '')}",
+        # Header
+        Div(
+            A("← К списку", href="/customs", style="color: #666; font-size: 0.875rem;"),
+            H1(f"🛃 Таможня: {quote.get('idn_quote', '')}"),
+            Div(
+                Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
+                workflow_status_badge(workflow_status),
+                style="display: flex; align-items: center; gap: 0.5rem;"
+            ),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Status banners
+        success_banner,
+        status_banner,
+
+        # Quote summary with customs stats
+        Div(
+            H3("📋 Сводка по КП"),
+            Div(
+                Div(
+                    Div(str(total_items), cls="stat-value"),
+                    Div("Позиций"),
+                    cls="stat-card-mini"
+                ),
+                Div(
+                    Div(f"{items_with_hs}/{total_items}", cls="stat-value"),
+                    Div("Заполнено ТН ВЭД"),
+                    cls="stat-card-mini"
+                ),
+                Div(
+                    Div(f"{total_duty:.2f}%", cls="stat-value"),
+                    Div("Сумма пошлин"),
+                    cls="stat-card-mini"
+                ),
+                Div(
+                    Div(format_money(total_extra) if total_extra else "0", cls="stat-value"),
+                    Div("Доп. расходы"),
+                    cls="stat-card-mini"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+            ),
+            # Progress bar
+            Div(
+                Div(
+                    Div(style=f"width: {progress_percent}%; height: 100%; background-color: {'#22c55e' if progress_percent == 100 else '#3b82f6'};"),
+                    style="background-color: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;"
+                ),
+                P(f"Прогресс: {progress_percent}% ({items_with_hs} из {total_items} позиций)", style="margin-top: 0.25rem; font-size: 0.875rem; color: #666;"),
+                style="margin-top: 0.5rem;"
+            ),
+            cls="card"
+        ),
+
+        # Instructions
+        Div(
+            H3("📝 Инструкция"),
+            P("Заполните коды ТН ВЭД для каждой позиции, укажите процент пошлины и дополнительные расходы.", style="margin-bottom: 0;"),
+            cls="card",
+            style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
+        ) if is_editable else None,
+
+        # Items form
+        Div(
+            H3("📦 Позиции"),
+            items_form,
+            cls="card"
+        ),
+
+        # Additional styles
+        Style("""
+            .stat-card-mini {
+                background: #f9fafb;
+                padding: 0.75rem 1rem;
+                border-radius: 4px;
+                text-align: center;
+            }
+            .stat-card-mini .stat-value {
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: #1f2937;
+            }
+        """),
+
+        session=session
+    )
+
+
+@rt("/customs/{quote_id}")
+def post(session, quote_id: str, action: str = "save", customs_notes: str = "", **kwargs):
+    """
+    Save customs data for all items and optionally mark customs as complete.
+
+    Feature #44: Customs data entry form (POST handler)
+    Feature #45: Complete customs button
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["customs", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to org
+    quote_result = supabase.table("quotes") \
+        .select("id, workflow_status, customs_completed_at") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return RedirectResponse("/customs", status_code=303)
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if editable
+    editable_statuses = ["pending_customs", "pending_logistics", "draft", "pending_procurement"]
+    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
+        return RedirectResponse(f"/customs/{quote_id}", status_code=303)
+
+    # Get all items for this quote
+    items_result = supabase.table("quote_items") \
+        .select("id") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    items = items_result.data or []
+
+    # Helper function for safe decimal conversion
+    def safe_decimal(val, default=0):
+        try:
+            return float(val) if val else default
+        except:
+            return default
+
+    # Update customs data for each item
+    for item in items:
+        item_id = item["id"]
+        hs_code = kwargs.get(f"hs_code_{item_id}", "")
+        customs_duty = kwargs.get(f"customs_duty_{item_id}", "0")
+        customs_extra = kwargs.get(f"customs_extra_{item_id}", "0")
+
+        # Update item
+        supabase.table("quote_items") \
+            .update({
+                "hs_code": hs_code if hs_code else None,
+                "customs_duty": safe_decimal(customs_duty),
+                "customs_extra": safe_decimal(customs_extra)
+            }) \
+            .eq("id", item_id) \
+            .execute()
+
+    # If action is complete, mark customs as done
+    if action == "complete":
+        user_roles = get_user_roles_from_session(session)
+        result = complete_customs(quote_id, user_id, user_roles)
+
+        if not result.success:
+            # Log error but still redirect
+            print(f"Error completing customs: {result.error}")
+
+    return RedirectResponse(f"/customs/{quote_id}", status_code=303)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
