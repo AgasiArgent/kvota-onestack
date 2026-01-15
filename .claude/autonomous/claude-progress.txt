@@ -3129,3 +3129,20 @@ This is different from brand_assignments/brand_procurement_assignments which ass
 - Created tests/test_customer_contract_service.py with 44 tests (all passing)
 - Updated features.json: API-005 passes=true
 
+
+---
+2026-01-15T19:30:00 - Completed API-008 (Brand Assignments API)
+- Created services/brand_supplier_assignment_service.py with:
+  - BrandSupplierAssignment dataclass with supplier join data
+  - CRUD operations: create, get, update, delete
+  - Query functions: get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier
+  - Bulk operations: bulk_create_brand_supplier_assignments
+  - Primary management: set_primary_supplier_for_brand, unset_primary_supplier_for_brand
+  - Utility: get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier
+  - Stats: get_brand_supplier_assignment_stats
+  - Display: format_brand_supplier_for_display, get_suppliers_for_brand_dropdown
+- Note: Existing brand_service.py handles brand→user (procurement manager) assignments
+- This new service handles brand→supplier (external supplier) assignments
+- Created tests/test_brand_supplier_assignment_service.py with 24 passing tests
+- Updated services/__init__.py with all exports
+- Updated features.json: API-008 passes=true

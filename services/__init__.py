@@ -536,6 +536,40 @@ from .location_service import (
     seed_default_locations,
     get_location_for_route,
 )
+from .brand_supplier_assignment_service import (
+    # Data class (Feature #API-008)
+    BrandSupplierAssignment,
+    # Create operations
+    create_brand_supplier_assignment,
+    bulk_create_brand_supplier_assignments,
+    # Read operations
+    get_brand_supplier_assignment,
+    get_assignments_for_brand,
+    get_primary_supplier_for_brand,
+    get_assignments_for_supplier,
+    get_all_brand_supplier_assignments,
+    count_brand_supplier_assignments,
+    get_unique_assigned_brands,
+    brand_has_supplier,
+    brand_has_primary_supplier,
+    # Update operations
+    update_brand_supplier_assignment,
+    set_primary_supplier_for_brand,
+    unset_primary_supplier_for_brand,
+    # Delete operations
+    delete_brand_supplier_assignment,
+    delete_brand_supplier_assignment_by_brand_supplier,
+    delete_all_assignments_for_brand,
+    delete_all_assignments_for_supplier,
+    # Utility functions
+    get_brand_supplier_mapping,
+    get_suppliers_count_by_brand,
+    get_brands_without_supplier,
+    get_brands_without_primary_supplier,
+    get_brand_supplier_assignment_stats,
+    format_brand_supplier_for_display,
+    get_suppliers_for_brand_dropdown,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -1105,4 +1139,31 @@ __all__ = [
     "get_locations_for_dropdown",
     "seed_default_locations",
     "get_location_for_route",
+    # Brand supplier assignment service (Feature #API-008)
+    "BrandSupplierAssignment",
+    "create_brand_supplier_assignment",
+    "bulk_create_brand_supplier_assignments",
+    "get_brand_supplier_assignment",
+    "get_assignments_for_brand",
+    "get_primary_supplier_for_brand",
+    "get_assignments_for_supplier",
+    "get_all_brand_supplier_assignments",
+    "count_brand_supplier_assignments",
+    "get_unique_assigned_brands",
+    "brand_has_supplier",
+    "brand_has_primary_supplier",
+    "update_brand_supplier_assignment",
+    "set_primary_supplier_for_brand",
+    "unset_primary_supplier_for_brand",
+    "delete_brand_supplier_assignment",
+    "delete_brand_supplier_assignment_by_brand_supplier",
+    "delete_all_assignments_for_brand",
+    "delete_all_assignments_for_supplier",
+    "get_brand_supplier_mapping",
+    "get_suppliers_count_by_brand",
+    "get_brands_without_supplier",
+    "get_brands_without_primary_supplier",
+    "get_brand_supplier_assignment_stats",
+    "format_brand_supplier_for_display",
+    "get_suppliers_for_brand_dropdown",
 ]

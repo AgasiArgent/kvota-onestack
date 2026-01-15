@@ -352,8 +352,10 @@
       "name": "Brand assignments API",
       "category": "backend",
       "priority": 2,
-      "passes": false,
-      "description": "Manage brand-supplier and brand-procurement assignments"
+      "passes": true,
+      "completed_at": "2026-01-15T19:30:00Z",
+      "description": "Manage brand-supplier and brand-procurement assignments",
+      "notes": "Created services/brand_supplier_assignment_service.py with: BrandSupplierAssignment dataclass, CRUD operations (create/get/update/delete), query functions (get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier, count_brand_supplier_assignments), bulk operations (bulk_create_brand_supplier_assignments), primary supplier management (set_primary_supplier_for_brand, unset_primary_supplier_for_brand - uses DB trigger for single-primary enforcement), utility functions (get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier, get_brands_without_primary_supplier, get_brand_supplier_assignment_stats, format_brand_supplier_for_display, get_suppliers_for_brand_dropdown). Note: brand_service.py already handles brand→procurement-manager assignments (brand_assignments table). This new service handles brand→supplier assignments (brand_supplier_assignments table from DB-008). Tests in tests/test_brand_supplier_assignment_service.py with 24 passing tests. Updated services/__init__.py with all exports."
     },
     {
       "id": "API-009",
