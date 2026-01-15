@@ -99,15 +99,18 @@ App runs at http://localhost:5001
 - [x] Feature #14: Seed roles data (2025-01-15) - Already in migration 001
 - [x] Feature #15: Seed plan_fact_categories data (2025-01-15)
 - [x] Feature #16: Configure RLS for new tables (2025-01-15)
+- [x] Feature #17: Role service - get_user_roles (2025-01-15)
 
 ### Next Up
-- Feature #17: Сервис ролей: получение ролей пользователя
+- Feature #18: Сервис ролей: проверка наличия роли (has_role function)
 
 ### Progress
-- **16 of 88 features completed** (18%)
+- **17 of 88 features completed** (19%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
+- **ROLE SERVICE STARTED** (feature 17 done)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
 - Helper functions added: user_has_role_in_org, user_organization_ids, user_is_admin_in_org
-- Next: Role system services (features 17-22)
+- Role service created with get_user_roles, get_user_role_codes, get_all_roles, get_role_by_code
+- Next: Complete role system services (features 18-22)

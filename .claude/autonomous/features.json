@@ -189,10 +189,10 @@
       "name": "Сервис ролей: получение ролей пользователя",
       "description": "Функция get_user_roles(user_id, org_id) → список ролей",
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T09:00:00Z",
+      "completed_at": "2025-01-15T09:10:00Z"
     },
     {
       "id": 18,

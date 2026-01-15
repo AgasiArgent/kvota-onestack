@@ -423,3 +423,22 @@
 - Added comprehensive RLS policy documentation
 - Files changed: migrations/015_verify_rls_policies.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #17: Сервис ролей: получение ролей пользователя
+- Created new service file: services/role_service.py
+- Implemented functions:
+  - get_user_roles(user_id, org_id) → List[Role] - main function for getting user roles
+  - get_user_role_codes(user_id, org_id) → List[str] - convenience function for role codes only
+  - get_all_roles() → List[Role] - get all available roles
+  - get_role_by_code(code) → Optional[Role] - get single role by code
+  - get_users_by_role(org_id, role_code) → List[dict] - get users with specific role
+  - get_users_by_any_role(org_id, role_codes) → List[dict] - get users with any of specified roles
+- Created dataclasses:
+  - Role: id, code, name, description
+  - UserRole: id, user_id, organization_id, role, created_at, created_by
+- Updated services/__init__.py to export new functions
+- Tested imports successfully
+- Files changed:
+  - services/role_service.py (new)
+  - services/__init__.py (updated)
+- Status: COMPLETE
