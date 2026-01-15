@@ -55,10 +55,10 @@
       "name": "Создать таблицу approvals",
       "description": "SQL миграция для запросов на согласование",
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T08:00:00Z",
+      "completed_at": "2025-01-15T08:05:00Z"
     },
     {
       "id": 6,

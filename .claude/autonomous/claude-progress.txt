@@ -119,3 +119,33 @@
 - Added table and column comments for documentation
 - Files changed: migrations/004_create_workflow_transitions_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #5: Создать таблицу approvals
+- Created SQL migration: `migrations/005_create_approvals_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - quote_id (UUID FK -> quotes, CASCADE DELETE)
+  - requested_by (UUID FK -> auth.users) - who requested approval
+  - approver_id (UUID FK -> auth.users) - who should approve
+  - approval_type (VARCHAR 50) - default 'top_manager'
+  - reason (TEXT) - why approval is needed
+  - status (VARCHAR 20) - 'pending', 'approved', 'rejected' with CHECK constraint
+  - decision_comment (TEXT) - comment from approver
+  - requested_at (TIMESTAMP)
+  - decided_at (TIMESTAMP) - set automatically via trigger
+- Added CHECK constraint: decided_at must be NULL when pending, NOT NULL otherwise
+- Created indexes:
+  - quote_id - for finding approvals by quote
+  - requested_by - for filtering by requester
+  - approver_id - for finding approvals to review
+  - status - for filtering by approval status
+  - requested_at DESC - for time-ordered listing
+  - (approver_id, status) composite - for pending approvals dashboard
+- RLS policies:
+  - Users can view approvals for quotes in their organization
+  - Quote controllers can create approval requests
+  - Approvers can update their pending approvals
+  - No DELETE - approvals are immutable audit records
+- Added trigger to automatically set decided_at when status changes from pending
+- Files changed: migrations/005_create_approvals_table.sql (new)
+- Status: COMPLETE
