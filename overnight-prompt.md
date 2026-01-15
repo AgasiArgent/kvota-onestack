@@ -93,8 +93,9 @@ App runs at http://localhost:5001
 - [x] Feature #8: Create plan_fact_categories table (2025-01-15)
 - [x] Feature #9: Create plan_fact_items table (2025-01-15)
 - [x] Feature #10: Create telegram_users table (2025-01-15)
+- [x] Feature #11: Create notifications table (2025-01-15)
 
 ### Next Up
-- Feature #11: Create notifications table
 - Feature #12: Extend quotes table with workflow fields
 - Feature #13: Extend quote_items table with workflow fields
+- Feature #14: Seed roles data
