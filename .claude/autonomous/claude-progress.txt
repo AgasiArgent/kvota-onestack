@@ -2574,3 +2574,44 @@ CREATE TABLE buyer_companies (
 
 **Status:** COMPLETE
 **Next:** DB-003 (Verify seller_companies table exists)
+
+## Session 2026-01-15 - Feature DB-003: Create seller_companies table
+
+**What was done:**
+- Created migration `migrations/020_create_seller_companies_table.sql`
+- Table is for our legal entities used for selling to customers
+- Level: QUOTE (one seller_company_id per quote)
+
+**Schema:**
+```sql
+CREATE TABLE seller_companies (
+    id UUID PK,
+    organization_id UUID FK,
+    name VARCHAR(255),
+    supplier_code VARCHAR(3),  -- 3-letter code (MBR, RAR, CMT, GES, TEX)
+    country,
+    inn, kpp, ogrn,
+    registration_address,
+    general_director_name,
+    general_director_position DEFAULT 'Генеральный директор',
+    is_active, created_at, updated_at, created_by
+);
+```
+
+**Features:**
+- Unique supplier_code per organization
+- RLS policies for organization isolation (select/insert/update/delete)
+- Only admin/finance can create/update
+- Indexes for name, inn, active status queries
+- Trigger for updated_at timestamp
+- Documented with COMMENT ON TABLE/COLUMN
+
+**Examples from spec:**
+- МАСТЕР БЭРИНГ ООО (MBR) - Россия
+- РадРесурс ООО (RAR) - Россия
+- ЦМТО1 ООО (CMT) - Россия
+- GESTUS DIŞ TİCARET (GES) - Турция
+- TEXCEL OTOMOTİV (TEX) - Турция
+
+**Status:** COMPLETE
+**Next:** DB-004 (customer_contacts table with is_signatory)
