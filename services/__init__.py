@@ -338,6 +338,38 @@ from .supplier_service import (
     format_supplier_for_dropdown,
     get_suppliers_for_dropdown,
 )
+from .buyer_company_service import (
+    # Data class (Feature #API-002)
+    BuyerCompany,
+    # Validation functions
+    validate_company_code as validate_buyer_company_code,
+    validate_inn as validate_buyer_inn,
+    validate_kpp as validate_buyer_kpp,
+    validate_ogrn,
+    # Create operations
+    create_buyer_company,
+    # Read operations
+    get_buyer_company,
+    get_buyer_company_by_code,
+    get_buyer_company_by_inn,
+    get_all_buyer_companies,
+    count_buyer_companies,
+    search_buyer_companies,
+    get_active_buyer_companies,
+    buyer_company_exists,
+    # Update operations
+    update_buyer_company,
+    activate_buyer_company,
+    deactivate_buyer_company,
+    # Delete operations
+    delete_buyer_company,
+    # Utility functions
+    get_buyer_company_stats,
+    get_buyer_company_display_name,
+    format_buyer_company_for_dropdown,
+    get_buyer_companies_for_dropdown,
+    get_buyer_company_for_document,
+)
 from .telegram_service import (
     # Configuration
     is_bot_configured,
@@ -752,4 +784,28 @@ __all__ = [
     "get_supplier_display_name",
     "format_supplier_for_dropdown",
     "get_suppliers_for_dropdown",
+    # Buyer company service (Feature #API-002)
+    "BuyerCompany",
+    "validate_buyer_company_code",
+    "validate_buyer_inn",
+    "validate_buyer_kpp",
+    "validate_ogrn",
+    "create_buyer_company",
+    "get_buyer_company",
+    "get_buyer_company_by_code",
+    "get_buyer_company_by_inn",
+    "get_all_buyer_companies",
+    "count_buyer_companies",
+    "search_buyer_companies",
+    "get_active_buyer_companies",
+    "buyer_company_exists",
+    "update_buyer_company",
+    "activate_buyer_company",
+    "deactivate_buyer_company",
+    "delete_buyer_company",
+    "get_buyer_company_stats",
+    "get_buyer_company_display_name",
+    "format_buyer_company_for_dropdown",
+    "get_buyer_companies_for_dropdown",
+    "get_buyer_company_for_document",
 ]

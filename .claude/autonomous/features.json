@@ -292,8 +292,10 @@
       "name": "CRUD API for buyer_companies",
       "category": "backend",
       "priority": 1,
-      "passes": false,
-      "description": "Create, read, update, delete buyer companies"
+      "passes": true,
+      "completed_at": "2026-01-15T22:30:00Z",
+      "description": "Create, read, update, delete buyer companies",
+      "notes": "Created services/buyer_company_service.py with: BuyerCompany dataclass with all table fields (company_code, inn, kpp, ogrn, registration_address, general_director_name/position), validation functions (validate_company_code, validate_inn for legal entity 10 digits, validate_kpp, validate_ogrn for 13 digits), CRUD operations (create_buyer_company, get_buyer_company, get_buyer_company_by_code, get_buyer_company_by_inn, get_all_buyer_companies, count_buyer_companies, search_buyer_companies, update_buyer_company, activate/deactivate, delete_buyer_company), dropdown helpers (get_buyer_companies_for_dropdown, format_buyer_company_for_dropdown), document generation helper (get_buyer_company_for_document with full_requisites formatting), stats function. Updated services/__init__.py with exports. Tests in tests/test_buyer_company_service.py with 44 passing tests."
     },
     {
       "id": "API-003",
