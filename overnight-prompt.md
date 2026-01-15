@@ -102,14 +102,15 @@ App runs at http://localhost:5001
 - [x] Feature #17: Role service - get_user_roles (2025-01-15)
 - [x] Feature #18: Role service - has_role, has_any_role, has_all_roles (2025-01-15)
 - [x] Feature #19: Role service - assign_role function (2025-01-15)
+- [x] Feature #20: Role service - remove_role function (2025-01-15)
 
 ### Next Up
-- Feature #20: Сервис ролей: удаление роли (remove_role function)
+- Feature #21: Middleware require_role (decorator for route protection)
 
 ### Progress
-- **19 of 88 features completed** (22%)
+- **20 of 88 features completed** (23%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
-- **ROLE SERVICE IN PROGRESS** (features 17-19 done)
+- **ROLE SERVICE IN PROGRESS** (features 17-20 done)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
