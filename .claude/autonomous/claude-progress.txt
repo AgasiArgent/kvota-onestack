@@ -184,3 +184,32 @@
 - All columns documented with COMMENT statements
 - Files changed: migrations/006_create_specifications_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #7: Создать таблицу deals
+- Created SQL migration: `migrations/007_create_deals_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - specification_id (UUID FK -> specifications, RESTRICT on delete)
+  - quote_id (UUID FK -> quotes, RESTRICT on delete)
+  - organization_id (UUID FK -> organizations, CASCADE on delete)
+  - deal_number (VARCHAR 100) - human-readable identifier like DEAL-2025-0001
+  - signed_at (DATE) - when specification was signed by client
+  - total_amount (DECIMAL 15,2) - total deal amount
+  - currency (VARCHAR 10) - RUB, USD, EUR, CNY
+  - status (VARCHAR 20) - CHECK constraint: active, completed, cancelled
+  - created_by, created_at, updated_at (audit fields)
+- Indexes created:
+  - specification_id, quote_id, organization_id (FK lookups)
+  - status, signed_at DESC, deal_number (filtering & sorting)
+  - created_at DESC (time-ordered listing)
+  - (organization_id, status) composite for org-scoped queries
+  - UNIQUE on specification_id (one deal per specification)
+- RLS policies:
+  - Users can view deals in their organization
+  - Only spec_controller or admin can create deals
+  - Only finance or admin can update deals
+  - Only admin can delete deals
+- Added trigger for automatic updated_at timestamp
+- Added helper function generate_deal_number(org_id) for generating deal numbers
+- Files changed: migrations/007_create_deals_table.sql (new)
+- Status: COMPLETE

@@ -89,8 +89,9 @@ App runs at http://localhost:5001
 - [x] Feature #4: Create workflow_transitions table (2025-01-15)
 - [x] Feature #5: Create approvals table (2025-01-15)
 - [x] Feature #6: Create specifications table (2025-01-15)
+- [x] Feature #7: Create deals table (2025-01-15)
 
 ### Next Up
-- Feature #7: Create deals table
 - Feature #8: Create plan_fact_categories table
 - Feature #9: Create plan_fact_items table
+- Feature #10: Create telegram_users table
