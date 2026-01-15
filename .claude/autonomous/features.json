@@ -92,8 +92,10 @@
       "name": "Create route_logistics_assignments table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Assign routes to logistics managers with pattern matching"
+      "passes": true,
+      "completed_at": "2026-01-15T18:00:00Z",
+      "description": "Assign routes to logistics managers with pattern matching",
+      "notes": "Created migration 027_create_route_logistics_assignments_table.sql with route_pattern field supporting wildcards (*). Helper functions: match_route_to_logistics_manager(), get_routes_for_logistics_manager(), get_logistics_manager_for_locations(), get_route_assignments_summary(). RLS policies for organization isolation."
     },
     {
       "id": "DB-011",
