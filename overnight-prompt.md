@@ -279,5 +279,6 @@ Start with DB-001 (suppliers table) and work through sequentially.
 
 ### Progress:
 - v3.0 features complete: **67/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 16 UI features done!)
-- Completed: UI-016 (Quote item form: supplier selector)
+- Completed this iteration: UI-016 (Quote item form: supplier selector)
+- Commit: 666c46b - feat(UI-016): Add supplier selector to quote item form
 - Next feature: **UI-017** (Quote item form: buyer company selector)
