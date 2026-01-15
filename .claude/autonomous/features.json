@@ -242,8 +242,10 @@
       "name": "Create notifications table",
       "category": "database",
       "priority": 3,
-      "passes": false,
-      "description": "Store notification history"
+      "passes": true,
+      "completed_at": "2026-01-15T20:45:00Z",
+      "description": "Store notification history",
+      "notes": "Table already existed from v2.0 (migration 011). Created migration 041_extend_notifications_v3.sql with v3.0 enhancements: added organization_id (multi-tenant), specification_id, approval_id, priority column (low/normal/high/urgent), metadata JSONB, expires_at for time-sensitive notifications. Extended type constraint with v3.0 types: workflow_transition, procurement_complete, logistics_complete, customs_complete, spec_ready, spec_signed, deal_created, payment_due, payment_received, invoice_received, invoice_overdue. Helper functions: create_notification_v3(), create_workflow_notification(), create_approval_notification(), get_pending_notifications_v3(), get_notification_counts(), mark_all_notifications_read(), cleanup_expired_notifications(). Updated RLS policies for organization isolation. View: v_notifications_list with related entity info."
     },
     {
       "id": "DB-026",
