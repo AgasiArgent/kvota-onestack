@@ -3047,3 +3047,36 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - mark_plan_fact_items_overdue() - Batch job to mark overdue items
 - View: v_plan_fact_items_full with category, deal, quote, customer context
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-024: Create telegram_users table
+- Purpose: Link Telegram accounts to system users for bot-based notifications and approvals
+- Created migration 040_create_telegram_users_table.sql
+- Table columns:
+  - id, organization_id, user_id (system user link)
+  - telegram_id (BIGINT unique), telegram_username, telegram_first_name, telegram_last_name, telegram_language_code
+  - Verification: verification_code, verification_code_expires_at, verification_attempts (max 5)
+  - Notification preferences: notifications_enabled (master), notify_on_task_assigned, notify_on_approval_request, notify_on_status_change, notify_on_deal_update
+  - Status: is_active, is_verified, blocked_at, blocked_reason
+  - Audit: created_at, updated_at, verified_at, last_interaction_at
+- Unique constraints: (organization_id, telegram_id), (user_id WHERE is_active)
+- Indexes: telegram_id lookup, username lookup, pending verifications, active notifiable users
+- Triggers:
+  - tr_telegram_users_update_timestamp - auto-update updated_at
+  - tr_telegram_users_set_verified_at - auto-set verified_at when is_verified becomes true
+- RLS policies:
+  - Users can CRUD their own telegram link
+  - Admins can view/update/delete any telegram user in their org
+- Helper functions:
+  - generate_telegram_verification_code() - 6-char alphanumeric code
+  - start_telegram_verification(user_id, org_id, telegram_id, ...) - Start verification flow with upsert
+  - verify_telegram_user(telegram_id, code) - Verify account, returns success/message/user_id/org_id
+  - get_telegram_user(telegram_id) - Get telegram user info by telegram_id
+  - get_telegram_id_for_user(user_id) - Get telegram_id for system user (if verified)
+  - get_telegram_recipients_for_notification(org_id, type, user_ids?) - Get recipients for notification type
+  - update_telegram_notification_preferences(...) - Update notification settings
+  - update_telegram_interaction(telegram_id) - Track last interaction
+  - unlink_telegram_account(user_id) - Soft delete telegram link
+  - block_telegram_user(telegram_id, reason) - Admin action to block user
+- View: v_telegram_users_summary - Admin dashboard view with user email
+- Status: COMPLETE

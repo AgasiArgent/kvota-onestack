@@ -232,8 +232,10 @@
       "name": "Create telegram_users table",
       "category": "database",
       "priority": 3,
-      "passes": false,
-      "description": "Link Telegram accounts to system users"
+      "passes": true,
+      "completed_at": "2026-01-15T20:30:00Z",
+      "description": "Link Telegram accounts to system users",
+      "notes": "Created migration 040_create_telegram_users_table.sql with: user_id/telegram_id linking, verification flow (code + expiry + attempts), notification preferences (task_assigned, approval_request, status_change, deal_update), RLS policies (own + admin access). Helper functions: generate_telegram_verification_code(), start_telegram_verification(), verify_telegram_user(), get_telegram_user(), get_telegram_id_for_user(), get_telegram_recipients_for_notification(), update_telegram_notification_preferences(), update_telegram_interaction(), unlink_telegram_account(), block_telegram_user(). View: v_telegram_users_summary."
     },
     {
       "id": "DB-025",
