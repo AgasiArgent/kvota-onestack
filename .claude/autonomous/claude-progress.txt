@@ -616,3 +616,41 @@
   - services/workflow_service.py (updated - added ~350 lines)
   - services/__init__.py (updated)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Features #26-27: Validation and Logging
+- NOTE: These features were already implemented within Feature #25:
+  - Feature #26 (Validation): can_transition() validates roles and status transitions
+  - Feature #27 (Logging): transition_quote_status() Step 5 logs to workflow_transitions
+- Marked both features as complete in features.json
+- Status: COMPLETE (no additional code needed)
+
+## Session 2025-01-15 - Feature #28: Auto-transition logistics+customs → sales_review
+- Implemented auto-transition logic when both parallel stages complete
+- New functions in workflow_service.py:
+  - check_and_auto_transition_to_sales_review(quote_id, actor_id)
+    - Checks if both logistics_completed_at and customs_completed_at are set
+    - If both complete, auto-transitions to pending_sales_review
+    - Uses skip_validation=True for system-initiated transitions
+  - complete_logistics(quote_id, actor_id, actor_roles)
+    - Validates logistics/admin role
+    - Sets logistics_completed_at timestamp
+    - Logs completion to workflow_transitions
+    - Calls auto-transition check
+    - Returns TransitionResult with new status (if auto-transitioned)
+  - complete_customs(quote_id, actor_id, actor_roles)
+    - Same pattern as complete_logistics for customs role
+    - Sets customs_completed_at timestamp
+    - Triggers auto-transition if logistics also complete
+  - get_parallel_stages_status(quote_id)
+    - Returns dict with completion status of both stages
+    - Useful for UI progress indicators
+- All functions:
+  - Properly validate current workflow status
+  - Prevent double-completion
+  - Include comprehensive docstrings
+- Updated services/__init__.py to export all new functions
+- Verified imports successfully in venv
+- Files changed:
+  - services/workflow_service.py (updated - added ~420 lines)
+  - services/__init__.py (updated)
+- Status: COMPLETE

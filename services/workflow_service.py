@@ -1336,3 +1336,422 @@ def get_available_transitions_for_quote(
         })
 
     return result
+
+
+# =============================================================================
+# AUTO-TRANSITION FUNCTIONS (Feature #28)
+# =============================================================================
+# Handles automatic status transitions when certain conditions are met
+# Specifically: logistics + customs → sales_review
+
+
+def check_and_auto_transition_to_sales_review(
+    quote_id: str,
+    actor_id: str
+) -> Optional[TransitionResult]:
+    """
+    Check if both logistics and customs are complete, and auto-transition to sales_review.
+
+    This function should be called after logistics or customs marks their work complete.
+    It checks if both `logistics_completed_at` and `customs_completed_at` are set,
+    and if so, automatically transitions the quote to `pending_sales_review`.
+
+    Args:
+        quote_id: UUID of the quote to check
+        actor_id: UUID of the user who triggered this check (for audit log)
+
+    Returns:
+        TransitionResult if auto-transition was performed, None if conditions not met
+
+    Example:
+        >>> # Called after logistics completes
+        >>> result = check_and_auto_transition_to_sales_review(quote_id, user_id)
+        >>> if result and result.success:
+        ...     print("Auto-transitioned to sales review!")
+    """
+    supabase = get_supabase()
+
+    # Fetch quote with completion timestamps
+    try:
+        response = supabase.table("quotes") \
+            .select("id, workflow_status, logistics_completed_at, customs_completed_at") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return None
+
+    if not response.data:
+        return None
+
+    quote = response.data
+    current_status = quote.get("workflow_status")
+    logistics_completed = quote.get("logistics_completed_at")
+    customs_completed = quote.get("customs_completed_at")
+
+    # Check if current status allows auto-transition
+    # Auto-transition should only happen from pending_logistics or pending_customs
+    allowed_statuses = [
+        WorkflowStatus.PENDING_LOGISTICS.value,
+        WorkflowStatus.PENDING_CUSTOMS.value
+    ]
+
+    if current_status not in allowed_statuses:
+        return None
+
+    # Check if both stages are complete
+    if not logistics_completed or not customs_completed:
+        return None
+
+    # Both complete! Perform auto-transition to sales_review
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_SALES_REVIEW,
+        actor_id=actor_id,
+        actor_roles=["system"],  # System-initiated transition
+        comment="Автоматический переход: логистика и таможня завершены",
+        skip_validation=True  # Skip role validation for auto-transitions
+    )
+
+    return result
+
+
+def complete_logistics(
+    quote_id: str,
+    actor_id: str,
+    actor_roles: List[str]
+) -> TransitionResult:
+    """
+    Mark logistics work as complete and check for auto-transition.
+
+    This function:
+    1. Validates the user has logistics or admin role
+    2. Sets logistics_completed_at timestamp
+    3. Checks if customs is also complete
+    4. If both complete, auto-transitions to pending_sales_review
+
+    Args:
+        quote_id: UUID of the quote
+        actor_id: UUID of the user completing logistics
+        actor_roles: List of role codes the user has
+
+    Returns:
+        TransitionResult indicating success or failure
+
+    Example:
+        >>> result = complete_logistics(quote_id, user_id, ["logistics"])
+        >>> if result.success:
+        ...     print(f"Logistics complete! New status: {result.to_status}")
+    """
+    supabase = get_supabase()
+
+    # Validate role
+    if not any(role in ["logistics", "admin"] for role in actor_roles):
+        return TransitionResult(
+            success=False,
+            error_message="Only logistics or admin can complete logistics",
+            quote_id=quote_id
+        )
+
+    # Get current quote status
+    try:
+        response = supabase.table("quotes") \
+            .select("id, workflow_status, logistics_completed_at") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    if not response.data:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    quote = response.data
+    current_status = quote.get("workflow_status")
+
+    # Validate current status - must be pending_logistics or pending_customs
+    # (logistics can be completed in parallel with customs)
+    if current_status not in [
+        WorkflowStatus.PENDING_LOGISTICS.value,
+        WorkflowStatus.PENDING_CUSTOMS.value
+    ]:
+        return TransitionResult(
+            success=False,
+            error_message=f"Cannot complete logistics from status: {get_status_name(current_status)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Check if already completed
+    if quote.get("logistics_completed_at"):
+        return TransitionResult(
+            success=False,
+            error_message="Logistics already completed",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Set logistics_completed_at
+    try:
+        update_response = supabase.table("quotes") \
+            .update({"logistics_completed_at": datetime.now(timezone.utc).isoformat()}) \
+            .eq("id", quote_id) \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Failed to update logistics completion: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Log the completion in workflow_transitions
+    try:
+        actor_role = "logistics" if "logistics" in actor_roles else "admin"
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": current_status,
+            "to_status": current_status,  # Status might not change yet
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "comment": "Логистика завершена"
+        }
+        supabase.table("workflow_transitions").insert(transition_data).execute()
+    except Exception:
+        pass  # Non-critical, continue
+
+    # Check for auto-transition
+    auto_result = check_and_auto_transition_to_sales_review(quote_id, actor_id)
+
+    if auto_result and auto_result.success:
+        # Auto-transition happened
+        return TransitionResult(
+            success=True,
+            error_message=None,
+            quote_id=quote_id,
+            from_status=current_status,
+            to_status=WorkflowStatus.PENDING_SALES_REVIEW.value,
+            transition_id=auto_result.transition_id
+        )
+    else:
+        # Logistics complete, but waiting for customs
+        return TransitionResult(
+            success=True,
+            error_message=None,
+            quote_id=quote_id,
+            from_status=current_status,
+            to_status=current_status  # Status unchanged, waiting for customs
+        )
+
+
+def complete_customs(
+    quote_id: str,
+    actor_id: str,
+    actor_roles: List[str]
+) -> TransitionResult:
+    """
+    Mark customs work as complete and check for auto-transition.
+
+    This function:
+    1. Validates the user has customs or admin role
+    2. Sets customs_completed_at timestamp
+    3. Checks if logistics is also complete
+    4. If both complete, auto-transitions to pending_sales_review
+
+    Args:
+        quote_id: UUID of the quote
+        actor_id: UUID of the user completing customs
+        actor_roles: List of role codes the user has
+
+    Returns:
+        TransitionResult indicating success or failure
+
+    Example:
+        >>> result = complete_customs(quote_id, user_id, ["customs"])
+        >>> if result.success:
+        ...     print(f"Customs complete! New status: {result.to_status}")
+    """
+    supabase = get_supabase()
+
+    # Validate role
+    if not any(role in ["customs", "admin"] for role in actor_roles):
+        return TransitionResult(
+            success=False,
+            error_message="Only customs or admin can complete customs",
+            quote_id=quote_id
+        )
+
+    # Get current quote status
+    try:
+        response = supabase.table("quotes") \
+            .select("id, workflow_status, customs_completed_at") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    if not response.data:
+        return TransitionResult(
+            success=False,
+            error_message=f"Quote not found: {quote_id}",
+            quote_id=quote_id
+        )
+
+    quote = response.data
+    current_status = quote.get("workflow_status")
+
+    # Validate current status - must be pending_logistics or pending_customs
+    if current_status not in [
+        WorkflowStatus.PENDING_LOGISTICS.value,
+        WorkflowStatus.PENDING_CUSTOMS.value
+    ]:
+        return TransitionResult(
+            success=False,
+            error_message=f"Cannot complete customs from status: {get_status_name(current_status)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Check if already completed
+    if quote.get("customs_completed_at"):
+        return TransitionResult(
+            success=False,
+            error_message="Customs already completed",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Set customs_completed_at
+    try:
+        update_response = supabase.table("quotes") \
+            .update({"customs_completed_at": datetime.now(timezone.utc).isoformat()}) \
+            .eq("id", quote_id) \
+            .execute()
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Failed to update customs completion: {str(e)}",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Log the completion in workflow_transitions
+    try:
+        actor_role = "customs" if "customs" in actor_roles else "admin"
+        transition_data = {
+            "quote_id": quote_id,
+            "from_status": current_status,
+            "to_status": current_status,  # Status might not change yet
+            "actor_id": actor_id,
+            "actor_role": actor_role,
+            "comment": "Таможня завершена"
+        }
+        supabase.table("workflow_transitions").insert(transition_data).execute()
+    except Exception:
+        pass  # Non-critical, continue
+
+    # Check for auto-transition
+    auto_result = check_and_auto_transition_to_sales_review(quote_id, actor_id)
+
+    if auto_result and auto_result.success:
+        # Auto-transition happened
+        return TransitionResult(
+            success=True,
+            error_message=None,
+            quote_id=quote_id,
+            from_status=current_status,
+            to_status=WorkflowStatus.PENDING_SALES_REVIEW.value,
+            transition_id=auto_result.transition_id
+        )
+    else:
+        # Customs complete, but waiting for logistics
+        return TransitionResult(
+            success=True,
+            error_message=None,
+            quote_id=quote_id,
+            from_status=current_status,
+            to_status=current_status  # Status unchanged, waiting for logistics
+        )
+
+
+def get_parallel_stages_status(quote_id: str) -> Dict:
+    """
+    Get the completion status of parallel stages (logistics and customs).
+
+    Useful for UI to show progress during parallel evaluation.
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict with:
+        - logistics_completed: bool
+        - logistics_completed_at: datetime or None
+        - customs_completed: bool
+        - customs_completed_at: datetime or None
+        - both_completed: bool
+        - current_status: str
+
+    Example:
+        >>> status = get_parallel_stages_status(quote_id)
+        >>> if status["both_completed"]:
+        ...     print("Both stages done!")
+        >>> else:
+        ...     if not status["logistics_completed"]:
+        ...         print("Waiting for logistics")
+        ...     if not status["customs_completed"]:
+        ...         print("Waiting for customs")
+    """
+    supabase = get_supabase()
+
+    try:
+        response = supabase.table("quotes") \
+            .select("workflow_status, logistics_completed_at, customs_completed_at") \
+            .eq("id", quote_id) \
+            .single() \
+            .execute()
+    except Exception:
+        return {
+            "logistics_completed": False,
+            "logistics_completed_at": None,
+            "customs_completed": False,
+            "customs_completed_at": None,
+            "both_completed": False,
+            "current_status": None
+        }
+
+    if not response.data:
+        return {
+            "logistics_completed": False,
+            "logistics_completed_at": None,
+            "customs_completed": False,
+            "customs_completed_at": None,
+            "both_completed": False,
+            "current_status": None
+        }
+
+    quote = response.data
+    logistics_completed_at = quote.get("logistics_completed_at")
+    customs_completed_at = quote.get("customs_completed_at")
+
+    return {
+        "logistics_completed": logistics_completed_at is not None,
+        "logistics_completed_at": logistics_completed_at,
+        "customs_completed": customs_completed_at is not None,
+        "customs_completed_at": customs_completed_at,
+        "both_completed": logistics_completed_at is not None and customs_completed_at is not None,
+        "current_status": quote.get("workflow_status")
+    }

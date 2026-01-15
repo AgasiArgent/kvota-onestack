@@ -71,6 +71,11 @@ from .workflow_service import (
     get_quote_workflow_status,
     get_quote_transition_history,
     get_available_transitions_for_quote,
+    # Auto-transition functions (Feature #28)
+    check_and_auto_transition_to_sales_review,
+    complete_logistics,
+    complete_customs,
+    get_parallel_stages_status,
 )
 
 __all__ = [
@@ -142,4 +147,9 @@ __all__ = [
     "get_quote_workflow_status",
     "get_quote_transition_history",
     "get_available_transitions_for_quote",
+    # Auto-transition functions (Feature #28)
+    "check_and_auto_transition_to_sales_review",
+    "complete_logistics",
+    "complete_customs",
+    "get_parallel_stages_status",
 ]

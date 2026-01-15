@@ -288,10 +288,11 @@
       "name": "Валидация перехода статуса",
       "description": "Проверка что переход разрешён для данной роли и текущего статуса",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T17:00:00Z",
+      "completed_at": "2025-01-15T17:30:00Z",
+      "notes": "Implemented within transition_quote_status() - can_transition() validates roles and status"
     },
     {
       "id": 27,
@@ -299,10 +300,11 @@
       "name": "Логирование переходов",
       "description": "Запись в workflow_transitions при каждом переходе",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T17:00:00Z",
+      "completed_at": "2025-01-15T17:30:00Z",
+      "notes": "Implemented within transition_quote_status() - Step 5 logs to workflow_transitions table"
     },
     {
       "id": 28,
@@ -310,10 +312,10 @@
       "name": "Автопереход logistics+customs → sales_review",
       "description": "Когда оба этапа завершены, автоматический переход",
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T18:00:00Z",
+      "completed_at": "2025-01-15T18:30:00Z"
     },
     {
       "id": 29,
