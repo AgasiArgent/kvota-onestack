@@ -179,6 +179,10 @@ from .telegram_service import (
     send_status_changed_notification,
     notify_quote_creator_of_status_change,
     notify_assigned_users_of_status_change,
+    # Returned for revision notification (Feature #63)
+    ReturnedForRevisionNotification,
+    send_returned_for_revision_notification,
+    notify_creator_of_return,
 )
 
 __all__ = [
@@ -341,4 +345,8 @@ __all__ = [
     "send_status_changed_notification",
     "notify_quote_creator_of_status_change",
     "notify_assigned_users_of_status_change",
+    # Returned for revision notification (Feature #63)
+    "ReturnedForRevisionNotification",
+    "send_returned_for_revision_notification",
+    "notify_creator_of_return",
 ]

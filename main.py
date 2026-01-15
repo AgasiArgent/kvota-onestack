@@ -5773,6 +5773,21 @@ def post(session, quote_id: str, comment: str = ""):
     )
 
     if result.success:
+        # Feature #63: Send notification to quote creator about the return
+        # Import asyncio locally if not already imported at module level
+        import asyncio
+        try:
+            asyncio.get_event_loop().run_until_complete(
+                notify_creator_of_return(
+                    quote_id=quote_id,
+                    actor_id=user_id,
+                    comment=comment.strip()
+                )
+            )
+        except Exception as e:
+            # Log error but don't fail the request - notification is best effort
+            print(f"Error sending return notification for quote {quote_id}: {e}")
+
         # Redirect to quote control list with success message
         return page_layout("Успешно",
             H1("✓ КП возвращено на доработку"),
@@ -6306,6 +6321,8 @@ from services.telegram_service import (
     send_callback_response,
     # Feature #61 imports
     handle_reject_callback,
+    # Feature #63 imports
+    notify_creator_of_return,
 )
 
 

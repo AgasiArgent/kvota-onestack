@@ -1524,3 +1524,37 @@
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #62 done
 
+
+## Session 2026-01-15 - Feature #63: Уведомление returned_for_revision (notification when quote is returned for revision)
+- Implemented returned_for_revision notification functionality in telegram_service.py
+- New dataclass:
+  - ReturnedForRevisionNotification: quote_id, quote_idn, customer_name, actor_name, comment
+- New functions (~220 lines):
+  - send_returned_for_revision_notification(user_id, quote_id, quote_idn, customer_name, actor_name, comment):
+    - Gets user's Telegram ID if linked
+    - Formats notification using RETURNED_FOR_REVISION template with warning emoji
+    - Sends via Telegram with "Open in system" button
+    - Records notification in database (telegram or in_app channel)
+    - Returns success status, telegram_sent flag, notification_id
+  - notify_creator_of_return(quote_id, actor_id, comment, actor_name):
+    - Convenience function that fetches quote details from DB
+    - Notifies the quote creator when quote is returned for revision
+    - Auto-fetches actor name from DB if not provided (defaults to "Контроллер КП")
+- Uses existing NOTIFICATION_TEMPLATES[RETURNED_FOR_REVISION] template:
+  - ⚠️ *Возвращено на доработку*
+  - Shows quote_idn, comment (reason), actor_name, and link to system
+- Updated services/__init__.py to export:
+  - ReturnedForRevisionNotification, send_returned_for_revision_notification, notify_creator_of_return
+- Updated main.py:
+  - Added notify_creator_of_return to telegram_service imports
+  - Integrated into /quote-control/{quote_id}/return POST handler
+  - Sends notification asynchronously after successful transition
+  - Error handling: logs error but doesn't fail the request (notification is best effort)
+- All syntax verified with py_compile
+- Imports verified working
+- Files changed:
+  - services/telegram_service.py (~220 lines added)
+  - services/__init__.py (updated exports)
+  - main.py (~15 lines added for notification integration)
+- Status: COMPLETE - Feature #63 done
+

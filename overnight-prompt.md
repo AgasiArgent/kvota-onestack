@@ -145,12 +145,13 @@ App runs at http://localhost:5001
 - [x] Feature #60: Inline-кнопка Согласовать (2025-01-15) - handle_approve_callback() validates user, transitions quote to approved, updates Telegram message
 - [x] Feature #61: Inline-кнопка Отклонить (2026-01-15) - handle_reject_callback() validates user, transitions quote to rejected, updates Telegram message
 - [x] Feature #62: Уведомление status_changed (2026-01-15) - StatusChangedNotification dataclass, send_status_changed_notification(), notify_quote_creator_of_status_change(), notify_assigned_users_of_status_change()
+- [x] Feature #63: Уведомление returned_for_revision (2026-01-15) - ReturnedForRevisionNotification dataclass, send_returned_for_revision_notification(), notify_creator_of_return(), integrated into /quote-control/{quote_id}/return handler
 
 ### Next Up
-- Feature #63: Уведомление returned_for_revision (notification when quote is returned for revision)
+- Feature #64: Сервис согласований (CRUD for approvals table)
 
 ### Progress
-- **62 of 88 features completed** (70%)
+- **63 of 88 features completed** (71%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

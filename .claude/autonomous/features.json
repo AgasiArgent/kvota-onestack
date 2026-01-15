@@ -718,10 +718,11 @@
       "name": "Уведомление returned_for_revision",
       "description": "Уведомление о возврате на доработку",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T10:00:00Z",
+      "completed_at": "2026-01-15T10:30:00Z",
+      "notes": "Implemented returned_for_revision notification functionality: ReturnedForRevisionNotification dataclass, send_returned_for_revision_notification() for sending to individual users with Telegram message and DB recording, notify_creator_of_return() convenience function that fetches quote details and notifies creator. Integrated into /quote-control/{quote_id}/return POST handler to send notification on successful return."
     },
     {
       "id": 64,

@@ -3198,3 +3198,219 @@ async def notify_assigned_users_of_status_change(
             "skipped": 0,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Returned for Revision Notification (Feature #63)
+# ============================================================================
+
+@dataclass
+class ReturnedForRevisionNotification:
+    """Data for returned_for_revision notification."""
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    actor_name: str  # Who returned the quote (quote_controller)
+    comment: str  # Reason for return (required)
+
+
+async def send_returned_for_revision_notification(
+    user_id: str,
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    actor_name: str,
+    comment: str
+) -> Dict[str, Any]:
+    """Send a returned_for_revision notification to a user via Telegram.
+
+    Feature #63: Уведомление returned_for_revision (notification when quote is returned for revision)
+
+    This is sent when a quote_controller returns a quote to the sales manager
+    for revision. The notification includes:
+    - The quote identifier
+    - The reason (comment) for the return
+    - Who returned it
+
+    Args:
+        user_id: UUID of the user to notify (typically the quote creator)
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier (e.g., "КП-2025-001")
+        customer_name: Customer name
+        actor_name: Name of the person who returned the quote
+        comment: Reason for the return (from quote_controller)
+
+    Returns:
+        Dict with:
+        - success: bool
+        - telegram_sent: bool - Whether Telegram message was sent
+        - notification_id: str - ID of recorded notification
+        - error: str - Error message if failed
+
+    Example:
+        >>> result = await send_returned_for_revision_notification(
+        ...     user_id="user-uuid",
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2025-001",
+        ...     customer_name="ООО Компания",
+        ...     actor_name="Петрова А.В.",
+        ...     comment="Необходимо уточнить условия оплаты"
+        ... )
+        >>> if result["success"]:
+        ...     print("Creator notified about return!")
+    """
+    # Build notification content
+    title = "Возвращено на доработку"
+    quote_url = f"{APP_BASE_URL}/quotes/{quote_id}"
+
+    # Format the Telegram message using the template
+    telegram_message = format_notification(
+        NotificationType.RETURNED_FOR_REVISION,
+        quote_idn=quote_idn,
+        comment=comment,
+        actor_name=actor_name,
+        quote_url=quote_url
+    )
+
+    # Try to send via Telegram
+    telegram_sent = False
+    telegram_error = None
+    telegram_id = await get_user_telegram_id(user_id)
+
+    if telegram_id:
+        try:
+            # Send message with "Open in system" button
+            bot = get_bot()
+            if bot:
+                keyboard = build_open_quote_keyboard(quote_id)
+                sent_msg = await bot.send_message(
+                    chat_id=telegram_id,
+                    text=telegram_message,
+                    parse_mode="Markdown",
+                    reply_markup=keyboard
+                )
+                telegram_sent = sent_msg is not None
+                if not telegram_sent:
+                    telegram_error = "Failed to send message"
+            else:
+                telegram_error = "Bot not configured"
+        except Exception as e:
+            telegram_error = str(e)
+            logger.error(f"Error sending returned_for_revision notification to {user_id}: {e}")
+    else:
+        telegram_error = "User has no linked Telegram account"
+        logger.info(f"User {user_id} has no linked Telegram - notification will be in-app only")
+
+    # Record the notification in the database
+    db_message = f"{quote_idn} - {customer_name}\nВозвращено: {actor_name}\nПричина: {comment}"
+
+    notification_id = record_notification(
+        user_id=user_id,
+        notification_type="returned_for_revision",
+        title=title,
+        message=db_message,
+        channel="telegram" if telegram_sent else "in_app",
+        quote_id=quote_id,
+        sent=telegram_sent,
+        error_message=telegram_error if not telegram_sent else None
+    )
+
+    return {
+        "success": True,  # Notification recorded even if Telegram failed
+        "telegram_sent": telegram_sent,
+        "notification_id": notification_id,
+        "telegram_id": telegram_id,
+        "error": telegram_error
+    }
+
+
+async def notify_creator_of_return(
+    quote_id: str,
+    actor_id: str,
+    comment: str,
+    actor_name: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send returned_for_revision notification to the quote creator.
+
+    This is the main convenience function for return notifications.
+    It fetches quote details from DB and notifies the creator.
+
+    Args:
+        quote_id: UUID of the quote
+        actor_id: UUID of the user who returned the quote (quote_controller)
+        comment: Reason for the return
+        actor_name: Optional name of actor (fetched from DB if not provided)
+
+    Returns:
+        Dict with notification result
+
+    Example:
+        >>> import asyncio
+        >>> result = asyncio.run(notify_creator_of_return(
+        ...     quote_id="quote-uuid",
+        ...     actor_id="controller-uuid",
+        ...     comment="Проверьте наценку на позиции 3 и 7"
+        ... ))
+        >>> if result["success"]:
+        ...     print("Creator notified!")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return {
+                "success": False,
+                "error": "Database connection error"
+            }
+
+        # Get quote details including creator
+        quote_response = supabase.table("quotes").select(
+            "id, idn, created_by, organization_id, customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data:
+            logger.warning(f"Quote {quote_id} not found for return notification")
+            return {
+                "success": False,
+                "error": "Quote not found"
+            }
+
+        quote = quote_response.data[0]
+        quote_idn = quote.get("idn", "N/A")
+        creator_id = quote.get("created_by")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        if not creator_id:
+            logger.warning(f"Quote {quote_id} has no creator - cannot send return notification")
+            return {
+                "success": False,
+                "error": "Quote has no creator"
+            }
+
+        # Get actor name if not provided
+        if not actor_name:
+            actor_response = supabase.table("organization_members").select(
+                "full_name"
+            ).eq("user_id", actor_id).execute()
+
+            if actor_response.data:
+                actor_name = actor_response.data[0].get("full_name", "Контроллер КП")
+            else:
+                actor_name = "Контроллер КП"
+
+        # Send the notification
+        return await send_returned_for_revision_notification(
+            user_id=creator_id,
+            quote_id=quote_id,
+            quote_idn=quote_idn,
+            customer_name=customer_name,
+            actor_name=actor_name,
+            comment=comment
+        )
+
+    except Exception as e:
+        logger.error(f"Error notifying creator of return for quote {quote_id}: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
