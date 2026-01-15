@@ -213,3 +213,23 @@
 - Added helper function generate_deal_number(org_id) for generating deal numbers
 - Files changed: migrations/007_create_deals_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #8: Создать таблицу plan_fact_categories
+- Created SQL migration: `migrations/008_create_plan_fact_categories_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - code (VARCHAR 50 UNIQUE) - category code for use in code
+  - name (VARCHAR 255) - human-readable name in Russian
+  - is_income (BOOLEAN) - true for income, false for expense
+  - sort_order (INTEGER) - display order in UI
+  - created_at (TIMESTAMP WITH TIME ZONE)
+- Added indexes:
+  - code - for fast lookups by code
+  - is_income - for filtering income vs expense categories
+  - sort_order - for ordered queries
+- RLS policies:
+  - All authenticated users can read categories (reference data)
+  - Only admins can insert/update/delete categories
+- Note: Seed data (Feature #15) commented out in migration file
+- Files changed: migrations/008_create_plan_fact_categories_table.sql (new)
+- Status: COMPLETE
