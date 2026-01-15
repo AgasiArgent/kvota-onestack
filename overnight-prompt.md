@@ -101,14 +101,15 @@ App runs at http://localhost:5001
 - [x] Feature #16: Configure RLS for new tables (2025-01-15)
 - [x] Feature #17: Role service - get_user_roles (2025-01-15)
 - [x] Feature #18: Role service - has_role, has_any_role, has_all_roles (2025-01-15)
+- [x] Feature #19: Role service - assign_role function (2025-01-15)
 
 ### Next Up
-- Feature #19: Сервис ролей: назначение роли (assign_role function)
+- Feature #20: Сервис ролей: удаление роли (remove_role function)
 
 ### Progress
-- **18 of 88 features completed** (20%)
+- **19 of 88 features completed** (22%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
-- **ROLE SERVICE IN PROGRESS** (features 17-18 done)
+- **ROLE SERVICE IN PROGRESS** (features 17-19 done)
 - All 11 new tables created with comprehensive RLS policies
 - Extended quotes and quote_items tables with workflow fields
 - Seed data for roles and plan_fact_categories inserted
@@ -116,4 +117,5 @@ App runs at http://localhost:5001
 - Role service now includes:
   - get_user_roles, get_user_role_codes, get_all_roles, get_role_by_code
   - has_role, has_any_role, has_all_roles (role checking functions)
-- Next: Complete role system services (features 19-22)
+  - assign_role (role assignment function)
+- Next: Complete role system services (features 20-22)
