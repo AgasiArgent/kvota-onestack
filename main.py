@@ -12865,6 +12865,294 @@ def post(company_id: str, session):
 
 
 # ============================================================================
+# SELLER COMPANIES MANAGEMENT (UI-005, UI-006)
+# ============================================================================
+
+@rt("/seller-companies")
+def get(session, q: str = "", status: str = ""):
+    """
+    Seller companies list page with search and filters.
+
+    Seller companies are OUR legal entities used for selling to customers.
+    Each quote has one seller_company_id (at quote level).
+
+    Query Parameters:
+        q: Search query (matches name, supplier_code, INN)
+        status: Filter by status ("active", "inactive", or "" for all)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only can manage seller companies
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра справочника компаний-продавцов."),
+                P("Требуется роль: admin"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import seller company service
+    from services.seller_company_service import (
+        get_all_seller_companies, search_seller_companies, get_seller_company_stats
+    )
+
+    # Get seller companies based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            is_active_filter = None if status == "" else (status == "active")
+            companies = search_seller_companies(
+                organization_id=org_id,
+                query=q.strip(),
+                is_active=is_active_filter,
+                limit=100
+            )
+        else:
+            # Get all with filters
+            is_active_filter = None if status == "" else (status == "active")
+            companies = get_all_seller_companies(
+                organization_id=org_id,
+                is_active=is_active_filter,
+                limit=100
+            )
+
+        # Get stats for summary
+        stats = get_seller_company_stats(organization_id=org_id)
+
+    except Exception as e:
+        print(f"Error loading seller companies: {e}")
+        companies = []
+        stats = {"total": 0, "active": 0, "inactive": 0}
+
+    # Status options for filter
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+        Option("Активные", value="active", selected=(status == "active")),
+        Option("Неактивные", value="inactive", selected=(status == "inactive")),
+    ]
+
+    # Build company rows
+    company_rows = []
+    for c in companies:
+        status_class = "status-approved" if c.is_active else "status-rejected"
+        status_text = "Активна" if c.is_active else "Неактивна"
+
+        company_rows.append(
+            Tr(
+                Td(
+                    Strong(c.supplier_code),
+                    style="font-family: monospace; color: #4a4aff;"
+                ),
+                Td(c.name),
+                Td(c.country or "—"),
+                Td(c.inn or "—"),
+                Td(c.kpp or "—"),
+                Td(c.general_director_name or "—"),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(
+                    A("✏️", href=f"/seller-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A("👁️", href=f"/seller-companies/{c.id}", title="Просмотр"),
+                )
+            )
+        )
+
+    return page_layout("Компании-продавцы",
+        # Header
+        Div(
+            H1("🏭 Компании-продавцы (наши юрлица)"),
+            A("+ Добавить компанию", href="/seller-companies/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert
+        Div(
+            "ℹ️ Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
+            "Каждое КП (quote) привязывается к одной компании-продавцу. ",
+            "Примеры: MBR (МАСТЕР БЭРИНГ), RAR (РадРесурс), CMT (ЦМТО1), GES (GESTUS), TEX (TEXCEL).",
+            cls="alert alert-info"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), cls="stat-value"),
+                Div("Всего"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), cls="stat-value"),
+                Div("Активных"),
+                cls="stat-card card"
+            ),
+            Div(
+                Div(str(stats.get("inactive", 0)), cls="stat-value"),
+                Div("Неактивных"),
+                cls="stat-card card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filter form
+        Div(
+            Form(
+                Div(
+                    Label(
+                        "Поиск по названию, коду или ИНН:",
+                        Input(type="text", name="q", value=q, placeholder="Например: МАСТЕР или MBR"),
+                    ),
+                    Label(
+                        "Статус:",
+                        Select(*status_options, name="status"),
+                    ),
+                    Button("Найти", type="submit"),
+                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                ),
+                method="get",
+                action="/seller-companies"
+            ),
+            cls="card"
+        ),
+
+        # Companies table
+        Div(
+            Table(
+                Thead(
+                    Tr(
+                        Th("Код"),
+                        Th("Название"),
+                        Th("Страна"),
+                        Th("ИНН"),
+                        Th("КПП"),
+                        Th("Директор"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*company_rows) if company_rows else Tbody(
+                    Tr(Td("Компании-продавцы не найдены", colspan="8", style="text-align: center; color: #666;"))
+                )
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/seller-companies/{company_id}")
+def get(company_id: str, session):
+    """Seller company detail view page."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра данной страницы.", cls="alert alert-error"),
+            session=session
+        )
+
+    from services.seller_company_service import get_seller_company
+
+    company = get_seller_company(company_id)
+    if not company:
+        return page_layout("Не найдено",
+            Div("Компания-продавец не найдена.", cls="alert alert-error"),
+            A("← К списку компаний", href="/seller-companies", role="button"),
+            session=session
+        )
+
+    status_class = "status-approved" if company.is_active else "status-rejected"
+    status_text = "Активна" if company.is_active else "Неактивна"
+
+    return page_layout(f"Компания: {company.name}",
+        Div(
+            # Header with actions
+            Div(
+                H1(f"🏭 {company.supplier_code} - {company.name}"),
+                Div(
+                    A("✏️ Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
+                    " ",
+                    A("← К списку", href="/seller-companies", role="button", cls="secondary"),
+                    style="display: flex; gap: 0.5rem;"
+                ),
+                style="display: flex; justify-content: space-between; align-items: center;"
+            ),
+            cls="card"
+        ),
+
+        # Company details
+        Div(
+            H2("Основная информация"),
+            Div(
+                Div(
+                    Strong("Код компании: "), Span(company.supplier_code, style="font-family: monospace;"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Название: "), Span(company.name),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Страна: "), Span(company.country or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Статус: "), Span(status_text, cls=f"status-badge {status_class}"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+            ),
+
+            H2("Юридические реквизиты", style="margin-top: 1.5rem;"),
+            Div(
+                Div(
+                    Strong("ИНН: "), Span(company.inn or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("КПП: "), Span(company.kpp or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("ОГРН: "), Span(company.ogrn or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Юридический адрес: "), Span(company.registration_address or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+            ),
+
+            H2("Руководитель", style="margin-top: 1.5rem;"),
+            Div(
+                Div(
+                    Strong("ФИО директора: "), Span(company.general_director_name or "—"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Strong("Должность: "), Span(company.general_director_position or "Генеральный директор"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+            ),
+
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

@@ -548,8 +548,10 @@
       "name": "Seller companies list page",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "List our selling legal entities"
+      "passes": true,
+      "completed_at": "2026-01-15T23:00:00Z",
+      "description": "List our selling legal entities",
+      "notes": "Added GET /seller-companies list page and GET /seller-companies/{id} detail view. Admin only access. Table shows: code, name, country, INN, KPP, director, status. Search by name/code/INN. Filter by status. Stats cards showing total/active/inactive."
     },
     {
       "id": "UI-006",
