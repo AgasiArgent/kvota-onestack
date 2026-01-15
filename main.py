@@ -21,6 +21,7 @@ from services.export_data_mapper import fetch_export_data
 from services.specification_export import generate_specification_pdf
 from services.invoice_export import generate_invoice_pdf
 from services.validation_export import create_validation_excel
+from services.procurement_export import create_procurement_excel
 
 # Import version service
 from services.quote_version_service import create_quote_version, list_quote_versions, get_quote_version
@@ -3234,9 +3235,14 @@ def get(quote_id: str, session):
             style="margin-bottom: 1rem;"
         ),
 
-        # Progress card
+        # Progress card with export button
         Div(
-            H3("Прогресс оценки"),
+            Div(
+                H3("Прогресс оценки", style="margin: 0;"),
+                A("📥 Скачать Excel", href=f"/procurement/{quote_id}/export", role="button",
+                  cls="secondary", style="font-size: 0.875rem;") if total_items > 0 else None,
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+            ),
             Div(
                 Div(f"{completed_items}/{total_items} позиций", style="margin-bottom: 0.5rem;"),
                 Div(
@@ -3407,6 +3413,87 @@ def post(quote_id: str, session, action: str = "save", **kwargs):
 
     # Redirect back to the procurement detail page
     return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+
+
+# ============================================================================
+# PROCUREMENT EXCEL EXPORT (Feature #36)
+# ============================================================================
+
+@rt("/procurement/{quote_id}/export")
+def get(quote_id: str, session):
+    """
+    Export procurement items to Excel for sending to suppliers.
+
+    Feature #36: Скачивание списка для оценки
+    - Exports items belonging to user's assigned brands
+    - Creates Excel file with columns for supplier to fill in
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    quote = quote_result.data
+    if not quote:
+        return RedirectResponse("/procurement", status_code=303)
+
+    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+
+    # Get user's assigned brands
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get all items for this quote
+    items_result = supabase.table("quote_items") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    all_items = items_result.data or []
+
+    # Filter items for my brands
+    my_items = [item for item in all_items
+                if item.get("brand", "").lower() in my_brands_lower]
+
+    if not my_items:
+        # No items to export, redirect back with message
+        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+
+    # Generate Excel
+    excel_bytes = create_procurement_excel(
+        quote=quote,
+        items=my_items,
+        brands=my_brands,
+        customer_name=customer_name
+    )
+
+    # Return as file download
+    from starlette.responses import Response
+    quote_number = quote.get("idn_quote", quote_id[:8])
+    filename = f"procurement_request_{quote_number}.xlsx"
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 # ============================================================================

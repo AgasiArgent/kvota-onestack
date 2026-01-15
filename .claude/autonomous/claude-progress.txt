@@ -820,3 +820,25 @@
     - Added GET /procurement/{quote_id} route
     - Added POST /procurement/{quote_id} handler
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #36: Скачивание списка для оценки
+- Created services/procurement_export.py with Excel export functions:
+  - create_procurement_excel() - Full export for supplier pricing requests
+    - Quote info header (number, customer, date, currency)
+    - Items grouped by brand with subheaders
+    - Columns: #, Brand, SKU, Name, Qty, Unit, Price (for supplier), Availability, Lead time, Notes
+    - Yellow highlight for columns supplier needs to fill
+    - Instructions text for supplier
+    - Total count footer
+  - create_procurement_simple_list() - Minimal export with just basic item info
+- Added export route: GET /procurement/{quote_id}/export
+  - Role check: procurement or admin
+  - Filters items by user's assigned brands (security)
+  - Downloads as .xlsx file with quote number in filename
+- Updated procurement detail page:
+  - Added "📥 Скачать Excel" button in progress card header
+  - Button only shows if there are items to export
+- Files changed:
+  - services/procurement_export.py (new - ~200 lines)
+  - main.py (updated - added import, ~75 lines for export route and UI button)
+- Status: COMPLETE
