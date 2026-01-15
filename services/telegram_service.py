@@ -787,6 +787,146 @@ async def is_telegram_linked(telegram_id: int) -> bool:
 
 
 # ============================================================================
+# Verification Code Request (Feature #56)
+# ============================================================================
+
+@dataclass
+class TelegramStatus:
+    """Status of user's Telegram connection."""
+    is_linked: bool
+    is_verified: bool
+    telegram_id: Optional[int] = None
+    telegram_username: Optional[str] = None
+    verified_at: Optional[str] = None
+    verification_code: Optional[str] = None
+    code_expires_at: Optional[str] = None
+
+
+def get_user_telegram_status(user_id: str) -> TelegramStatus:
+    """Get the Telegram connection status for a user.
+
+    Feature #56: Used by /settings/telegram page to show current status.
+
+    Args:
+        user_id: UUID of the system user
+
+    Returns:
+        TelegramStatus with connection details
+
+    Example:
+        status = get_user_telegram_status(user["id"])
+        if status.is_verified:
+            print(f"Linked to @{status.telegram_username}")
+        elif status.verification_code:
+            print(f"Pending code: {status.verification_code}")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            logger.error("Cannot get service Supabase client")
+            return TelegramStatus(is_linked=False, is_verified=False)
+
+        response = supabase.table("telegram_users").select(
+            "telegram_id, telegram_username, is_verified, verified_at, verification_code, verification_code_expires_at"
+        ).eq("user_id", user_id).execute()
+
+        if response.data and len(response.data) > 0:
+            record = response.data[0]
+            return TelegramStatus(
+                is_linked=True,
+                is_verified=record.get("is_verified", False),
+                telegram_id=record.get("telegram_id") if record.get("telegram_id") != 0 else None,
+                telegram_username=record.get("telegram_username"),
+                verified_at=record.get("verified_at"),
+                verification_code=record.get("verification_code") if not record.get("is_verified") else None,
+                code_expires_at=record.get("verification_code_expires_at") if not record.get("is_verified") else None
+            )
+
+        return TelegramStatus(is_linked=False, is_verified=False)
+
+    except Exception as e:
+        logger.error(f"Error getting Telegram status for user {user_id}: {e}")
+        return TelegramStatus(is_linked=False, is_verified=False)
+
+
+def request_verification_code(user_id: str) -> Optional[str]:
+    """Request a new verification code for Telegram linking.
+
+    Feature #56: Called when user clicks "Get verification code" button.
+
+    This function calls the database function request_telegram_verification() which:
+    1. Checks if user already has a verified account (returns NULL)
+    2. Generates a new 6-character verification code
+    3. Sets expiration to 30 minutes from now
+    4. Returns the code
+
+    Args:
+        user_id: UUID of the system user
+
+    Returns:
+        6-character verification code, or None if already verified or error
+
+    Example:
+        code = request_verification_code(user["id"])
+        if code:
+            print(f"Your code: {code}")
+        else:
+            print("Already verified or error occurred")
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            logger.error("Cannot get service Supabase client")
+            return None
+
+        # Call the database function
+        response = supabase.rpc(
+            "request_telegram_verification",
+            {"p_user_id": user_id}
+        ).execute()
+
+        logger.info(f"Verification code request response: {response.data}")
+
+        # The function returns the code directly (not in a record)
+        if response.data:
+            return response.data
+
+        return None
+
+    except Exception as e:
+        logger.error(f"Error requesting verification code for user {user_id}: {e}")
+        return None
+
+
+def unlink_telegram_account(user_id: str) -> bool:
+    """Remove the Telegram link for a user.
+
+    Feature #56: Called when user clicks "Unlink Telegram" button.
+
+    Args:
+        user_id: UUID of the system user
+
+    Returns:
+        True if successfully unlinked, False otherwise
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            logger.error("Cannot get service Supabase client")
+            return False
+
+        # Delete the telegram_users record
+        response = supabase.table("telegram_users").delete().eq("user_id", user_id).execute()
+
+        logger.info(f"Unlinked Telegram for user {user_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error unlinking Telegram for user {user_id}: {e}")
+        return False
+
+
+# ============================================================================
 # Webhook Processing
 # ============================================================================
 

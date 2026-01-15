@@ -148,6 +148,11 @@ from .telegram_service import (
     verify_telegram_account,
     get_telegram_user,
     is_telegram_linked,
+    # Verification code UI (Feature #56)
+    TelegramStatus,
+    get_user_telegram_status,
+    request_verification_code,
+    unlink_telegram_account,
 )
 
 __all__ = [
@@ -279,4 +284,9 @@ __all__ = [
     "verify_telegram_account",
     "get_telegram_user",
     "is_telegram_linked",
+    # Verification code UI (Feature #56)
+    "TelegramStatus",
+    "get_user_telegram_status",
+    "request_verification_code",
+    "unlink_telegram_account",
 ]

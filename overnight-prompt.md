@@ -138,12 +138,13 @@ App runs at http://localhost:5001
 - [x] Feature #53: Webhook endpoint (2025-01-15) - POST /api/telegram/webhook with update processing
 - [x] Feature #54: Команда /start (2025-01-15) - Welcome message with account linking instructions
 - [x] Feature #55: Верификация аккаунта (2025-01-15) - Telegram account verification via code
+- [x] Feature #56: UI генерации кода верификации (2025-01-15) - /settings/telegram page with verification code
 
 ### Next Up
-- Feature #56: UI генерации кода верификации (страница /settings/telegram с кодом)
+- Feature #57: Команда /status (показать мои текущие задачи)
 
 ### Progress
-- **55 of 88 features completed** (62%)
+- **56 of 88 features completed** (64%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

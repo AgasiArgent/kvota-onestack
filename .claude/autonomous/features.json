@@ -635,10 +635,10 @@
       "name": "UI генерации кода верификации",
       "description": "Страница /settings/telegram с кодом",
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-01-15T08:00:00Z",
+      "completed_at": "2026-01-15T08:30:00Z"
     },
     {
       "id": 57,

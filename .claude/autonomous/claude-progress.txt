@@ -1301,3 +1301,45 @@
   - services/__init__.py (updated - added verification exports)
   - main.py (updated webhook handler to pass telegram_username)
 - Status: COMPLETE - Feature #55 done
+
+
+## Session 2025-01-15 - Feature #56: UI генерации кода верификации
+- Created /settings/telegram page for Telegram account linking UI
+- Added new functions to telegram_service.py (~130 lines):
+  - TelegramStatus dataclass:
+    - is_linked, is_verified, telegram_id, telegram_username
+    - verified_at, verification_code, code_expires_at
+  - get_user_telegram_status(user_id) → TelegramStatus:
+    - Queries telegram_users table for user's connection status
+    - Returns current link status, verification code if pending
+  - request_verification_code(user_id) → Optional[str]:
+    - Calls database function request_telegram_verification()
+    - Returns 6-character verification code (valid 30 minutes)
+    - Returns None if already verified or error
+  - unlink_telegram_account(user_id) → bool:
+    - Deletes telegram_users record for user
+    - Returns True on success
+- Created GET /settings/telegram route in main.py (~120 lines):
+  - Shows different UI based on status:
+    - Verified: Shows linked account info, unlink button
+    - Pending code: Shows verification code, instructions, refresh button
+    - Not linked: Shows benefits, "Get code" button
+  - Russian language UI with emojis
+  - Instructions for using the verification code with the bot
+- Created POST /settings/telegram handler (~100 lines):
+  - action=new_code: Generates new verification code
+  - action=unlink: Removes Telegram link
+  - Success/error pages with navigation
+- Updated /settings page:
+  - Added Telegram settings card with link to /settings/telegram
+  - Russian description about notifications
+- Updated services/__init__.py:
+  - Export TelegramStatus, get_user_telegram_status, request_verification_code, unlink_telegram_account
+- Updated main.py imports:
+  - Added get_user_telegram_status, request_verification_code, unlink_telegram_account from telegram_service
+- All syntax verified with py_compile
+- Files changed:
+  - services/telegram_service.py (~130 lines added)
+  - services/__init__.py (updated exports)
+  - main.py (~240 lines added for /settings/telegram routes)
+- Status: COMPLETE - Feature #56 done
