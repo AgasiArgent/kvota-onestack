@@ -6301,6 +6301,9 @@ from services.telegram_service import (
     get_user_telegram_status,
     request_verification_code,
     unlink_telegram_account,
+    # Feature #60 imports
+    handle_approve_callback,
+    send_callback_response,
 )
 
 
@@ -6354,9 +6357,30 @@ async def telegram_webhook(request):
                 await respond_to_command(result.telegram_id, result.text, result.args, result.telegram_username)
 
             elif result.update_type == "callback_query" and result.callback_data:
-                # Callback query handling will be expanded in Features #60, #61
-                # For now, just log it
-                logger.info(f"Callback query: {result.callback_data.action} for {result.callback_data.quote_id}")
+                # Handle callback queries (inline button presses)
+                callback_data = result.callback_data
+                logger.info(f"Callback query: {callback_data.action} for {callback_data.quote_id}")
+
+                # Feature #60: Handle approve callback
+                if callback_data.action == "approve":
+                    approve_result = await handle_approve_callback(
+                        telegram_id=result.telegram_id,
+                        quote_id=callback_data.quote_id
+                    )
+                    logger.info(f"Approve callback result: success={approve_result.success}, quote={approve_result.quote_idn}")
+
+                    # Get message_id from the original update to edit the message
+                    message_id = json_data.get("callback_query", {}).get("message", {}).get("message_id")
+                    if message_id and result.telegram_id:
+                        await send_callback_response(result.telegram_id, message_id, approve_result)
+
+                # Feature #61: Handle reject callback (to be implemented)
+                elif callback_data.action == "reject":
+                    logger.info(f"Reject callback for quote {callback_data.quote_id} - not yet implemented")
+
+                # Handle details callback - just log for now
+                elif callback_data.action == "details":
+                    logger.info(f"Details callback for quote {callback_data.quote_id}")
 
             elif result.update_type == "message":
                 # Regular text message (not a command)

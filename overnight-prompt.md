@@ -142,12 +142,13 @@ App runs at http://localhost:5001
 - [x] Feature #57: Команда /status (2025-01-15) - Shows user's tasks by role with formatted Telegram message
 - [x] Feature #58: Отправка уведомления task_assigned (2025-01-15) - send_task_assigned_notification() with Telegram + DB recording
 - [x] Feature #59: Отправка уведомления approval_required (2025-01-15) - send_approval_required_notification() with inline buttons
+- [x] Feature #60: Inline-кнопка Согласовать (2025-01-15) - handle_approve_callback() validates user, transitions quote to approved, updates Telegram message
 
 ### Next Up
-- Feature #60: Inline-кнопка Согласовать (callback handler для approve_{quote_id})
+- Feature #61: Inline-кнопка Отклонить (callback handler для reject_{quote_id})
 
 ### Progress
-- **59 of 88 features completed** (67%)
+- **60 of 88 features completed** (68%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

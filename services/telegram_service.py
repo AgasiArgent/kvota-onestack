@@ -2408,3 +2408,233 @@ async def send_approval_notification_for_quote(
             "success": False,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Approve Callback Handler (Feature #60)
+# ============================================================================
+
+@dataclass
+class ApprovalCallbackResult:
+    """Result of processing an approval callback."""
+    success: bool
+    quote_id: str
+    quote_idn: str = ""
+    action: str = ""  # "approved" or "rejected"
+    message: str = ""  # Message to display to the user
+    error: Optional[str] = None
+    new_status: Optional[str] = None
+
+
+async def handle_approve_callback(
+    telegram_id: int,
+    quote_id: str
+) -> ApprovalCallbackResult:
+    """Handle the 'approve' inline button callback from Telegram.
+
+    Feature #60: Inline-кнопка Согласовать (Callback handler для approve_{quote_id})
+
+    This function:
+    1. Checks if Telegram account is linked and verified
+    2. Gets the user's roles in the organization
+    3. Verifies they have top_manager or admin role
+    4. Checks the quote is in pending_approval status
+    5. Transitions the quote to approved status
+    6. Updates the original Telegram message to show success
+
+    Args:
+        telegram_id: Telegram user ID who pressed the button
+        quote_id: UUID of the quote to approve
+
+    Returns:
+        ApprovalCallbackResult with success status and details
+
+    Example:
+        >>> result = await handle_approve_callback(12345678, "quote-uuid")
+        >>> if result.success:
+        ...     print(f"Quote {result.quote_idn} approved!")
+    """
+    from services.workflow_service import (
+        transition_quote_status,
+        WorkflowStatus,
+        get_quote_workflow_status
+    )
+    from services.role_service import get_user_role_codes
+
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="approved",
+                error="Database connection error",
+                message="❌ Ошибка подключения к базе данных"
+            )
+
+        # Step 1: Check if Telegram account is linked
+        telegram_user = await get_telegram_user(telegram_id)
+        if not telegram_user:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="approved",
+                error="Telegram account not linked",
+                message="❌ Ваш Telegram аккаунт не привязан к системе.\n\nИспользуйте /start для инструкций по привязке."
+            )
+
+        user_id = telegram_user.get("user_id")
+        logger.info(f"Approve callback: telegram_id={telegram_id}, user_id={user_id}, quote_id={quote_id}")
+
+        # Step 2: Get quote details to verify organization
+        quote_response = supabase.table("quotes").select(
+            "id, idn, organization_id, workflow_status, customer:customers(name)"
+        ).eq("id", quote_id).execute()
+
+        if not quote_response.data or len(quote_response.data) == 0:
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                action="approved",
+                error="Quote not found",
+                message="❌ КП не найдено в системе"
+            )
+
+        quote = quote_response.data[0]
+        org_id = quote.get("organization_id")
+        quote_idn = quote.get("idn", "N/A")
+        current_status = quote.get("workflow_status")
+        customer = quote.get("customer", {})
+        customer_name = customer.get("name", "N/A") if customer else "N/A"
+
+        # Step 3: Check user's roles in the organization
+        user_roles = get_user_role_codes(user_id, org_id)
+
+        # Step 4: Verify user has top_manager or admin role
+        if not any(role in ["top_manager", "admin"] for role in user_roles):
+            logger.warning(f"User {user_id} tried to approve quote {quote_id} without permission. Roles: {user_roles}")
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="approved",
+                error="Permission denied",
+                message="❌ У вас нет прав на согласование КП.\n\nТребуется роль: топ-менеджер или администратор"
+            )
+
+        # Step 5: Check quote is in pending_approval status
+        if current_status != WorkflowStatus.PENDING_APPROVAL.value:
+            status_name = _get_status_name_ru(current_status)
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="approved",
+                error=f"Invalid status: {current_status}",
+                message=f"❌ КП не может быть согласовано\n\nТекущий статус: {status_name}\n\nТребуется статус: Ожидает согласования"
+            )
+
+        # Step 6: Transition to approved status
+        result = transition_quote_status(
+            quote_id=quote_id,
+            to_status=WorkflowStatus.APPROVED,
+            actor_id=user_id,
+            actor_roles=user_roles,
+            comment="Согласовано через Telegram"
+        )
+
+        if result.success:
+            logger.info(f"Quote {quote_id} approved by user {user_id} via Telegram")
+            return ApprovalCallbackResult(
+                success=True,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="approved",
+                message=f"✅ КП {quote_idn} успешно согласовано!\n\nКлиент: {customer_name}\n\nТеперь КП можно отправить клиенту.",
+                new_status=WorkflowStatus.APPROVED.value
+            )
+        else:
+            logger.error(f"Failed to approve quote {quote_id}: {result.error_message}")
+            return ApprovalCallbackResult(
+                success=False,
+                quote_id=quote_id,
+                quote_idn=quote_idn,
+                action="approved",
+                error=result.error_message,
+                message=f"❌ Ошибка при согласовании КП\n\n{result.error_message}"
+            )
+
+    except Exception as e:
+        logger.error(f"Error handling approve callback for quote {quote_id}: {e}")
+        return ApprovalCallbackResult(
+            success=False,
+            quote_id=quote_id,
+            action="approved",
+            error=str(e),
+            message=f"❌ Произошла ошибка: {str(e)}"
+        )
+
+
+async def send_callback_response(
+    telegram_id: int,
+    message_id: int,
+    result: ApprovalCallbackResult
+) -> bool:
+    """Send response to a callback and update the original message.
+
+    This function updates the original approval request message to show
+    the result of the approval action.
+
+    Args:
+        telegram_id: Telegram user ID
+        message_id: ID of the original message to edit
+        result: ApprovalCallbackResult from handle_approve_callback
+
+    Returns:
+        True if message was updated successfully
+    """
+    bot = get_bot()
+    if not bot:
+        return False
+
+    # Build the updated message
+    if result.success:
+        if result.action == "approved":
+            emoji = "✅"
+            decision = "СОГЛАСОВАНО"
+        else:  # rejected
+            emoji = "❌"
+            decision = "ОТКЛОНЕНО"
+
+        updated_text = f"""{emoji} *{decision}*
+
+КП: {result.quote_idn}
+{result.message.replace(f"✅ КП {result.quote_idn} успешно согласовано!", "").strip()}"""
+    else:
+        updated_text = f"""⚠️ *Ошибка обработки*
+
+{result.message}"""
+
+    # Try to edit the original message (remove inline buttons)
+    try:
+        await bot.edit_message_text(
+            chat_id=telegram_id,
+            message_id=message_id,
+            text=updated_text,
+            parse_mode="Markdown"
+        )
+        logger.info(f"Updated callback response message {message_id} for user {telegram_id}")
+        return True
+    except TelegramError as e:
+        # If edit fails (e.g., message too old), send a new message
+        logger.warning(f"Failed to edit message {message_id}, sending new: {e}")
+        try:
+            await bot.send_message(
+                chat_id=telegram_id,
+                text=result.message,
+                parse_mode="Markdown"
+            )
+            return True
+        except TelegramError as e2:
+            logger.error(f"Failed to send callback response: {e2}")
+            return False

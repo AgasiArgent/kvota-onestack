@@ -168,6 +168,10 @@ from .telegram_service import (
     ApprovalRequiredNotification,
     send_approval_required_notification,
     send_approval_notification_for_quote,
+    # Approve callback handler (Feature #60)
+    ApprovalCallbackResult,
+    handle_approve_callback,
+    send_callback_response,
 )
 
 __all__ = [
@@ -319,4 +323,8 @@ __all__ = [
     "ApprovalRequiredNotification",
     "send_approval_required_notification",
     "send_approval_notification_for_quote",
+    # Approve callback handler (Feature #60)
+    "ApprovalCallbackResult",
+    "handle_approve_callback",
+    "send_callback_response",
 ]

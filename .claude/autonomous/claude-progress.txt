@@ -1433,3 +1433,37 @@
   - services/__init__.py (updated exports)
 - Status: COMPLETE - Feature #59 done
 
+
+## Session 2025-01-15 - Feature #60: Inline-кнопка Согласовать (callback handler)
+- Implemented approve callback handler for Telegram inline buttons
+- New functions in telegram_service.py (~230 lines):
+  - ApprovalCallbackResult dataclass:
+    - success, quote_id, quote_idn, action, message, error, new_status
+  - handle_approve_callback(telegram_id, quote_id) → ApprovalCallbackResult:
+    - Validates Telegram account is linked and verified
+    - Gets user's roles in the organization
+    - Checks user has top_manager or admin role
+    - Verifies quote is in pending_approval status
+    - Calls transition_quote_status() to move to approved
+    - Returns detailed result with success/error message
+  - send_callback_response(telegram_id, message_id, result) → bool:
+    - Updates the original Telegram message to show approval result
+    - Removes inline buttons after action taken
+    - Falls back to sending new message if edit fails
+- Updated main.py webhook handler (~20 lines):
+  - Added imports for handle_approve_callback, send_callback_response
+  - Enhanced callback_query handling section:
+    - If action == "approve": calls handle_approve_callback
+    - Gets message_id from callback query to update original message
+    - Calls send_callback_response to show result
+    - Placeholder for reject and details actions (features #61+)
+- Updated services/__init__.py:
+  - Added exports: ApprovalCallbackResult, handle_approve_callback, send_callback_response
+- All syntax verified with py_compile
+- Imports tested successfully
+- Files changed:
+  - services/telegram_service.py (~230 lines added)
+  - services/__init__.py (updated exports)
+  - main.py (~25 lines added/modified)
+- Status: COMPLETE - Feature #60 done
+
