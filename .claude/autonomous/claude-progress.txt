@@ -3245,3 +3245,14 @@ Features:
 - Empty state shows links to add first or seed defaults
 - Russian UI labels throughout
 
+
+2026-01-15 20:27:17 - UI-012 (Supplier invoices registry page) - COMPLETE
+  - Created GET /supplier-invoices list page with search, supplier filter, status filter
+  - Created GET /supplier-invoices/{id} detail page with items and payments
+  - Permission check: admin, procurement, or finance roles
+  - Stats cards: total, pending, partially_paid, paid, overdue counts
+  - Summary amounts in RUB
+  - Table with invoice info, amounts, status badges
+  - Detail page shows items table and payments table
+  - Russian localization
+

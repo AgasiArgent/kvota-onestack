@@ -15713,6 +15713,451 @@ def get(session):
 
 
 # ============================================================================
+# SUPPLIER INVOICES ROUTES
+# ============================================================================
+
+@rt("/supplier-invoices")
+def get(session, q: str = "", supplier_id: str = "", status: str = ""):
+    """
+    Supplier invoices registry page with filters.
+
+    Query Parameters:
+        q: Search query (matches invoice number)
+        supplier_id: Filter by supplier
+        status: Filter by status (pending, partially_paid, paid, overdue, cancelled)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin, procurement, finance roles
+    if not user_has_any_role(session, ["admin", "procurement", "finance"]):
+        return page_layout("Access Denied",
+            Div(
+                H1("⛔ Доступ запрещён"),
+                P("У вас нет прав для просмотра реестра инвойсов поставщиков."),
+                P("Требуется роль: admin, procurement или finance"),
+                A("← На главную", href="/dashboard", role="button"),
+                cls="card"
+            ),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Import invoice service
+    from services.supplier_invoice_service import (
+        get_all_invoices, search_invoices, get_invoice_summary,
+        get_invoice_status_name, get_invoice_status_color,
+        INVOICE_STATUSES, INVOICE_STATUS_NAMES
+    )
+    from services.supplier_service import get_all_suppliers
+
+    # Get invoices based on filters
+    try:
+        if q and q.strip():
+            # Use search if query provided
+            invoices = search_invoices(
+                organization_id=org_id,
+                query_text=q.strip(),
+                limit=100
+            )
+        else:
+            # Get all with filters
+            invoices = get_all_invoices(
+                organization_id=org_id,
+                status=status if status else None,
+                supplier_id=supplier_id if supplier_id else None,
+                limit=100
+            )
+
+        # Get suppliers for filter dropdown
+        suppliers = get_all_suppliers(organization_id=org_id, is_active=True, limit=200)
+
+        # Get summary stats
+        summary = get_invoice_summary(organization_id=org_id)
+
+    except Exception as e:
+        print(f"Error loading supplier invoices: {e}")
+        invoices = []
+        suppliers = []
+        from services.supplier_invoice_service import InvoiceSummary
+        summary = InvoiceSummary()
+
+    # Build supplier options for filter
+    supplier_options = [Option("Все поставщики", value="")] + [
+        Option(f"{s.supplier_code} - {s.name}", value=str(s.id), selected=(str(s.id) == supplier_id))
+        for s in suppliers
+    ]
+
+    # Status options
+    status_options = [
+        Option("Все статусы", value="", selected=(status == "")),
+    ] + [
+        Option(INVOICE_STATUS_NAMES.get(s, s), value=s, selected=(status == s))
+        for s in INVOICE_STATUSES
+    ]
+
+    # Status color mapping for CSS classes
+    status_color_classes = {
+        "pending": "status-pending",
+        "partially_paid": "status-in-progress",
+        "paid": "status-approved",
+        "overdue": "status-rejected",
+        "cancelled": "status-cancelled",
+    }
+
+    # Build invoice rows
+    invoice_rows = []
+    for inv in invoices:
+        status_cls = status_color_classes.get(inv.status, "status-pending")
+        status_text = get_invoice_status_name(inv.status)
+
+        # Format amounts
+        total_formatted = f"{inv.total_amount:,.2f}" if inv.total_amount else "0.00"
+        paid_formatted = f"{inv.paid_amount:,.2f}" if inv.paid_amount else "0.00"
+        remaining = (inv.total_amount or 0) - (inv.paid_amount or 0)
+        remaining_formatted = f"{remaining:,.2f}"
+
+        # Format dates
+        invoice_date_str = inv.invoice_date.strftime("%d.%m.%Y") if inv.invoice_date else "—"
+        due_date_str = inv.due_date.strftime("%d.%m.%Y") if inv.due_date else "—"
+
+        # Overdue indicator
+        overdue_badge = Span(" ⚠️", title="Просрочено!") if inv.is_overdue else ""
+
+        invoice_rows.append(
+            Tr(
+                Td(
+                    A(
+                        Strong(inv.invoice_number),
+                        href=f"/supplier-invoices/{inv.id}",
+                        style="font-family: monospace; color: #4a4aff; text-decoration: none;"
+                    )
+                ),
+                Td(f"{inv.supplier_code or ''} - {inv.supplier_name or '—'}" if inv.supplier_name else "—"),
+                Td(invoice_date_str),
+                Td(due_date_str, overdue_badge),
+                Td(f"{total_formatted} {inv.currency}", style="text-align: right;"),
+                Td(f"{paid_formatted} {inv.currency}", style="text-align: right; color: #28a745;"),
+                Td(f"{remaining_formatted} {inv.currency}", style="text-align: right; color: #dc3545;" if remaining > 0 else "text-align: right;"),
+                Td(Span(status_text, cls=f"status-badge {status_cls}")),
+                Td(
+                    A("👁️", href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 0.5rem;"),
+                    A("✏️", href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
+                )
+            )
+        )
+
+    return page_layout("Инвойсы поставщиков",
+        # Header
+        Div(
+            H1("📋 Реестр инвойсов поставщиков"),
+            A("+ Добавить инвойс", href="/supplier-invoices/new", role="button"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
+
+        # Info alert
+        Div(
+            "📌 Реестр инвойсов отслеживает все счета от поставщиков, их статусы оплаты и сроки.",
+            cls="alert alert-info",
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(summary.total), cls="stat-value"),
+                Div("Всего"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(summary.pending), cls="stat-value", style="color: #ffc107;"),
+                Div("Ожидает оплаты"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(summary.partially_paid), cls="stat-value", style="color: #17a2b8;"),
+                Div("Частично оплачено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(summary.paid), cls="stat-value", style="color: #28a745;"),
+                Div("Оплачено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(summary.overdue), cls="stat-value", style="color: #dc3545;"),
+                Div("Просрочено"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Summary amounts
+        Div(
+            Div(
+                Strong("К оплате: "),
+                Span(f"{summary.pending_amount:,.2f} ₽", style="color: #dc3545;"),
+                " | ",
+                Strong("Оплачено: "),
+                Span(f"{summary.paid_amount:,.2f} ₽", style="color: #28a745;"),
+                " | ",
+                Strong("Всего: "),
+                Span(f"{summary.total_amount:,.2f} ₽"),
+            ),
+            cls="card", style="margin-bottom: 1rem; text-align: center; padding: 1rem;"
+        ),
+
+        # Filters
+        Div(
+            Form(
+                Div(
+                    Input(name="q", value=q, placeholder="Поиск по номеру инвойса...", style="flex: 2;"),
+                    Select(*supplier_options, name="supplier_id", style="flex: 2;"),
+                    Select(*status_options, name="status", style="flex: 1;"),
+                    Button("🔍 Поиск", type="submit"),
+                    A("Сбросить", href="/supplier-invoices", role="button", cls="secondary"),
+                    style="display: flex; gap: 0.5rem; align-items: center;"
+                ),
+                method="get",
+                action="/supplier-invoices"
+            ),
+            cls="card", style="margin-bottom: 1rem;"
+        ),
+
+        # Table
+        Table(
+            Thead(
+                Tr(
+                    Th("№ Инвойса"),
+                    Th("Поставщик"),
+                    Th("Дата"),
+                    Th("Срок оплаты"),
+                    Th("Сумма", style="text-align: right;"),
+                    Th("Оплачено", style="text-align: right;"),
+                    Th("Остаток", style="text-align: right;"),
+                    Th("Статус"),
+                    Th("Действия")
+                )
+            ),
+            Tbody(*invoice_rows) if invoice_rows else Tbody(
+                Tr(Td(
+                    "Инвойсы не найдены. ",
+                    A("Добавить первый инвойс", href="/supplier-invoices/new"),
+                    colspan="9", style="text-align: center; padding: 2rem;"
+                ))
+            ),
+            cls="table"
+        ),
+
+        session=session
+    )
+
+
+@rt("/supplier-invoices/{invoice_id}")
+def get(invoice_id: str, session):
+    """View single supplier invoice details with items and payments."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement", "finance"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра инвойсов.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.supplier_invoice_service import (
+        get_invoice_with_details, get_invoice_status_name, get_invoice_status_color
+    )
+    from services.supplier_invoice_payment_service import get_payments_for_invoice
+
+    try:
+        invoice = get_invoice_with_details(invoice_id)
+        if not invoice:
+            return page_layout("Не найдено",
+                Div("Инвойс не найден.", cls="alert alert-error"),
+                A("← К реестру инвойсов", href="/supplier-invoices", role="button"),
+                session=session
+            )
+
+        # Verify organization access
+        if str(invoice.organization_id) != str(org_id):
+            return page_layout("Access Denied",
+                Div("У вас нет доступа к этому инвойсу.", cls="alert alert-error"),
+                session=session
+            )
+
+        # Get payments for this invoice
+        payments = get_payments_for_invoice(invoice_id)
+
+    except Exception as e:
+        print(f"Error loading invoice: {e}")
+        return page_layout("Ошибка",
+            Div(f"Ошибка при загрузке инвойса: {e}", cls="alert alert-error"),
+            A("← К реестру инвойсов", href="/supplier-invoices", role="button"),
+            session=session
+        )
+
+    # Status styling
+    status_color_classes = {
+        "pending": "status-pending",
+        "partially_paid": "status-in-progress",
+        "paid": "status-approved",
+        "overdue": "status-rejected",
+        "cancelled": "status-cancelled",
+    }
+    status_cls = status_color_classes.get(invoice.status, "status-pending")
+    status_text = get_invoice_status_name(invoice.status)
+
+    # Calculate amounts
+    total_amount = invoice.total_amount or 0
+    paid_amount = invoice.paid_amount or 0
+    remaining = total_amount - paid_amount
+
+    # Format dates
+    invoice_date_str = invoice.invoice_date.strftime("%d.%m.%Y") if invoice.invoice_date else "—"
+    due_date_str = invoice.due_date.strftime("%d.%m.%Y") if invoice.due_date else "—"
+
+    # Build items table (if items exist)
+    items_section = []
+    if hasattr(invoice, 'items') and invoice.items:
+        item_rows = []
+        for item in invoice.items:
+            item_total = (item.quantity or 0) * (item.unit_price or 0)
+            item_rows.append(
+                Tr(
+                    Td(item.description or "—"),
+                    Td(str(item.quantity or 0)),
+                    Td(f"{item.unit_price or 0:,.2f}"),
+                    Td(f"{item_total:,.2f}", style="text-align: right;"),
+                )
+            )
+        items_section = [
+            H3("📦 Позиции инвойса"),
+            Table(
+                Thead(Tr(
+                    Th("Описание"),
+                    Th("Кол-во"),
+                    Th("Цена за ед."),
+                    Th("Сумма", style="text-align: right;"),
+                )),
+                Tbody(*item_rows),
+                cls="table"
+            ),
+        ]
+
+    # Build payments table
+    payment_rows = []
+    from services.supplier_invoice_payment_service import get_payment_type_name
+    for p in payments:
+        payment_date_str = p.payment_date.strftime("%d.%m.%Y") if p.payment_date else "—"
+        payment_type_text = get_payment_type_name(p.payment_type)
+        payment_rows.append(
+            Tr(
+                Td(payment_date_str),
+                Td(payment_type_text),
+                Td(f"{p.amount:,.2f} {p.currency}", style="text-align: right;"),
+                Td(p.buyer_company_name or "—"),
+                Td(p.payment_document or "—"),
+                Td(p.notes or "—"),
+            )
+        )
+
+    payments_section = [
+        Div(
+            H3("💳 Платежи", style="display: inline;"),
+            A("+ Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline", style="float: right;"),
+            style="margin-bottom: 1rem;"
+        ),
+    ]
+
+    if payment_rows:
+        payments_section.append(
+            Table(
+                Thead(Tr(
+                    Th("Дата"),
+                    Th("Тип"),
+                    Th("Сумма", style="text-align: right;"),
+                    Th("Плательщик"),
+                    Th("Документ"),
+                    Th("Примечание"),
+                )),
+                Tbody(*payment_rows),
+                cls="table"
+            )
+        )
+    else:
+        payments_section.append(
+            Div("Платежи ещё не зарегистрированы.", cls="alert alert-warning")
+        )
+
+    return page_layout(f"Инвойс {invoice.invoice_number}",
+        # Header
+        Div(
+            A("← К реестру инвойсов", href="/supplier-invoices"),
+            H1(f"📋 Инвойс {invoice.invoice_number}"),
+            Span(status_text, cls=f"status-badge {status_cls}", style="font-size: 1.2rem;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Main info card
+        Div(
+            Div(
+                H3("Основная информация"),
+                Table(
+                    Tr(Td(Strong("Номер инвойса:")), Td(invoice.invoice_number)),
+                    Tr(Td(Strong("Поставщик:")), Td(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}")),
+                    Tr(Td(Strong("Дата инвойса:")), Td(invoice_date_str)),
+                    Tr(Td(Strong("Срок оплаты:")), Td(due_date_str, Span(" ⚠️ Просрочено!", style="color: #dc3545;") if invoice.is_overdue else "")),
+                    style="border: none;"
+                ),
+                cls="col"
+            ),
+            Div(
+                H3("Финансы"),
+                Table(
+                    Tr(Td(Strong("Сумма:")), Td(f"{total_amount:,.2f} {invoice.currency}", style="font-size: 1.2rem;")),
+                    Tr(Td(Strong("Оплачено:")), Td(f"{paid_amount:,.2f} {invoice.currency}", style="color: #28a745;")),
+                    Tr(Td(Strong("Остаток:")), Td(f"{remaining:,.2f} {invoice.currency}", style="color: #dc3545;" if remaining > 0 else "")),
+                    style="border: none;"
+                ),
+                cls="col"
+            ),
+            cls="grid", style="margin-bottom: 1.5rem;"
+        ),
+
+        # Items section (if any)
+        Div(*items_section, cls="card", style="margin-bottom: 1rem;") if items_section else "",
+
+        # Payments section
+        Div(*payments_section, cls="card", style="margin-bottom: 1rem;"),
+
+        # Notes
+        Div(
+            H3("📝 Примечания"),
+            P(invoice.notes or "Нет примечаний"),
+            cls="card", style="margin-bottom: 1rem;"
+        ) if invoice.notes else "",
+
+        # Actions
+        Div(
+            A("✏️ Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", role="button"),
+            A("💳 Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline"),
+            style="display: flex; gap: 1rem;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
