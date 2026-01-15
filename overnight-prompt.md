@@ -164,12 +164,13 @@ App runs at http://localhost:5001
 - [x] Feature #79: Таблица план-факт по сделке (2026-01-15) - Created /finance/{deal_id} route with comprehensive deal detail page. Shows deal info (number, customer, spec, amounts, dates), plan-fact summary (planned/actual income/expense, margin, variance), and plan-fact table with all payment items grouped by category with color coding and status indicators.
 - [x] Feature #80: Форма регистрации платежа (2026-01-15) - Created /finance/{deal_id}/plan-fact/{item_id} GET/POST routes. GET shows planned data card (category, amount, date, status) and actual data form (amount, currency, exchange rate, date, payment document, notes). POST validates and updates plan_fact_items with actual payment data. Database trigger calculates variance automatically.
 - [x] Feature #81: Сервис план-факта (2026-01-15) - Created services/plan_fact_service.py with full CRUD: PlanFactCategory and PlanFactItem dataclasses, category functions, create/read/update/delete operations for plan_fact_items, summary and statistics (get_deal_plan_fact_summary, get_items_grouped_by_category, get_upcoming_payments, get_payments_for_period), validation functions. Updated services/__init__.py with 35+ exports.
+- [x] Feature #82: Автогенерация плановых платежей (2026-01-15) - Created generate_plan_fact_from_deal(), regenerate_plan_fact_for_deal(), get_plan_fact_generation_preview() functions. Added GeneratePlanFactResult dataclass. Created UI routes: GET/POST /finance/{deal_id}/generate-plan-fact for preview and execution. Updated deal detail page with auto-generation buttons. Generates payments for: client_payment (advance + final), supplier_payment (advance + final), logistics, customs, finance_commission.
 
 ### Next Up
-- Feature #82: Автогенерация плановых платежей (create plan_fact_items from deal conditions)
+- Feature #83: Расчёт отклонений (variance_amount calculation when recording actual payments)
 
 ### Progress
-- **81 of 88 features completed** (92%)
+- **82 of 88 features completed** (93%)
 - **TELEGRAM BOT PHASE STARTED** (Feature #52 complete: bot service infrastructure)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)

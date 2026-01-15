@@ -2059,3 +2059,57 @@ CreateDealFromSpecResult(
 - Summary calculations handle Decimal types properly
 
 ### Status: COMPLETE
+
+## Session 2026-01-15 - Feature #82: Автогенерация плановых платежей
+
+### What was done
+- Created auto-generation functions for plan-fact items from deal conditions
+- Added `GeneratePlanFactResult` dataclass for structured return type
+- Implemented `generate_plan_fact_from_deal()` function that:
+  - Fetches deal, specification, and quote data
+  - Extracts calculation variables (advance_from_client, advance_to_supplier, time_to_advance, etc.)
+  - Calculates totals from quote_item_calculations (purchase, logistics, customs)
+  - Generates plan_fact_items for each payment category
+  - Supports replace_existing flag for regeneration
+- Implemented `regenerate_plan_fact_for_deal()` convenience wrapper
+- Implemented `get_plan_fact_generation_preview()` for UI preview
+- Created UI routes:
+  - GET `/finance/{deal_id}/generate-plan-fact` - Preview page showing what will be generated
+  - POST `/finance/{deal_id}/generate-plan-fact` - Executes generation
+- Updated deal detail page with:
+  - "🔄 Сгенерировать из КП" button when no items exist
+  - "🔄 Перегенерировать" button when items already exist
+  - Both buttons in plan-fact table header section
+
+### Payment categories generated
+- `client_payment`: Based on advance_from_client % and time_to_advance timing
+  - Advance payment (if advance_pct > 0)
+  - Final payment (if advance_pct < 100)
+- `supplier_payment`: Based on total_purchase and advance_to_supplier %
+  - Advance to supplier (if supplier_advance > 0)
+  - Remaining to supplier (if supplier_advance < 100)
+- `logistics`: Full logistics_total from calculation
+- `customs`: Combined customs_duty_total + customs_processing_total
+- `finance_commission`: Based on bank_commission_percent
+
+### Files changed
+- `services/plan_fact_service.py`:
+  - Added GeneratePlanFactResult dataclass (~20 lines)
+  - Added generate_plan_fact_from_deal() function (~250 lines)
+  - Added regenerate_plan_fact_for_deal() function (~20 lines)
+  - Added get_plan_fact_generation_preview() function (~150 lines)
+- `services/__init__.py`:
+  - Added imports for new functions
+  - Added to __all__ exports
+- `main.py`:
+  - Added GET/POST routes for /finance/{deal_id}/generate-plan-fact (~150 lines)
+  - Updated empty plan_fact_table to show generation button
+  - Updated plan-fact table header with regeneration button
+
+### Technical notes
+- Uses bulk_create_plan_fact_items() for efficient batch creation
+- Calculates planned dates based on deal signed_at + timedelta offsets
+- Shows warning on preview page if items already exist
+- Error handling with detailed error messages
+
+### Status: COMPLETE

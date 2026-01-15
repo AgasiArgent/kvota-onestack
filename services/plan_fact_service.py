@@ -1095,3 +1095,550 @@ def validate_deal_plan_fact(deal_id: str) -> Dict[str, Any]:
         'warnings': warnings,
         'summary': summary
     }
+
+
+# ============================================================================
+# Auto-Generation Functions (Feature #82)
+# ============================================================================
+
+@dataclass
+class GeneratePlanFactResult:
+    """Result of auto-generating plan-fact items from deal conditions."""
+    success: bool
+    items_created: List[PlanFactItem]
+    items_count: int
+    error: Optional[str]
+    source_data: Dict[str, Any]  # Shows what data was used
+
+
+def generate_plan_fact_from_deal(
+    deal_id: str,
+    created_by: Optional[str] = None,
+    replace_existing: bool = False
+) -> GeneratePlanFactResult:
+    """
+    Auto-generate planned payments from deal conditions.
+
+    This function reads the deal's specification and quote data, extracts
+    calculation variables (advance percentages, payment timing, etc.),
+    and creates plan_fact_items for each payment category.
+
+    Args:
+        deal_id: UUID of the deal to generate plan-fact for
+        created_by: ID of the user triggering generation
+        replace_existing: If True, delete existing items before creating new ones
+                         If False, skip generation if items already exist
+
+    Returns:
+        GeneratePlanFactResult with success flag, created items, and source data
+
+    Payment categories generated:
+        - client_payment: Based on advance_from_client % and timing
+        - supplier_payment: Based on total_purchase and advance_to_supplier %
+        - logistics: Based on logistics_total from calculation
+        - customs: Based on customs costs from calculation
+        - finance_commission: Based on bank_commission_percent
+
+    Example:
+        result = generate_plan_fact_from_deal('deal-123', created_by='user-456')
+        if result.success:
+            print(f"Created {result.items_count} plan-fact items")
+    """
+    from datetime import timedelta
+
+    supabase = get_supabase()
+    source_data = {}
+
+    try:
+        # Step 1: Get deal with related spec and quote
+        deal_result = supabase.table('deals').select(
+            '*, specifications(*, quotes(id, idn_quote, total_amount, currency, organization_id))'
+        ).eq('id', deal_id).execute()
+
+        if not deal_result.data:
+            return GeneratePlanFactResult(
+                success=False,
+                items_created=[],
+                items_count=0,
+                error=f"Deal not found: {deal_id}",
+                source_data={}
+            )
+
+        deal = deal_result.data[0]
+        spec = deal.get('specifications', {}) or {}
+        quote = spec.get('quotes', {}) or {}
+        quote_id = spec.get('quote_id') or quote.get('id')
+
+        source_data['deal'] = {
+            'id': deal_id,
+            'deal_number': deal.get('deal_number'),
+            'total_amount': deal.get('total_amount'),
+            'currency': deal.get('currency'),
+            'signed_at': deal.get('signed_at'),
+        }
+        source_data['quote_id'] = quote_id
+
+        # Step 2: Check for existing items
+        existing_count = count_items_for_deal(deal_id).get('total', 0)
+
+        if existing_count > 0 and not replace_existing:
+            return GeneratePlanFactResult(
+                success=False,
+                items_created=[],
+                items_count=0,
+                error=f"Plan-fact items already exist ({existing_count} items). Use replace_existing=True to regenerate.",
+                source_data=source_data
+            )
+
+        if replace_existing and existing_count > 0:
+            delete_all_items_for_deal(deal_id)
+
+        # Step 3: Get calculation variables from quote
+        if quote_id:
+            vars_result = supabase.table('quote_calculation_variables') \
+                .select('*') \
+                .eq('quote_id', quote_id) \
+                .execute()
+
+            calc_vars = vars_result.data[0] if vars_result.data else {}
+        else:
+            calc_vars = {}
+
+        source_data['calc_vars'] = {
+            'advance_from_client': calc_vars.get('advance_from_client', 100),
+            'advance_to_supplier': calc_vars.get('advance_to_supplier', 100),
+            'time_to_advance': calc_vars.get('time_to_advance', 0),
+            'time_to_advance_on_receiving': calc_vars.get('time_to_advance_on_receiving', 0),
+            'bank_commission_percent': calc_vars.get('bank_commission_percent', 0),
+        }
+
+        # Step 4: Get calculation results for totals
+        if quote_id:
+            calc_result = supabase.table('quote_item_calculations') \
+                .select('*') \
+                .eq('quote_id', quote_id) \
+                .execute()
+
+            calc_items = calc_result.data if calc_result.data else []
+        else:
+            calc_items = []
+
+        # Calculate totals from items
+        total_purchase = Decimal('0')
+        total_logistics = Decimal('0')
+        total_customs = Decimal('0')
+        total_sale = Decimal('0')
+
+        for item in calc_items:
+            total_purchase += Decimal(str(item.get('purchase_price_total', 0) or 0))
+            total_logistics += Decimal(str(item.get('logistics_total', 0) or 0))
+            # Customs costs may include duty and processing fees
+            customs_duty = Decimal(str(item.get('customs_duty_total', 0) or 0))
+            customs_processing = Decimal(str(item.get('customs_processing_total', 0) or 0))
+            total_customs += customs_duty + customs_processing
+            total_sale += Decimal(str(item.get('sales_price_total_with_vat', 0) or 0))
+
+        # Use deal's total_amount as the primary source for client payments
+        deal_total = Decimal(str(deal.get('total_amount', 0) or 0))
+        if deal_total == 0:
+            deal_total = total_sale
+
+        source_data['totals'] = {
+            'deal_total': float(deal_total),
+            'total_purchase': float(total_purchase),
+            'total_logistics': float(total_logistics),
+            'total_customs': float(total_customs),
+            'total_sale': float(total_sale),
+        }
+
+        # Step 5: Determine base date (deal signed_at or today)
+        try:
+            if deal.get('signed_at'):
+                if isinstance(deal['signed_at'], str):
+                    base_date = datetime.strptime(deal['signed_at'], '%Y-%m-%d').date()
+                else:
+                    base_date = deal['signed_at']
+            else:
+                base_date = date.today()
+        except:
+            base_date = date.today()
+
+        source_data['base_date'] = base_date.isoformat()
+
+        currency = deal.get('currency') or spec.get('specification_currency') or 'RUB'
+
+        # Step 6: Generate planned payments
+        items_to_create = []
+
+        # --- Client Payments ---
+        advance_pct = float(calc_vars.get('advance_from_client', 100) or 100)
+        time_to_advance = int(calc_vars.get('time_to_advance', 0) or 0)
+        time_to_final = int(calc_vars.get('time_to_advance_on_receiving', 0) or 0)
+
+        if advance_pct > 0 and deal_total > 0:
+            advance_amount = deal_total * Decimal(str(advance_pct)) / 100
+            advance_date = base_date + timedelta(days=time_to_advance)
+
+            items_to_create.append({
+                'category_code': 'client_payment',
+                'planned_amount': float(advance_amount),
+                'planned_date': advance_date,
+                'planned_currency': currency,
+                'description': f'Аванс от клиента ({advance_pct:.0f}%)',
+            })
+
+        # If not 100% prepayment, add final payment
+        if advance_pct < 100 and deal_total > 0:
+            remaining_pct = 100 - advance_pct
+            remaining_amount = deal_total * Decimal(str(remaining_pct)) / 100
+            final_date = base_date + timedelta(days=time_to_final) if time_to_final > 0 else base_date + timedelta(days=30)
+
+            items_to_create.append({
+                'category_code': 'client_payment',
+                'planned_amount': float(remaining_amount),
+                'planned_date': final_date,
+                'planned_currency': currency,
+                'description': f'Остаток от клиента ({remaining_pct:.0f}%)',
+            })
+
+        # --- Supplier Payment ---
+        if total_purchase > 0:
+            supplier_advance_pct = float(calc_vars.get('advance_to_supplier', 100) or 100)
+
+            if supplier_advance_pct > 0:
+                supplier_advance = total_purchase * Decimal(str(supplier_advance_pct)) / 100
+                # Supplier payment typically shortly after deal signing
+                supplier_date = base_date + timedelta(days=3)
+
+                items_to_create.append({
+                    'category_code': 'supplier_payment',
+                    'planned_amount': float(supplier_advance),
+                    'planned_date': supplier_date,
+                    'planned_currency': currency,
+                    'description': f'Оплата поставщику ({supplier_advance_pct:.0f}%)',
+                })
+
+            # If not 100% advance to supplier, add remaining
+            if supplier_advance_pct < 100:
+                remaining_pct = 100 - supplier_advance_pct
+                remaining_supplier = total_purchase * Decimal(str(remaining_pct)) / 100
+                supplier_final_date = base_date + timedelta(days=20)  # Typically after goods arrive
+
+                items_to_create.append({
+                    'category_code': 'supplier_payment',
+                    'planned_amount': float(remaining_supplier),
+                    'planned_date': supplier_final_date,
+                    'planned_currency': currency,
+                    'description': f'Остаток поставщику ({remaining_pct:.0f}%)',
+                })
+
+        # --- Logistics Payment ---
+        if total_logistics > 0:
+            logistics_date = base_date + timedelta(days=14)  # Typically paid during transit
+
+            items_to_create.append({
+                'category_code': 'logistics',
+                'planned_amount': float(total_logistics),
+                'planned_date': logistics_date,
+                'planned_currency': currency,
+                'description': 'Оплата логистики',
+            })
+
+        # --- Customs Payment ---
+        if total_customs > 0:
+            customs_date = base_date + timedelta(days=21)  # Typically at customs clearance
+
+            items_to_create.append({
+                'category_code': 'customs',
+                'planned_amount': float(total_customs),
+                'planned_date': customs_date,
+                'planned_currency': currency,
+                'description': 'Таможенные платежи',
+            })
+
+        # --- Bank/Finance Commission ---
+        bank_commission_pct = float(calc_vars.get('bank_commission_percent', 0) or 0)
+        if bank_commission_pct > 0 and deal_total > 0:
+            commission_amount = deal_total * Decimal(str(bank_commission_pct)) / 100
+            commission_date = base_date + timedelta(days=7)
+
+            items_to_create.append({
+                'category_code': 'finance_commission',
+                'planned_amount': float(commission_amount),
+                'planned_date': commission_date,
+                'planned_currency': currency,
+                'description': f'Банковская комиссия ({bank_commission_pct:.1f}%)',
+            })
+
+        # Step 7: Create all items
+        created_items = bulk_create_plan_fact_items(
+            deal_id=deal_id,
+            items=items_to_create,
+            created_by=created_by
+        )
+
+        source_data['items_planned'] = len(items_to_create)
+        source_data['items_created'] = len(created_items)
+
+        return GeneratePlanFactResult(
+            success=True,
+            items_created=created_items,
+            items_count=len(created_items),
+            error=None,
+            source_data=source_data
+        )
+
+    except Exception as e:
+        print(f"Error generating plan-fact items: {e}")
+        import traceback
+        traceback.print_exc()
+        return GeneratePlanFactResult(
+            success=False,
+            items_created=[],
+            items_count=0,
+            error=str(e),
+            source_data=source_data
+        )
+
+
+def regenerate_plan_fact_for_deal(
+    deal_id: str,
+    created_by: Optional[str] = None
+) -> GeneratePlanFactResult:
+    """
+    Regenerate plan-fact items for a deal, replacing existing ones.
+
+    This is a convenience wrapper around generate_plan_fact_from_deal
+    with replace_existing=True.
+
+    Args:
+        deal_id: UUID of the deal
+        created_by: ID of the user triggering regeneration
+
+    Returns:
+        GeneratePlanFactResult with success flag and created items
+
+    Warning:
+        This will DELETE all existing plan-fact items for the deal,
+        including any with recorded actual payments!
+    """
+    return generate_plan_fact_from_deal(
+        deal_id=deal_id,
+        created_by=created_by,
+        replace_existing=True
+    )
+
+
+def get_plan_fact_generation_preview(deal_id: str) -> Dict[str, Any]:
+    """
+    Preview what plan-fact items would be generated for a deal.
+
+    This does NOT create any items - just shows what would be generated.
+
+    Args:
+        deal_id: UUID of the deal
+
+    Returns:
+        Dict with preview data:
+        {
+            'deal_info': {...},
+            'source_data': {...},
+            'planned_items': [{...}, ...],
+            'totals': {...},
+            'can_generate': bool,
+            'existing_items': int
+        }
+    """
+    from datetime import timedelta
+
+    supabase = get_supabase()
+    preview = {
+        'deal_info': {},
+        'source_data': {},
+        'planned_items': [],
+        'totals': {},
+        'can_generate': False,
+        'existing_items': 0
+    }
+
+    try:
+        # Get deal with related data
+        deal_result = supabase.table('deals').select(
+            '*, specifications(*, quotes(id, idn_quote, total_amount, currency))'
+        ).eq('id', deal_id).execute()
+
+        if not deal_result.data:
+            preview['error'] = 'Deal not found'
+            return preview
+
+        deal = deal_result.data[0]
+        spec = deal.get('specifications', {}) or {}
+        quote = spec.get('quotes', {}) or {}
+        quote_id = spec.get('quote_id') or quote.get('id')
+
+        preview['deal_info'] = {
+            'deal_number': deal.get('deal_number'),
+            'total_amount': deal.get('total_amount'),
+            'currency': deal.get('currency'),
+            'signed_at': deal.get('signed_at'),
+            'status': deal.get('status'),
+        }
+
+        # Check existing items
+        preview['existing_items'] = count_items_for_deal(deal_id).get('total', 0)
+
+        # Get calculation variables
+        if quote_id:
+            vars_result = supabase.table('quote_calculation_variables') \
+                .select('*') \
+                .eq('quote_id', quote_id) \
+                .execute()
+
+            calc_vars = vars_result.data[0] if vars_result.data else {}
+
+            # Get calculation totals
+            calc_result = supabase.table('quote_item_calculations') \
+                .select('purchase_price_total, logistics_total, customs_duty_total, customs_processing_total, sales_price_total_with_vat') \
+                .eq('quote_id', quote_id) \
+                .execute()
+
+            calc_items = calc_result.data if calc_result.data else []
+        else:
+            calc_vars = {}
+            calc_items = []
+
+        preview['source_data'] = {
+            'advance_from_client': calc_vars.get('advance_from_client', 100),
+            'advance_to_supplier': calc_vars.get('advance_to_supplier', 100),
+            'time_to_advance': calc_vars.get('time_to_advance', 0),
+            'time_to_advance_on_receiving': calc_vars.get('time_to_advance_on_receiving', 0),
+            'bank_commission_percent': calc_vars.get('bank_commission_percent', 0),
+        }
+
+        # Calculate totals
+        total_purchase = sum(Decimal(str(item.get('purchase_price_total', 0) or 0)) for item in calc_items)
+        total_logistics = sum(Decimal(str(item.get('logistics_total', 0) or 0)) for item in calc_items)
+        total_customs = sum(
+            Decimal(str(item.get('customs_duty_total', 0) or 0)) +
+            Decimal(str(item.get('customs_processing_total', 0) or 0))
+            for item in calc_items
+        )
+        total_sale = sum(Decimal(str(item.get('sales_price_total_with_vat', 0) or 0)) for item in calc_items)
+        deal_total = Decimal(str(deal.get('total_amount', 0) or 0)) or total_sale
+
+        preview['totals'] = {
+            'deal_total': float(deal_total),
+            'total_purchase': float(total_purchase),
+            'total_logistics': float(total_logistics),
+            'total_customs': float(total_customs),
+            'total_sale': float(total_sale),
+        }
+
+        # Generate preview items
+        try:
+            if deal.get('signed_at'):
+                if isinstance(deal['signed_at'], str):
+                    base_date = datetime.strptime(deal['signed_at'], '%Y-%m-%d').date()
+                else:
+                    base_date = deal['signed_at']
+            else:
+                base_date = date.today()
+        except:
+            base_date = date.today()
+
+        currency = deal.get('currency', 'RUB')
+        planned_items = []
+
+        advance_pct = float(calc_vars.get('advance_from_client', 100) or 100)
+        time_to_advance = int(calc_vars.get('time_to_advance', 0) or 0)
+        time_to_final = int(calc_vars.get('time_to_advance_on_receiving', 0) or 0)
+
+        if advance_pct > 0 and deal_total > 0:
+            planned_items.append({
+                'category': 'client_payment',
+                'category_name': 'Оплата от клиента',
+                'description': f'Аванс от клиента ({advance_pct:.0f}%)',
+                'amount': float(deal_total * Decimal(str(advance_pct)) / 100),
+                'currency': currency,
+                'date': (base_date + timedelta(days=time_to_advance)).isoformat(),
+                'is_income': True,
+            })
+
+        if advance_pct < 100 and deal_total > 0:
+            remaining_pct = 100 - advance_pct
+            planned_items.append({
+                'category': 'client_payment',
+                'category_name': 'Оплата от клиента',
+                'description': f'Остаток от клиента ({remaining_pct:.0f}%)',
+                'amount': float(deal_total * Decimal(str(remaining_pct)) / 100),
+                'currency': currency,
+                'date': (base_date + timedelta(days=time_to_final if time_to_final > 0 else 30)).isoformat(),
+                'is_income': True,
+            })
+
+        if total_purchase > 0:
+            supplier_pct = float(calc_vars.get('advance_to_supplier', 100) or 100)
+            if supplier_pct > 0:
+                planned_items.append({
+                    'category': 'supplier_payment',
+                    'category_name': 'Оплата поставщику',
+                    'description': f'Оплата поставщику ({supplier_pct:.0f}%)',
+                    'amount': float(total_purchase * Decimal(str(supplier_pct)) / 100),
+                    'currency': currency,
+                    'date': (base_date + timedelta(days=3)).isoformat(),
+                    'is_income': False,
+                })
+            if supplier_pct < 100:
+                remaining_pct = 100 - supplier_pct
+                planned_items.append({
+                    'category': 'supplier_payment',
+                    'category_name': 'Оплата поставщику',
+                    'description': f'Остаток поставщику ({remaining_pct:.0f}%)',
+                    'amount': float(total_purchase * Decimal(str(remaining_pct)) / 100),
+                    'currency': currency,
+                    'date': (base_date + timedelta(days=20)).isoformat(),
+                    'is_income': False,
+                })
+
+        if total_logistics > 0:
+            planned_items.append({
+                'category': 'logistics',
+                'category_name': 'Логистика',
+                'description': 'Оплата логистики',
+                'amount': float(total_logistics),
+                'currency': currency,
+                'date': (base_date + timedelta(days=14)).isoformat(),
+                'is_income': False,
+            })
+
+        if total_customs > 0:
+            planned_items.append({
+                'category': 'customs',
+                'category_name': 'Таможня',
+                'description': 'Таможенные платежи',
+                'amount': float(total_customs),
+                'currency': currency,
+                'date': (base_date + timedelta(days=21)).isoformat(),
+                'is_income': False,
+            })
+
+        bank_pct = float(calc_vars.get('bank_commission_percent', 0) or 0)
+        if bank_pct > 0 and deal_total > 0:
+            planned_items.append({
+                'category': 'finance_commission',
+                'category_name': 'Банковская комиссия',
+                'description': f'Банковская комиссия ({bank_pct:.1f}%)',
+                'amount': float(deal_total * Decimal(str(bank_pct)) / 100),
+                'currency': currency,
+                'date': (base_date + timedelta(days=7)).isoformat(),
+                'is_income': False,
+            })
+
+        preview['planned_items'] = planned_items
+        preview['can_generate'] = len(planned_items) > 0
+
+        return preview
+
+    except Exception as e:
+        preview['error'] = str(e)
+        return preview

@@ -236,6 +236,7 @@ from .plan_fact_service import (
     # Data classes
     PlanFactCategory,
     PlanFactItem,
+    GeneratePlanFactResult,  # Feature #82
     # Category functions
     get_all_categories,
     get_category,
@@ -270,6 +271,10 @@ from .plan_fact_service import (
     # Validation
     validate_item_for_payment,
     validate_deal_plan_fact,
+    # Auto-generation functions (Feature #82)
+    generate_plan_fact_from_deal,
+    regenerate_plan_fact_for_deal,
+    get_plan_fact_generation_preview,
 )
 from .telegram_service import (
     # Configuration
@@ -633,4 +638,9 @@ __all__ = [
     # Plan-fact validation
     "validate_item_for_payment",
     "validate_deal_plan_fact",
+    # Auto-generation functions (Feature #82)
+    "GeneratePlanFactResult",
+    "generate_plan_fact_from_deal",
+    "regenerate_plan_fact_for_deal",
+    "get_plan_fact_generation_preview",
 ]

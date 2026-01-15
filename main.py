@@ -8615,9 +8615,13 @@ def get(session, deal_id: str):
         )
     else:
         plan_fact_table = Div(
-            P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic;"),
-            A("+ Добавить плановый платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
-              style="background: #10b981;"),
+            P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic; margin-bottom: 1rem;"),
+            Div(
+                A("🔄 Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
+                  style="background: #3b82f6; margin-right: 0.5rem;"),
+                A("+ Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", role="button",
+                  style="background: #10b981;"),
+            ),
             style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 8px;"
         )
 
@@ -8696,8 +8700,12 @@ def get(session, deal_id: str):
         Div(
             Div(
                 H2("План-факт платежей", style="display: inline-block; margin-right: 1rem;"),
-                A("+ Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
-                  style="background: #10b981; font-size: 0.875rem;") if plan_fact_items else "",
+                Div(
+                    A("+ Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
+                      style="background: #10b981; font-size: 0.875rem; margin-right: 0.5rem;"),
+                    A("🔄 Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
+                      style="background: #6b7280; font-size: 0.875rem;"),
+                ) if plan_fact_items else "",
                 style="display: flex; align-items: center; margin-bottom: 1rem;"
             ),
             plan_fact_table,
@@ -8705,6 +8713,203 @@ def get(session, deal_id: str):
 
         session=session
     )
+
+
+# ============================================================================
+# AUTO-GENERATE PLAN-FACT ITEMS (Feature #82)
+# ============================================================================
+
+@rt("/finance/{deal_id}/generate-plan-fact")
+def get(session, deal_id: str):
+    """
+    Preview and confirm auto-generation of plan-fact items.
+
+    Feature #82: Автогенерация плановых платежей
+
+    Shows a preview of what plan-fact items will be generated from deal conditions.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    from services import get_plan_fact_generation_preview
+
+    # Get preview of what will be generated
+    preview = get_plan_fact_generation_preview(deal_id)
+
+    if preview.get('error'):
+        return page_layout("Ошибка",
+            H1("Ошибка генерации"),
+            P(f"Не удалось подготовить предпросмотр: {preview.get('error')}"),
+            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            session=session
+        )
+
+    deal_info = preview.get('deal_info', {})
+    planned_items = preview.get('planned_items', [])
+    totals = preview.get('totals', {})
+    existing_items = preview.get('existing_items', 0)
+
+    # Build preview table
+    preview_rows = []
+    for item in planned_items:
+        is_income = item.get('is_income', False)
+        amount = float(item.get('amount', 0))
+        category_color = "#10b981" if is_income else "#6366f1"
+
+        preview_rows.append(Tr(
+            Td(Span(item.get('category_name', '-'), style=f"color: {category_color}; font-weight: 500;")),
+            Td(item.get('description', '-')),
+            Td(f"{amount:,.2f} {item.get('currency', 'RUB')}", style="text-align: right; font-weight: 500;"),
+            Td(item.get('date', '-')),
+            Td(
+                Span("Доход", style="color: #10b981;") if is_income else Span("Расход", style="color: #6366f1;")
+            ),
+        ))
+
+    # Calculate totals
+    total_income = sum(item.get('amount', 0) for item in planned_items if item.get('is_income'))
+    total_expense = sum(item.get('amount', 0) for item in planned_items if not item.get('is_income'))
+    planned_margin = total_income - total_expense
+
+    # Warning if items exist
+    existing_warning = None
+    if existing_items > 0:
+        existing_warning = Div(
+            Strong("⚠️ Внимание: "),
+            f"Для этой сделки уже существуют {existing_items} плановых платежей. ",
+            "Генерация заменит все существующие записи.",
+            style="background: #fef3c7; border: 1px solid #f59e0b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; color: #92400e;"
+        )
+
+    return page_layout(f"Генерация план-факта",
+        # Header with back button
+        Div(
+            A(f"← Назад к сделке {deal_info.get('deal_number', '')}", href=f"/finance/{deal_id}", style="color: #6b7280; text-decoration: none;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        H1("Автогенерация плановых платежей"),
+        P("На основе условий сделки будут созданы следующие плановые платежи:"),
+
+        existing_warning,
+
+        # Source data info
+        Div(
+            H3("Исходные данные", style="margin-top: 0;"),
+            Table(
+                Tr(Td(Strong("Сумма сделки:"), style="width: 200px;"), Td(f"{deal_info.get('total_amount', 0):,.2f} {deal_info.get('currency', 'RUB')}")),
+                Tr(Td(Strong("Дата подписания:")), Td(deal_info.get('signed_at', '-'))),
+                Tr(Td(Strong("Закупка (из КП):")), Td(f"{totals.get('total_purchase', 0):,.2f}")),
+                Tr(Td(Strong("Логистика (из КП):")), Td(f"{totals.get('total_logistics', 0):,.2f}")),
+                Tr(Td(Strong("Таможня (из КП):")), Td(f"{totals.get('total_customs', 0):,.2f}")),
+            ),
+            style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;"
+        ),
+
+        # Preview table
+        H3("Планируемые платежи"),
+        Table(
+            Thead(
+                Tr(
+                    Th("Категория"),
+                    Th("Описание"),
+                    Th("Сумма", style="text-align: right;"),
+                    Th("План. дата"),
+                    Th("Тип"),
+                )
+            ),
+            Tbody(*preview_rows),
+            Tfoot(
+                Tr(
+                    Td(Strong("Итого поступлений:"), colspan="2"),
+                    Td(Strong(f"{total_income:,.2f}"), style="text-align: right; color: #10b981;"),
+                    Td(),
+                    Td(),
+                ),
+                Tr(
+                    Td(Strong("Итого расходов:"), colspan="2"),
+                    Td(Strong(f"{total_expense:,.2f}"), style="text-align: right; color: #6366f1;"),
+                    Td(),
+                    Td(),
+                ),
+                Tr(
+                    Td(Strong("Плановая маржа:"), colspan="2"),
+                    Td(Strong(f"{planned_margin:,.2f}"), style=f"text-align: right; color: {'#10b981' if planned_margin >= 0 else '#ef4444'};"),
+                    Td(),
+                    Td(),
+                ),
+            ),
+            cls="striped"
+        ) if preview_rows else P("Нет данных для генерации платежей.", style="color: #666; font-style: italic;"),
+
+        # Action buttons
+        Div(
+            Form(
+                Button("✓ Сгенерировать платежи", type="submit", style="background: #10b981; margin-right: 1rem;") if preview_rows else "",
+                A("Отмена", href=f"/finance/{deal_id}", role="button", style="background: #6b7280;"),
+                method="POST",
+                action=f"/finance/{deal_id}/generate-plan-fact",
+            ),
+            style="margin-top: 1.5rem;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/finance/{deal_id}/generate-plan-fact")
+def post(session, deal_id: str):
+    """
+    Execute auto-generation of plan-fact items.
+
+    Feature #82: Автогенерация плановых платежей
+
+    Creates plan_fact_items based on deal conditions (payment terms, amounts, etc.)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has finance role
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    from services import generate_plan_fact_from_deal, count_items_for_deal
+
+    # Check if items already exist and replace them
+    existing_count = count_items_for_deal(deal_id).get('total', 0)
+    replace_existing = existing_count > 0
+
+    # Generate plan-fact items
+    result = generate_plan_fact_from_deal(
+        deal_id=deal_id,
+        created_by=user_id,
+        replace_existing=replace_existing
+    )
+
+    if result.success:
+        # Redirect back to deal page with success message
+        return RedirectResponse(f"/finance/{deal_id}?generated={result.items_count}", status_code=303)
+    else:
+        # Show error
+        return page_layout("Ошибка генерации",
+            H1("Ошибка"),
+            P(f"Не удалось сгенерировать плановые платежи: {result.error}"),
+            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            session=session
+        )
 
 
 # ============================================================================
