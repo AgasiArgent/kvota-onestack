@@ -78,3 +78,20 @@
   - Only admins can insert/delete roles
 - Files changed: migrations/002_create_user_roles_table.sql (new)
 - Status: COMPLETE
+
+## Session 2025-01-15 - Feature #3: Создать таблицу brand_assignments
+- Created SQL migration: `migrations/003_create_brand_assignments_table.sql`
+- Table structure:
+  - id (UUID PK)
+  - organization_id (UUID FK → organizations)
+  - brand (VARCHAR 255) - matches brand field in quote_items
+  - user_id (UUID FK → auth.users) - procurement manager assigned
+  - created_at (TIMESTAMP)
+  - created_by (UUID FK → auth.users)
+- Unique constraint: (organization_id, brand) - one manager per brand per org
+- Created indexes: user_id, organization_id, (organization_id, brand) composite
+- RLS policies:
+  - Users can view brand assignments in their organization
+  - Only admins can insert/update/delete brand assignments
+- Files changed: migrations/003_create_brand_assignments_table.sql (new)
+- Status: COMPLETE
