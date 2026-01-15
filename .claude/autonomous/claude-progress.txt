@@ -892,3 +892,45 @@
     - Added "Логистика" link to nav_bar for logistics/admin roles
 - Status: COMPLETE
 
+## Session 2025-01-15 - Feature #39: Список КП на этапе логистики
+- NOTE: Already completed as part of Feature #38
+- The /logistics page already filters and displays quotes with pending_logistics status
+- Status: COMPLETE (no additional work needed)
+
+## Session 2025-01-15 - Features #40 & #41: Logistics Data Entry Form & Completion Button
+- Created /logistics/{quote_id} GET route for logistics detail page:
+  - Displays quote header with customer name and workflow status
+  - Shows summary stats: total items, total weight, unique countries
+  - Collapsible items table showing first 20 items
+  - Form for logistics cost fields:
+    - logistics_supplier_hub (supplier to hub)
+    - logistics_hub_customs (hub to customs)
+    - logistics_customs_client (customs to client)
+    - delivery_time (days)
+    - logistics_notes (textarea for notes)
+  - Editing disabled when quote is not in editable status or already completed
+  - Action buttons: "Сохранить данные" and "Завершить логистику"
+  - Success/warning banners based on completion status
+- Created /logistics/{quote_id} POST handler:
+  - Validates user has logistics/admin role
+  - Verifies quote is in correct workflow status for editing
+  - Saves logistics data to quote_calculation_variables table
+  - If action=complete, calls complete_logistics() which:
+    - Sets logistics_completed_at timestamp
+    - Triggers auto-transition to sales_review if customs also complete
+- Data storage: Logistics data is stored in quote_calculation_variables.variables JSON field
+  - Same structure used by calculation engine
+  - Fields: logistics_supplier_hub, logistics_hub_customs, logistics_customs_client, delivery_time, logistics_notes
+- UI features:
+  - Russian labels
+  - Disabled fields when not editable
+  - Green success banner when logistics is complete
+  - Yellow warning banner when editing not available
+  - Back link to /logistics
+- Files changed:
+  - main.py (~380 lines added):
+    - Added GET /logistics/{quote_id} route
+    - Added POST /logistics/{quote_id} handler
+    - Added .stat-card-mini CSS class
+- Status: COMPLETE - LOGISTICS UI PHASE COMPLETE (all 4 features done: 38-41)
+

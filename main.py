@@ -3765,6 +3765,398 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# LOGISTICS DETAIL PAGE
+# ============================================================================
+
+@rt("/logistics/{quote_id}")
+def get(session, quote_id: str):
+    """
+    Logistics detail page - view and edit logistics data for a quote.
+
+    Feature #40: Logistics data entry form
+    - Shows quote summary and items
+    - Editable fields for logistics costs and delivery time
+    - Only editable when quote is in pending_logistics or pending_customs status
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has logistics role
+    if not user_has_any_role(session, ["logistics", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Fetch quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("Quote Not Found",
+            H1("Quote Not Found"),
+            P("The requested quote was not found or you don't have access."),
+            A("← Back to Logistics", href="/logistics"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+    customer_name = quote.get("customers", {}).get("name", "Unknown")
+
+    # Load existing calculation variables (where logistics data is stored)
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    saved_vars = vars_result.data[0]["variables"] if vars_result.data else {}
+
+    def get_var(key, default):
+        return saved_vars.get(key, default)
+
+    # Fetch quote items for summary
+    items_result = supabase.table("quote_items") \
+        .select("id, brand, article_number, name, quantity, unit, base_price, weight, supplier_country") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    items = items_result.data or []
+
+    # Check if logistics is editable
+    editable_statuses = ["pending_logistics", "pending_customs", "draft", "pending_procurement"]
+    is_editable = workflow_status in editable_statuses and quote.get("logistics_completed_at") is None
+    logistics_done = quote.get("logistics_completed_at") is not None
+
+    # Calculate summary stats
+    total_items = len(items)
+    total_weight = sum(float(item.get("weight", 0) or 0) for item in items)
+    unique_countries = set(item.get("supplier_country", "Unknown") for item in items)
+
+    # Build items summary table
+    items_summary = Table(
+        Thead(Tr(
+            Th("Бренд"),
+            Th("Артикул"),
+            Th("Наименование"),
+            Th("Кол-во"),
+            Th("Вес (кг)"),
+            Th("Страна")
+        )),
+        Tbody(
+            *[Tr(
+                Td(item.get("brand", "—")),
+                Td(item.get("article_number", "—")),
+                Td(item.get("name", "—")[:40] + "..." if len(item.get("name", "")) > 40 else item.get("name", "—")),
+                Td(str(item.get("quantity", 0))),
+                Td(str(item.get("weight", "—"))),
+                Td(item.get("supplier_country", "—"))
+            ) for item in items[:20]]  # Show first 20 items
+        ),
+        style="width: 100%; font-size: 0.875rem;"
+    )
+
+    # Form for logistics data
+    logistics_form = Form(
+        # Logistics cost fields
+        Div(
+            H3("📦 Стоимость логистики"),
+            P("Введите стоимость доставки по сегментам (в валюте КП)", style="color: #666; margin-bottom: 1rem;"),
+            Div(
+                Div(
+                    Label("От поставщика до хаба",
+                        Input(
+                            name="logistics_supplier_hub",
+                            type="number",
+                            value=str(get_var('logistics_supplier_hub', 0)),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block;"
+                    ),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("От хаба до таможни",
+                        Input(
+                            name="logistics_hub_customs",
+                            type="number",
+                            value=str(get_var('logistics_hub_customs', 0)),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block;"
+                    ),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("От таможни до клиента",
+                        Input(
+                            name="logistics_customs_client",
+                            type="number",
+                            value=str(get_var('logistics_customs_client', 0)),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block;"
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 1rem;"
+            ),
+            cls="card"
+        ),
+
+        # Delivery time
+        Div(
+            H3("📅 Сроки доставки"),
+            Div(
+                Div(
+                    Label("Срок доставки (дней)",
+                        Input(
+                            name="delivery_time",
+                            type="number",
+                            value=str(get_var('delivery_time', 30)),
+                            min="1",
+                            max="365",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block;"
+                    ),
+                    style="flex: 1; max-width: 200px;"
+                ),
+                Div(
+                    Label("Примечания логиста",
+                        Textarea(
+                            str(get_var('logistics_notes', '')),
+                            name="logistics_notes",
+                            rows="3",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block;"
+                    ),
+                    style="flex: 2;"
+                ),
+                style="display: flex; gap: 1rem; align-items: start;"
+            ),
+            cls="card"
+        ),
+
+        # Action buttons
+        Div(
+            Button("💾 Сохранить данные", type="submit", name="action", value="save",
+                   style="margin-right: 0.5rem;") if is_editable else None,
+            Button("✅ Завершить логистику", type="submit", name="action", value="complete",
+                   cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
+            Span("✅ Логистика завершена", style="color: #22c55e; font-weight: bold;") if logistics_done else None,
+            style="margin-top: 1rem;"
+        ) if is_editable or logistics_done else None,
+
+        method="post",
+        action=f"/logistics/{quote_id}"
+    )
+
+    # Status banner
+    status_banner = Div(
+        P(f"⚠️ Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование логистики недоступно.",
+          style="margin: 0;"),
+        style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if not is_editable and not logistics_done else None
+
+    success_banner = Div(
+        P(f"✅ Логистика по данному КП завершена.",
+          style="margin: 0;"),
+        style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if logistics_done else None
+
+    return page_layout(f"Logistics - {quote.get('idn_quote', '')}",
+        # Header
+        Div(
+            A("← К списку", href="/logistics", style="color: #666; font-size: 0.875rem;"),
+            H1(f"Логистика: {quote.get('idn_quote', '')}"),
+            Div(
+                Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
+                workflow_status_badge(workflow_status),
+                style="display: flex; align-items: center; gap: 0.5rem;"
+            ),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Status banners
+        success_banner,
+        status_banner,
+
+        # Quote summary
+        Div(
+            H3("📋 Сводка по КП"),
+            Div(
+                Div(
+                    Div(str(total_items), cls="stat-value"),
+                    Div("Позиций"),
+                    cls="stat-card-mini"
+                ),
+                Div(
+                    Div(f"{total_weight:.1f}", cls="stat-value"),
+                    Div("Общий вес (кг)"),
+                    cls="stat-card-mini"
+                ),
+                Div(
+                    Div(str(len(unique_countries)), cls="stat-value"),
+                    Div("Стран отправки"),
+                    cls="stat-card-mini"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+            ),
+            Details(
+                Summary("Показать позиции", style="cursor: pointer; color: #3b82f6;"),
+                items_summary,
+                style="margin-top: 0.5rem;"
+            ) if items else P("Нет позиций в КП", style="color: #666;"),
+            cls="card"
+        ),
+
+        # Logistics form
+        logistics_form,
+
+        # Additional styles
+        Style("""
+            .stat-card-mini {
+                background: #f9fafb;
+                padding: 0.75rem 1rem;
+                border-radius: 4px;
+                text-align: center;
+            }
+            .stat-card-mini .stat-value {
+                font-size: 1.5rem;
+                font-weight: bold;
+                color: #1f2937;
+            }
+        """),
+
+        session=session
+    )
+
+
+@rt("/logistics/{quote_id}")
+def post(session, quote_id: str,
+         logistics_supplier_hub: str = "0",
+         logistics_hub_customs: str = "0",
+         logistics_customs_client: str = "0",
+         delivery_time: str = "30",
+         logistics_notes: str = "",
+         action: str = "save"):
+    """
+    Save logistics data and optionally mark logistics as complete.
+
+    Feature #40: Logistics data entry form (POST handler)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["logistics", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to org
+    quote_result = supabase.table("quotes") \
+        .select("id, workflow_status, logistics_completed_at") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return RedirectResponse("/logistics", status_code=303)
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if editable
+    editable_statuses = ["pending_logistics", "pending_customs", "draft", "pending_procurement"]
+    if workflow_status not in editable_statuses or quote.get("logistics_completed_at"):
+        return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
+
+    # Load existing variables
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("id, variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    existing_vars = vars_result.data[0]["variables"] if vars_result.data else {}
+    vars_id = vars_result.data[0]["id"] if vars_result.data else None
+
+    # Helper function
+    def safe_decimal(val, default="0"):
+        try:
+            return float(val) if val else float(default)
+        except:
+            return float(default)
+
+    def safe_int(val, default=30):
+        try:
+            return int(val) if val else default
+        except:
+            return default
+
+    # Update logistics fields in variables
+    updated_vars = {
+        **existing_vars,
+        'logistics_supplier_hub': safe_decimal(logistics_supplier_hub),
+        'logistics_hub_customs': safe_decimal(logistics_hub_customs),
+        'logistics_customs_client': safe_decimal(logistics_customs_client),
+        'delivery_time': safe_int(delivery_time),
+        'logistics_notes': logistics_notes
+    }
+
+    # Upsert variables
+    if vars_id:
+        supabase.table("quote_calculation_variables") \
+            .update({"variables": updated_vars}) \
+            .eq("id", vars_id) \
+            .execute()
+    else:
+        supabase.table("quote_calculation_variables") \
+            .insert({
+                "quote_id": quote_id,
+                "organization_id": org_id,
+                "variables": updated_vars
+            }) \
+            .execute()
+
+    # If action is complete, mark logistics as done
+    if action == "complete":
+        user_roles = get_user_roles_from_session(session)
+        result = complete_logistics(quote_id, user_id, user_roles)
+
+        if not result.success:
+            # Log error but still redirect
+            print(f"Error completing logistics: {result.error}")
+
+    return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 

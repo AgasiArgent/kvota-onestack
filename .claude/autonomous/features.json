@@ -433,10 +433,11 @@
       "name": "Список КП на этапе логистики",
       "description": "КП со статусом pending_logistics",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T23:30:00Z",
+      "completed_at": "2025-01-15T23:31:00Z",
+      "notes": "Already implemented in Feature #38 - /logistics page shows quotes filtered by pending_logistics status"
     },
     {
       "id": 40,
@@ -444,10 +445,11 @@
       "name": "Форма ввода логистики",
       "description": "Стоимость по сегментам, срок доставки",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T23:35:00Z",
+      "completed_at": "2025-01-15T23:50:00Z",
+      "notes": "Created /logistics/{quote_id} page with form for logistics costs and delivery time. Data stored in quote_calculation_variables."
     },
     {
       "id": 41,
@@ -455,10 +457,11 @@
       "name": "Кнопка завершения логистики",
       "description": "Завершить этап логистики",
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "in_progress": false,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2025-01-15T23:50:00Z",
+      "completed_at": "2025-01-15T23:51:00Z",
+      "notes": "Implemented in Feature #40 - form includes 'Завершить логистику' button that calls complete_logistics()"
     },
     {
       "id": 42,

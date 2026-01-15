@@ -121,12 +121,15 @@ App runs at http://localhost:5001
 - [x] Feature #36: Скачивание списка для оценки (2025-01-15)
 - [x] Feature #37: Кнопка завершения оценки (2025-01-15)
 - [x] Feature #38: Страница /logistics (2025-01-15)
+- [x] Feature #39: Список КП на этапе логистики (2025-01-15) - Already in #38
+- [x] Feature #40: Форма ввода логистики (2025-01-15)
+- [x] Feature #41: Кнопка завершения логистики (2025-01-15) - In #40
 
 ### Next Up
-- Feature #39: Список КП на этапе логистики (filtering already done in #38)
+- Feature #42: Страница /customs (customs workspace page)
 
 ### Progress
-- **38 of 88 features completed** (43%)
+- **41 of 88 features completed** (47%)
 - **DATABASE PHASE COMPLETE** (all 16 features done)
 - **ROLE SERVICE PHASE COMPLETE** (all 6 features done: 17-22)
 - **WORKFLOW ENGINE PHASE COMPLETE** (all 10 features done: 23-32)
