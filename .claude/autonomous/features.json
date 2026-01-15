@@ -152,8 +152,10 @@
       "name": "Create supplier_invoice_items table",
       "category": "database",
       "priority": 2,
-      "passes": false,
-      "description": "Link invoice items to quote_items"
+      "passes": true,
+      "completed_at": "2026-01-15T19:00:00Z",
+      "description": "Link invoice items to quote_items",
+      "notes": "Created migration 033_create_supplier_invoice_items_table.sql with: quote_item_id FK (optional for non-quote purchases), auto-calculate total trigger, auto-sync parent invoice total trigger, RLS policies inheriting from parent invoice. Helper functions: get_invoice_items_with_details(), get_invoices_for_quote_item(), get_quote_item_invoiced_total(), get_quote_invoicing_summary(). View: v_supplier_invoice_items_full"
     },
     {
       "id": "DB-017",

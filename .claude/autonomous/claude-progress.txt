@@ -2873,3 +2873,24 @@ This is different from brand_assignments/brand_procurement_assignments which ass
   - get_invoices_for_supplier(supplier_id) - list with payment info
 - Created v_supplier_invoices_with_payments view
 - Status: COMPLETE
+
+
+## Session 2026-01-15 - Feature DB-016: Create supplier_invoice_items table
+- Created migration 033_create_supplier_invoice_items_table.sql
+- Invoice line items linking invoices to quote_items for traceability
+- Fields:
+  - invoice_id FK (parent) with CASCADE delete
+  - quote_item_id FK (optional - NULL for non-quote purchases)
+  - description TEXT (fallback when no quote_item or different description)
+  - quantity, unit_price, total_price (auto-calculated)
+  - unit (override from quote_item if needed)
+- Auto-calculate trigger: total_price = quantity * unit_price
+- Auto-sync trigger: Updates parent invoice total when items change
+- RLS policies: Inherit access from parent invoice
+- Helper functions:
+  - get_invoice_items_with_details(invoice_id) - items with product/quote context
+  - get_invoices_for_quote_item(quote_item_id) - invoicing history for an item
+  - get_quote_item_invoiced_total(quote_item_id) - total invoiced amount
+  - get_quote_invoicing_summary(quote_id) - invoicing status for all quote items
+- Created v_supplier_invoice_items_full view with complete context
+- Status: COMPLETE
