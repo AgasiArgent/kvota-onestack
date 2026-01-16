@@ -17,26 +17,19 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          password: ${{ secrets.VPS_PASSWORD }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd /root/onestack
             git pull origin main
             docker compose up -d --build
             docker image prune -f
 
-      - name: Notify Sentry of deploy
-        if: success()
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      - name: Deployment status
+        if: always()
         run: |
-          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
-            curl -sL https://sentry.io/api/0/organizations/kvota/releases/ \
-              -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
-              -H "Content-Type: application/json" \
-              -d "{\"version\": \"${{ github.sha }}\", \"projects\": [\"kvota-onestack\"]}" || true
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed!"
           fi
-
-      - name: Deployment failed
-        if: failure()
-        run: echo "Deployment failed!"
