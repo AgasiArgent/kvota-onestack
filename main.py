@@ -6082,8 +6082,9 @@ def get(session, status_filter: str = None):
     """
     Customs workspace - shows quotes in customs stage for customs role.
 
-    Feature #42: Basic customs page structure
-    Feature #43: List quotes at customs stage (included)
+    Feature UI-021 (v3.0): Customs workspace list view
+    - Shows quotes in pending_customs or pending_logistics status
+    - Added head_of_customs role access
     """
     redirect = require_login(session)
     if redirect:
@@ -6093,8 +6094,8 @@ def get(session, status_filter: str = None):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has customs role
-    if not user_has_any_role(session, ["customs", "admin"]):
+    # Check if user has customs role (includes head_of_customs for v3.0)
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -6294,10 +6295,12 @@ def get(session, quote_id: str):
     """
     Customs detail page - view and edit customs data for each item in a quote.
 
-    Feature #44: Customs data entry form
-    - Shows quote summary and all items
-    - Editable fields for HS codes (ТН ВЭД), duty, and extra charges
+    Feature UI-021 (v3.0): Customs workspace view
+    - Shows quote summary and items with item-level customs data
+    - Editable fields for HS codes (ТН ВЭД), duty percent, and extra costs
+    - Pickup location and supplier display for each item (v3.0 supply chain)
     - Only editable when quote is in pending_customs or pending_logistics status
+    - Uses v3.0 field names: hs_code, customs_duty_percent, customs_extra_cost
     """
     redirect = require_login(session)
     if redirect:
@@ -6307,8 +6310,8 @@ def get(session, quote_id: str):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has customs role
-    if not user_has_any_role(session, ["customs", "admin"]):
+    # Check if user has customs role (includes head_of_customs for v3.0)
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -6331,10 +6334,17 @@ def get(session, quote_id: str):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
     customer_name = quote.get("customers", {}).get("name", "Unknown")
+    currency = quote.get("currency", "RUB")
 
-    # Fetch quote items
+    # Fetch quote items with v3.0 customs and supply chain fields
     items_result = supabase.table("quote_items") \
-        .select("id, brand, product_code, product_name, quantity, unit, base_price_vat, weight_in_kg, supplier_country, hs_code, customs_duty, customs_extra") \
+        .select("""
+            id, brand, product_code, product_name, quantity, unit,
+            base_price_vat, purchase_price_rub, purchase_price_original,
+            weight_in_kg, weight_kg, volume_m3, supplier_country,
+            pickup_location_id, supplier_id,
+            hs_code, customs_duty_percent, customs_extra_cost
+        """) \
         .eq("quote_id", quote_id) \
         .order("created_at") \
         .execute()
@@ -6346,91 +6356,239 @@ def get(session, quote_id: str):
     is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
     customs_done = quote.get("customs_completed_at") is not None
 
-    # Calculate summary stats
+    # v3.0: Fetch pickup location info for items
+    pickup_location_map = {}
+    pickup_location_ids = [item.get("pickup_location_id") for item in items if item.get("pickup_location_id")]
+    if pickup_location_ids:
+        try:
+            from services.location_service import get_location, format_location_for_dropdown
+            for pickup_location_id in set(pickup_location_ids):
+                try:
+                    loc = get_location(pickup_location_id)
+                    if loc:
+                        pickup_location_map[pickup_location_id] = {
+                            "id": loc.id,
+                            "label": format_location_for_dropdown(loc).get("label", loc.display_name or f"{loc.city}, {loc.country}"),
+                            "city": loc.city,
+                            "country": loc.country
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+    # v3.0: Fetch supplier info for items
+    supplier_map = {}
+    supplier_ids = [item.get("supplier_id") for item in items if item.get("supplier_id")]
+    if supplier_ids:
+        try:
+            from services.supplier_service import get_supplier, format_supplier_for_dropdown
+            for supplier_id in set(supplier_ids):
+                try:
+                    sup = get_supplier(supplier_id)
+                    if sup:
+                        supplier_map[supplier_id] = {
+                            "id": sup.id,
+                            "label": format_supplier_for_dropdown(sup).get("label", sup.name),
+                            "country": sup.country
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+    # Calculate summary stats with v3.0 fields
     total_items = len(items)
     items_with_hs = sum(1 for item in items if item.get("hs_code"))
-    total_duty = sum(float(item.get("customs_duty", 0) or 0) for item in items)
-    total_extra = sum(float(item.get("customs_extra", 0) or 0) for item in items)
+    items_with_customs = 0
+    total_customs_cost = 0
 
-    # Build items form - each item has fields for HS code, duty, extra
-    def item_row(item, index):
+    for item in items:
+        duty_percent = float(item.get("customs_duty_percent") or 0)
+        extra_cost = float(item.get("customs_extra_cost") or 0)
+        purchase_price = float(item.get("purchase_price_rub") or item.get("base_price_vat") or 0)
+        quantity = float(item.get("quantity") or 1)
+
+        # Calculate duty amount based on purchase price * duty percent
+        duty_amount = purchase_price * quantity * (duty_percent / 100)
+        item_customs_total = duty_amount + extra_cost
+
+        if item.get("hs_code") and item.get("customs_duty_percent") is not None:
+            items_with_customs += 1
+        total_customs_cost += item_customs_total
+
+    # Build item cards for v3.0 item-level customs data
+    def customs_item_card(item, idx):
         item_id = item.get("id")
-        return Tr(
-            Td(str(index + 1)),
-            Td(
-                Div(item.get("brand", "—"), style="font-weight: 500;"),
-                Div(item.get("product_code", ""), style="font-size: 0.75rem; color: #666;")
+        pickup_info = pickup_location_map.get(item.get("pickup_location_id"))
+        supplier_info = supplier_map.get(item.get("supplier_id"))
+
+        # Get current item customs values (v3.0 fields)
+        hs_code = item.get("hs_code") or ""
+        duty_percent = item.get("customs_duty_percent") or 0
+        extra_cost = item.get("customs_extra_cost") or 0
+
+        # Calculate duty amount for display
+        purchase_price = float(item.get("purchase_price_rub") or item.get("base_price_vat") or 0)
+        quantity = float(item.get("quantity") or 1)
+        duty_amount = purchase_price * quantity * (float(duty_percent) / 100)
+        item_customs_total = duty_amount + float(extra_cost)
+
+        # Item completion indicator
+        has_customs = hs_code and duty_percent is not None
+        status_icon = "✅" if has_customs else "⏳"
+        status_color = "#22c55e" if has_customs else "#f59e0b"
+
+        # Weight/volume reference
+        weight = item.get("weight_kg") or item.get("weight_in_kg") or 0
+        volume = item.get("volume_m3") or 0
+
+        return Div(
+            # Item header
+            Div(
+                Div(
+                    Span(f"{status_icon} ", style=f"color: {status_color};"),
+                    Strong(item.get("brand", "—")),
+                    Span(f" — {(item.get('product_name') or '—')[:50]}", style="color: #666;"),
+                    style="flex: 1;"
+                ),
+                Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
             ),
-            Td((item.get("product_name", "") or "—")[:40] + "..." if len(item.get("product_name", "") or "") > 40 else (item.get("product_name", "") or "—")),
-            Td(f"{item.get('quantity', 0)} {item.get('unit', 'шт')}"),
-            Td(item.get("supplier_country", "—")),
-            Td(
-                Input(
-                    name=f"hs_code_{item_id}",
-                    type="text",
-                    value=item.get("hs_code", ""),
-                    placeholder="0000000000",
-                    maxlength="20",
-                    disabled=not is_editable,
-                    style="width: 120px; font-size: 0.875rem;"
-                )
+
+            # Item info badges
+            Div(
+                Span(f"📦 Кол-во: {item.get('quantity', 0)}", style="margin-right: 1rem; font-size: 0.875rem;"),
+                Span(f"⚖️ Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem;") if weight else None,
+                Span(f"🌍 {item.get('supplier_country', '—')}", style="margin-right: 1rem; font-size: 0.875rem;"),
+                # Purchase value for duty calculation reference
+                Span(f"💰 Закуп: {format_money(purchase_price * quantity, currency)}",
+                     style="margin-right: 1rem; font-size: 0.875rem; color: #059669;",
+                     title="Стоимость закупки для расчёта пошлины") if purchase_price else None,
+                # Pickup location badge (v3.0)
+                Span(
+                    f"📍 {pickup_info['label'] if pickup_info else '—'}",
+                    style="font-size: 0.875rem; color: #cc6600;",
+                    title=f"Точка отгрузки: {pickup_info['city']}, {pickup_info['country']}" if pickup_info else "Точка отгрузки не указана"
+                ) if pickup_info or item.get("pickup_location_id") else None,
+                # Supplier badge (v3.0)
+                Span(
+                    f"🏭 {supplier_info['label'][:30] if supplier_info else '—'}",
+                    style="font-size: 0.875rem; color: #3b82f6; margin-left: 0.5rem;",
+                    title=f"Поставщик: {supplier_info['label']}" if supplier_info else "Поставщик не указан"
+                ) if supplier_info or item.get("supplier_id") else None,
+                style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem;"
             ),
-            Td(
-                Input(
-                    name=f"customs_duty_{item_id}",
-                    type="number",
-                    value=str(item.get("customs_duty", 0) or 0),
-                    min="0",
-                    step="0.01",
-                    disabled=not is_editable,
-                    style="width: 80px; font-size: 0.875rem;"
-                )
+
+            # Customs data inputs (v3.0 - item level)
+            Div(
+                H4("🛃 Таможенные данные", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151;"),
+                Div(
+                    # HS Code (ТН ВЭД)
+                    Div(
+                        Label("Код ТН ВЭД",
+                            Input(
+                                name=f"hs_code_{item_id}",
+                                type="text",
+                                value=hs_code,
+                                placeholder="8482.10.10",
+                                maxlength="20",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        Small("Формат: XXXX.XX.XX", style="color: #999;"),
+                        style="flex: 1;"
+                    ),
+                    # Duty Percent
+                    Div(
+                        Label("Пошлина %",
+                            Input(
+                                name=f"customs_duty_percent_{item_id}",
+                                type="number",
+                                value=str(duty_percent),
+                                min="0",
+                                max="100",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        Small(f"= {format_money(duty_amount, currency)}", style="color: #059669;") if duty_amount > 0 else None,
+                        style="flex: 0 0 120px;"
+                    ),
+                    # Extra Costs
+                    Div(
+                        Label("Доп. расходы",
+                            Input(
+                                name=f"customs_extra_cost_{item_id}",
+                                type="number",
+                                value=str(extra_cost),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        Small("СВХ, сертификаты", style="color: #999;"),
+                        style="flex: 0 0 140px;"
+                    ),
+                    style="display: flex; gap: 0.75rem;"
+                ),
+                # Item total display
+                Div(
+                    Span(f"Итого таможня: {format_money(item_customs_total, currency)}",
+                         style="font-weight: 500; color: #374151;"),
+                    Span(f" (пошлина: {format_money(duty_amount, currency)} + доп: {format_money(extra_cost, currency)})",
+                         style="font-size: 0.8rem; color: #666;") if item_customs_total > 0 else None,
+                    style="text-align: right; margin-top: 0.5rem; font-size: 0.875rem;"
+                ) if item_customs_total > 0 else None,
+                style="background: #f9fafb; padding: 1rem; border-radius: 4px;"
             ),
-            Td(
-                Input(
-                    name=f"customs_extra_{item_id}",
-                    type="number",
-                    value=str(item.get("customs_extra", 0) or 0),
-                    min="0",
-                    step="0.01",
-                    disabled=not is_editable,
-                    style="width: 80px; font-size: 0.875rem;"
-                )
-            )
+
+            cls="card",
+            style="margin-bottom: 1rem; border-left: 3px solid " + (status_color if has_customs else "#e5e7eb") + ";"
         )
 
-    # Items table in a form
-    items_form = Form(
-        Table(
-            Thead(Tr(
-                Th("#"),
-                Th("Бренд/Артикул"),
-                Th("Наименование"),
-                Th("Кол-во"),
-                Th("Страна"),
-                Th("Код ТН ВЭД"),
-                Th("Пошлина %"),
-                Th("Доп. расходы")
-            )),
-            Tbody(
-                *[item_row(item, i) for i, item in enumerate(items)]
-            ) if items else Tbody(Tr(Td("Нет позиций в КП", colspan="8", style="text-align: center; color: #666;"))),
-            style="width: 100%; font-size: 0.875rem;"
-        ),
+    # Build the item-level customs section
+    item_customs_section = Div(
+        H3("📦 Таможня по позициям (v3.0)", style="margin-bottom: 1rem;"),
+        P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Дополнительные расходы включают СВХ, сертификацию, брокерские услуги.",
+          style="color: #666; margin-bottom: 1rem;"),
+        *[customs_item_card(item, idx) for idx, item in enumerate(items)],
+    ) if items else Div(
+        P("Нет позиций в КП для таможенного оформления.", style="color: #666;"),
+        cls="card"
+    )
 
-        # Notes field
+    # Quote-level notes section
+    quote_level_section = Div(
+        H3("📝 Примечания"),
         Div(
             Label("Примечания таможенника",
                 Textarea(
-                    quote.get("customs_notes", ""),
+                    quote.get("customs_notes") or "",
                     name="customs_notes",
                     rows="3",
                     disabled=not is_editable,
                     style="width: 100%;"
                 ),
-                style="display: block; margin-top: 1rem;"
+                style="display: block;"
             ),
-        ) if is_editable else None,
+        ),
+        cls="card"
+    )
+
+    # Form wrapper
+    customs_form = Form(
+        # Item-level customs (v3.0)
+        item_customs_section,
+
+        # Quote-level notes
+        quote_level_section,
 
         # Action buttons
         Div(
@@ -6482,7 +6640,7 @@ def get(session, quote_id: str):
         success_banner,
         status_banner,
 
-        # Quote summary with customs stats
+        # Quote summary with customs stats (v3.0)
         Div(
             H3("📋 Сводка по КП"),
             Div(
@@ -6497,14 +6655,15 @@ def get(session, quote_id: str):
                     cls="stat-card-mini"
                 ),
                 Div(
-                    Div(f"{total_duty:.2f}%", cls="stat-value"),
-                    Div("Сумма пошлин"),
+                    Div(f"{items_with_customs}/{total_items}", cls="stat-value"),
+                    Div("С пошлиной"),
                     cls="stat-card-mini"
                 ),
                 Div(
-                    Div(format_money(total_extra) if total_extra else "0", cls="stat-value"),
-                    Div("Доп. расходы"),
-                    cls="stat-card-mini"
+                    Div(format_money(total_customs_cost, currency), cls="stat-value"),
+                    Div("Итого таможня"),
+                    cls="stat-card-mini",
+                    style="border: 2px solid #8b5cf6;" if total_customs_cost > 0 else ""
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
@@ -6523,17 +6682,13 @@ def get(session, quote_id: str):
         # Instructions
         Div(
             H3("📝 Инструкция"),
-            P("Заполните коды ТН ВЭД для каждой позиции, укажите процент пошлины и дополнительные расходы.", style="margin-bottom: 0;"),
+            P("Для каждой позиции укажите код ТН ВЭД и процент пошлины. Пошлина рассчитывается от закупочной стоимости.", style="margin-bottom: 0;"),
             cls="card",
             style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
         ) if is_editable else None,
 
-        # Items form
-        Div(
-            H3("📦 Позиции"),
-            items_form,
-            cls="card"
-        ),
+        # Items form (v3.0)
+        customs_form,
 
         # Transition history (Feature #88)
         workflow_transition_history(quote_id),
@@ -6562,8 +6717,11 @@ async def post(session, quote_id: str, request):
     """
     Save customs data for all items and optionally mark customs as complete.
 
-    Feature #44: Customs data entry form (POST handler)
-    Feature #45: Complete customs button
+    Feature UI-021 (v3.0): Customs workspace POST handler
+    - Saves item-level customs data to quote_items table
+    - Uses v3.0 fields: hs_code, customs_duty_percent, customs_extra_cost
+    - Saves quote-level customs_notes
+    - Handles 'complete' action to mark customs as done
     """
     redirect = require_login(session)
     if redirect:
@@ -6578,8 +6736,8 @@ async def post(session, quote_id: str, request):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check role
-    if not user_has_any_role(session, ["customs", "admin"]):
+    # Check role (includes head_of_customs for v3.0)
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -6617,21 +6775,30 @@ async def post(session, quote_id: str, request):
         except:
             return default
 
-    # Update customs data for each item
+    # Update customs data for each item using v3.0 field names
     for item in items:
         item_id = item["id"]
         hs_code = form_data.get(f"hs_code_{item_id}", "")
-        customs_duty = form_data.get(f"customs_duty_{item_id}", "0")
-        customs_extra = form_data.get(f"customs_extra_{item_id}", "0")
+        # v3.0: Use customs_duty_percent instead of customs_duty
+        customs_duty_percent = form_data.get(f"customs_duty_percent_{item_id}", "0")
+        # v3.0: Use customs_extra_cost instead of customs_extra
+        customs_extra_cost = form_data.get(f"customs_extra_cost_{item_id}", "0")
 
-        # Update item
+        # Update item with v3.0 column names
         supabase.table("quote_items") \
             .update({
                 "hs_code": hs_code if hs_code else None,
-                "customs_duty": safe_decimal(customs_duty),
-                "customs_extra": safe_decimal(customs_extra)
+                "customs_duty_percent": safe_decimal(customs_duty_percent),
+                "customs_extra_cost": safe_decimal(customs_extra_cost)
             }) \
             .eq("id", item_id) \
+            .execute()
+
+    # Save customs notes at quote level
+    if customs_notes:
+        supabase.table("quotes") \
+            .update({"customs_notes": customs_notes}) \
+            .eq("id", quote_id) \
             .execute()
 
     # If action is complete, mark customs as done
