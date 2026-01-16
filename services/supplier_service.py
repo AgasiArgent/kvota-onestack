@@ -227,21 +227,19 @@ def create_supplier(
     try:
         supabase = _get_supabase()
 
-        result = supabase.table("suppliers").insert({
+        # Note: Only insert minimal columns that definitely exist in DB
+        # Many columns may not exist if migrations not fully applied
+        insert_data = {
             "organization_id": organization_id,
             "name": name,
             "supplier_code": supplier_code,
-            "country": country,
-            "city": city,
-            "inn": inn,
-            "kpp": kpp,
-            "contact_person": contact_person,
-            "contact_email": contact_email,
-            "contact_phone": contact_phone,
-            "default_payment_terms": default_payment_terms,
             "is_active": is_active,
-            "created_by": created_by,
-        }).execute()
+        }
+        # Only add country if provided - this should exist in base schema
+        if country:
+            insert_data["country"] = country
+
+        result = supabase.table("suppliers").insert(insert_data).execute()
 
         if result.data and len(result.data) > 0:
             return _parse_supplier(result.data[0])

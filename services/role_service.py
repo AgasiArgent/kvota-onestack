@@ -58,7 +58,7 @@ def get_user_roles(user_id: str | UUID, organization_id: str | UUID) -> List[Rol
     supabase = get_supabase()
 
     # Query user_roles joined with roles to get role details
-    # Note: existing DB uses 'slug' column, not 'code'
+    # Note: DB uses 'slug' column, we map to 'code' in API
     response = supabase.table("user_roles") \
         .select("id, user_id, organization_id, role_id, created_at, roles(id, slug, name, description)") \
         .eq("user_id", str(user_id)) \
@@ -71,7 +71,7 @@ def get_user_roles(user_id: str | UUID, organization_id: str | UUID) -> List[Rol
         if role_data:
             roles.append(Role(
                 id=UUID(role_data["id"]),
-                code=role_data["slug"],  # DB uses 'slug', we map to 'code' for API
+                code=role_data["slug"],  # DB uses 'slug', we map to 'code'
                 name=role_data["name"],
                 description=role_data.get("description")
             ))

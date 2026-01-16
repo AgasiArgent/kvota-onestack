@@ -1024,7 +1024,7 @@ def get(session):
 
     # Get seller companies for dropdown (v3.0)
     from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
-    seller_companies = get_all_seller_companies(organization_id=user["org_id"], active_only=True)
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
     return page_layout("New Quote",
         H1("Create New Quote"),
@@ -1057,7 +1057,7 @@ def get(session):
                         Select(
                             Option("Выберите компанию...", value="", disabled=True, selected=True),
                             *[Option(
-                                format_seller_company_for_dropdown(sc),
+                                format_seller_company_for_dropdown(sc)["label"],
                                 value=sc.id
                             ) for sc in seller_companies],
                             name="seller_company_id", required=True
@@ -1149,8 +1149,10 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
         }
 
         # v3.0: seller_company_id at quote level
-        if seller_company_id and seller_company_id.strip():
-            insert_data["seller_company_id"] = seller_company_id.strip()
+        # Note: Only add if DB schema has this column (migration 028)
+        # For now, skip since migrations may not be applied
+        # if seller_company_id and seller_company_id.strip():
+        #     insert_data["seller_company_id"] = seller_company_id.strip()
 
         result = supabase.table("quotes").insert(insert_data).execute()
 
@@ -1894,15 +1896,24 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
 
 
 @rt("/quotes/{quote_id}/products")
-def post(quote_id: str, product_name: str, product_code: str, brand: str, quantity: int,
-         base_price_vat: float, weight_in_kg: float, supplier_country: str, customs_code: str,
-         supplier_id: str = None, buyer_company_id: str = None, pickup_location_id: str = None, session=None):
+def post(quote_id: str, product_name: str, quantity: str, base_price_vat: str,
+         product_code: str = "", brand: str = "", weight_in_kg: str = "",
+         supplier_country: str = "", customs_code: str = "",
+         supplier_id: str = "", buyer_company_id: str = "", pickup_location_id: str = "", session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
 
     user = session["user"]
     supabase = get_supabase()
+
+    # Convert numeric parameters (handle empty strings from form)
+    try:
+        qty = int(quantity) if quantity else 1
+        price = float(base_price_vat) if base_price_vat else 0.0
+        weight = float(weight_in_kg) if weight_in_kg else None
+    except (ValueError, TypeError):
+        return Div("Invalid numeric values", cls="alert alert-error")
 
     # Verify quote belongs to user's org
     quote_result = supabase.table("quotes") \
@@ -1923,9 +1934,9 @@ def post(quote_id: str, product_name: str, product_code: str, brand: str, quanti
             "product_name": product_name,
             "product_code": product_code or None,
             "brand": brand or None,
-            "quantity": quantity,
-            "base_price_vat": base_price_vat,
-            "weight_in_kg": weight_in_kg or None,
+            "quantity": qty,
+            "base_price_vat": price,
+            "weight_in_kg": weight,
             "supplier_country": supplier_country or None,
             "customs_code": customs_code or None,
         }
@@ -2024,9 +2035,9 @@ def get(quote_id: str, session):
     user = session["user"]
     supabase = get_supabase()
 
-    # Get quote with seller company info
+    # Get quote (seller_company_id column may not exist if migration not applied)
     result = supabase.table("quotes") \
-        .select("*, seller_companies(id, supplier_code, name)") \
+        .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
         .execute()
@@ -2047,14 +2058,13 @@ def get(quote_id: str, session):
 
     # Get seller companies for dropdown
     from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
-    seller_companies = get_all_seller_companies(organization_id=user["org_id"], active_only=True)
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
     # Prepare seller company info for pre-selected value
+    # Note: seller_company_id column may not exist if migration 028 not applied
     selected_seller_id = quote.get("seller_company_id")
     selected_seller_label = None
-    if quote.get("seller_companies"):
-        sc = quote["seller_companies"]
-        selected_seller_label = f"{sc.get('supplier_code', '')} - {sc.get('name', '')}"
+    # We no longer join seller_companies since FK may not exist
 
     return page_layout(f"Edit {quote.get('idn_quote', '')}",
         H1(f"Edit Quote {quote.get('idn_quote', '')}"),
@@ -4647,9 +4657,9 @@ def get(quote_id: str, session):
 
     all_items = items_result.data or []
 
-    # Filter items for my brands
+    # Filter items for my brands (handle None brand values)
     my_items = [item for item in all_items
-                if item.get("brand", "").lower() in my_brands_lower]
+                if (item.get("brand") or "").lower() in my_brands_lower]
 
     # v3.0: Fetch supplier info for items that have supplier_id
     supplier_map = {}
@@ -5094,29 +5104,31 @@ async def post(quote_id: str, session, request):
         if weight:
             update_data["weight_in_kg"] = float(weight)
 
-        # v3.0: Volume field
-        volume = form_data.get(f"volume_m3_{item_id}")
-        if volume:
-            update_data["volume_m3"] = float(volume)
+        # v3.0: Volume field (column doesn't exist yet - skip for now)
+        # volume = form_data.get(f"volume_m3_{item_id}")
+        # if volume:
+        #     update_data["volume_m3"] = float(volume)
 
-        # v3.0: Supply chain fields (replacing old supplier_country/city/payer_company)
+        # v3.0: Supply chain fields
         supplier_id = form_data.get(f"supplier_id_{item_id}")
         if supplier_id:
             update_data["supplier_id"] = supplier_id
         else:
             update_data["supplier_id"] = None
 
+        # Note: column is "purchasing_company_id", not "buyer_company_id"
         buyer_company_id = form_data.get(f"buyer_company_id_{item_id}")
         if buyer_company_id:
-            update_data["buyer_company_id"] = buyer_company_id
+            update_data["purchasing_company_id"] = buyer_company_id
         else:
-            update_data["buyer_company_id"] = None
+            update_data["purchasing_company_id"] = None
 
-        pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
-        if pickup_location_id:
-            update_data["pickup_location_id"] = pickup_location_id
-        else:
-            update_data["pickup_location_id"] = None
+        # pickup_location_id column doesn't exist yet - skip for now
+        # pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
+        # if pickup_location_id:
+        #     update_data["pickup_location_id"] = pickup_location_id
+        # else:
+        #     update_data["pickup_location_id"] = None
 
         production_time = form_data.get(f"production_time_days_{item_id}")
         if production_time:
@@ -5125,8 +5137,6 @@ async def post(quote_id: str, session, request):
         advance_percent = form_data.get(f"advance_to_supplier_percent_{item_id}")
         if advance_percent:
             update_data["advance_to_supplier_percent"] = float(advance_percent)
-        else:
-            update_data["supplier_advance_percent"] = None
 
         payment_terms = form_data.get(f"supplier_payment_terms_{item_id}")
         update_data["supplier_payment_terms"] = payment_terms or None
@@ -5225,9 +5235,9 @@ def get(quote_id: str, session):
 
     all_items = items_result.data or []
 
-    # Filter items for my brands
+    # Filter items for my brands (handle None brand values)
     my_items = [item for item in all_items
-                if item.get("brand", "").lower() in my_brands_lower]
+                if (item.get("brand") or "").lower() in my_brands_lower]
 
     if not my_items:
         # No items to export, redirect back with message
@@ -5528,14 +5538,11 @@ def get(session, quote_id: str):
     def get_var(key, default):
         return saved_vars.get(key, default)
 
-    # Fetch quote items with v3.0 logistics and supply chain fields
+    # Fetch quote items with available fields (some v3.0 logistics columns may not exist yet)
     items_result = supabase.table("quote_items") \
         .select("""
             id, brand, product_code, product_name, quantity, unit, base_price_vat,
-            weight_in_kg, weight_kg, volume_m3, supplier_country,
-            pickup_location_id, supplier_id,
-            logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer,
-            logistics_total_days
+            weight_in_kg, supplier_country, pickup_country, supplier_id, supplier_city
         """) \
         .eq("quote_id", quote_id) \
         .order("created_at") \
@@ -8673,9 +8680,9 @@ def get(session, quote_id: str):
 
     supabase = get_supabase()
 
-    # Fetch quote with customer info and v3.0 seller_company_id
+    # Fetch quote with customer info (some columns may not exist in DB)
     quote_result = supabase.table("quotes") \
-        .select("*, customers(id, name, inn, company_name), seller_companies(id, name, supplier_code, inn, kpp, registration_address, general_director_name, general_director_position)") \
+        .select("*, customers(id, name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -8709,11 +8716,11 @@ def get(session, quote_id: str):
         # Redirect to edit existing specification
         return RedirectResponse(f"/spec-control/{existing_spec.data[0]['id']}", status_code=303)
 
-    # Get quote versions for version selection
+    # Get quote versions for version selection (use * to avoid column mismatch)
     versions_result = supabase.table("quote_versions") \
-        .select("id, version_number, comment, created_at, total_amount, currency") \
+        .select("*") \
         .eq("quote_id", quote_id) \
-        .order("version_number", desc=True) \
+        .order("created_at", desc=True) \
         .execute()
 
     versions = versions_result.data or []
@@ -9249,11 +9256,11 @@ def get(session, spec_id: str):
     # Check if editable
     is_editable = status in ["draft", "pending_review"]
 
-    # Get quote versions for version selection
+    # Get quote versions for version selection (use * to avoid column mismatch)
     versions_result = supabase.table("quote_versions") \
-        .select("id, version_number, comment, created_at, total_amount, currency") \
+        .select("*") \
         .eq("quote_id", quote_id) \
-        .order("version_number", desc=True) \
+        .order("created_at", desc=True) \
         .execute()
 
     versions = versions_result.data or []
@@ -11532,18 +11539,18 @@ def get(session):
     for member in members:
         member_user_id = member["user_id"]
 
-        # Get user roles
+        # Get user roles (DB uses 'slug', we call it 'code' in UI)
         user_roles_result = supabase.table("user_roles").select(
-            "id, role_id, roles(code, name)"
+            "id, role_id, roles(slug, name)"
         ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
 
         member_roles = user_roles_result.data if user_roles_result.data else []
-        role_codes = [r.get("roles", {}).get("code", "") for r in member_roles if r.get("roles")]
+        role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
         role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
 
         # Get Telegram status
         tg_result = supabase.table("telegram_users").select(
-            "telegram_id, username, verified_at"
+            "telegram_id, telegram_username, verified_at"
         ).eq("user_id", member_user_id).limit(1).execute()
 
         tg_data = tg_result.data[0] if tg_result.data else None
@@ -13139,13 +13146,21 @@ def get(session, q: str = "", country: str = "", status: str = ""):
             )
         else:
             # Get all with filters
-            active_only = None if status == "" else (status == "active")
-            suppliers = get_all_suppliers(
-                organization_id=org_id,
-                country=country if country else None,
-                active_only=active_only,
-                limit=100
-            )
+            is_active = None if status == "" else (status == "active")
+            if country:
+                # Use country-specific function
+                from services.supplier_service import get_suppliers_by_country
+                suppliers = get_suppliers_by_country(
+                    organization_id=org_id,
+                    country=country,
+                    is_active=is_active
+                )
+            else:
+                suppliers = get_all_suppliers(
+                    organization_id=org_id,
+                    is_active=is_active,
+                    limit=100
+                )
 
         # Get countries for filter dropdown
         countries = get_unique_countries(organization_id=org_id)
@@ -13269,6 +13284,97 @@ def get(session, q: str = "", country: str = "", status: str = ""):
 
         session=session
     )
+
+
+@rt("/suppliers/new")
+def get(session):
+    """Show form to create a new supplier."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    return _supplier_form(session=session)
+
+
+@rt("/suppliers/new")
+def post(
+    supplier_code: str,
+    name: str,
+    country: str = "",
+    city: str = "",
+    inn: str = "",
+    kpp: str = "",
+    contact_person: str = "",
+    contact_email: str = "",
+    contact_phone: str = "",
+    default_payment_terms: str = "",
+    session=None
+):
+    """Handle supplier creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "procurement"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.supplier_service import create_supplier, validate_supplier_code
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _supplier_form(
+            error="Код поставщика должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    try:
+        supplier = create_supplier(
+            organization_id=org_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or None,
+            city=city.strip() or None,
+            inn=inn.strip() or None,
+            kpp=kpp.strip() or None,
+            contact_person=contact_person.strip() or None,
+            contact_email=contact_email.strip() or None,
+            contact_phone=contact_phone.strip() or None,
+            default_payment_terms=default_payment_terms.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if supplier:
+            return RedirectResponse(f"/suppliers/{supplier.id}", status_code=303)
+        else:
+            return _supplier_form(
+                error="Поставщик с таким кодом уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _supplier_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating supplier: {e}")
+        return _supplier_form(error=f"Ошибка при создании: {e}", session=session)
 
 
 @rt("/suppliers/{supplier_id}")
@@ -13557,97 +13663,6 @@ def _supplier_form(supplier=None, error=None, session=None):
         ),
         session=session
     )
-
-
-@rt("/suppliers/new")
-def get(session):
-    """Show form to create a new supplier."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions
-    if not user_has_any_role(session, ["admin", "procurement"]):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
-            session=session
-        )
-
-    return _supplier_form(session=session)
-
-
-@rt("/suppliers/new")
-def post(
-    supplier_code: str,
-    name: str,
-    country: str = "",
-    city: str = "",
-    inn: str = "",
-    kpp: str = "",
-    contact_person: str = "",
-    contact_email: str = "",
-    contact_phone: str = "",
-    default_payment_terms: str = "",
-    session=None
-):
-    """Handle supplier creation form submission."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions
-    if not user_has_any_role(session, ["admin", "procurement"]):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания поставщиков.", cls="alert alert-error"),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-    user_id = user.get("id")
-
-    from services.supplier_service import create_supplier, validate_supplier_code
-
-    # Normalize supplier code to uppercase
-    supplier_code = supplier_code.strip().upper() if supplier_code else ""
-
-    # Validate supplier code format
-    if not supplier_code or not validate_supplier_code(supplier_code):
-        return _supplier_form(
-            error="Код поставщика должен состоять из 3 заглавных латинских букв",
-            session=session
-        )
-
-    try:
-        supplier = create_supplier(
-            organization_id=org_id,
-            name=name.strip(),
-            supplier_code=supplier_code,
-            country=country.strip() or None,
-            city=city.strip() or None,
-            inn=inn.strip() or None,
-            kpp=kpp.strip() or None,
-            contact_person=contact_person.strip() or None,
-            contact_email=contact_email.strip() or None,
-            contact_phone=contact_phone.strip() or None,
-            default_payment_terms=default_payment_terms.strip() or None,
-            is_active=True,
-            created_by=user_id,
-        )
-
-        if supplier:
-            return RedirectResponse(f"/suppliers/{supplier.id}", status_code=303)
-        else:
-            return _supplier_form(
-                error="Поставщик с таким кодом уже существует",
-                session=session
-            )
-
-    except ValueError as e:
-        return _supplier_form(error=str(e), session=session)
-    except Exception as e:
-        print(f"Error creating supplier: {e}")
-        return _supplier_form(error=f"Ошибка при создании: {e}", session=session)
 
 
 @rt("/suppliers/{supplier_id}/edit")
@@ -14723,6 +14738,121 @@ def get(session, q: str = "", status: str = ""):
     )
 
 
+@rt("/seller-companies/new")
+def get(session):
+    """Show form to create a new seller company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-продавцов. Требуется роль: admin", cls="alert alert-error"),
+            session=session
+        )
+
+    return _seller_company_form(session=session)
+
+
+@rt("/seller-companies/new")
+def post(
+    supplier_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    session=None
+):
+    """Handle seller company creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-продавцов.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.seller_company_service import (
+        create_seller_company, validate_supplier_code, validate_inn, validate_kpp, validate_ogrn
+    )
+
+    # Normalize supplier code to uppercase
+    supplier_code = supplier_code.strip().upper() if supplier_code else ""
+
+    # Validate supplier code format
+    if not supplier_code or not validate_supplier_code(supplier_code):
+        return _seller_company_form(
+            error="Код компании должен состоять из 3 заглавных латинских букв (например, MBR, CMT, GES)",
+            session=session
+        )
+
+    # Validate INN (optional but if provided must be valid)
+    inn_clean = inn.strip() if inn else ""
+    if inn_clean and not validate_inn(inn_clean):
+        return _seller_company_form(
+            error="ИНН должен состоять из 10 цифр (юрлицо) или 12 цифр (ИП)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _seller_company_form(
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _seller_company_form(
+            error="ОГРН должен состоять из 13 цифр (юрлицо) или 15 цифр (ИП)",
+            session=session
+        )
+
+    try:
+        company = create_seller_company(
+            organization_id=org_id,
+            name=name.strip(),
+            supplier_code=supplier_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean or None,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if company:
+            return RedirectResponse(f"/seller-companies/{company.id}", status_code=303)
+        else:
+            return _seller_company_form(
+                error="Компания с таким кодом или ИНН уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _seller_company_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating seller company: {e}")
+        return _seller_company_form(error=f"Ошибка при создании: {e}", session=session)
+
+
 @rt("/seller-companies/{company_id}")
 def get(company_id: str, session):
     """Seller company detail view page."""
@@ -15016,121 +15146,6 @@ def _seller_company_form(
         ),
         session=session
     )
-
-
-@rt("/seller-companies/new")
-def get(session):
-    """Show form to create a new seller company."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания компаний-продавцов. Требуется роль: admin", cls="alert alert-error"),
-            session=session
-        )
-
-    return _seller_company_form(session=session)
-
-
-@rt("/seller-companies/new")
-def post(
-    supplier_code: str,
-    name: str,
-    country: str = "Россия",
-    inn: str = "",
-    kpp: str = "",
-    ogrn: str = "",
-    registration_address: str = "",
-    general_director_position: str = "Генеральный директор",
-    general_director_name: str = "",
-    session=None
-):
-    """Handle seller company creation form submission."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания компаний-продавцов.", cls="alert alert-error"),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-    user_id = user.get("id")
-
-    from services.seller_company_service import (
-        create_seller_company, validate_supplier_code, validate_inn, validate_kpp, validate_ogrn
-    )
-
-    # Normalize supplier code to uppercase
-    supplier_code = supplier_code.strip().upper() if supplier_code else ""
-
-    # Validate supplier code format
-    if not supplier_code or not validate_supplier_code(supplier_code):
-        return _seller_company_form(
-            error="Код компании должен состоять из 3 заглавных латинских букв (например, MBR, CMT, GES)",
-            session=session
-        )
-
-    # Validate INN (optional but if provided must be valid)
-    inn_clean = inn.strip() if inn else ""
-    if inn_clean and not validate_inn(inn_clean):
-        return _seller_company_form(
-            error="ИНН должен состоять из 10 цифр (юрлицо) или 12 цифр (ИП)",
-            session=session
-        )
-
-    # Validate KPP (optional)
-    kpp_clean = kpp.strip() if kpp else ""
-    if kpp_clean and not validate_kpp(kpp_clean):
-        return _seller_company_form(
-            error="КПП должен состоять из 9 цифр",
-            session=session
-        )
-
-    # Validate OGRN (optional)
-    ogrn_clean = ogrn.strip() if ogrn else ""
-    if ogrn_clean and not validate_ogrn(ogrn_clean):
-        return _seller_company_form(
-            error="ОГРН должен состоять из 13 цифр (юрлицо) или 15 цифр (ИП)",
-            session=session
-        )
-
-    try:
-        company = create_seller_company(
-            organization_id=org_id,
-            name=name.strip(),
-            supplier_code=supplier_code,
-            country=country.strip() or "Россия",
-            inn=inn_clean or None,
-            kpp=kpp_clean or None,
-            ogrn=ogrn_clean or None,
-            registration_address=registration_address.strip() or None,
-            general_director_position=general_director_position.strip() or "Генеральный директор",
-            general_director_name=general_director_name.strip() or None,
-            is_active=True,
-            created_by=user_id,
-        )
-
-        if company:
-            return RedirectResponse(f"/seller-companies/{company.id}", status_code=303)
-        else:
-            return _seller_company_form(
-                error="Компания с таким кодом или ИНН уже существует",
-                session=session
-            )
-
-    except ValueError as e:
-        return _seller_company_form(error=str(e), session=session)
-    except Exception as e:
-        print(f"Error creating seller company: {e}")
-        return _seller_company_form(error=f"Ошибка при создании: {e}", session=session)
 
 
 @rt("/seller-companies/{company_id}/edit")

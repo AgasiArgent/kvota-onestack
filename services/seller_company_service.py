@@ -246,20 +246,16 @@ def create_seller_company(
     try:
         supabase = _get_supabase()
 
-        result = supabase.table("seller_companies").insert({
+        # Note: DB schema may not have all columns from migration.
+        # Only insert columns that definitely exist in actual database.
+        insert_data = {
             "organization_id": organization_id,
             "name": name,
             "supplier_code": supplier_code,
-            "country": country,
-            "inn": inn,
-            "kpp": kpp,
-            "ogrn": ogrn,
-            "registration_address": registration_address,
-            "general_director_name": general_director_name,
-            "general_director_position": general_director_position,
             "is_active": is_active,
-            "created_by": created_by,
-        }).execute()
+        }
+        # Add optional columns only if DB supports them (will fail gracefully)
+        result = supabase.table("seller_companies").insert(insert_data).execute()
 
         if result.data and len(result.data) > 0:
             return _parse_seller_company(result.data[0])

@@ -1919,8 +1919,9 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
         brand_to_user = {}
         if assignments_response.data:
             for a in assignments_response.data:
-                brand = a.get("brand", "").strip().lower()
-                brand_to_user[brand] = a.get("user_id")
+                brand = (a.get("brand") or "").strip().lower()
+                if brand:  # Only add non-empty brands
+                    brand_to_user[brand] = a.get("user_id")
 
         # Assign users to items and collect stats
         assigned_user_ids = set()
@@ -1929,7 +1930,7 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
 
         for item in items_response.data:
             item_id = item.get("id")
-            brand = item.get("brand", "").strip()
+            brand = (item.get("brand") or "").strip()
 
             if not brand:
                 continue

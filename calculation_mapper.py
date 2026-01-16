@@ -99,10 +99,41 @@ SUPPLIER_COUNTRY_MAPPING = {
     # Additional EU countries (map to EU cross-border)
     "Германия": "ЕС (между странами ЕС)",
     "Germany": "ЕС (между странами ЕС)",
+    "DE": "ЕС (между странами ЕС)",  # Germany ISO code
+    "FR": "ЕС (между странами ЕС)",  # France
+    "IT": "ЕС (между странами ЕС)",  # Italy
+    "ES": "ЕС (между странами ЕС)",  # Spain
+    "NL": "ЕС (между странами ЕС)",  # Netherlands
+    "AT": "ЕС (между странами ЕС)",  # Austria
+    "BE": "ЕС (между странами ЕС)",  # Belgium
+    "SE": "ЕС (между странами ЕС)",  # Sweden
+    "CZ": "ЕС (между странами ЕС)",  # Czech Republic
+    "SK": "ЕС (между странами ЕС)",  # Slovakia
+    "HU": "ЕС (между странами ЕС)",  # Hungary
+    "RO": "ЕС (между странами ЕС)",  # Romania
+    "FI": "ЕС (между странами ЕС)",  # Finland
+    "DK": "ЕС (между странами ЕС)",  # Denmark
+    "PT": "ЕС (между странами ЕС)",  # Portugal
+    "IE": "ЕС (между странами ЕС)",  # Ireland
+    "GR": "ЕС (между странами ЕС)",  # Greece
+    "HR": "ЕС (между странами ЕС)",  # Croatia
+    "SI": "ЕС (между странами ЕС)",  # Slovenia
+    "EE": "ЕС (между странами ЕС)",  # Estonia
+
+    # ISO codes for existing countries
+    "TR": "Турция",  # Turkey
+    "RU": "Россия",  # Russia
+    "CN": "Китай",  # China
+    "LT": "Литва",  # Lithuania
+    "LV": "Латвия",  # Latvia
+    "BG": "Болгария",  # Bulgaria
+    "PL": "Польша",  # Poland
+    "AE": "ОАЭ",  # UAE
 
     # Non-EU countries (map to Other)
     "США": "Прочие",
     "USA": "Прочие",
+    "US": "Прочие",  # USA ISO code
 }
 
 
@@ -365,8 +396,10 @@ def map_variables_to_calculation_input(
     )
 
     # ========== CompanySettings (2 fields) ==========
+    # Handle empty seller_company - use default if empty or falsy
+    seller_company_value = variables.get('seller_company') or 'МАСТЕР БЭРИНГ ООО'
     company = CompanySettings(
-        seller_company=SellerCompany(variables.get('seller_company', 'МАСТЕР БЭРИНГ ООО')),
+        seller_company=SellerCompany(seller_company_value),
         offer_sale_type=OfferSaleType(variables.get('offer_sale_type', 'поставка'))
     )
 
