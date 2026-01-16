@@ -77,6 +77,11 @@ app, rt = fast_app(
     live=True,
 )
 
+# Temporary Sentry test route - remove after verification
+@rt("/sentry-test")
+def sentry_test():
+    raise Exception("Sentry test error from production - please ignore")
+
 # ============================================================================
 # STYLES
 # ============================================================================
