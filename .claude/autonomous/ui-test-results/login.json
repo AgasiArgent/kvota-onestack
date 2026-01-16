@@ -1,0 +1,13 @@
+{
+  "flow": "login",
+  "status": "pass",
+  "url": "http://localhost:5001/login",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "checks": [
+    "Login form renders",
+    "Email field present",
+    "Password field present",
+    "Sign In button present",
+    "Login with valid credentials works"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "flow": "calculation",
+  "status": "pass",
+  "url": "http://localhost:5001/quotes/{id}/calculate",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "checks": [
+    "Calculation page loads without error",
+    "Company Settings section with dropdowns (Sale Type, Incoterms)",
+    "Pricing section with inputs (Markup, Discount, Exchange Rate)",
+    "Logistics Costs section",
+    "Brokerage Costs section",
+    "Payment Terms section",
+    "DM Fee section",
+    "HTMX Live Preview with Update button"
+  ],
+  "fix_applied": "Removed seller_companies FK join, fetch separately via get_seller_company service"
+}

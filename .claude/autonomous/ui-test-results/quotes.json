@@ -1,0 +1,13 @@
+{
+  "flow": "quotes",
+  "status": "pass",
+  "url": "http://localhost:5001/quotes",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "checks": [
+    "Quotes list page loads",
+    "New Quote button present",
+    "Table with Quote #, Customer, Status, Total, Created, Actions columns",
+    "Quote rows display correctly",
+    "View and Edit actions work"
+  ]
+}

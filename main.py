@@ -2614,9 +2614,9 @@ def get(quote_id: str, session):
     user = session["user"]
     supabase = get_supabase()
 
-    # Get quote with items and seller company (v3.0)
+    # Get quote with customer (v3.0 - fetch seller company separately to avoid FK issues)
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name), seller_companies(id, supplier_code, name)") \
+        .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
         .execute()
@@ -2627,13 +2627,17 @@ def get(quote_id: str, session):
     quote = quote_result.data[0]
     currency = quote.get("currency", "USD")
 
-    # Get seller company info for display
-    seller_company_info = quote.get("seller_companies")
+    # Get seller company info separately using service function
+    from services.seller_company_service import get_seller_company
+    seller_company_info = None
     seller_company_display = "Не выбрана"
     seller_company_name = ""
-    if seller_company_info:
-        seller_company_display = f"{seller_company_info.get('supplier_code', '')} - {seller_company_info.get('name', '')}"
-        seller_company_name = seller_company_info.get('name', '')
+    if quote.get("seller_company_id"):
+        seller_company = get_seller_company(quote["seller_company_id"])
+        if seller_company:
+            seller_company_info = {"id": seller_company.id, "supplier_code": seller_company.supplier_code, "name": seller_company.name}
+            seller_company_display = f"{seller_company.supplier_code} - {seller_company.name}"
+            seller_company_name = seller_company.name
 
     # Get quote items
     items_result = supabase.table("quote_items") \

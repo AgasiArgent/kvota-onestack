@@ -1,0 +1,13 @@
+{
+  "flow": "procurement",
+  "status": "pass",
+  "url": "http://localhost:5001/procurement",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "checks": [
+    "Procurement page loads",
+    "My brands section displays",
+    "Status filter dropdown renders with options",
+    "Statistics counters show",
+    "Quotes table structure correct"
+  ]
+}

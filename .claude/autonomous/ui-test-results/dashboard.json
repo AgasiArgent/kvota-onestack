@@ -1,0 +1,13 @@
+{
+  "flow": "dashboard",
+  "status": "pass",
+  "url": "http://localhost:5001/dashboard",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "checks": [
+    "Dashboard page loads",
+    "Stats display (Всего КП, Выручка, В работе)",
+    "Pending approvals section",
+    "Specifications section",
+    "Recent quotes table"
+  ]
+}
