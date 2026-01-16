@@ -5255,9 +5255,12 @@ def get(quote_id: str, session):
 @rt("/logistics")
 def get(session, status_filter: str = None):
     """
-    Logistics workspace - shows quotes in logistics stage for logist role.
+    Logistics workspace - shows quotes in logistics stage for logistics role.
 
-    Feature #38: Basic logistics page structure
+    Feature UI-020 (v3.0): Logistics workspace list view
+    - Shows quotes in pending_logistics or pending_customs status
+    - Supports head_of_logistics role (sees all quotes)
+    - Logistics role sees quotes on their assigned routes
     """
     redirect = require_login(session)
     if redirect:
@@ -5267,8 +5270,8 @@ def get(session, status_filter: str = None):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has logistics role
-    if not user_has_any_role(session, ["logistics", "admin"]):
+    # Check if user has logistics role (v3.0: added head_of_logistics)
+    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -5468,9 +5471,12 @@ def get(session, quote_id: str):
     """
     Logistics detail page - view and edit logistics data for a quote.
 
-    Feature #40: Logistics data entry form
-    - Shows quote summary and items
-    - Editable fields for logistics costs and delivery time
+    Feature UI-020 (v3.0): Logistics workspace view
+    - Shows quote summary and items with item-level logistics costs
+    - Editable fields for per-item logistics costs (supplier→hub, hub→customs, customs→customer)
+    - Item-level logistics_total_days field
+    - Pickup location display for each item
+    - Quote-level logistics summary
     - Only editable when quote is in pending_logistics or pending_customs status
     """
     redirect = require_login(session)
@@ -5482,7 +5488,7 @@ def get(session, quote_id: str):
     org_id = user["org_id"]
 
     # Check if user has logistics role
-    if not user_has_any_role(session, ["logistics", "admin"]):
+    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -5505,8 +5511,9 @@ def get(session, quote_id: str):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
     customer_name = quote.get("customers", {}).get("name", "Unknown")
+    currency = quote.get("currency", "RUB")
 
-    # Load existing calculation variables (where logistics data is stored)
+    # Load existing calculation variables (quote-level logistics data)
     vars_result = supabase.table("quote_calculation_variables") \
         .select("variables") \
         .eq("quote_id", quote_id) \
@@ -5517,10 +5524,17 @@ def get(session, quote_id: str):
     def get_var(key, default):
         return saved_vars.get(key, default)
 
-    # Fetch quote items for summary
+    # Fetch quote items with v3.0 logistics and supply chain fields
     items_result = supabase.table("quote_items") \
-        .select("id, brand, product_code, product_name, quantity, unit, base_price_vat, weight_in_kg, supplier_country") \
+        .select("""
+            id, brand, product_code, product_name, quantity, unit, base_price_vat,
+            weight_in_kg, weight_kg, volume_m3, supplier_country,
+            pickup_location_id, supplier_id,
+            logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer,
+            logistics_total_days
+        """) \
         .eq("quote_id", quote_id) \
+        .order("created_at") \
         .execute()
 
     items = items_result.data or []
@@ -5530,127 +5544,260 @@ def get(session, quote_id: str):
     is_editable = workflow_status in editable_statuses and quote.get("logistics_completed_at") is None
     logistics_done = quote.get("logistics_completed_at") is not None
 
+    # v3.0: Fetch pickup location info for items
+    pickup_location_map = {}
+    pickup_location_ids = [item.get("pickup_location_id") for item in items if item.get("pickup_location_id")]
+    if pickup_location_ids:
+        try:
+            from services.location_service import get_location, format_location_for_dropdown
+            for pickup_location_id in set(pickup_location_ids):
+                try:
+                    loc = get_location(pickup_location_id)
+                    if loc:
+                        pickup_location_map[pickup_location_id] = {
+                            "id": loc.id,
+                            "label": format_location_for_dropdown(loc).get("label", loc.display_name or f"{loc.city}, {loc.country}"),
+                            "city": loc.city,
+                            "country": loc.country
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+    # v3.0: Fetch supplier info for items
+    supplier_map = {}
+    supplier_ids = [item.get("supplier_id") for item in items if item.get("supplier_id")]
+    if supplier_ids:
+        try:
+            from services.supplier_service import get_supplier, format_supplier_for_dropdown
+            for supplier_id in set(supplier_ids):
+                try:
+                    sup = get_supplier(supplier_id)
+                    if sup:
+                        supplier_map[supplier_id] = {
+                            "id": sup.id,
+                            "label": format_supplier_for_dropdown(sup).get("label", sup.name),
+                            "country": sup.country
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
     # Calculate summary stats
     total_items = len(items)
-    total_weight = sum(float(item.get("weight_in_kg", 0) or 0) for item in items)
-    unique_countries = set(item.get("supplier_country", "Unknown") for item in items)
+    total_weight = sum(float(item.get("weight_kg") or item.get("weight_in_kg") or 0) for item in items)
+    total_volume = sum(float(item.get("volume_m3") or 0) for item in items)
+    unique_countries = set(item.get("supplier_country", "Unknown") for item in items if item.get("supplier_country"))
 
-    # Build items summary table
-    items_summary = Table(
-        Thead(Tr(
-            Th("Бренд"),
-            Th("Артикул"),
-            Th("Наименование"),
-            Th("Кол-во"),
-            Th("Вес (кг)"),
-            Th("Страна")
-        )),
-        Tbody(
-            *[Tr(
-                Td(item.get("brand", "—")),
-                Td(item.get("product_code", "—")),
-                Td(item.get("product_name", "—")[:40] + "..." if len(item.get("product_name", "") or "") > 40 else item.get("product_name", "—")),
-                Td(str(item.get("quantity", 0))),
-                Td(str(item.get("weight_in_kg", "—"))),
-                Td(item.get("supplier_country", "—"))
-            ) for item in items[:20]]  # Show first 20 items
-        ),
-        style="width: 100%; font-size: 0.875rem;"
+    # Calculate logistics completion status per item
+    items_with_logistics = 0
+    total_logistics_cost = 0
+    for item in items:
+        s2h = float(item.get("logistics_supplier_to_hub") or 0)
+        h2c = float(item.get("logistics_hub_to_customs") or 0)
+        c2c = float(item.get("logistics_customs_to_customer") or 0)
+        item_total = s2h + h2c + c2c
+        if item_total > 0 or item.get("logistics_total_days"):
+            items_with_logistics += 1
+        total_logistics_cost += item_total
+
+    # Build item form cards for v3.0 item-level logistics
+    def logistics_item_card(item, idx):
+        item_id = item.get("id")
+        pickup_info = pickup_location_map.get(item.get("pickup_location_id"))
+        supplier_info = supplier_map.get(item.get("supplier_id"))
+
+        # Get current item logistics values
+        s2h = item.get("logistics_supplier_to_hub") or 0
+        h2c = item.get("logistics_hub_to_customs") or 0
+        c2c = item.get("logistics_customs_to_customer") or 0
+        days = item.get("logistics_total_days") or ""
+        item_logistics_total = float(s2h) + float(h2c) + float(c2c)
+
+        # Item completion indicator
+        has_logistics = item_logistics_total > 0 or days
+        status_icon = "✅" if has_logistics else "⏳"
+        status_color = "#22c55e" if has_logistics else "#f59e0b"
+
+        # Weight/volume for logistics calculation reference
+        weight = item.get("weight_kg") or item.get("weight_in_kg") or 0
+        volume = item.get("volume_m3") or 0
+
+        return Div(
+            # Item header
+            Div(
+                Div(
+                    Span(f"{status_icon} ", style=f"color: {status_color};"),
+                    Strong(item.get("brand", "—")),
+                    Span(f" — {item.get('product_name', '—')[:50]}", style="color: #666;"),
+                    style="flex: 1;"
+                ),
+                Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+            ),
+
+            # Item info badges
+            Div(
+                Span(f"📦 Кол-во: {item.get('quantity', 0)}", style="margin-right: 1rem; font-size: 0.875rem;"),
+                Span(f"⚖️ Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem;") if weight else None,
+                Span(f"📐 Объём: {volume} м³", style="margin-right: 1rem; font-size: 0.875rem;") if volume else None,
+                Span(f"🌍 {item.get('supplier_country', '—')}", style="margin-right: 1rem; font-size: 0.875rem;"),
+                # Pickup location badge (v3.0)
+                Span(
+                    f"📍 {pickup_info['label'] if pickup_info else '—'}",
+                    style="font-size: 0.875rem; color: #cc6600;",
+                    title=f"Точка отгрузки: {pickup_info['city']}, {pickup_info['country']}" if pickup_info else "Точка отгрузки не указана"
+                ) if pickup_info or item.get("pickup_location_id") else None,
+                # Supplier badge (v3.0)
+                Span(
+                    f"🏭 {supplier_info['label'][:30] if supplier_info else '—'}",
+                    style="font-size: 0.875rem; color: #3b82f6; margin-left: 0.5rem;",
+                    title=f"Поставщик: {supplier_info['label']}" if supplier_info else "Поставщик не указан"
+                ) if supplier_info or item.get("supplier_id") else None,
+                style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem;"
+            ),
+
+            # Logistics cost inputs (v3.0 - item level)
+            Div(
+                H4("🚚 Стоимость логистики по сегментам", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151;"),
+                Div(
+                    # Supplier → Hub
+                    Div(
+                        Label("Поставщик → Хаб",
+                            Input(
+                                name=f"logistics_supplier_to_hub_{item_id}",
+                                type="number",
+                                value=str(s2h),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        style="flex: 1;"
+                    ),
+                    # Hub → Customs
+                    Div(
+                        Label("Хаб → Таможня",
+                            Input(
+                                name=f"logistics_hub_to_customs_{item_id}",
+                                type="number",
+                                value=str(h2c),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        style="flex: 1;"
+                    ),
+                    # Customs → Customer
+                    Div(
+                        Label("Таможня → Клиент",
+                            Input(
+                                name=f"logistics_customs_to_customer_{item_id}",
+                                type="number",
+                                value=str(c2c),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        style="flex: 1;"
+                    ),
+                    # Total days
+                    Div(
+                        Label("Дней",
+                            Input(
+                                name=f"logistics_total_days_{item_id}",
+                                type="number",
+                                value=str(days) if days else "",
+                                min="1",
+                                max="365",
+                                disabled=not is_editable,
+                                style="width: 100%;"
+                            ),
+                            style="display: block; font-size: 0.875rem;"
+                        ),
+                        style="flex: 0 0 80px;"
+                    ),
+                    style="display: flex; gap: 0.75rem;"
+                ),
+                # Item total display
+                Div(
+                    Span(f"Итого по позиции: {format_money(item_logistics_total, currency)}",
+                         style="font-weight: 500; color: #374151;"),
+                    style="text-align: right; margin-top: 0.5rem; font-size: 0.875rem;"
+                ) if item_logistics_total > 0 else None,
+                style="background: #f9fafb; padding: 1rem; border-radius: 4px;"
+            ),
+
+            cls="card",
+            style="margin-bottom: 1rem; border-left: 3px solid " + (status_color if has_logistics else "#e5e7eb") + ";"
+        )
+
+    # Build the item-level logistics form
+    item_logistics_section = Div(
+        H3("📦 Логистика по позициям (v3.0)", style="margin-bottom: 1rem;"),
+        P("Введите стоимость доставки для каждой позиции по сегментам маршрута.",
+          style="color: #666; margin-bottom: 1rem;"),
+        *[logistics_item_card(item, idx) for idx, item in enumerate(items)],
+    ) if items else Div(
+        P("Нет позиций в КП для расчёта логистики.", style="color: #666;"),
+        cls="card"
     )
 
-    # Form for logistics data
-    logistics_form = Form(
-        # Logistics cost fields
+    # Quote-level logistics summary and notes (kept for backward compatibility)
+    quote_level_section = Div(
+        H3("📊 Общие параметры логистики"),
+        P("Эти параметры применяются ко всему КП.", style="color: #666; margin-bottom: 1rem;"),
         Div(
-            H3("📦 Стоимость логистики"),
-            P("Введите стоимость доставки по сегментам (в валюте КП)", style="color: #666; margin-bottom: 1rem;"),
             Div(
-                Div(
-                    Label("От поставщика до хаба",
-                        Input(
-                            name="logistics_supplier_hub",
-                            type="number",
-                            value=str(get_var('logistics_supplier_hub', 0)),
-                            min="0",
-                            step="0.01",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="display: block;"
+                Label("Срок доставки (дней)",
+                    Input(
+                        name="delivery_time",
+                        type="number",
+                        value=str(get_var('delivery_time', 30)),
+                        min="1",
+                        max="365",
+                        disabled=not is_editable,
+                        style="width: 100%;"
                     ),
-                    style="flex: 1;"
+                    style="display: block;"
                 ),
-                Div(
-                    Label("От хаба до таможни",
-                        Input(
-                            name="logistics_hub_customs",
-                            type="number",
-                            value=str(get_var('logistics_hub_customs', 0)),
-                            min="0",
-                            step="0.01",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="display: block;"
-                    ),
-                    style="flex: 1;"
-                ),
-                Div(
-                    Label("От таможни до клиента",
-                        Input(
-                            name="logistics_customs_client",
-                            type="number",
-                            value=str(get_var('logistics_customs_client', 0)),
-                            min="0",
-                            step="0.01",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="display: block;"
-                    ),
-                    style="flex: 1;"
-                ),
-                style="display: flex; gap: 1rem;"
+                style="flex: 0 0 150px;"
             ),
-            cls="card"
+            Div(
+                Label("Примечания логиста",
+                    Textarea(
+                        str(get_var('logistics_notes', '')),
+                        name="logistics_notes",
+                        rows="3",
+                        disabled=not is_editable,
+                        style="width: 100%;"
+                    ),
+                    style="display: block;"
+                ),
+                style="flex: 1;"
+            ),
+            style="display: flex; gap: 1rem; align-items: start;"
         ),
+        cls="card"
+    )
 
-        # Delivery time
-        Div(
-            H3("📅 Сроки доставки"),
-            Div(
-                Div(
-                    Label("Срок доставки (дней)",
-                        Input(
-                            name="delivery_time",
-                            type="number",
-                            value=str(get_var('delivery_time', 30)),
-                            min="1",
-                            max="365",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="display: block;"
-                    ),
-                    style="flex: 1; max-width: 200px;"
-                ),
-                Div(
-                    Label("Примечания логиста",
-                        Textarea(
-                            str(get_var('logistics_notes', '')),
-                            name="logistics_notes",
-                            rows="3",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="display: block;"
-                    ),
-                    style="flex: 2;"
-                ),
-                style="display: flex; gap: 1rem; align-items: start;"
-            ),
-            cls="card"
-        ),
+    # Form wrapper
+    logistics_form = Form(
+        # Item-level logistics (v3.0)
+        item_logistics_section,
+
+        # Quote-level settings
+        quote_level_section,
 
         # Action buttons
         Div(
@@ -5699,7 +5846,7 @@ def get(session, quote_id: str):
         success_banner,
         status_banner,
 
-        # Quote summary
+        # Quote summary with v3.0 stats
         Div(
             H3("📋 Сводка по КП"),
             Div(
@@ -5709,26 +5856,37 @@ def get(session, quote_id: str):
                     cls="stat-card-mini"
                 ),
                 Div(
+                    Div(f"{items_with_logistics}/{total_items}", cls="stat-value"),
+                    Div("С логистикой"),
+                    cls="stat-card-mini"
+                ),
+                Div(
                     Div(f"{total_weight:.1f}", cls="stat-value"),
                     Div("Общий вес (кг)"),
                     cls="stat-card-mini"
                 ),
                 Div(
+                    Div(f"{total_volume:.2f}", cls="stat-value"),
+                    Div("Общий объём (м³)"),
+                    cls="stat-card-mini"
+                ) if total_volume > 0 else None,
+                Div(
                     Div(str(len(unique_countries)), cls="stat-value"),
                     Div("Стран отправки"),
                     cls="stat-card-mini"
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+                Div(
+                    Div(format_money(total_logistics_cost, currency), cls="stat-value", style="font-size: 1.25rem;"),
+                    Div("Итого логистика"),
+                    cls="stat-card-mini",
+                    style="background: #dbeafe;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;"
             ),
-            Details(
-                Summary("Показать позиции", style="cursor: pointer; color: #3b82f6;"),
-                items_summary,
-                style="margin-top: 0.5rem;"
-            ) if items else P("Нет позиций в КП", style="color: #666;"),
             cls="card"
         ),
 
-        # Logistics form
+        # Logistics form with item-level editing
         logistics_form,
 
         # Additional styles
@@ -5738,6 +5896,7 @@ def get(session, quote_id: str):
                 padding: 0.75rem 1rem;
                 border-radius: 4px;
                 text-align: center;
+                min-width: 100px;
             }
             .stat-card-mini .stat-value {
                 font-size: 1.5rem;
@@ -5754,17 +5913,14 @@ def get(session, quote_id: str):
 
 
 @rt("/logistics/{quote_id}")
-def post(session, quote_id: str,
-         logistics_supplier_hub: str = "0",
-         logistics_hub_customs: str = "0",
-         logistics_customs_client: str = "0",
-         delivery_time: str = "30",
-         logistics_notes: str = "",
-         action: str = "save"):
+async def post(session, quote_id: str, request):
     """
     Save logistics data and optionally mark logistics as complete.
 
-    Feature #40: Logistics data entry form (POST handler)
+    Feature UI-020 (v3.0): Logistics workspace POST handler
+    - Saves item-level logistics costs to quote_items table
+    - Saves quote-level delivery_time and logistics_notes to variables
+    - Handles 'complete' action to mark logistics as done
     """
     redirect = require_login(session)
     if redirect:
@@ -5775,7 +5931,7 @@ def post(session, quote_id: str,
     org_id = user["org_id"]
 
     # Check role
-    if not user_has_any_role(session, ["logistics", "admin"]):
+    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -5798,6 +5954,80 @@ def post(session, quote_id: str,
     if workflow_status not in editable_statuses or quote.get("logistics_completed_at"):
         return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
 
+    # Get form data
+    form_data = await request.form()
+
+    # Helper functions
+    def safe_decimal(val, default="0"):
+        try:
+            return float(val) if val else float(default)
+        except:
+            return float(default)
+
+    def safe_int(val, default=None):
+        try:
+            return int(val) if val else default
+        except:
+            return default
+
+    # ==========================================
+    # v3.0: Save item-level logistics to quote_items
+    # ==========================================
+
+    # Get all quote items to update
+    items_result = supabase.table("quote_items") \
+        .select("id") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    items = items_result.data or []
+
+    # Update each item's logistics fields
+    total_logistics_cost = 0
+    for item in items:
+        item_id = item["id"]
+
+        # Get item-specific logistics values from form
+        s2h = form_data.get(f"logistics_supplier_to_hub_{item_id}")
+        h2c = form_data.get(f"logistics_hub_to_customs_{item_id}")
+        c2c = form_data.get(f"logistics_customs_to_customer_{item_id}")
+        days = form_data.get(f"logistics_total_days_{item_id}")
+
+        # Build update data
+        update_data = {}
+
+        if s2h is not None:
+            update_data["logistics_supplier_to_hub"] = safe_decimal(s2h)
+        if h2c is not None:
+            update_data["logistics_hub_to_customs"] = safe_decimal(h2c)
+        if c2c is not None:
+            update_data["logistics_customs_to_customer"] = safe_decimal(c2c)
+        if days is not None:
+            days_val = safe_int(days)
+            update_data["logistics_total_days"] = days_val if days_val and days_val > 0 else None
+
+        # Calculate item total for quote-level summary
+        item_total = safe_decimal(s2h) + safe_decimal(h2c) + safe_decimal(c2c)
+        total_logistics_cost += item_total
+
+        # Update item if we have data
+        if update_data:
+            try:
+                supabase.table("quote_items") \
+                    .update(update_data) \
+                    .eq("id", item_id) \
+                    .execute()
+            except Exception as e:
+                print(f"Error updating logistics for item {item_id}: {e}")
+
+    # ==========================================
+    # Quote-level variables (delivery_time, notes)
+    # ==========================================
+
+    delivery_time = form_data.get("delivery_time", "30")
+    logistics_notes = form_data.get("logistics_notes", "")
+    action = form_data.get("action", "save")
+
     # Load existing variables
     vars_result = supabase.table("quote_calculation_variables") \
         .select("id, variables") \
@@ -5807,27 +6037,14 @@ def post(session, quote_id: str,
     existing_vars = vars_result.data[0]["variables"] if vars_result.data else {}
     vars_id = vars_result.data[0]["id"] if vars_result.data else None
 
-    # Helper function
-    def safe_decimal(val, default="0"):
-        try:
-            return float(val) if val else float(default)
-        except:
-            return float(default)
-
-    def safe_int(val, default=30):
-        try:
-            return int(val) if val else default
-        except:
-            return default
-
-    # Update logistics fields in variables
+    # Update quote-level logistics fields in variables
+    # Also store total for backward compatibility with calculation engine
     updated_vars = {
         **existing_vars,
-        'logistics_supplier_hub': safe_decimal(logistics_supplier_hub),
-        'logistics_hub_customs': safe_decimal(logistics_hub_customs),
-        'logistics_customs_client': safe_decimal(logistics_customs_client),
-        'delivery_time': safe_int(delivery_time),
-        'logistics_notes': logistics_notes
+        'delivery_time': safe_int(delivery_time, 30),
+        'logistics_notes': logistics_notes,
+        # Store aggregated totals for calculation engine (backward compatibility)
+        'logistics_total_from_items': total_logistics_cost
     }
 
     # Upsert variables

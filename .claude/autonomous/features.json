@@ -1,7 +1,7 @@
 {
   "version": "3.0",
   "project": "Kvota OneStack - Quote Workflow System with Supply Chain",
-  "description": "Расширение OneStack: 4 типа компаний в цепочке поставок, IDN система, реестр инвойсов поставщиков, 12 ролей",
+  "description": "\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u0438\u0435 OneStack: 4 \u0442\u0438\u043f\u0430 \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0439 \u0432 \u0446\u0435\u043f\u043e\u0447\u043a\u0435 \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a, IDN \u0441\u0438\u0441\u0442\u0435\u043c\u0430, \u0440\u0435\u0435\u0441\u0442\u0440 \u0438\u043d\u0432\u043e\u0439\u0441\u043e\u0432 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u043e\u0432, 12 \u0440\u043e\u043b\u0435\u0439",
   "created": "2025-01-15T00:00:00Z",
   "stack": "Python FastHTML + HTMX + Supabase",
   "spec_file": ".claude/autonomous/app_spec.xml",
@@ -125,7 +125,7 @@
       "passes": true,
       "completed_at": "2026-01-15T18:30:00Z",
       "description": "Add logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_total_days",
-      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier→hub, hub→customs, customs→customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
+      "notes": "Created migration 030_extend_quote_items_logistics.sql with: 4 logistics columns (supplier\u2192hub, hub\u2192customs, customs\u2192customer costs + total_days), check constraints (non-negative costs, positive days), helper functions: get_item_logistics_total(), get_quote_logistics_summary(), is_quote_logistics_complete(), and v_quote_items_logistics view for logistics workspace."
     },
     {
       "id": "DB-014",
@@ -345,7 +345,7 @@
       "passes": true,
       "description": "Search locations with query parameter for HTMX dropdown",
       "completed_at": "2026-01-15T19:03:01.440853",
-      "notes": "Created API endpoints for location search:\n1. GET /api/locations/search - Returns HTML <option> elements for HTMX dropdown\n   - Query params: q (search query), hub_only, customs_only, limit\n   - Returns: HTML options with location badges [хаб], [таможня]\n   - Supports trigram-based partial matching\n2. GET /api/locations/search/json - Returns JSON for custom implementations\n   - Same params as HTML endpoint\n   - Returns: {items: [{value, label}], count, query}\n   - Error handling returns {error, items: []}\n3. Tests: tests/test_api_locations.py with 21 passing tests\n   - Search filtering, hub/customs filters\n   - JSON response structure\n   - Parameter parsing and validation"
+      "notes": "Created API endpoints for location search:\n1. GET /api/locations/search - Returns HTML <option> elements for HTMX dropdown\n   - Query params: q (search query), hub_only, customs_only, limit\n   - Returns: HTML options with location badges [\u0445\u0430\u0431], [\u0442\u0430\u043c\u043e\u0436\u043d\u044f]\n   - Supports trigram-based partial matching\n2. GET /api/locations/search/json - Returns JSON for custom implementations\n   - Same params as HTML endpoint\n   - Returns: {items: [{value, label}], count, query}\n   - Error handling returns {error, items: []}\n3. Tests: tests/test_api_locations.py with 21 passing tests\n   - Search filtering, hub/customs filters\n   - JSON response structure\n   - Parameter parsing and validation"
     },
     {
       "id": "API-008",
@@ -355,7 +355,7 @@
       "passes": true,
       "completed_at": "2026-01-15T19:30:00Z",
       "description": "Manage brand-supplier and brand-procurement assignments",
-      "notes": "Created services/brand_supplier_assignment_service.py with: BrandSupplierAssignment dataclass, CRUD operations (create/get/update/delete), query functions (get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier, count_brand_supplier_assignments), bulk operations (bulk_create_brand_supplier_assignments), primary supplier management (set_primary_supplier_for_brand, unset_primary_supplier_for_brand - uses DB trigger for single-primary enforcement), utility functions (get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier, get_brands_without_primary_supplier, get_brand_supplier_assignment_stats, format_brand_supplier_for_display, get_suppliers_for_brand_dropdown). Note: brand_service.py already handles brand→procurement-manager assignments (brand_assignments table). This new service handles brand→supplier assignments (brand_supplier_assignments table from DB-008). Tests in tests/test_brand_supplier_assignment_service.py with 24 passing tests. Updated services/__init__.py with all exports."
+      "notes": "Created services/brand_supplier_assignment_service.py with: BrandSupplierAssignment dataclass, CRUD operations (create/get/update/delete), query functions (get_assignments_for_brand, get_primary_supplier_for_brand, get_assignments_for_supplier, count_brand_supplier_assignments), bulk operations (bulk_create_brand_supplier_assignments), primary supplier management (set_primary_supplier_for_brand, unset_primary_supplier_for_brand - uses DB trigger for single-primary enforcement), utility functions (get_brand_supplier_mapping, get_suppliers_count_by_brand, get_brands_without_supplier, get_brands_without_primary_supplier, get_brand_supplier_assignment_stats, format_brand_supplier_for_display, get_suppliers_for_brand_dropdown). Note: brand_service.py already handles brand\u2192procurement-manager assignments (brand_assignments table). This new service handles brand\u2192supplier assignments (brand_supplier_assignments table from DB-008). Tests in tests/test_brand_supplier_assignment_service.py with 24 passing tests. Updated services/__init__.py with all exports."
     },
     {
       "id": "API-009",
@@ -444,7 +444,7 @@
       "passes": true,
       "completed_at": "2026-01-16T00:15:00Z",
       "description": "Create new versions during client_negotiation",
-      "notes": "Implementation exists in quote_version_service.py. create_quote_version() creates immutable snapshot with auto-incrementing version number, stores: variables (with Decimal→float conversion), products snapshot, calculation results, totals, exchange rate info, change_reason. list_quote_versions() returns ordered list with transformed UI-compatible data. get_quote_version() fetches specific version with full details. Exported in services/__init__.py. Created tests/test_quote_version_service.py with 16 passing tests covering version creation, incrementation, data conversion, list/get operations, and edge cases."
+      "notes": "Implementation exists in quote_version_service.py. create_quote_version() creates immutable snapshot with auto-incrementing version number, stores: variables (with Decimal\u2192float conversion), products snapshot, calculation results, totals, exchange rate info, change_reason. list_quote_versions() returns ordered list with transformed UI-compatible data. get_quote_version() fetches specific version with full details. Exported in services/__init__.py. Created tests/test_quote_version_service.py with 16 passing tests covering version creation, incrementation, data conversion, list/get operations, and edge cases."
     },
     {
       "id": "SPEC-001",
@@ -622,7 +622,7 @@
       "passes": true,
       "description": "List invoices with status filters",
       "completed_at": "2026-01-15T20:27:11.439902",
-      "notes": "Implemented supplier invoices registry page in main.py:\n- GET /supplier-invoices - List page with filters (search, supplier, status)\n- GET /supplier-invoices/{id} - Detail view with items and payments\n- Permission check: admin, procurement, or finance role required\n- Stats cards showing: total, pending, partially_paid, paid, overdue\n- Summary amounts showing pending/paid/total in RUB\n- Table columns: invoice number, supplier, date, due date, total, paid, remaining, status, actions\n- Status badges with color coding (yellow=pending, blue=partial, green=paid, red=overdue, gray=cancelled)\n- Overdue indicator (⚠️) for invoices past due date\n- Detail page shows: main info, financial summary, items table, payments table with add payment button\n- Russian localization throughout"
+      "notes": "Implemented supplier invoices registry page in main.py:\n- GET /supplier-invoices - List page with filters (search, supplier, status)\n- GET /supplier-invoices/{id} - Detail view with items and payments\n- Permission check: admin, procurement, or finance role required\n- Stats cards showing: total, pending, partially_paid, paid, overdue\n- Summary amounts showing pending/paid/total in RUB\n- Table columns: invoice number, supplier, date, due date, total, paid, remaining, status, actions\n- Status badges with color coding (yellow=pending, blue=partial, green=paid, red=overdue, gray=cancelled)\n- Overdue indicator (\u26a0\ufe0f) for invoices past due date\n- Detail page shows: main info, financial summary, items table, payments table with add payment button\n- Russian localization throughout"
     },
     {
       "id": "UI-013",
@@ -672,7 +672,7 @@
       "passes": true,
       "description": "Dropdown to select buyer company at item level",
       "completed_at": "2026-01-15T23:49:04.258549Z",
-      "notes": "Added buyer_company_dropdown to quote item (product) form. Updates: 1) Added buyer_company_dropdown() call in Add Product form with Russian labels. 2) Added buyer_company_id parameter to POST handler. 3) Fetch buyer_company_info for display in product_row. 4) Display 🏢 buyer company badge in product row with green color. Tests: 22 passing."
+      "notes": "Added buyer_company_dropdown to quote item (product) form. Updates: 1) Added buyer_company_dropdown() call in Add Product form with Russian labels. 2) Added buyer_company_id parameter to POST handler. 3) Fetch buyer_company_info for display in product_row. 4) Display \ud83c\udfe2 buyer company badge in product row with green color. Tests: 22 passing."
     },
     {
       "id": "UI-018",
@@ -682,7 +682,7 @@
       "passes": true,
       "description": "Location dropdown with search for pickup",
       "completed_at": "2026-01-16T05:15:00Z",
-      "notes": "Added pickup location dropdown to quote item (product) form:\n1. Added location_dropdown() call in Add Product form after buyer_company_dropdown\n   - name=\"pickup_location_id\", label=\"Точка отгрузки\"\n   - help_text=\"Откуда забирать товар у поставщика\"\n   - Uses /api/locations/search endpoint with HTMX\n2. Updated POST /quotes/{id}/products handler:\n   - Added pickup_location_id parameter\n   - Saves to quote_items table\n   - Fetches location info for product_row display\n3. Updated product_row() function:\n   - Added pickup_location_info parameter\n   - Displays 📍 location badge in orange (#cc6600)\n   - Shows code or city with full location in title tooltip\n   - Placeholder badge when ID exists but info not loaded\n4. Updated GET /quotes/{id}/products handler:\n   - Added pickup_location_map for batch location fetching\n   - Added get_item_pickup_location() helper function\n   - Passes pickup_location_info to product_row\nTests: 33 passing tests in tests/test_ui_quote_pickup_location.py"
+      "notes": "Added pickup location dropdown to quote item (product) form:\n1. Added location_dropdown() call in Add Product form after buyer_company_dropdown\n   - name=\"pickup_location_id\", label=\"\u0422\u043e\u0447\u043a\u0430 \u043e\u0442\u0433\u0440\u0443\u0437\u043a\u0438\"\n   - help_text=\"\u041e\u0442\u043a\u0443\u0434\u0430 \u0437\u0430\u0431\u0438\u0440\u0430\u0442\u044c \u0442\u043e\u0432\u0430\u0440 \u0443 \u043f\u043e\u0441\u0442\u0430\u0432\u0449\u0438\u043a\u0430\"\n   - Uses /api/locations/search endpoint with HTMX\n2. Updated POST /quotes/{id}/products handler:\n   - Added pickup_location_id parameter\n   - Saves to quote_items table\n   - Fetches location info for product_row display\n3. Updated product_row() function:\n   - Added pickup_location_info parameter\n   - Displays \ud83d\udccd location badge in orange (#cc6600)\n   - Shows code or city with full location in title tooltip\n   - Placeholder badge when ID exists but info not loaded\n4. Updated GET /quotes/{id}/products handler:\n   - Added pickup_location_map for batch location fetching\n   - Added get_item_pickup_location() helper function\n   - Passes pickup_location_info to product_row\nTests: 33 passing tests in tests/test_ui_quote_pickup_location.py"
     },
     {
       "id": "UI-019",
@@ -692,15 +692,17 @@
       "passes": true,
       "description": "View filtered by assigned brands with editable procurement fields",
       "completed_at": "2026-01-15T21:00:57.062633",
-      "notes": "Updated procurement workspace with v3.0 supply chain dropdowns:\n1. Replaced hardcoded country/city/payer_company selects with HTMX-powered dropdowns\n2. Added supplier_dropdown() for supplier_id selection (external suppliers)\n3. Added buyer_company_dropdown() for buyer_company_id selection (our legal entities)\n4. Added location_dropdown() for pickup_location_id selection (searchable locations)\n5. Added volume_m3 field to procurement form\n6. Created \"Цепочка поставок\" section with visual grouping\n7. Updated POST handler to save v3.0 fields: supplier_id, buyer_company_id, pickup_location_id, volume_m3\n8. Pre-fetches existing supply chain data for edit forms using supplier_map, buyer_company_map, pickup_location_map\n9. Read-only mode shows static text instead of dropdowns when can_edit=False\n10. Tests: tests/test_ui_procurement_workspace.py with 9 passing service tests, 22 skipped UI tests (require fasthtml)"
+      "notes": "Updated procurement workspace with v3.0 supply chain dropdowns:\n1. Replaced hardcoded country/city/payer_company selects with HTMX-powered dropdowns\n2. Added supplier_dropdown() for supplier_id selection (external suppliers)\n3. Added buyer_company_dropdown() for buyer_company_id selection (our legal entities)\n4. Added location_dropdown() for pickup_location_id selection (searchable locations)\n5. Added volume_m3 field to procurement form\n6. Created \"\u0426\u0435\u043f\u043e\u0447\u043a\u0430 \u043f\u043e\u0441\u0442\u0430\u0432\u043e\u043a\" section with visual grouping\n7. Updated POST handler to save v3.0 fields: supplier_id, buyer_company_id, pickup_location_id, volume_m3\n8. Pre-fetches existing supply chain data for edit forms using supplier_map, buyer_company_map, pickup_location_map\n9. Read-only mode shows static text instead of dropdowns when can_edit=False\n10. Tests: tests/test_ui_procurement_workspace.py with 9 passing service tests, 22 skipped UI tests (require fasthtml)"
     },
     {
       "id": "UI-020",
       "name": "Logistics workspace view",
       "category": "frontend",
       "priority": 1,
-      "passes": false,
-      "description": "View filtered by assigned routes with logistics fields"
+      "passes": true,
+      "description": "View filtered by assigned routes with logistics fields",
+      "completed_at": "2026-01-15T21:07:08.017846",
+      "notes": "Updated logistics workspace with v3.0 features:\n1. Item-level logistics cost fields (supplier\u2192hub, hub\u2192customs, customs\u2192customer)\n2. Item-level logistics_total_days field\n3. Pickup location display for each item (v3.0 supply chain)\n4. Supplier display for each item (v3.0 supply chain)\n5. Quote-level delivery_time and logistics_notes (kept for backward compatibility)\n6. Added head_of_logistics role access\n7. POST handler saves item-level logistics to quote_items table\n8. Summary stats show items with/without logistics data\n9. Total logistics cost aggregated from all items\nTests: tests/test_ui_logistics_workspace.py with 26 passing tests"
     },
     {
       "id": "UI-021",
