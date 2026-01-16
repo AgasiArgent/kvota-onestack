@@ -13,3 +13,6 @@
 2026-01-16 05:05:26,844 - ralph.adapter.kiro - WARNING - Kiro command 'kiro-cli' (and fallback) not found
 2026-01-16 05:05:26,845 - ralph.adapter.kiro - INFO - Kiro adapter initialized - Command: kiro-cli, Default timeout: 600s, Trust tools: True
 2026-01-16 05:05:26,851 - ralph.adapter.qchat - INFO - Q Chat adapter initialized - Command: q, Default timeout: 600s, Trust tools: True
+2026-01-16 06:01:20,927 - ralph.adapter.kiro - WARNING - Kiro command 'kiro-cli' (and fallback) not found
+2026-01-16 06:01:20,928 - ralph.adapter.kiro - INFO - Kiro adapter initialized - Command: kiro-cli, Default timeout: 600s, Trust tools: True
+2026-01-16 06:01:20,934 - ralph.adapter.qchat - INFO - Q Chat adapter initialized - Command: q, Default timeout: 600s, Trust tools: True
