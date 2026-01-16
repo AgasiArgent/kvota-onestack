@@ -7297,6 +7297,40 @@ def get(session, quote_id: str):
         "Рекомендуется 2-5% при длительных сроках поставки"
     ))
 
+    # 11. Invoice verification (v3.0 Feature UI-022)
+    # Check if supplier invoices exist for quote items
+    from services.supplier_invoice_service import get_quote_invoicing_summary
+    invoicing_summary = get_quote_invoicing_summary(quote_id)
+
+    if invoicing_summary.total_items > 0:
+        invoice_coverage = invoicing_summary.coverage_percent
+        if invoice_coverage == 100:
+            invoice_status = "ok"
+            invoice_value = f"Все позиции ({invoicing_summary.items_with_invoices}/{invoicing_summary.total_items})"
+        elif invoice_coverage > 0:
+            invoice_status = "warning"
+            invoice_value = f"{invoicing_summary.items_with_invoices}/{invoicing_summary.total_items} позиций ({invoice_coverage:.0f}%)"
+        else:
+            invoice_status = "error"
+            invoice_value = "Нет инвойсов от поставщиков"
+
+        checklist_items.append(checklist_item(
+            "11. Наличие инвойсов от поставщиков",
+            "Проверяет наличие инвойсов в реестре для всех позиций КП",
+            invoice_value,
+            invoice_status,
+            f"Сумма: ожидаемая {format_money(float(invoicing_summary.total_expected))}, подтверждённая {format_money(float(invoicing_summary.total_invoiced))}"
+            if invoicing_summary.items_with_invoices > 0 else "Добавьте инвойсы от поставщиков в реестр"
+        ))
+    else:
+        checklist_items.append(checklist_item(
+            "11. Наличие инвойсов от поставщиков",
+            "Проверяет наличие инвойсов в реестре для всех позиций КП",
+            "Нет позиций для проверки",
+            "info",
+            None
+        ))
+
     # Summary info
     customer_name = quote.get("customers", {}).get("name", "—")
     quote_total = float(quote.get("total_amount", 0) or 0)
@@ -7387,6 +7421,75 @@ def get(session, quote_id: str):
             *checklist_items,
             cls="card"
         ),
+
+        # Invoice verification detail (v3.0 Feature UI-022)
+        Div(
+            H3("🧾 Проверка инвойсов поставщиков"),
+            P("Сверка сумм и позиций с инвойсами в реестре", style="color: #666; margin-bottom: 1rem;"),
+            # Summary stats
+            Div(
+                Div(
+                    Span(f"{invoicing_summary.items_with_invoices}", style="font-size: 1.5rem; font-weight: bold;"),
+                    Span(f" / {invoicing_summary.total_items} позиций с инвойсами",
+                         style="color: #666;"),
+                    style="text-align: center;"
+                ),
+                Div(
+                    Span(f"{invoicing_summary.coverage_percent:.0f}%", style="font-size: 1.25rem; font-weight: bold; color: #22c55e;" if invoicing_summary.coverage_percent == 100 else "font-size: 1.25rem; font-weight: bold; color: #f59e0b;"),
+                    Span(" покрытие", style="color: #666;"),
+                    style="text-align: center;"
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 1rem; background: #f9fafb; border-radius: 8px; margin-bottom: 1rem;"
+            ),
+            # Items table
+            Table(
+                Thead(
+                    Tr(
+                        Th("Товар", style="text-align: left;"),
+                        Th("Кол-во", style="text-align: right;"),
+                        Th("Инвойс кол-во", style="text-align: right;"),
+                        Th("Инвойс сумма", style="text-align: right;"),
+                        Th("Статус", style="text-align: center;"),
+                    )
+                ),
+                Tbody(
+                    *[
+                        Tr(
+                            Td(item.product_name or "—", style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
+                            Td(f"{item.quote_quantity:.0f}", style="text-align: right;"),
+                            Td(
+                                f"{item.invoiced_quantity:.0f}" if item.invoice_count > 0 else "—",
+                                style="text-align: right;"
+                            ),
+                            Td(
+                                format_money(float(item.invoiced_amount)) if item.invoice_count > 0 else "—",
+                                style="text-align: right;"
+                            ),
+                            Td(
+                                Span("✓", style="color: #22c55e; font-weight: bold;") if item.is_fully_invoiced else (
+                                    Span("◐", style="color: #f59e0b;", title="Частично") if item.invoice_count > 0 else Span("✗", style="color: #ef4444;", title="Нет инвойса")
+                                ),
+                                style="text-align: center;"
+                            )
+                        )
+                        for item in invoicing_summary.items
+                    ] if invoicing_summary.items else [
+                        Tr(
+                            Td("Нет позиций для проверки", colspan="5", style="text-align: center; color: #666; padding: 1rem;")
+                        )
+                    ]
+                ),
+                style="width: 100%;"
+            ),
+            # Link to supplier invoices registry
+            Div(
+                A("📋 Открыть реестр инвойсов поставщиков →", href="/supplier-invoices",
+                  style="color: #3b82f6; text-decoration: none; font-size: 0.875rem;"),
+                style="margin-top: 1rem; text-align: right;"
+            ),
+            cls="card",
+            style="margin-top: 1rem;"
+        ) if invoicing_summary.total_items > 0 else None,
 
         # Action buttons (only if can edit)
         Div(

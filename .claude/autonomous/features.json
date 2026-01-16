@@ -719,8 +719,10 @@
       "name": "Quote controller checklist view",
       "category": "frontend",
       "priority": 2,
-      "passes": false,
-      "description": "Checklist UI for quote controller role"
+      "passes": true,
+      "completed_at": "2026-01-15T22:00:00Z",
+      "description": "Checklist UI for quote controller role",
+      "notes": "Enhanced quote control checklist view with v3.0 invoice verification:\n1. Added QuoteInvoicingItem and QuoteInvoicingSummary dataclasses to supplier_invoice_service.py\n2. Added get_quote_invoicing_summary() function to call DB RPC\n3. Added checklist item 11: 'Наличие инвойсов от поставщиков'\n4. Invoice verification shows: ok (100%), warning (partial), error (no invoices)\n5. Added detailed invoice verification section with:\n   - Summary stats (items with invoices, coverage percent)\n   - Items table (product, quantity, invoiced qty, invoiced amount, status)\n   - Status icons: ✓ (fully invoiced), ◐ (partial), ✗ (no invoice)\n   - Link to supplier invoices registry\n6. Coverage percentage calculation\n7. Exported new classes and function in services/__init__.py\n8. Tests: tests/test_ui_quote_control_checklist.py with 26 passing tests"
     },
     {
       "id": "UI-023",

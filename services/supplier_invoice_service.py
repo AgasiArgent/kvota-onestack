@@ -163,6 +163,55 @@ class InvoiceSummary:
     paid_amount: Decimal = Decimal("0.00")
 
 
+@dataclass
+class QuoteInvoicingItem:
+    """
+    Invoicing status for a single quote item.
+
+    Used in quote controller checklist to verify supplier invoices
+    are present for all quote items.
+    """
+    quote_item_id: str
+    product_name: str = ""
+
+    # Quote item details
+    quote_quantity: Decimal = Decimal("0.00")
+    quote_unit_price: Decimal = Decimal("0.00")
+
+    # Invoicing status
+    invoiced_quantity: Decimal = Decimal("0.00")
+    invoiced_amount: Decimal = Decimal("0.00")
+    invoice_count: int = 0
+    is_fully_invoiced: bool = False
+
+
+@dataclass
+class QuoteInvoicingSummary:
+    """
+    Overall invoicing summary for a quote.
+
+    Shows how many items have invoices and total amounts.
+    """
+    total_items: int = 0
+    items_with_invoices: int = 0
+    items_fully_invoiced: int = 0
+    total_expected: Decimal = Decimal("0.00")
+    total_invoiced: Decimal = Decimal("0.00")
+    items: List[QuoteInvoicingItem] = field(default_factory=list)
+
+    @property
+    def all_invoiced(self) -> bool:
+        """Check if all items are invoiced."""
+        return self.items_with_invoices == self.total_items and self.total_items > 0
+
+    @property
+    def coverage_percent(self) -> float:
+        """Calculate invoicing coverage percentage."""
+        if self.total_items == 0:
+            return 0.0
+        return (self.items_with_invoices / self.total_items) * 100
+
+
 # =============================================================================
 # PARSING FUNCTIONS
 # =============================================================================
@@ -1373,6 +1422,69 @@ def get_total_invoiced_for_quote_item(quote_item_id: str) -> Decimal:
     except Exception as e:
         print(f"Error getting total invoiced: {e}")
         return Decimal("0.00")
+
+
+def get_quote_invoicing_summary(quote_id: str) -> QuoteInvoicingSummary:
+    """
+    Get invoicing summary for all items in a quote.
+
+    Used by quote controller to verify that supplier invoices exist
+    for all quote items before approval.
+
+    Calls database function get_quote_invoicing_summary which returns:
+    - quote_item_id, product_name, quote_quantity, quote_unit_price
+    - invoiced_quantity, invoiced_amount, invoice_count, is_fully_invoiced
+
+    Args:
+        quote_id: Quote UUID
+
+    Returns:
+        QuoteInvoicingSummary with list of QuoteInvoicingItem
+    """
+    try:
+        supabase = _get_supabase()
+
+        # Call database function
+        result = supabase.rpc(
+            "get_quote_invoicing_summary",
+            {"p_quote_id": quote_id}
+        ).execute()
+
+        summary = QuoteInvoicingSummary()
+
+        if not result.data:
+            return summary
+
+        # Parse each item from the result
+        for row in result.data:
+            item = QuoteInvoicingItem(
+                quote_item_id=row.get("quote_item_id", ""),
+                product_name=row.get("product_name", "") or "",
+                quote_quantity=_parse_decimal(row.get("quote_quantity", 0)),
+                quote_unit_price=_parse_decimal(row.get("quote_unit_price", 0)),
+                invoiced_quantity=_parse_decimal(row.get("invoiced_quantity", 0)),
+                invoiced_amount=_parse_decimal(row.get("invoiced_amount", 0)),
+                invoice_count=int(row.get("invoice_count", 0) or 0),
+                is_fully_invoiced=bool(row.get("is_fully_invoiced", False)),
+            )
+            summary.items.append(item)
+
+            # Calculate totals
+            summary.total_items += 1
+            summary.total_expected += item.quote_quantity * item.quote_unit_price
+
+            if item.invoice_count > 0:
+                summary.items_with_invoices += 1
+                summary.total_invoiced += item.invoiced_amount
+
+            if item.is_fully_invoiced:
+                summary.items_fully_invoiced += 1
+
+        return summary
+
+    except Exception as e:
+        print(f"Error getting quote invoicing summary: {e}")
+        return QuoteInvoicingSummary()
 
 
 # =============================================================================

@@ -642,6 +642,8 @@ from .supplier_invoice_service import (
     SupplierInvoice,
     SupplierInvoiceItem,
     InvoiceSummary,
+    QuoteInvoicingItem,
+    QuoteInvoicingSummary,
     # Constants
     INVOICE_STATUS_PENDING,
     INVOICE_STATUS_PARTIALLY_PAID,
@@ -694,6 +696,7 @@ from .supplier_invoice_service import (
     delete_invoice_item,
     get_items_for_quote_item,
     get_total_invoiced_for_quote_item,
+    get_quote_invoicing_summary,
     # Utility functions
     get_invoice_summary,
     get_invoice_stats_by_supplier,
