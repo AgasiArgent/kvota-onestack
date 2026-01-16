@@ -729,8 +729,10 @@
       "name": "Specification controller view (before send)",
       "category": "frontend",
       "priority": 2,
-      "passes": false,
-      "description": "Spec data entry form with PDF preview"
+      "passes": true,
+      "completed_at": "2026-01-15T21:30:00Z",
+      "description": "Spec data entry form with PDF preview",
+      "notes": "Enhanced specification controller view with v3.0 features:\n1. Create form (/spec-control/create/{quote_id}):\n   - Auto-fetches seller company from quote's seller_company_id\n   - Pre-fills our_legal_entity from seller company name\n   - Customer contract dropdown with auto-numbering\n   - Auto-generate spec number as CONTRACT_NUMBER-NEXT_SPEC\n   - Customer signatory display from customer_contacts (is_signatory=true)\n2. Edit form (/spec-control/{spec_id}):\n   - Shows linked contract info (read-only when linked)\n   - Shows seller company from quote\n   - Shows signatory or warning with link to set\n3. PDF preview: /spec-control/{spec_id}/preview-pdf\n4. All 18 specification fields in organized sections\n5. Status workflow: draft → pending_review → approved → signed\n6. Tests: tests/test_ui_spec_controller_view.py with 21 passing tests"
     },
     {
       "id": "UI-024",

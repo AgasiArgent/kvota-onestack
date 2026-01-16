@@ -8647,8 +8647,12 @@ def get(session, quote_id: str):
     Create a new specification from a quote.
 
     Feature #69: Specification data entry form (create new)
+    Feature UI-023: Enhanced v3.0 integration with seller company, customer contracts, signatory
     - Shows quote summary
     - Pre-fills some fields from quote data
+    - v3.0: Auto-fetches seller company from quote's seller_company_id
+    - v3.0: Customer contract dropdown for specification numbering
+    - v3.0: Shows signatory from customer_contacts
     - Form for all 18 specification fields
     """
     redirect = require_login(session)
@@ -8665,9 +8669,9 @@ def get(session, quote_id: str):
 
     supabase = get_supabase()
 
-    # Fetch quote with customer info
+    # Fetch quote with customer info and v3.0 seller_company_id
     quote_result = supabase.table("quotes") \
-        .select("*, customers(name, inn)") \
+        .select("*, customers(id, name, inn, company_name), seller_companies(id, name, supplier_code, inn, kpp, registration_address, general_director_name, general_director_position)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -8682,7 +8686,14 @@ def get(session, quote_id: str):
 
     quote = quote_result.data[0]
     customer = quote.get("customers", {}) or {}
+    customer_id = customer.get("id")
     customer_name = customer.get("name", "Unknown")
+    customer_company = customer.get("company_name") or customer_name
+
+    # v3.0: Get seller company from quote
+    seller_company = quote.get("seller_companies", {}) or {}
+    seller_company_name = seller_company.get("name", "")
+    seller_company_id = quote.get("seller_company_id")
 
     # Check if specification already exists for this quote
     existing_spec = supabase.table("specifications") \
@@ -8711,13 +8722,38 @@ def get(session, quote_id: str):
 
     calc_vars = vars_result.data[0].get("variables", {}) if vars_result.data else {}
 
+    # v3.0: Get customer contracts for dropdown
+    customer_contracts = []
+    if customer_id:
+        contracts_result = supabase.table("customer_contracts") \
+            .select("id, contract_number, contract_date, next_specification_number, status") \
+            .eq("customer_id", customer_id) \
+            .eq("status", "active") \
+            .order("contract_date", desc=True) \
+            .execute()
+        customer_contracts = contracts_result.data or []
+
+    # v3.0: Get customer signatory from customer_contacts
+    signatory_info = None
+    if customer_id:
+        signatory_result = supabase.table("customer_contacts") \
+            .select("name, position") \
+            .eq("customer_id", customer_id) \
+            .eq("is_signatory", True) \
+            .limit(1) \
+            .execute()
+        if signatory_result.data:
+            signatory_info = signatory_result.data[0]
+
     # Pre-fill values from quote
     prefill = {
         "proposal_idn": quote.get("idn_quote", ""),
         "specification_currency": quote.get("currency", "USD"),
-        "client_legal_entity": customer_name,
+        "client_legal_entity": customer_company,
         "delivery_city_russia": calc_vars.get("delivery_city", ""),
         "cargo_pickup_country": calc_vars.get("supplier_country", ""),
+        # v3.0: Pre-fill our legal entity from seller company
+        "our_legal_entity": seller_company_name,
     }
 
     # Form fields grouped by category
@@ -8918,15 +8954,21 @@ def get(session, quote_id: str):
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 5: Legal Entities
+            # Section 5: Legal Entities (v3.0 enhanced)
             Div(
                 H3("🏢 Юридические лица"),
                 Div(
                     Div(
                         Label("Наше юридическое лицо", For="our_legal_entity"),
                         Input(name="our_legal_entity", id="our_legal_entity",
+                              value=prefill.get("our_legal_entity", ""),
                               placeholder="ООО \"Наша компания\"",
                               style="width: 100%;"),
+                        # v3.0: Show seller company from quote if available
+                        Small(
+                            f"📋 Из КП: {seller_company.get('supplier_code', '')} - {seller_company_name}",
+                            style="color: #666; display: block; margin-top: 0.25rem;"
+                        ) if seller_company_name else None,
                         cls="form-group"
                     ),
                     Div(
@@ -8942,6 +8984,58 @@ def get(session, quote_id: str):
                 ),
                 cls="card",
                 style="margin-bottom: 1.5rem;"
+            ),
+
+            # Section 6: Contract and Signatory (v3.0 NEW)
+            Div(
+                H3("📝 Договор и подписант"),
+                Div(
+                    Div(
+                        Label("Договор клиента", For="contract_id"),
+                        Select(
+                            Option("-- Без привязки к договору --", value=""),
+                            *[Option(
+                                f"{c.get('contract_number', '-')} от {c.get('contract_date', '')[:10] if c.get('contract_date') else '-'} (след.спец: №{c.get('next_specification_number', 1)})",
+                                value=c.get("id")
+                            ) for c in customer_contracts],
+                            name="contract_id",
+                            id="contract_id",
+                            style="width: 100%;"
+                        ),
+                        Small(
+                            "При выборе договора номер спецификации будет сгенерирован автоматически",
+                            style="color: #666; display: block; margin-top: 0.25rem;"
+                        ),
+                        cls="form-group"
+                    ) if customer_contracts else Div(
+                        Label("Договор клиента"),
+                        P("⚠️ У клиента нет активных договоров", style="color: #b45309; margin: 0;"),
+                        A("Создать договор →", href=f"/customer-contracts/new?customer_id={customer_id}" if customer_id else "#",
+                          style="font-size: 0.875rem;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Подписант со стороны клиента"),
+                        Div(
+                            P(
+                                Strong(signatory_info.get("name", "")),
+                                Br() if signatory_info.get("position") else None,
+                                Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
+                                style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
+                            ),
+                            Small("✓ Подписант определён из контактов клиента", style="color: #16a34a; display: block; margin-top: 0.25rem;"),
+                        ) if signatory_info else Div(
+                            P("⚠️ Подписант не указан в контактах клиента", style="color: #b45309; margin: 0;"),
+                            A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
+                              style="font-size: 0.875rem;"),
+                        ),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem; background: #fefce8;"
             ),
 
             # Action buttons
@@ -8967,6 +9061,7 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
     Create a new specification from form data.
 
     Feature #69: Specification data entry form (create POST handler)
+    Feature UI-023: v3.0 enhanced with contract_id for auto-numbering
     """
     redirect = require_login(session)
     if redirect:
@@ -9014,12 +9109,40 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         except:
             return default
 
+    # v3.0: Handle contract_id for auto-numbering
+    contract_id = kwargs.get("contract_id") or None
+    specification_number = kwargs.get("specification_number") or None
+
+    # Auto-generate specification number from contract if selected and no manual number provided
+    if contract_id and not specification_number:
+        try:
+            # Get contract info for spec numbering
+            contract_result = supabase.table("customer_contracts") \
+                .select("contract_number, next_specification_number") \
+                .eq("id", contract_id) \
+                .execute()
+
+            if contract_result.data:
+                contract = contract_result.data[0]
+                next_spec_num = contract.get("next_specification_number", 1)
+                contract_num = contract.get("contract_number", "")
+                # Format: CONTRACT_NUMBER-SPEC_NUMBER (e.g., ДП-001/2025-1)
+                specification_number = f"{contract_num}-{next_spec_num}"
+
+                # Increment next_specification_number in contract
+                supabase.table("customer_contracts") \
+                    .update({"next_specification_number": next_spec_num + 1}) \
+                    .eq("id", contract_id) \
+                    .execute()
+        except Exception as e:
+            print(f"Error auto-generating specification number: {e}")
+
     # Build specification data
     spec_data = {
         "quote_id": quote_id,
         "organization_id": org_id,
         "quote_version_id": kwargs.get("quote_version_id") or None,
-        "specification_number": kwargs.get("specification_number") or None,
+        "specification_number": specification_number,
         "proposal_idn": kwargs.get("proposal_idn") or None,
         "item_ind_sku": kwargs.get("item_ind_sku") or None,
         "sign_date": kwargs.get("sign_date") or None,
@@ -9037,6 +9160,7 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
         "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "contract_id": contract_id,  # v3.0: Link to customer contract
         "status": "draft",
         "created_by": user_id,
     }
@@ -9062,9 +9186,13 @@ def get(session, spec_id: str):
     View/edit an existing specification.
 
     Feature #69: Specification data entry form (edit existing)
+    Feature UI-023: v3.0 enhanced with seller company, contracts, signatory
     - Shows all 18 specification fields
     - Editable when status is draft or pending_review
     - Shows quote summary and customer info
+    - v3.0: Shows seller company from quote
+    - v3.0: Shows linked contract info
+    - v3.0: Shows signatory from customer_contacts
     """
     redirect = require_login(session)
     if redirect:
@@ -9080,9 +9208,9 @@ def get(session, spec_id: str):
 
     supabase = get_supabase()
 
-    # Fetch specification with quote and customer info
+    # Fetch specification with quote, customer and v3.0 seller_company, contract info
     spec_result = supabase.table("specifications") \
-        .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(name, inn))") \
+        .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, seller_company_id, customers(id, name, inn, company_name), seller_companies(id, name, supplier_code)), customer_contracts(id, contract_number, contract_date)") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -9098,10 +9226,21 @@ def get(session, spec_id: str):
     spec = spec_result.data[0]
     quote = spec.get("quotes", {}) or {}
     customer = quote.get("customers", {}) or {}
+    customer_id = customer.get("id")
     customer_name = customer.get("name", "Unknown")
+    customer_company = customer.get("company_name") or customer_name
     quote_id = spec.get("quote_id")
     status = spec.get("status", "draft")
     quote_workflow_status = quote.get("workflow_status", "draft")
+
+    # v3.0: Get seller company from quote
+    seller_company = quote.get("seller_companies", {}) or {}
+    seller_company_name = seller_company.get("name", "")
+    seller_company_code = seller_company.get("supplier_code", "")
+
+    # v3.0: Get linked contract info
+    linked_contract = spec.get("customer_contracts", {}) or {}
+    contract_id = spec.get("contract_id")
 
     # Check if editable
     is_editable = status in ["draft", "pending_review"]
@@ -9114,6 +9253,29 @@ def get(session, spec_id: str):
         .execute()
 
     versions = versions_result.data or []
+
+    # v3.0: Get customer contracts for dropdown
+    customer_contracts = []
+    if customer_id:
+        contracts_result = supabase.table("customer_contracts") \
+            .select("id, contract_number, contract_date, next_specification_number, status") \
+            .eq("customer_id", customer_id) \
+            .eq("status", "active") \
+            .order("contract_date", desc=True) \
+            .execute()
+        customer_contracts = contracts_result.data or []
+
+    # v3.0: Get customer signatory from customer_contacts
+    signatory_info = None
+    if customer_id:
+        signatory_result = supabase.table("customer_contacts") \
+            .select("name, position") \
+            .eq("customer_id", customer_id) \
+            .eq("is_signatory", True) \
+            .limit(1) \
+            .execute()
+        if signatory_result.data:
+            signatory_info = signatory_result.data[0]
 
     # Status badge helper
     def spec_status_badge(status):
@@ -9371,7 +9533,7 @@ def get(session, spec_id: str):
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 5: Legal Entities
+            # Section 5: Legal Entities (v3.0 enhanced)
             Div(
                 H3("🏢 Юридические лица"),
                 Div(
@@ -9382,6 +9544,11 @@ def get(session, spec_id: str):
                               placeholder="ООО \"Наша компания\"",
                               disabled=not is_editable,
                               style="width: 100%;"),
+                        # v3.0: Show seller company from quote if available
+                        Small(
+                            f"📋 Из КП: {seller_company_code} - {seller_company_name}",
+                            style="color: #666; display: block; margin-top: 0.25rem;"
+                        ) if seller_company_name else None,
                         cls="form-group"
                     ),
                     Div(
@@ -9400,7 +9567,64 @@ def get(session, spec_id: str):
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Feature #71: Section 6 - Signed Scan Upload (visible when status is approved or signed)
+            # Section 6: Contract and Signatory (v3.0 NEW)
+            Div(
+                H3("📝 Договор и подписант"),
+                Div(
+                    Div(
+                        Label("Договор клиента", For="contract_id"),
+                        # Show linked contract (read-only display) or dropdown to select
+                        Div(
+                            P(
+                                Strong(f"{linked_contract.get('contract_number', '-')}"),
+                                f" от {linked_contract.get('contract_date', '')[:10] if linked_contract.get('contract_date') else '-'}",
+                                style="margin: 0; padding: 0.5rem; background: #eff6ff; border-radius: 4px; border-left: 3px solid #3b82f6;"
+                            ),
+                            Small("✓ Спецификация привязана к договору", style="color: #1d4ed8; display: block; margin-top: 0.25rem;"),
+                            Input(type="hidden", name="contract_id", value=contract_id or ""),
+                        ) if linked_contract.get("contract_number") else Select(
+                            Option("-- Без привязки к договору --", value="", selected=not contract_id),
+                            *[Option(
+                                f"{c.get('contract_number', '-')} от {c.get('contract_date', '')[:10] if c.get('contract_date') else '-'}",
+                                value=c.get("id"),
+                                selected=c.get("id") == contract_id
+                            ) for c in customer_contracts],
+                            name="contract_id",
+                            id="contract_id",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ) if customer_contracts else Div(
+                            P("⚠️ У клиента нет активных договоров", style="color: #b45309; margin: 0;"),
+                            A("Создать договор →", href=f"/customer-contracts/new?customer_id={customer_id}" if customer_id else "#",
+                              style="font-size: 0.875rem;"),
+                        ),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Подписант со стороны клиента"),
+                        Div(
+                            P(
+                                Strong(signatory_info.get("name", "")),
+                                Br() if signatory_info.get("position") else None,
+                                Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
+                                style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
+                            ),
+                            Small("✓ Подписант определён из контактов клиента", style="color: #16a34a; display: block; margin-top: 0.25rem;"),
+                        ) if signatory_info else Div(
+                            P("⚠️ Подписант не указан в контактах клиента", style="color: #b45309; margin: 0;"),
+                            A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
+                              style="font-size: 0.875rem;"),
+                        ),
+                        cls="form-group"
+                    ),
+                    cls="grid",
+                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="margin-bottom: 1.5rem; background: #fefce8;"
+            ),
+
+            # Feature #71: Section 7 - Signed Scan Upload (visible when status is approved or signed)
             Div(
                 H3("✍️ Подписанный скан"),
                 # Show current scan if exists

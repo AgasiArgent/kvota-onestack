@@ -277,8 +277,24 @@ Start with DB-001 (suppliers table) and work through sequentially.
     - Russian UI labels ("Поставщик", "Внешний поставщик для данной позиции")
     - Tests: tests/test_ui_quote_item_supplier.py (7 passed, 8 skipped due to import)
 
+70. **UI-023** (Specification controller view - before send) - ✅ COMPLETE
+    - Enhanced spec controller view with v3.0 features:
+    - Create form (/spec-control/create/{quote_id}):
+      - Auto-fetches seller company from quote's seller_company_id
+      - Pre-fills our_legal_entity from seller company name
+      - Customer contract dropdown with auto-numbering (CONTRACT_NUMBER-NEXT_SPEC)
+      - Customer signatory display from customer_contacts (is_signatory=true)
+      - Warning messages with links when contract/signatory not set
+    - Edit form (/spec-control/{spec_id}):
+      - Shows linked contract info (read-only when linked)
+      - Shows seller company from quote (info badge)
+      - Shows signatory or warning with link to set
+    - PDF preview: /spec-control/{spec_id}/preview-pdf
+    - All 18 specification fields in organized sections (6 sections)
+    - Status workflow: draft → pending_review → approved → signed
+    - Tests: tests/test_ui_spec_controller_view.py with 21 passing tests
+
 ### Progress:
-- v3.0 features complete: **67/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 16 UI features done!)
-- Completed this iteration: UI-016 (Quote item form: supplier selector)
-- Commit: 666c46b - feat(UI-016): Add supplier selector to quote item form
-- Next feature: **UI-017** (Quote item form: buyer company selector)
+- v3.0 features complete: **68/94** (26 DB + 2 IDN + 11 API + 6 WF + 3 SPEC + 3 DEAL + 17 UI features done!)
+- Completed this iteration: UI-023 (Specification controller view - before send)
+- Next feature: **UI-024** (Specification controller view - after signature)
