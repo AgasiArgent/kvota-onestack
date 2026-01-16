@@ -16,9 +16,11 @@ from typing import Dict, Any, Optional
 # Check if fasthtml is available for UI component tests
 try:
     from main import supplier_dropdown, buyer_company_dropdown, location_dropdown
+    from fasthtml.common import to_xml
     FASTHTML_AVAILABLE = True
 except ImportError:
     FASTHTML_AVAILABLE = False
+    to_xml = str  # Fallback
 
 
 # Skip marker for tests requiring fasthtml
@@ -252,8 +254,8 @@ class TestDropdownAttributes:
             dropdown_id="sup-test123",
         )
 
-        # Convert to string to check content
-        dropdown_str = str(dropdown)
+        # Convert to HTML string to check content
+        dropdown_str = to_xml(dropdown)
 
         # Should have search endpoint
         assert "/api/suppliers/search" in dropdown_str
@@ -271,7 +273,7 @@ class TestDropdownAttributes:
             dropdown_id="buy-test123",
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
 
         assert "/api/buyer-companies/search" in dropdown_str
         assert "hx-get" in dropdown_str
@@ -285,7 +287,7 @@ class TestDropdownAttributes:
             dropdown_id="loc-test123",
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
 
         assert "/api/locations/search" in dropdown_str
         assert "hx-get" in dropdown_str
@@ -308,7 +310,7 @@ class TestDropdownHelpText:
             help_text=help_text,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert help_text in dropdown_str
 
     @requires_fasthtml
@@ -321,7 +323,7 @@ class TestDropdownHelpText:
             help_text=help_text,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert help_text in dropdown_str
 
     @requires_fasthtml
@@ -334,7 +336,7 @@ class TestDropdownHelpText:
             help_text=help_text,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert help_text in dropdown_str
 
 
@@ -431,7 +433,7 @@ class TestFormFieldNames:
             label="Поставщик",
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert expected_name in dropdown_str
 
     @requires_fasthtml
@@ -445,7 +447,7 @@ class TestFormFieldNames:
             label="Компания-покупатель",
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert expected_name in dropdown_str
 
     @requires_fasthtml
@@ -459,7 +461,7 @@ class TestFormFieldNames:
             label="Точка отгрузки",
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert expected_name in dropdown_str
 
 
@@ -495,19 +497,19 @@ class TestAPIEndpoints:
     def test_suppliers_search_endpoint_exists(self):
         """Suppliers search endpoint should be defined in routes"""
         # Check that the endpoint pattern is used in the dropdown
-        dropdown_str = str(supplier_dropdown(name="s", label="S"))
+        dropdown_str = to_xml(supplier_dropdown(name="s", label="S"))
         assert "/api/suppliers/search" in dropdown_str
 
     @requires_fasthtml
     def test_buyer_companies_search_endpoint_exists(self):
         """Buyer companies search endpoint should be defined in routes"""
-        dropdown_str = str(buyer_company_dropdown(name="b", label="B"))
+        dropdown_str = to_xml(buyer_company_dropdown(name="b", label="B"))
         assert "/api/buyer-companies/search" in dropdown_str
 
     @requires_fasthtml
     def test_locations_search_endpoint_exists(self):
         """Locations search endpoint should be defined in routes"""
-        dropdown_str = str(location_dropdown(name="l", label="L"))
+        dropdown_str = to_xml(location_dropdown(name="l", label="L"))
         assert "/api/locations/search" in dropdown_str
 
 
@@ -561,7 +563,7 @@ class TestBackwardCompatibility:
             selected_label=None,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert "Выберите поставщика" in dropdown_str
 
     @requires_fasthtml
@@ -574,7 +576,7 @@ class TestBackwardCompatibility:
             selected_label=None,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert "Выберите компанию" in dropdown_str
 
     @requires_fasthtml
@@ -587,7 +589,7 @@ class TestBackwardCompatibility:
             selected_label=None,
         )
 
-        dropdown_str = str(dropdown)
+        dropdown_str = to_xml(dropdown)
         assert "Выберите локацию" in dropdown_str
 
 

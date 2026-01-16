@@ -115,10 +115,11 @@ class TestProductRow:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import product_row
+            from fasthtml.common import to_xml
 
             result = product_row(mock_quote_item, "RUB")
-            # Convert to string to check content
-            result_str = str(result)
+            # Convert to HTML string to check content
+            result_str = to_xml(result)
 
             assert "Test Product" in result_str
             assert "SKU-001" in result_str
@@ -133,9 +134,10 @@ class TestProductRow:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import product_row
+            from fasthtml.common import to_xml
 
             result = product_row(mock_quote_item_with_supplier, "RUB", supplier_info=mock_supplier)
-            result_str = str(result)
+            result_str = to_xml(result)
 
             # Should contain supplier icon/badge
             assert "TSC" in result_str or "Test Supplier" in result_str
@@ -148,9 +150,10 @@ class TestProductRow:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import product_row
+            from fasthtml.common import to_xml
 
             result = product_row(mock_quote_item_with_supplier, "RUB")
-            result_str = str(result)
+            result_str = to_xml(result)
 
             # Should contain supplier indicator (just the icon)
             # When supplier_id exists but supplier_info not passed
@@ -182,9 +185,10 @@ class TestSupplierDropdown:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import supplier_dropdown
+            from fasthtml.common import to_xml
 
             result = supplier_dropdown()
-            result_str = str(result)
+            result_str = to_xml(result)
 
             # Should contain default label
             assert "Поставщик" in result_str or "supplier_id" in result_str
@@ -197,6 +201,7 @@ class TestSupplierDropdown:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import supplier_dropdown
+            from fasthtml.common import to_xml
 
             result = supplier_dropdown(
                 name="custom_supplier",
@@ -204,7 +209,7 @@ class TestSupplierDropdown:
                 required=True,
                 placeholder="Custom placeholder..."
             )
-            result_str = str(result)
+            result_str = to_xml(result)
 
             assert "Custom Label" in result_str or "custom_supplier" in result_str
         except ImportError as e:
@@ -357,9 +362,10 @@ class TestUILabels:
             import sys
             sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
             from main import supplier_dropdown
+            from fasthtml.common import to_xml
 
             result = supplier_dropdown()
-            result_str = str(result)
+            result_str = to_xml(result)
 
             # Should use Russian label
             assert "Поставщик" in result_str
