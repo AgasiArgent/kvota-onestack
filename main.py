@@ -4647,6 +4647,63 @@ def get(quote_id: str, session):
     my_items = [item for item in all_items
                 if item.get("brand", "").lower() in my_brands_lower]
 
+    # v3.0: Fetch supplier info for items that have supplier_id
+    supplier_map = {}
+    supplier_ids = [item.get("supplier_id") for item in my_items if item.get("supplier_id")]
+    if supplier_ids:
+        try:
+            from services.supplier_service import get_supplier, format_supplier_for_dropdown
+            for supplier_id in set(supplier_ids):
+                try:
+                    supplier = get_supplier(supplier_id)
+                    if supplier:
+                        supplier_map[supplier_id] = {
+                            "id": supplier.id,
+                            "label": format_supplier_for_dropdown(supplier)
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+    # v3.0: Fetch buyer company info for items that have buyer_company_id
+    buyer_company_map = {}
+    buyer_company_ids = [item.get("buyer_company_id") for item in my_items if item.get("buyer_company_id")]
+    if buyer_company_ids:
+        try:
+            from services.buyer_company_service import get_buyer_company, format_buyer_company_for_dropdown
+            for buyer_company_id in set(buyer_company_ids):
+                try:
+                    bc = get_buyer_company(buyer_company_id)
+                    if bc:
+                        buyer_company_map[buyer_company_id] = {
+                            "id": bc.id,
+                            "label": format_buyer_company_for_dropdown(bc)
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+    # v3.0: Fetch pickup location info for items that have pickup_location_id
+    pickup_location_map = {}
+    pickup_location_ids = [item.get("pickup_location_id") for item in my_items if item.get("pickup_location_id")]
+    if pickup_location_ids:
+        try:
+            from services.location_service import get_location, format_location_for_dropdown
+            for pickup_location_id in set(pickup_location_ids):
+                try:
+                    loc = get_location(pickup_location_id)
+                    if loc:
+                        pickup_location_map[pickup_location_id] = {
+                            "id": loc.id,
+                            "label": format_location_for_dropdown(loc).get("label", loc.display_name or f"{loc.city}, {loc.country}")
+                        }
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
     # Calculate progress for MY items
     total_items = len(my_items)
     completed_items = len([i for i in my_items if i.get("procurement_status") == "completed"])
@@ -4672,16 +4729,24 @@ def get(quote_id: str, session):
         quantity = item.get("quantity", 1)
         is_completed = item.get("procurement_status") == "completed"
 
-        # Current values
+        # Current values - basic fields
         base_price = item.get("base_price_vat", "")
         weight = item.get("weight_in_kg", "")
-        supplier_country = item.get("supplier_country", "")
-        supplier_city = item.get("supplier_city", "")
+        volume = item.get("volume_m3", "")
         production_time = item.get("production_time_days", "")
-        payer_company = item.get("payer_company", "")
         advance_percent = item.get("advance_to_supplier_percent", 100)
         payment_terms = item.get("supplier_payment_terms", "")
         notes = item.get("procurement_notes", "")
+
+        # v3.0 supply chain fields
+        supplier_id = item.get("supplier_id")
+        buyer_company_id = item.get("buyer_company_id")
+        pickup_location_id = item.get("pickup_location_id")
+
+        # Get pre-selected labels from maps (populated above)
+        supplier_info = supplier_map.get(supplier_id) if supplier_id else None
+        buyer_company_info = buyer_company_map.get(buyer_company_id) if buyer_company_id else None
+        pickup_location_info = pickup_location_map.get(pickup_location_id) if pickup_location_id else None
 
         # Status badge
         status_style = "background: #dcfce7; color: #166534;" if is_completed else "background: #fef3c7; color: #92400e;"
@@ -4706,9 +4771,64 @@ def get(quote_id: str, session):
                 style="display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: #666;"
             ) if name else None,
 
-            # Editable fields in grid
+            # v3.0 Supply Chain section (collapsible for clarity)
             Div(
-                # Row 1: Price, Weight, Country, City
+                H4("🔗 Цепочка поставок", style="margin: 0 0 1rem; color: #1f2937; font-size: 0.95rem;"),
+
+                # Row 1: Supplier, Buyer Company, Pickup Location
+                Div(
+                    # Supplier dropdown (v3.0 - searchable)
+                    supplier_dropdown(
+                        name=f"supplier_id_{item_id}",
+                        label="Поставщик",
+                        selected_id=supplier_id,
+                        selected_label=supplier_info["label"] if supplier_info else None,
+                        placeholder="Поиск поставщика...",
+                        help_text="Внешний поставщик товара",
+                        dropdown_id=f"sup-{item_id[:8]}",
+                    ) if can_edit else Label(
+                        "Поставщик",
+                        Div(supplier_info["label"] if supplier_info else "— не выбран —",
+                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
+                    ),
+
+                    # Buyer Company dropdown (v3.0 - searchable)
+                    buyer_company_dropdown(
+                        name=f"buyer_company_id_{item_id}",
+                        label="Компания-покупатель",
+                        selected_id=buyer_company_id,
+                        selected_label=buyer_company_info["label"] if buyer_company_info else None,
+                        placeholder="Поиск компании...",
+                        help_text="Наше юрлицо для закупки",
+                        dropdown_id=f"buy-{item_id[:8]}",
+                    ) if can_edit else Label(
+                        "Компания-покупатель",
+                        Div(buyer_company_info["label"] if buyer_company_info else "— не выбрана —",
+                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
+                    ),
+
+                    # Pickup Location dropdown (v3.0 - searchable)
+                    location_dropdown(
+                        name=f"pickup_location_id_{item_id}",
+                        label="Точка отгрузки",
+                        selected_id=pickup_location_id,
+                        selected_label=pickup_location_info["label"] if pickup_location_info else None,
+                        placeholder="Поиск локации...",
+                        help_text="Откуда забирать товар",
+                        dropdown_id=f"loc-{item_id[:8]}",
+                    ) if can_edit else Label(
+                        "Точка отгрузки",
+                        Div(pickup_location_info["label"] if pickup_location_info else "— не выбрана —",
+                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
+                    ),
+
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                ),
+                style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;"
+            ),
+
+            # Row 2: Price, Weight, Volume, Production time
+            Div(
                 Label("Цена за ед. (с НДС) *",
                     Input(name=f"base_price_vat_{item_id}", type="number", step="0.01", min="0",
                           value=str(base_price) if base_price else "",
@@ -4723,36 +4843,13 @@ def get(quote_id: str, session):
                           disabled=not can_edit),
                     style="flex: 1;"
                 ),
-                Label("Страна поставщика",
-                    Select(
-                        Option("— Выберите —", value=""),
-                        Option("Китай", value="Китай", selected=(supplier_country == "Китай")),
-                        Option("Турция", value="Турция", selected=(supplier_country == "Турция")),
-                        Option("Россия", value="Россия", selected=(supplier_country == "Россия")),
-                        Option("Германия", value="Германия", selected=(supplier_country == "Германия")),
-                        Option("Италия", value="Италия", selected=(supplier_country == "Италия")),
-                        Option("Корея", value="Корея", selected=(supplier_country == "Корея")),
-                        Option("Тайвань", value="Тайвань", selected=(supplier_country == "Тайвань")),
-                        Option("Индия", value="Индия", selected=(supplier_country == "Индия")),
-                        Option("США", value="США", selected=(supplier_country == "США")),
-                        Option("Другое", value="other", selected=(supplier_country and supplier_country not in ["Китай", "Турция", "Россия", "Германия", "Италия", "Корея", "Тайвань", "Индия", "США"])),
-                        name=f"supplier_country_{item_id}",
-                        disabled=not can_edit
-                    ),
-                    style="flex: 1;"
-                ),
-                Label("Город поставщика",
-                    Input(name=f"supplier_city_{item_id}", type="text",
-                          value=supplier_city or "",
-                          placeholder="Шанхай",
+                Label("Объём, м³",
+                    Input(name=f"volume_m3_{item_id}", type="number", step="0.001", min="0",
+                          value=str(volume) if volume else "",
+                          placeholder="0.01",
                           disabled=not can_edit),
                     style="flex: 1;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-            ),
-
-            # Row 2: Production time, Payer company, Advance %, Payment terms
-            Div(
                 Label("Срок пр-ва, дней",
                     Input(name=f"production_time_days_{item_id}", type="number", min="0",
                           value=str(production_time) if production_time else "",
@@ -4760,17 +4857,11 @@ def get(quote_id: str, session):
                           disabled=not can_edit),
                     style="flex: 1;"
                 ),
-                Label("Компания-плательщик",
-                    Select(
-                        Option("— Выберите —", value=""),
-                        Option("ООО Квота", value="ООО Квота", selected=(payer_company == "ООО Квота")),
-                        Option("ООО Квота Групп", value="ООО Квота Групп", selected=(payer_company == "ООО Квота Групп")),
-                        Option("ИП Иванов", value="ИП Иванов", selected=(payer_company == "ИП Иванов")),
-                        name=f"payer_company_{item_id}",
-                        disabled=not can_edit
-                    ),
-                    style="flex: 1;"
-                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+            ),
+
+            # Row 3: Advance %, Payment terms
+            Div(
                 Label("Аванс поставщику, %",
                     Input(name=f"advance_to_supplier_percent_{item_id}", type="number", min="0", max="100",
                           value=str(advance_percent) if advance_percent is not None else "100",
@@ -4783,9 +4874,9 @@ def get(quote_id: str, session):
                           value=payment_terms or "",
                           placeholder="30% аванс, 70% до отгрузки",
                           disabled=not can_edit),
-                    style="flex: 1;"
+                    style="flex: 2;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1rem;"
             ),
 
             # Notes field
@@ -4999,23 +5090,39 @@ async def post(quote_id: str, session, request):
         if weight:
             update_data["weight_in_kg"] = float(weight)
 
-        supplier_country = form_data.get(f"supplier_country_{item_id}")
-        if supplier_country:
-            update_data["supplier_country"] = supplier_country
+        # v3.0: Volume field
+        volume = form_data.get(f"volume_m3_{item_id}")
+        if volume:
+            update_data["volume_m3"] = float(volume)
 
-        supplier_city = form_data.get(f"supplier_city_{item_id}")
-        update_data["supplier_city"] = supplier_city or None
+        # v3.0: Supply chain fields (replacing old supplier_country/city/payer_company)
+        supplier_id = form_data.get(f"supplier_id_{item_id}")
+        if supplier_id:
+            update_data["supplier_id"] = supplier_id
+        else:
+            update_data["supplier_id"] = None
+
+        buyer_company_id = form_data.get(f"buyer_company_id_{item_id}")
+        if buyer_company_id:
+            update_data["buyer_company_id"] = buyer_company_id
+        else:
+            update_data["buyer_company_id"] = None
+
+        pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
+        if pickup_location_id:
+            update_data["pickup_location_id"] = pickup_location_id
+        else:
+            update_data["pickup_location_id"] = None
 
         production_time = form_data.get(f"production_time_days_{item_id}")
         if production_time:
             update_data["production_time_days"] = int(production_time)
 
-        payer_company = form_data.get(f"payer_company_{item_id}")
-        update_data["payer_company"] = payer_company or None
-
         advance_percent = form_data.get(f"advance_to_supplier_percent_{item_id}")
         if advance_percent:
             update_data["advance_to_supplier_percent"] = float(advance_percent)
+        else:
+            update_data["supplier_advance_percent"] = None
 
         payment_terms = form_data.get(f"supplier_payment_terms_{item_id}")
         update_data["supplier_payment_terms"] = payment_terms or None
