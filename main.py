@@ -14,6 +14,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Initialize Sentry for error tracking (must be before app creation)
+import sentry_sdk
+
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        send_default_pii=True,
+        traces_sample_rate=1.0,
+        environment=os.getenv("SENTRY_ENVIRONMENT", "production" if not os.getenv("DEBUG") else "development"),
+    )
+
 from services.database import get_supabase, get_anon_client
 
 # Import export services
