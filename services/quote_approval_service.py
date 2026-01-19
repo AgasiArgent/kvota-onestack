@@ -217,7 +217,7 @@ def approve_department(
 
     try:
         # 1. Get current quote
-        result = supabase.table('quotes').select('id, status, approvals') \
+        result = supabase.table('quotes').select('id, status, workflow_status, approvals') \
             .eq('id', quote_id) \
             .eq('organization_id', organization_id) \
             .execute()
@@ -226,7 +226,7 @@ def approve_department(
             return False, "Quote not found"
 
         quote = result.data[0]
-        status = quote.get('status')
+        status = quote.get('workflow_status') or quote.get('status', 'draft')
         approvals = quote.get('approvals', {})
 
         # 2. Check status allows approval (not yet approved by spec controller)
@@ -258,7 +258,7 @@ def approve_department(
         if are_all_departments_approved(approvals):
             # All approved! Change status to 'pending_spec_control'
             # This signals to spec controller that they can create the specification
-            update_data['status'] = 'pending_spec_control'
+            update_data['workflow_status'] = 'pending_spec_control'
             message = f"{DEPARTMENT_NAMES[department]} одобрило. КП готово к созданию спецификации!"
         else:
             message = f"{DEPARTMENT_NAMES[department]} одобрило КП"
@@ -312,7 +312,7 @@ def reject_department(
 
     try:
         # 1. Get current quote
-        result = supabase.table('quotes').select('id, status, approvals') \
+        result = supabase.table('quotes').select('id, status, workflow_status, approvals') \
             .eq('id', quote_id) \
             .eq('organization_id', organization_id) \
             .execute()
@@ -343,8 +343,9 @@ def reject_department(
 
         # 4. If quote was "pending_spec_control", revert to "pending_review"
         update_data = {'approvals': approvals, 'updated_at': datetime.now().isoformat()}
-        if quote.get('status') == 'pending_spec_control':
-            update_data['status'] = 'pending_review'
+        status = quote.get('workflow_status') or quote.get('status', 'draft')
+        if status == 'pending_spec_control':
+            update_data['workflow_status'] = 'pending_review'
 
         # 5. Save to database
         supabase.table('quotes').update(update_data) \
@@ -402,7 +403,7 @@ def get_approval_status(quote_id: str, organization_id: str) -> Optional[Dict]:
 
     try:
         # Get quote with approvals
-        result = supabase.table('quotes').select('id, status, approvals') \
+        result = supabase.table('quotes').select('id, status, workflow_status, approvals') \
             .eq('id', quote_id) \
             .eq('organization_id', organization_id) \
             .execute()
