@@ -59,6 +59,10 @@ from services.deal_service import count_deals_by_status, get_deals_by_status
 
 # Import specification service (Feature #86)
 from services.specification_service import count_specifications_by_status
+from services.specification_approval_service import (
+    get_approval_status, approve_department, reject_department,
+    user_can_approve_department, DEPARTMENT_NAMES
+)
 
 # Import calculation engine
 from calculation_engine import calculate_multiproduct_quote
@@ -9342,6 +9346,9 @@ def get(session, spec_id: str):
         label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
         return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
 
+    # Get approval status for multi-department workflow
+    approval_status = get_approval_status(spec_id, org_id) or {}
+
     # Safe workflow progress bar with error handling
     try:
         progress_bar = workflow_progress_bar(quote_workflow_status)
@@ -9435,6 +9442,84 @@ def get(session, spec_id: str):
             cls="card",
             style="background: #fee2e2; border-left: 4px solid #dc2626; margin-bottom: 1.5rem;"
         ) if user_has_any_role(session, ["admin"]) else None,
+
+        # Multi-department approval progress (Bug #8 follow-up)
+        Div(
+            H3("📋 Прогресс согласования спецификации", style="margin-bottom: 1rem;"),
+
+            # Progress bar visual
+            Div(
+                *[
+                    Div(
+                        Div(
+                            dept_name,
+                            style=f"text-align: center; font-size: 0.75rem; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else '#6b7280'};"
+                        ),
+                        Div(
+                            "✅" if approval_status.get(dept, {}).get('approved') else
+                            ("⏳" if approval_status.get(dept, {}).get('can_approve') else "🚫"),
+                            style="font-size: 1.5rem; margin: 0.5rem 0;"
+                        ),
+                        style=f"flex: 1; padding: 0.5rem; background: {'#d1fae5' if approval_status.get(dept, {}).get('approved') else '#f3f4f6'}; border-radius: 8px; margin: 0 0.25rem;"
+                    )
+                    for dept, dept_name in [('procurement', 'Закупки'), ('logistics', 'Логистика'),
+                                            ('customs', 'Таможня'), ('sales', 'Продажи'), ('control', 'Контроль')]
+                ],
+                style="display: flex; margin-bottom: 1.5rem;"
+            ),
+
+            # Department status details
+            *[
+                Div(
+                    # Department name and status
+                    Div(
+                        Span(f"{'✅' if dept_status.get('approved') else ('⏳' if dept_status.get('can_approve') else '🚫')} {DEPARTMENT_NAMES.get(dept, dept)}",
+                             style=f"font-weight: 600; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#6b7280')};"),
+                        Span(" - Одобрено" if dept_status.get('approved') else
+                             (" - Ожидает проверки" if dept_status.get('can_approve') else " - Недоступно"),
+                             style="margin-left: 0.5rem; color: #6b7280;"),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+
+                    # Approval info or blocking info
+                    (Div(
+                        P(f"Одобрил: {dept_status.get('approved_by_name') or dept_status.get('approved_by') or 'Неизвестно'}",
+                          style="font-size: 0.875rem; margin: 0.25rem 0; color: #6b7280;") if dept_status.get('approved_by') else None,
+                        P(f"Дата: {dept_status.get('approved_at', '').split('T')[0] if dept_status.get('approved_at') else ''}",
+                          style="font-size: 0.875rem; margin: 0.25rem 0; color: #6b7280;") if dept_status.get('approved_at') else None,
+                        P(f"Комментарий: {dept_status.get('comments')}",
+                          style="font-size: 0.875rem; margin: 0.25rem 0; font-style: italic;") if dept_status.get('comments') else None,
+                    ) if dept_status.get('approved') else
+                    (Div(
+                        Form(
+                            Input(type="hidden", name="action", value="department_approve"),
+                            Input(type="hidden", name="department", value=dept),
+                            Div(
+                                Textarea(name="comments", placeholder="Комментарий (необязательно)",
+                                        rows="2", style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;"),
+                                style="margin-bottom: 0.5rem;"
+                            ),
+                            Button("✅ Одобрить", type="submit",
+                                   style="background: #10b981; border-color: #10b981; margin-right: 0.5rem;"),
+                            action=f"/spec-control/{spec_id}",
+                            method="POST"
+                        ),
+                        style="margin-top: 0.5rem;"
+                    ) if dept_status.get('can_approve') and user_can_approve_department(session, dept) and status == 'pending_review' else
+                    (Div(
+                        P(f"Требуется одобрение: {', '.join([DEPARTMENT_NAMES.get(d, d) for d in dept_status.get('blocking_departments', [])])}",
+                          style="font-size: 0.875rem; color: #dc2626; margin-top: 0.5rem;")
+                    ) if dept_status.get('blocking_departments') else None))),
+
+                    cls="card",
+                    style="margin-bottom: 1rem; padding: 1rem; background: #f9fafb;"
+                )
+                for dept, dept_status in [(d, approval_status.get(d, {})) for d in ['procurement', 'logistics', 'customs', 'sales', 'control']]
+            ],
+
+            cls="card",
+            style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
+        ) if status in ['pending_review', 'approved'] and approval_status else None,
 
         Form(
             # Hidden fields
@@ -9890,6 +9975,26 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
             .update({"status": new_status}) \
             .eq("id", spec_id) \
             .execute()
+
+        return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+    # Bug #8 follow-up: Multi-department approval
+    if action == "department_approve":
+        department = kwargs.get("department")
+        comments = kwargs.get("comments")
+
+        if not department:
+            return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+        # Check if user has permission for this department
+        if not user_can_approve_department(session, department):
+            return RedirectResponse("/unauthorized", status_code=303)
+
+        # Approve the department
+        success, message = approve_department(spec_id, org_id, department, user_id, comments)
+
+        # TODO: Add flash message support to show success/error message
+        print(f"[APPROVAL] {message}")
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 

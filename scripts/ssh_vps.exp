@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+
+set timeout 20
+set password "V5z!s%PjGVeD"
+set host "217.26.25.207"
+set user "root"
+
+# Get command from command line argument
+set command [lindex $argv 0]
+
+spawn ssh -o StrictHostKeyChecking=no $user@$host $command
+
+expect {
+    "*password:" {
+        send "$password\r"
+        exp_continue
+    }
+    eof
+}
