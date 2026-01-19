@@ -9220,7 +9220,7 @@ def get(session, spec_id: str):
     # Fetch specification with quote, customer and contract info
     try:
         spec_result = supabase.table("specifications") \
-            .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn)), customer_contracts(id, contract_number, contract_date)") \
+            .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn)), customer_contracts!contract_id(id, contract_number, contract_date)") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
             .execute()
