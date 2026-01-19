@@ -9934,10 +9934,6 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
     - admin_change_status: Admin-only action to directly change status to any value
     - department_approve: Approve specification for a specific department
     """
-    # DEBUG: Log all received parameters
-    print(f"[POST DEBUG] spec_id={spec_id}, action='{action}', new_status='{new_status}', department='{department}', comments='{comments}'")
-    print(f"[POST DEBUG] kwargs={kwargs}")
-
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -9987,20 +9983,14 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
     # Bug #8 follow-up: Multi-department approval
     if action == "department_approve":
         if not department:
-            print("[APPROVAL] No department specified")
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
-
-        print(f"[APPROVAL] Department approval request: department={department}, comments={comments}")
 
         # Check if user has permission for this department
         if not user_can_approve_department(session, department):
-            print(f"[APPROVAL] User does not have permission for department: {department}")
             return RedirectResponse("/unauthorized", status_code=303)
 
         # Approve the department
-        success, message = approve_department(spec_id, org_id, department, user_id, comments)
-
-        print(f"[APPROVAL] Result: success={success}, message={message}")
+        approve_department(spec_id, org_id, department, user_id, comments)
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
