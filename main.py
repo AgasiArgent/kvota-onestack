@@ -9217,10 +9217,12 @@ def get(session, spec_id: str):
 
     supabase = get_supabase()
 
-    # Fetch specification with quote, customer and contract info
+    # Fetch specification with quote and customer info
+    # Note: contract_id FK not yet applied in production DB (migration 036 pending)
+    # Contracts are fetched separately below (lines 9298-9306)
     try:
         spec_result = supabase.table("specifications") \
-            .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn)), customer_contracts!contract_id(id, contract_number, contract_date)") \
+            .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn))") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
             .execute()
@@ -9278,9 +9280,21 @@ def get(session, spec_id: str):
     seller_company_name = ""
     seller_company_code = ""
 
-    # v3.0: Get linked contract info
-    linked_contract = spec.get("customer_contracts", {}) or {}
+    # v3.0: Get linked contract info (if contract_id exists)
     contract_id = spec.get("contract_id")
+    linked_contract = {}
+    if contract_id:
+        try:
+            linked_contract_result = supabase.table("customer_contracts") \
+                .select("id, contract_number, contract_date") \
+                .eq("id", contract_id) \
+                .limit(1) \
+                .execute()
+            if linked_contract_result.data:
+                linked_contract = linked_contract_result.data[0]
+        except Exception as e:
+            print(f"[WARNING] Could not fetch linked contract {contract_id}: {e}")
+            linked_contract = {}
 
     # Check if editable
     is_editable = status in ["draft", "pending_review"]
