@@ -9852,21 +9852,29 @@ def post(session, spec_id: str, action: str = "save", **kwargs):
 
     # Bug #8: Admin override - allow admins to change status directly
     if action == "admin_change_status":
+        print(f"[DEBUG] Admin status change requested: action={action}, kwargs={kwargs}")
+
         if not user_has_any_role(session, ["admin"]):
+            print(f"[DEBUG] User is not admin, redirecting to unauthorized")
             return RedirectResponse("/unauthorized", status_code=303)
 
         new_status = kwargs.get("new_status", current_status)
         valid_statuses = ["draft", "pending_review", "approved", "signed"]
 
+        print(f"[DEBUG] new_status={new_status}, current_status={current_status}, valid={new_status in valid_statuses}")
+
         if new_status not in valid_statuses:
+            print(f"[DEBUG] Invalid status, redirecting")
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
         # Update only the status
+        print(f"[DEBUG] Updating status from {current_status} to {new_status}")
         supabase.table("specifications") \
             .update({"status": new_status}) \
             .eq("id", spec_id) \
             .execute()
 
+        print(f"[DEBUG] Status updated successfully, redirecting")
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
     # Check if editable (for regular save/submit/approve actions)
