@@ -9384,7 +9384,7 @@ def get(session, spec_id: str):
         # Admin panel for status management (Bug #8: Allow admins to move specs between stages)
         Div(
             H3("🔧 Админ-панель управления статусом", style="margin-bottom: 1rem; color: #dc2626;"),
-            P(f"Текущий статус: {spec_status_badge(status)}", style="margin-bottom: 1rem;"),
+            P("Текущий статус: ", spec_status_badge(status), style="margin-bottom: 1rem;"),
             P("Изменить статус на:", style="margin-bottom: 0.5rem; font-weight: 600;"),
             Div(
                 # Separate form for each status button to ensure value is passed correctly
