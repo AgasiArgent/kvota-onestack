@@ -9919,18 +9919,20 @@ def get(session, spec_id: str):
 
 
 @rt("/spec-control/{spec_id}")
-def post(session, spec_id: str, action: str = "save", new_status: str = "", **kwargs):
+def post(session, spec_id: str, action: str = "save", new_status: str = "", department: str = "", comments: str = "", **kwargs):
     """
     Save specification changes or change status.
 
     Feature #69: Specification data entry form (save/update POST handler)
     Bug #8: Admin status override for testing and error correction
+    Bug #8 follow-up: Multi-department approval
 
     Actions:
     - save: Save current data
     - submit_review: Save and change status to pending_review
     - approve: Save and change status to approved
     - admin_change_status: Admin-only action to directly change status to any value
+    - department_approve: Approve specification for a specific department
     """
     redirect = require_login(session)
     if redirect:
@@ -9980,21 +9982,21 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
     # Bug #8 follow-up: Multi-department approval
     if action == "department_approve":
-        department = kwargs.get("department")
-        comments = kwargs.get("comments")
-
         if not department:
+            print("[APPROVAL] No department specified")
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+        print(f"[APPROVAL] Department approval request: department={department}, comments={comments}")
 
         # Check if user has permission for this department
         if not user_can_approve_department(session, department):
+            print(f"[APPROVAL] User does not have permission for department: {department}")
             return RedirectResponse("/unauthorized", status_code=303)
 
         # Approve the department
         success, message = approve_department(spec_id, org_id, department, user_id, comments)
 
-        # TODO: Add flash message support to show success/error message
-        print(f"[APPROVAL] {message}")
+        print(f"[APPROVAL] Result: success={success}, message={message}")
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
