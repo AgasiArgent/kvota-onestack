@@ -9834,7 +9834,7 @@ def get(session, spec_id: str):
 
 
 @rt("/spec-control/{spec_id}")
-def post(session, spec_id: str, action: str = "save", **kwargs):
+def post(session, spec_id: str, action: str = "save", new_status: str = "", **kwargs):
     """
     Save specification changes or change status.
 
@@ -9876,13 +9876,13 @@ def post(session, spec_id: str, action: str = "save", **kwargs):
 
     # Bug #8: Admin override - allow admins to change status directly
     if action == "admin_change_status":
-        print(f"[DEBUG] Admin status change requested: action={action}, kwargs={kwargs}")
+        print(f"[DEBUG] Admin status change requested: action={action}, new_status={new_status}")
 
         if not user_has_any_role(session, ["admin"]):
             print(f"[DEBUG] User is not admin, redirecting to unauthorized")
             return RedirectResponse("/unauthorized", status_code=303)
 
-        new_status = kwargs.get("new_status", current_status)
+        new_status = new_status or current_status
         valid_statuses = ["draft", "pending_review", "approved", "signed"]
 
         print(f"[DEBUG] new_status={new_status}, current_status={current_status}, valid={new_status in valid_statuses}")
