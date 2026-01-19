@@ -16,23 +16,11 @@ def run_migration():
     supabase = get_supabase()
 
     print("Running quote approvals migration...")
+    print("Note: Column must be added manually via Supabase SQL Editor")
+    print("Run: ALTER TABLE quotes ADD COLUMN IF NOT EXISTS approvals JSONB;")
+    print("")
 
     try:
-        # Step 1: Add column
-        print("1. Adding approvals column to quotes table...")
-        supabase.rpc('exec_sql', {
-            'sql': '''
-                ALTER TABLE quotes
-                ADD COLUMN IF NOT EXISTS approvals JSONB DEFAULT '{
-                  "procurement": {"approved": false, "approved_by": null, "approved_at": null, "comments": null},
-                  "logistics": {"approved": false, "approved_by": null, "approved_at": null, "comments": null},
-                  "customs": {"approved": false, "approved_by": null, "approved_at": null, "comments": null},
-                  "sales": {"approved": false, "approved_by": null, "approved_at": null, "comments": null},
-                  "control": {"approved": false, "approved_by": null, "approved_at": null, "comments": null}
-                }'::JSONB;
-            '''
-        }).execute()
-        print("✓ Column added")
 
         # Step 2: Initialize existing quotes
         print("2. Initializing approvals for existing quotes...")
