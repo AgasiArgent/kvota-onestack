@@ -9386,25 +9386,49 @@ def get(session, spec_id: str):
             H3("🔧 Админ-панель управления статусом", style="margin-bottom: 1rem; color: #dc2626;"),
             P(f"Текущий статус: {spec_status_badge(status)}", style="margin-bottom: 1rem;"),
             P("Изменить статус на:", style="margin-bottom: 0.5rem; font-weight: 600;"),
-            Form(
-                Div(
-                    Button("📝 Черновик", type="submit", name="new_status", value="draft",
-                           style="background: #6b7280; border-color: #6b7280; margin-right: 0.5rem;",
+            Div(
+                # Separate form for each status button to ensure value is passed correctly
+                Form(
+                    Input(type="hidden", name="action", value="admin_change_status"),
+                    Input(type="hidden", name="new_status", value="draft"),
+                    Button("📝 Черновик", type="submit",
+                           style="background: #6b7280; border-color: #6b7280;",
                            disabled=(status == "draft")),
-                    Button("🔍 На проверке", type="submit", name="new_status", value="pending_review",
-                           style="background: #f59e0b; border-color: #f59e0b; margin-right: 0.5rem;",
-                           disabled=(status == "pending_review")),
-                    Button("✅ Утверждена", type="submit", name="new_status", value="approved",
-                           style="background: #3b82f6; border-color: #3b82f6; margin-right: 0.5rem;",
-                           disabled=(status == "approved")),
-                    Button("✍️ Подписана", type="submit", name="new_status", value="signed",
-                           style="background: #22c55e; border-color: #22c55e; margin-right: 0.5rem;",
-                           disabled=(status == "signed")),
-                    style="display: flex; flex-wrap: wrap; gap: 0.5rem;"
+                    action=f"/spec-control/{spec_id}",
+                    method="POST",
+                    style="display: inline;"
                 ),
-                Input(type="hidden", name="action", value="admin_change_status"),
-                action=f"/spec-control/{spec_id}",
-                method="POST"
+                Form(
+                    Input(type="hidden", name="action", value="admin_change_status"),
+                    Input(type="hidden", name="new_status", value="pending_review"),
+                    Button("🔍 На проверке", type="submit",
+                           style="background: #f59e0b; border-color: #f59e0b;",
+                           disabled=(status == "pending_review")),
+                    action=f"/spec-control/{spec_id}",
+                    method="POST",
+                    style="display: inline; margin-left: 0.5rem;"
+                ),
+                Form(
+                    Input(type="hidden", name="action", value="admin_change_status"),
+                    Input(type="hidden", name="new_status", value="approved"),
+                    Button("✅ Утверждена", type="submit",
+                           style="background: #3b82f6; border-color: #3b82f6;",
+                           disabled=(status == "approved")),
+                    action=f"/spec-control/{spec_id}",
+                    method="POST",
+                    style="display: inline; margin-left: 0.5rem;"
+                ),
+                Form(
+                    Input(type="hidden", name="action", value="admin_change_status"),
+                    Input(type="hidden", name="new_status", value="signed"),
+                    Button("✍️ Подписана", type="submit",
+                           style="background: #22c55e; border-color: #22c55e;",
+                           disabled=(status == "signed")),
+                    action=f"/spec-control/{spec_id}",
+                    method="POST",
+                    style="display: inline; margin-left: 0.5rem;"
+                ),
+                style="display: flex; flex-wrap: wrap; align-items: center;"
             ),
             P("⚠️ Внимание: это админ-функция для тестирования и исправления ошибок. Используйте осторожно!",
               style="margin-top: 1rem; font-size: 0.875rem; color: #ef4444;"),
