@@ -50,7 +50,11 @@ class CustomerContact:
     """
     id: str
     customer_id: str
-    name: str
+    name: str  # Имя (First name)
+
+    # Full name parts (ФИО раздельно)
+    last_name: Optional[str] = None  # Фамилия (Last name)
+    patronymic: Optional[str] = None  # Отчество (Middle name/Patronymic)
 
     # Contact details
     position: Optional[str] = None  # Job title (e.g., "Директор", "Главный инженер")
@@ -67,6 +71,16 @@ class CustomerContact:
     # Timestamps
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    def get_full_name(self) -> str:
+        """Get full name in Russian format: Фамилия Имя Отчество"""
+        parts = []
+        if self.last_name:
+            parts.append(self.last_name)
+        parts.append(self.name)
+        if self.patronymic:
+            parts.append(self.patronymic)
+        return " ".join(parts)
 
 
 @dataclass

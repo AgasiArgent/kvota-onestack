@@ -1004,10 +1004,55 @@ def post(name: str, inn: str, email: str, phone: str, address: str, session):
         return RedirectResponse("/customers", status_code=303)
 
     except Exception as e:
+        # Parse Supabase error
+        error_str = str(e)
+
+        # Check if it's a duplicate INN error
+        if "duplicate key" in error_str and "idx_customers_org_inn" in error_str:
+            error_msg = f"Клиент с ИНН '{inn}' уже существует в вашей организации."
+        elif "duplicate key" in error_str:
+            error_msg = "Такой клиент уже существует."
+        else:
+            # Try to extract the message from Supabase error format
+            if "'message':" in error_str:
+                try:
+                    import re
+                    match = re.search(r"'message': '([^']+)'", error_str)
+                    if match:
+                        error_msg = f"Ошибка при создании клиента: {match.group(1)}"
+                    else:
+                        error_msg = f"Ошибка при создании клиента: {error_str}"
+                except:
+                    error_msg = f"Ошибка при создании клиента: {error_str}"
+            else:
+                error_msg = f"Ошибка при создании клиента: {error_str}"
+
         return page_layout("New Customer",
-            Div(str(e), cls="alert alert-error"),
+            Div(error_msg, style="background: #fee; border: 1px solid #c33; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;"),
             H1("Add Customer"),
-            # ... form would be here
+            Div(
+                Form(
+                    Div(
+                        Label("Company Name *", Input(name="name", required=True, placeholder="ООО Ромашка", value=name)),
+                        Label("INN", Input(name="inn", placeholder="7701234567", value=inn or "")),
+                        cls="form-row"
+                    ),
+                    Div(
+                        Label("Email", Input(name="email", type="email", placeholder="info@company.ru", value=email or "")),
+                        Label("Phone", Input(name="phone", placeholder="+7 999 123 4567", value=phone or "")),
+                        cls="form-row"
+                    ),
+                    Label("Address", Textarea(name="address", placeholder="Delivery address", rows="3", value=address or "")),
+                    Div(
+                        Button("Save Customer", type="submit"),
+                        A("Cancel", href="/customers", role="button", cls="secondary"),
+                        cls="form-actions"
+                    ),
+                    method="post",
+                    action="/customers/new"
+                ),
+                cls="card"
+            ),
             session=session
         )
 
@@ -1259,11 +1304,12 @@ def get(quote_id: str, session):
         Div(
             H3(f"Products ({len(items)})"),
             Table(
-                Thead(Tr(Th("Product"), Th("SKU"), Th("Qty"), Th("Unit Price"), Th("Total"))),
+                Thead(Tr(Th("Product"), Th("SKU"), Th("IDN-SKU"), Th("Qty"), Th("Unit Price"), Th("Total"))),
                 Tbody(
                     *[Tr(
                         Td(item.get("product_name", "—")),
                         Td(item.get("product_code", "—")),
+                        Td(item.get("idn_sku", "—")),
                         Td(str(item.get("quantity", 0))),
                         Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB"))),
                         Td(format_money(
@@ -1271,7 +1317,7 @@ def get(quote_id: str, session):
                             quote.get("currency", "RUB")
                         ))
                     ) for item in items]
-                ) if items else Tbody(Tr(Td("No products yet", colspan="5", style="text-align: center;")))
+                ) if items else Tbody(Tr(Td("No products yet", colspan="6", style="text-align: center;")))
             ),
             A("+ Add Products", href=f"/quotes/{quote_id}/products") if not items else None,
             cls="card"
@@ -1734,7 +1780,11 @@ def get(quote_id: str, session):
             Form(
                 Div(
                     Label("Product Name *", Input(name="product_name", required=True, placeholder="Bearing SKF 6205")),
+                    cls="form-row"
+                ),
+                Div(
                     Label("Product Code (SKU)", Input(name="product_code", placeholder="SKF-6205-2RS")),
+                    Label("IDN-SKU (Артикул)", Input(name="idn_sku", placeholder="IDN-12345")),
                     cls="form-row"
                 ),
                 Div(
@@ -1909,7 +1959,7 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
 
 @rt("/quotes/{quote_id}/products")
 def post(quote_id: str, product_name: str, quantity: str, base_price_vat: str,
-         product_code: str = "", brand: str = "", weight_in_kg: str = "",
+         product_code: str = "", idn_sku: str = "", brand: str = "", weight_in_kg: str = "",
          supplier_country: str = "", customs_code: str = "",
          supplier_id: str = "", buyer_company_id: str = "", pickup_location_id: str = "", session=None):
     redirect = require_login(session)
@@ -1945,6 +1995,7 @@ def post(quote_id: str, product_name: str, quantity: str, base_price_vat: str,
             "quote_id": quote_id,
             "product_name": product_name,
             "product_code": product_code or None,
+            "idn_sku": idn_sku or None,
             "brand": brand or None,
             "quantity": qty,
             "base_price_vat": price,
@@ -2238,73 +2289,8 @@ def delete(quote_id: str, session):
 # CUSTOMER DETAIL/EDIT
 # ============================================================================
 
-@rt("/customers/{customer_id}")
-def get(customer_id: str, session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    result = supabase.table("customers") \
-        .select("*") \
-        .eq("id", customer_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not result.data:
-        return page_layout("Not Found", H1("Customer not found"), session=session)
-
-    customer = result.data[0]
-
-    # Get customer's quotes
-    quotes_result = supabase.table("quotes") \
-        .select("id, idn_quote, status, total_amount, created_at") \
-        .eq("customer_id", customer_id) \
-        .order("created_at", desc=True) \
-        .limit(10) \
-        .execute()
-
-    quotes = quotes_result.data or []
-
-    return page_layout(customer.get("name", "Customer"),
-        Div(
-            H1(customer.get("name", "—")),
-            A("Edit", href=f"/customers/{customer_id}/edit", role="button", cls="secondary"),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        Div(
-            H3("Contact Information"),
-            Table(
-                Tr(Td("INN:"), Td(customer.get("inn") or "—")),
-                Tr(Td("Email:"), Td(customer.get("email") or "—")),
-                Tr(Td("Phone:"), Td(customer.get("phone") or "—")),
-                Tr(Td("Address:"), Td(customer.get("address") or "—")),
-            ),
-            cls="card"
-        ),
-
-        Div(
-            H3(f"Quotes ({len(quotes)})"),
-            Table(
-                Thead(Tr(Th("Quote #"), Th("Status"), Th("Total"), Th("Date"))),
-                Tbody(
-                    *[Tr(
-                        Td(A(q.get("idn_quote", "—"), href=f"/quotes/{q['id']}")),
-                        Td(status_badge(q.get("status", "draft"))),
-                        Td(format_money(q.get("total_amount"))),
-                        Td(q.get("created_at", "")[:10])
-                    ) for q in quotes]
-                ) if quotes else Tbody(Tr(Td("No quotes yet", colspan="4")))
-            ),
-            cls="card"
-        ),
-
-        A("← Back to Customers", href="/customers"),
-        session=session
-    )
+# REMOVED: Old customer detail route - replaced by enhanced version at line ~15609
+# This old route was causing routing conflicts preventing /customers/{customer_id}/contacts/new from working
 
 
 @rt("/customers/{customer_id}/edit")
@@ -9231,12 +9217,44 @@ def get(session, spec_id: str):
 
     supabase = get_supabase()
 
-    # Fetch specification with quote, customer and v3.0 seller_company, contract info
-    spec_result = supabase.table("specifications") \
-        .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, seller_company_id, customers(id, name, inn, company_name), seller_companies(id, name, supplier_code)), customer_contracts(id, contract_number, contract_date)") \
-        .eq("id", spec_id) \
-        .eq("organization_id", org_id) \
-        .execute()
+    # Fetch specification with quote, customer and contract info
+    try:
+        spec_result = supabase.table("specifications") \
+            .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn)), customer_contracts(id, contract_number, contract_date)") \
+            .eq("id", spec_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+    except Exception as e:
+        # Log detailed error to Sentry
+        import traceback
+        error_details = {
+            "spec_id": spec_id,
+            "org_id": org_id,
+            "user_id": user_id,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+        # Log to Sentry if available
+        if sentry_dsn:
+            sentry_sdk.capture_exception(e)
+
+        # Log to console for debugging
+        print(f"[ERROR] Spec-control route failed for spec_id={spec_id}")
+        print(f"Error: {str(e)}")
+        print(f"Traceback:\n{traceback.format_exc()}")
+
+        return page_layout("Ошибка",
+            H1("Ошибка загрузки спецификации"),
+            Div(
+                P(f"Произошла ошибка при загрузке спецификации ID: {spec_id}"),
+                P(f"Ошибка: {str(e)}", style="font-family: monospace; font-size: 0.9rem; background: #f5f5f5; padding: 0.5rem; border-radius: 4px;"),
+                P("Ошибка отправлена в систему мониторинга.", style="font-size: 0.875rem; color: #666;"),
+                style="background: #fee; border: 1px solid #c33; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;"
+            ),
+            A("← Назад к спецификациям", href="/spec-control"),
+            session=session
+        )
 
     if not spec_result.data:
         return page_layout("Спецификация не найдена",
@@ -9251,15 +9269,14 @@ def get(session, spec_id: str):
     customer = quote.get("customers", {}) or {}
     customer_id = customer.get("id")
     customer_name = customer.get("name", "Unknown")
-    customer_company = customer.get("company_name") or customer_name
+    customer_company = customer_name  # Fixed: removed company_name reference
     quote_id = spec.get("quote_id")
     status = spec.get("status", "draft")
     quote_workflow_status = quote.get("workflow_status", "draft")
 
-    # v3.0: Get seller company from quote
-    seller_company = quote.get("seller_companies", {}) or {}
-    seller_company_name = seller_company.get("name", "")
-    seller_company_code = seller_company.get("supplier_code", "")
+    # TODO: seller_companies relationship not yet implemented in database
+    seller_company_name = ""
+    seller_company_code = ""
 
     # v3.0: Get linked contract info
     linked_contract = spec.get("customer_contracts", {}) or {}
@@ -9311,11 +9328,18 @@ def get(session, spec_id: str):
         label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
         return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
 
+    # Safe workflow progress bar with error handling
+    try:
+        progress_bar = workflow_progress_bar(quote_workflow_status)
+    except Exception as e:
+        print(f"[WARNING] workflow_progress_bar failed for status={quote_workflow_status}: {e}")
+        progress_bar = Div()  # Empty div if workflow bar fails
+
     return page_layout("Редактирование спецификации",
         H1("Редактирование спецификации"),
 
         # Workflow progress bar (Feature #87)
-        workflow_progress_bar(quote_workflow_status),
+        progress_bar,
 
         # Status and info banner
         Div(
@@ -15588,7 +15612,7 @@ def get(customer_id: str, session):
 
         contacts_rows.append(
             Tr(
-                Td(Strong(contact.name), *badges),
+                Td(Strong(contact.get_full_name()), *badges),
                 Td(contact.position or "—"),
                 Td(
                     A(contact.email, href=f"mailto:{contact.email}") if contact.email else "—"
@@ -15735,6 +15759,185 @@ def get(customer_id: str, session):
 
         session=session
     )
+
+
+# ============================================================================
+# Customer Contacts - New Contact
+# ============================================================================
+
+@rt("/customers/{customer_id}/contacts/new")
+def get(session, customer_id: str):
+    """Add new contact for a customer."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check if user has sales or admin role
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+
+    # Get customer info
+    customer_result = supabase.table("customers") \
+        .select("id, name, inn") \
+        .eq("id", customer_id) \
+        .eq("organization_id", user["org_id"]) \
+        .execute()
+
+    if not customer_result.data:
+        return page_layout("Клиент не найден",
+            H1("Клиент не найден"),
+            P("Запрошенный клиент не найден или у вас нет доступа."),
+            A("← Назад к клиентам", href="/customers"),
+            session=session
+        )
+
+    customer = customer_result.data[0]
+
+    return page_layout("Добавить контакт",
+        H1(f"Добавить контакт для {customer['name']}"),
+        Div(
+            Form(
+                Div(
+                    Label("Фамилия *", Input(name="last_name", required=True, placeholder="Иванов")),
+                    Label("Имя *", Input(name="name", required=True, placeholder="Иван")),
+                    Label("Отчество", Input(name="patronymic", placeholder="Иванович")),
+                    cls="form-row", style="grid-template-columns: repeat(3, 1fr);"
+                ),
+                Div(
+                    Label("Должность", Input(name="position", placeholder="Директор")),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("Email", Input(name="email", type="email", placeholder="ivanov@company.ru")),
+                    Label("Телефон", Input(name="phone", placeholder="+7 999 123 4567")),
+                    cls="form-row"
+                ),
+                Div(
+                    Label(
+                        Input(type="checkbox", name="is_primary", value="true"),
+                        " ★ Основной контакт (для основной коммуникации)",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
+                    Label(
+                        Input(type="checkbox", name="is_signatory", value="true"),
+                        " ✍️ Подписант (имя будет в спецификациях PDF)",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
+                    cls="form-row"
+                ),
+                Label("Заметки", Textarea(name="notes", placeholder="Дополнительная информация о контакте", rows="3")),
+                Div(
+                    Button("Сохранить", type="submit"),
+                    A("Отмена", href=f"/customers/{customer_id}", role="button", cls="secondary"),
+                    cls="form-actions"
+                ),
+                method="post",
+                action=f"/customers/{customer_id}/contacts/new"
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/customers/{customer_id}/contacts/new")
+def post(session, customer_id: str, name: str, last_name: str = "", patronymic: str = "",
+         position: str = "", email: str = "", phone: str = "",
+         is_primary: str = "", is_signatory: str = "", notes: str = ""):
+    """Create new contact for a customer."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check if user has sales or admin role
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+
+    # Verify customer exists and user has access
+    customer_result = supabase.table("customers") \
+        .select("id, name") \
+        .eq("id", customer_id) \
+        .eq("organization_id", user["org_id"]) \
+        .execute()
+
+    if not customer_result.data:
+        return RedirectResponse("/customers", status_code=303)
+
+    customer = customer_result.data[0]
+
+    try:
+        # Insert new contact
+        result = supabase.table("customer_contacts").insert({
+            "customer_id": customer_id,
+            "organization_id": user["org_id"],
+            "name": name,
+            "last_name": last_name or None,
+            "patronymic": patronymic or None,
+            "position": position or None,
+            "email": email or None,
+            "phone": phone or None,
+            "is_primary": is_primary == "true",
+            "is_signatory": is_signatory == "true",
+            "notes": notes or None
+        }).execute()
+
+        return RedirectResponse(f"/customers/{customer_id}", status_code=303)
+
+    except Exception as e:
+        error_msg = f"Ошибка при создании контакта: {str(e)}"
+
+        return page_layout("Добавить контакт",
+            Div(error_msg, style="background: #fee; border: 1px solid #c33; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;"),
+            H1(f"Добавить контакт для {customer['name']}"),
+            Div(
+                Form(
+                    Div(
+                        Label("Фамилия *", Input(name="last_name", required=True, placeholder="Иванов", value=last_name)),
+                        Label("Имя *", Input(name="name", required=True, placeholder="Иван", value=name)),
+                        Label("Отчество", Input(name="patronymic", placeholder="Иванович", value=patronymic)),
+                        cls="form-row", style="grid-template-columns: repeat(3, 1fr);"
+                    ),
+                    Div(
+                        Label("Должность", Input(name="position", placeholder="Директор", value=position)),
+                        cls="form-row"
+                    ),
+                    Div(
+                        Label("Email", Input(name="email", type="email", placeholder="ivanov@company.ru", value=email)),
+                        Label("Телефон", Input(name="phone", placeholder="+7 999 123 4567", value=phone)),
+                        cls="form-row"
+                    ),
+                    Div(
+                        Label(
+                            Input(type="checkbox", name="is_primary", value="true", checked=is_primary=="true"),
+                            " ★ Основной контакт (для основной коммуникации)",
+                            style="display: flex; align-items: center; gap: 0.5rem;"
+                        ),
+                        Label(
+                            Input(type="checkbox", name="is_signatory", value="true", checked=is_signatory=="true"),
+                            " ✍️ Подписант (имя будет в спецификациях PDF)",
+                            style="display: flex; align-items: center; gap: 0.5rem;"
+                        ),
+                        cls="form-row"
+                    ),
+                    Label("Заметки", Textarea(name="notes", placeholder="Дополнительная информация о контакте", rows="3", value=notes)),
+                    Div(
+                        Button("Сохранить", type="submit"),
+                        A("Отмена", href=f"/customers/{customer_id}", role="button", cls="secondary"),
+                        cls="form-actions"
+                    ),
+                    method="post",
+                    action=f"/customers/{customer_id}/contacts/new"
+                ),
+                cls="card"
+            ),
+            session=session
+        )
 
 
 # ============================================================================
