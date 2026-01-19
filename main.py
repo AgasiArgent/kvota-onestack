@@ -1801,6 +1801,9 @@ def post(quote_id: str, session, department: str = "", comments: str = ""):
         comments=comments if comments else None
     )
 
+    # Debug logging
+    print(f"[DEBUG] Approve department: dept={department}, success={success}, message={message}")
+
     # Redirect back to quote detail page
     # TODO: Add flash message with success/error message
     return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
