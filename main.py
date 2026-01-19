@@ -9381,6 +9381,37 @@ def get(session, spec_id: str):
             style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;"
         ) if not is_editable else None,
 
+        # Admin panel for status management (Bug #8: Allow admins to move specs between stages)
+        Div(
+            H3("🔧 Админ-панель управления статусом", style="margin-bottom: 1rem; color: #dc2626;"),
+            P(f"Текущий статус: {spec_status_badge(status)}", style="margin-bottom: 1rem;"),
+            P("Изменить статус на:", style="margin-bottom: 0.5rem; font-weight: 600;"),
+            Form(
+                Div(
+                    Button("📝 Черновик", type="submit", name="new_status", value="draft",
+                           style="background: #6b7280; border-color: #6b7280; margin-right: 0.5rem;",
+                           disabled=(status == "draft")),
+                    Button("🔍 На проверке", type="submit", name="new_status", value="pending_review",
+                           style="background: #f59e0b; border-color: #f59e0b; margin-right: 0.5rem;",
+                           disabled=(status == "pending_review")),
+                    Button("✅ Утверждена", type="submit", name="new_status", value="approved",
+                           style="background: #3b82f6; border-color: #3b82f6; margin-right: 0.5rem;",
+                           disabled=(status == "approved")),
+                    Button("✍️ Подписана", type="submit", name="new_status", value="signed",
+                           style="background: #22c55e; border-color: #22c55e; margin-right: 0.5rem;",
+                           disabled=(status == "signed")),
+                    style="display: flex; flex-wrap: wrap; gap: 0.5rem;"
+                ),
+                Input(type="hidden", name="action", value="admin_change_status"),
+                action=f"/spec-control/{spec_id}",
+                method="POST"
+            ),
+            P("⚠️ Внимание: это админ-функция для тестирования и исправления ошибок. Используйте осторожно!",
+              style="margin-top: 1rem; font-size: 0.875rem; color: #ef4444;"),
+            cls="card",
+            style="background: #fee2e2; border-left: 4px solid #dc2626; margin-bottom: 1.5rem;"
+        ) if user_has_any_role(session, ["admin"]) else None,
+
         Form(
             # Hidden fields
             Input(type="hidden", name="spec_id", value=spec_id),
@@ -9784,11 +9815,13 @@ def post(session, spec_id: str, action: str = "save", **kwargs):
     Save specification changes or change status.
 
     Feature #69: Specification data entry form (save/update POST handler)
+    Bug #8: Admin status override for testing and error correction
 
     Actions:
     - save: Save current data
     - submit_review: Save and change status to pending_review
     - approve: Save and change status to approved
+    - admin_change_status: Admin-only action to directly change status to any value
     """
     redirect = require_login(session)
     if redirect:
@@ -9817,7 +9850,26 @@ def post(session, spec_id: str, action: str = "save", **kwargs):
     spec = spec_result.data[0]
     current_status = spec.get("status", "draft")
 
-    # Check if editable
+    # Bug #8: Admin override - allow admins to change status directly
+    if action == "admin_change_status":
+        if not user_has_any_role(session, ["admin"]):
+            return RedirectResponse("/unauthorized", status_code=303)
+
+        new_status = kwargs.get("new_status", current_status)
+        valid_statuses = ["draft", "pending_review", "approved", "signed"]
+
+        if new_status not in valid_statuses:
+            return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+        # Update only the status
+        supabase.table("specifications") \
+            .update({"status": new_status}) \
+            .eq("id", spec_id) \
+            .execute()
+
+        return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
+
+    # Check if editable (for regular save/submit/approve actions)
     if current_status not in ["draft", "pending_review"]:
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
