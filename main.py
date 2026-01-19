@@ -9934,6 +9934,10 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
     - admin_change_status: Admin-only action to directly change status to any value
     - department_approve: Approve specification for a specific department
     """
+    # DEBUG: Log all received parameters
+    print(f"[POST DEBUG] spec_id={spec_id}, action='{action}', new_status='{new_status}', department='{department}', comments='{comments}'")
+    print(f"[POST DEBUG] kwargs={kwargs}")
+
     redirect = require_login(session)
     if redirect:
         return redirect
