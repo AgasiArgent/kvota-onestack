@@ -127,13 +127,39 @@ Before confirming deployment:
 
 ---
 
+### 4. Seller Company Selection Bug
+
+**Status:** ✅ FIXED (2026-01-20)
+
+**Issue:**
+- Seller companies dropdown was empty when creating new quotes
+- Error in logs: "Could not find the table 'public.seller_companies'"
+- Root cause: `seller_company_service.py` wasn't configured to use kvota schema
+
+**Fix (3 commits):**
+1. **Uncommented seller_company_id saving** - Enabled saving seller_company_id in POST /quotes/new handler
+2. **Applied migration 028** - Added seller_company_id and idn columns to kvota.quotes table with foreign keys and indexes
+3. **Fixed schema configuration** - Added `ClientOptions(schema="kvota")` to seller_company_service.py Supabase client initialization
+
+**Verification:**
+- Tested through UI at https://kvotaflow.ru/quotes/new
+- Successfully created quote with seller company TST
+- Verified seller_company_id saved in database: `39fd9760-a1ee-4196-8449-1df1402344f2`
+
+**Commits:**
+- e68ed85 "Fix seller company selection: enable seller_company_id saving"
+- 3eb572c "Fix seller_company_service to use kvota schema"
+- 0290721 "Fix seller_company_service to use ClientOptions for schema"
+
+---
+
 ## 🎯 Next Steps
 
 ### Immediate (Current Work)
-1. Fix buyer/seller company creation bug
-2. Clean up roles table (reduce from 86 to relevant ones)
-3. Implement users table UI improvements
-4. Test all changes thoroughly before deployment
+1. ~~Fix buyer/seller company creation bug~~ ✅
+2. ~~Fix seller company selection bug~~ ✅
+3. Clean up roles table (reduce from 86 to relevant ones)
+4. Review and improve quote creation form (remove currency, payment_terms, add delivery location fields)
 
 ### Future Enhancements
 - Consider adding filters to requested items tab
