@@ -21,51 +21,33 @@ def get_user_profile(user_id: str, organization_id: str) -> Optional[Dict[str, A
     """
     supabase = get_supabase()
 
-    # Get user from auth.users
-    user_result = supabase.auth.admin.get_user_by_id(user_id)
-    if not user_result or not user_result.user:
+    # Get user profile with email from organization_members
+    # Since auth.admin API is not available, we get email through RPC or directly
+    member_result = supabase.rpc(
+        "get_user_profile_data",
+        {"p_user_id": user_id, "p_organization_id": organization_id}
+    ).execute()
+
+    if not member_result.data or len(member_result.data) == 0:
         return None
 
-    user = user_result.user
-
-    # Get user profile
-    profile_result = supabase.table("user_profiles") \
-        .select("*, department:departments(name), sales_group:sales_groups(name), manager:auth.users!manager_id(email)") \
-        .eq("user_id", user_id) \
-        .eq("organization_id", organization_id) \
-        .maybe_single() \
-        .execute()
-
-    profile = profile_result.data if profile_result.data else {}
-
-    # Get user role
-    role_result = supabase.table("organization_members") \
-        .select("role:roles(name, slug)") \
-        .eq("user_id", user_id) \
-        .eq("organization_id", organization_id) \
-        .eq("status", "active") \
-        .maybe_single() \
-        .execute()
-
-    role = None
-    if role_result.data and role_result.data.get("role"):
-        role = role_result.data["role"]
+    data = member_result.data[0]
 
     return {
-        "id": user.id,
-        "email": user.email,
-        "phone": user.phone,
-        "created_at": user.created_at,
+        "id": user_id,
+        "email": data.get("email"),
+        "phone": data.get("phone"),
+        "created_at": data.get("created_at"),
         # From profile
-        "full_name": profile.get("full_name"),
-        "position": profile.get("position"),
-        "department": profile.get("department", {}).get("name") if profile.get("department") else None,
-        "sales_group": profile.get("sales_group", {}).get("name") if profile.get("sales_group") else None,
-        "manager_email": profile.get("manager", {}).get("email") if profile.get("manager") else None,
-        "location": profile.get("location"),
+        "full_name": data.get("full_name"),
+        "position": data.get("position"),
+        "department": data.get("department_name"),
+        "sales_group": data.get("sales_group_name"),
+        "manager_email": data.get("manager_email"),
+        "location": data.get("location"),
         # Role
-        "role_name": role.get("name") if role else None,
-        "role_slug": role.get("slug") if role else None,
+        "role_name": data.get("role_name"),
+        "role_slug": data.get("role_slug"),
     }
 
 
