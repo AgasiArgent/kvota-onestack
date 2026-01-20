@@ -21,6 +21,7 @@ from datetime import datetime, date
 import os
 import re
 from supabase import create_client
+from supabase.client import ClientOptions
 
 
 # Initialize Supabase client with service role for admin operations
@@ -35,7 +36,7 @@ def _get_supabase():
     return create_client(
         SUPABASE_URL,
         SUPABASE_SERVICE_KEY,
-        options={"schema": "kvota"}
+        options=ClientOptions(schema="kvota")
     )
 
 
