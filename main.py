@@ -98,46 +98,41 @@ app, rt = fast_app(
 # STYLES
 # ============================================================================
 
+# Custom styles to complement PicoCSS
+# PicoCSS provides: forms, buttons, tables, cards, grids, typography
+# We only add: custom nav, status badges, and app-specific overrides
 APP_STYLES = """
-* { box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #f5f5f5; color: #333; line-height: 1.6; }
-nav { background: #1a1a2e; color: white; padding: 1rem 0; }
+/* Custom Navigation Bar */
+nav { background: #1a1a2e; color: white; padding: 1rem 0; margin-bottom: 0; }
 nav .nav-container { max-width: 1200px; margin: 0 auto; padding: 0 1rem; display: flex; justify-content: space-between; align-items: center; }
 nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 1.5rem; align-items: center; }
-nav a { color: #a0a0ff; text-decoration: none; }
+nav a { color: #a0a0ff; text-decoration: none; transition: color 0.2s; }
 nav a:hover { color: white; }
 nav strong { color: white; font-size: 1.2rem; }
-h1, h2, h3 { color: #1a1a2e; margin-top: 0; }
-a { color: #4a4aff; }
-input, select, button, textarea { padding: 0.5rem; font-size: 1rem; border: 1px solid #ddd; border-radius: 4px; }
-input:focus, select:focus, textarea:focus { outline: 2px solid #4a4aff; border-color: #4a4aff; }
-button { background: #4a4aff; color: white; border: none; cursor: pointer; padding: 0.75rem 1.5rem; }
-button:hover { background: #3a3adf; }
-button.secondary { background: #6c757d; }
-button.danger { background: #dc3545; }
-table { width: 100%; border-collapse: collapse; background: white; margin-top: 1rem; }
-th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
-th { background: #f8f9fa; font-weight: 600; }
-tr:hover { background: #f8f9fa; }
-label { display: block; margin-bottom: 1rem; font-weight: 500; }
-label input, label select, label textarea { margin-top: 0.25rem; width: 100%; }
-.container { max-width: 1200px; margin: 0 auto; padding: 1rem; }
-.card { background: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
-.stat-card { text-align: center; padding: 1rem; }
-.stat-value { font-size: 2rem; font-weight: bold; color: #4a4aff; }
-.alert { padding: 1rem; border-radius: 4px; margin-bottom: 1rem; }
-.alert-success { background: #d4edda; color: #155724; }
-.alert-error { background: #f8d7da; color: #721c24; }
-.alert-info { background: #cce5ff; color: #004085; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-actions { display: flex; gap: 1rem; margin-top: 1rem; }
-.status-badge { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; }
+
+/* Status Badges */
+.status-badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.875rem; font-weight: 500; }
 .status-draft { background: #ffc107; color: #000; }
 .status-sent { background: #17a2b8; color: #fff; }
 .status-approved { background: #28a745; color: #fff; }
 .status-rejected { background: #dc3545; color: #fff; }
+
+/* Stats Grid */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.stat-card { text-align: center; padding: 1.5rem; background: var(--card-background-color); border-radius: var(--border-radius); box-shadow: var(--card-box-shadow); }
+.stat-value { font-size: 2rem; font-weight: bold; color: var(--primary); margin: 0; }
+.stat-label { font-size: 0.875rem; color: var(--muted-color); margin-top: 0.25rem; }
+
+/* Form Helpers */
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-actions { display: flex; gap: 1rem; margin-top: 1rem; justify-content: flex-start; }
 @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+
+/* Alerts (complement Pico's built-in alerts) */
+.alert { padding: 1rem; border-radius: var(--border-radius); margin-bottom: 1rem; }
+.alert-success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+.alert-error { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+.alert-info { background: #cce5ff; color: #004085; border-left: 4px solid #0d6efd; }
 """
 
 # ============================================================================
@@ -214,6 +209,9 @@ def page_layout(title, *content, session=None):
             Title(f"{title} - Kvota"),
             Meta(charset="utf-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1"),
+            # PicoCSS - Modern, semantic CSS framework
+            Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"),
+            # Custom styles (nav, badges, app-specific overrides)
             Style(APP_STYLES),
             # HTMX
             Script(src="https://unpkg.com/htmx.org@1.9.10")
