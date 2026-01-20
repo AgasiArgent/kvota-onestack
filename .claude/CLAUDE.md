@@ -8,38 +8,18 @@
 
 ## 🗄️ Database - CRITICAL
 
-**ALWAYS use the `db-kvota` skill when working with database!**
+**Schema:** `kvota` (NOT `public`) | **Role column:** `r.slug` (NOT `r.code`)
 
-### Quick Facts
-
-- **Schema:** `kvota` (NOT `public`)
-- **Tables:** 51 tables in kvota schema
-- **Role column:** `r.slug` (NOT `r.code`)
-- **Location:** Supabase PostgreSQL on VPS
-
-### Database Skill
-
-**Skill:** `.claude/skills/db-kvota/`
-
-**Auto-activates when:**
-- Mentioning database, БД, supabase, postgres
-- Working with migrations
-- Database errors occur
-- Querying tables
-
-**Key reminders:**
+**Key Rules:**
 - ✅ Always use `kvota.table_name` prefix
 - ✅ Use `r.slug` not `r.code` in RLS policies
 - ✅ Configure clients with `schema: "kvota"`
-- ✅ Check skill before migrations
+- ✅ Check `.claude/skills/db-kvota/skill.md` before migrations
 
-### Files to Reference
-
-When working with database, check:
-- **`.claude/skills/db-kvota/skill.md`** - Quick commands & troubleshooting
-- **`DATABASE_GUIDE.md`** - Detailed guide
-- **`DATABASE_TABLES.md`** - Table schemas
-- **`migrations/`** - Migration files
+**Reference Files:**
+- `.claude/skills/db-kvota/skill.md` - Commands & troubleshooting
+- `DATABASE_GUIDE.md` - Detailed guide
+- `DATABASE_TABLES.md` - Table schemas
 
 ---
 
@@ -79,138 +59,65 @@ docker restart kvota-onestack
 
 ## 🛠️ Development Workflow
 
-### Working with Database
+1. Make changes locally
+2. **Test through UI** (Chrome Extension Tool) ← MANDATORY
+3. Commit with descriptive message
+4. Push to main → CI/CD deploys automatically
+5. Monitor: `ssh beget-kvota "docker logs kvota-onestack --tail 50"`
 
-1. **Check skill first:** Review `.claude/skills/db-kvota/skill.md`
-2. **Use kvota schema:** Always prefix with `kvota.`
-3. **Verify on VPS:** Test queries before code changes
-4. **Update migrations:** Keep numbered sequence
+---
 
-### Making Changes
+## 🧪 Testing - CRITICAL
 
-1. **Local development**
-2. **Commit with descriptive message**
-3. **Push to main** → CI/CD deploys automatically
-4. **Monitor logs:** `docker logs kvota-onestack`
+**ALWAYS test changes through UI using Chrome Extension Tool (claude-in-chrome MCP):**
 
-### Creating Migrations
-
-**Follow pattern:**
-```sql
--- migrations/XXX_description.sql
--- Always use kvota schema
-CREATE TABLE kvota.new_table (...);
-
--- Always use r.slug in RLS
-WHERE r.slug IN ('admin', 'finance')
 ```
+1. After making code changes, commit and push to deploy
+2. Use mcp__claude-in-chrome__* tools to test in browser
+3. Navigate, click, fill forms, take screenshots
+4. Verify all functionality works end-to-end
+```
+
+**Never skip UI testing** - backend changes must be verified through actual user interface.
 
 ---
 
 ## 🐛 Debugging
 
-### Database Issues
+**Database errors:**
+- "relation does not exist" → Check `kvota.` schema prefix
+- "column r.code does not exist" → Use `r.slug`
+- RLS blocks access → Check user roles & `.claude/skills/db-kvota/skill.md`
 
-**First:** Activate `db-kvota` skill or read `.claude/skills/db-kvota/skill.md`
-
-**Common errors:**
-- "relation does not exist" → Check schema prefix
-- "column r.code does not exist" → Use r.slug
-- RLS blocks access → Check user roles
-
-**Quick diagnostic:**
+**Application logs:**
 ```bash
-ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres \
-  -c 'SELECT schemaname, COUNT(*) FROM pg_tables
-      WHERE schemaname IN (\"kvota\", \"public\") GROUP BY schemaname;'"
-```
-
-### Application Issues
-
-**Check logs:**
-```bash
-ssh beget-kvota "docker logs kvota-onestack --tail 100"
-```
-
-**Check health:**
-```bash
-ssh beget-kvota "docker ps | grep kvota"
+ssh beget-kvota "docker logs kvota-onestack --tail 50"
 ```
 
 ---
 
 ## 📋 Key Files
 
-### Configuration
-
-- **`services/database.py`** - Supabase client (MUST have `schema: "kvota"`)
-- **`docker-compose.prod.yml`** - Production config
-- **`.env`** - Environment variables (on VPS)
-
-### Documentation
-
-- **`DATABASE_GUIDE.md`** - Database guide for humans
-- **`DATABASE_TABLES.md`** - Table schemas reference
-- **`MIGRATION_GUIDE.md`** - Migration instructions
-- **`PRODUCTION_TABLES.md`** - Production database state
-
-### Skills
-
-- **`.claude/skills/db-kvota/`** - Database helper skill
+**Config:** `services/database.py` (Supabase client), `docker-compose.prod.yml`, `.env` (on VPS)
+**Docs:** `DATABASE_GUIDE.md`, `DATABASE_TABLES.md`, `MIGRATION_GUIDE.md`
+**Skills:** `.claude/skills/db-kvota/`
 
 ---
 
 ## ✅ Best Practices
 
-### Database Operations
+**Migrations:**
+```sql
+-- migrations/XXX_description.sql
+CREATE TABLE kvota.new_table (...);  -- Always use kvota schema
+WHERE r.slug IN ('admin', 'finance')  -- Always use r.slug in RLS
+```
 
-1. **Always use kvota schema**
-   ```python
-   # ✅ Correct
-   supabase = create_client(url, key, options={"schema": "kvota"})
-   ```
-
-2. **Always use r.slug in RLS**
-   ```sql
-   -- ✅ Correct
-   WHERE r.slug IN ('admin', 'finance')
-   ```
-
-3. **Check skill before work**
-   - Read `.claude/skills/db-kvota/skill.md` first
-   - Use provided commands
-   - Follow checklist
-
-### Code Changes
-
-1. **Test on VPS before commit**
-2. **Use descriptive commit messages**
-3. **Include "Co-Authored-By: Claude Sonnet 4.5"**
-4. **Let CI/CD handle deployment**
-
-### Migrations
-
-1. **Create backup first**
-2. **Use sequential numbering**
-3. **Test on copy if possible**
-4. **Always use kvota prefix**
-5. **Verify after applying**
-
----
-
-## 🎯 Remember
-
-**When working with database:**
-1. ✅ Activate `db-kvota` skill (auto-triggers)
-2. ✅ Use `kvota` schema everywhere
-3. ✅ Use `r.slug` not `r.code`
-4. ✅ Check skill.md for commands
-5. ✅ Test on VPS before committing
-
-**When in doubt:**
-- Check `.claude/skills/db-kvota/skill.md`
-- Review `DATABASE_GUIDE.md`
-- Look at existing migrations in `migrations/`
+**Commits:**
+1. Test through UI first (Chrome Extension Tool)
+2. Use descriptive commit messages
+3. Include "Co-Authored-By: Claude Sonnet 4.5"
+4. Push to main → CI/CD auto-deploys
 
 ---
 
