@@ -1117,15 +1117,7 @@ def get(session):
                             name="customer_id", required=True
                         )
                     ),
-                    Label("Quote Currency",
-                        Select(
-                            Option("RUB - Russian Ruble", value="RUB", selected=True),
-                            Option("USD - US Dollar", value="USD"),
-                            Option("EUR - Euro", value="EUR"),
-                            name="currency"
-                        )
-                    ),
-                    cls="form-row"
+                    cls="form-group"
                 ),
                 # Seller company selector (v3.0 - at quote level)
                 Div(
@@ -1153,8 +1145,25 @@ def get(session):
                             name="delivery_terms"
                         )
                     ),
-                    Label("Payment Terms (days)",
-                        Input(name="payment_terms", type="number", value="30", min="0")
+                    cls="form-group"
+                ),
+                # Delivery location fields
+                Div(
+                    Label("Delivery City",
+                        Input(
+                            name="delivery_city",
+                            type="text",
+                            placeholder="Moscow, Beijing, etc.",
+                            required=False
+                        )
+                    ),
+                    Label("Delivery Country",
+                        Input(
+                            name="delivery_country",
+                            type="text",
+                            placeholder="Russia, China, etc.",
+                            required=False
+                        )
                     ),
                     cls="form-row"
                 ),
@@ -1183,7 +1192,8 @@ def get(session):
 
 
 @rt("/quotes/new")
-def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: int, notes: str,
+def post(customer_id: str, delivery_terms: str, notes: str,
+         delivery_city: str = None, delivery_country: str = None,
          seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
@@ -1216,13 +1226,18 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
             "title": title,
             "customer_id": customer_id,
             "organization_id": user["org_id"],
-            "currency": currency,
+            "currency": "RUB",  # Default currency, will be set during calculation
             "delivery_terms": delivery_terms,
-            "payment_terms": payment_terms,
             "notes": notes or None,
             "status": "draft",
             "created_by": user["id"]
         }
+
+        # Add delivery location if provided
+        if delivery_city and delivery_city.strip():
+            insert_data["delivery_city"] = delivery_city.strip()
+        if delivery_country and delivery_country.strip():
+            insert_data["delivery_country"] = delivery_country.strip()
 
         # v3.0: seller_company_id at quote level
         if seller_company_id and seller_company_id.strip():
@@ -2882,6 +2897,18 @@ def get(quote_id: str, session):
                     Div(
                         H3("Pricing"),
                         Div(
+                            Label("Quote Currency *",
+                                Select(
+                                    Option("RUB - Russian Ruble", value="RUB", selected=currency == "RUB"),
+                                    Option("USD - US Dollar", value="USD", selected=currency == "USD"),
+                                    Option("EUR - Euro", value="EUR", selected=currency == "EUR"),
+                                    name="quote_currency"
+                                ),
+                                Small("Currency for the commercial proposal", style="color: #666; display: block; margin-top: 0.25rem;")
+                            ),
+                            cls="form-group"
+                        ),
+                        Div(
                             Label("Markup %",
                                 Input(name="markup", type="number", value=str(get_var('markup', 15)), min="0", max="100", step="0.1")
                             ),
@@ -3044,6 +3071,7 @@ def post(
     offer_sale_type: str = "поставка",
     offer_incoterms: str = "DDP",
     # Pricing
+    quote_currency: str = "RUB",
     markup: str = "15",
     supplier_discount: str = "0",
     exchange_rate: str = "1.0",
@@ -3265,6 +3293,13 @@ def post(
         else:
             supabase.table("quote_calculation_summaries") \
                 .insert(calc_summary) \
+                .execute()
+
+        # Update quote currency if it changed
+        if quote.get("currency") != quote_currency:
+            supabase.table("quotes") \
+                .update({"currency": quote_currency}) \
+                .eq("id", quote_id) \
                 .execute()
 
         # Create immutable quote version for audit trail
