@@ -1,0 +1,31 @@
+{
+  "skillName": "db-kvota",
+  "description": "Database helper for OneStack - ensures correct kvota schema usage, prevents common errors (r.slug vs r.code), and provides quick diagnostic commands",
+  "triggerPatterns": [
+    "база данных",
+    "БД",
+    "database",
+    "supabase",
+    "postgres",
+    "postgresql",
+    "migration",
+    "миграция",
+    "schema",
+    "схема",
+    "таблица",
+    "table",
+    "RLS",
+    "policy",
+    "политика",
+    "ошибка БД",
+    "database error",
+    "SQL",
+    "запрос",
+    "query",
+    "relation does not exist",
+    "column.*code.*does not exist"
+  ],
+  "version": "1.0.0",
+  "author": "OneStack Team",
+  "tags": ["database", "postgres", "supabase", "kvota", "schema", "RLS", "diagnostics"]
+}
