@@ -16960,6 +16960,323 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
 
 
 # ============================================================================
+# User Profile
+# ============================================================================
+
+@rt("/profile/{user_id}")
+def get(user_id: str, session, tab: str = "general"):
+    """User profile view page with statistics, specifications, and customers."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    # Check permissions - users can view their own profile, admins can view all profiles
+    current_user_id = user.get("user_id")
+    is_admin = user_has_any_role(session, ["admin", "top_manager"])
+
+    if user_id != current_user_id and not is_admin:
+        return page_layout("Access Denied",
+            Div("У вас нет прав для просмотра данного профиля.", cls="alert alert-error"),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    from services.user_profile_service import (
+        get_user_profile,
+        get_user_statistics,
+        get_user_specifications,
+        get_user_customers
+    )
+
+    # Get user profile
+    profile = get_user_profile(user_id, org_id)
+    if not profile:
+        return page_layout("Не найдено",
+            Div("Пользователь не найден.", cls="alert alert-error"),
+            A("← На главную", href="/dashboard", role="button"),
+            session=session
+        )
+
+    # Tab navigation
+    tabs_nav = Div(
+        A("Общая информация",
+          href=f"/profile/{user_id}?tab=general",
+          cls=f"tab-btn {'active' if tab == 'general' else ''}"),
+        A("Спецификации",
+          href=f"/profile/{user_id}?tab=specifications",
+          cls=f"tab-btn {'active' if tab == 'specifications' else ''}"),
+        A("Клиенты",
+          href=f"/profile/{user_id}?tab=customers",
+          cls=f"tab-btn {'active' if tab == 'customers' else ''}"),
+        cls="tabs-nav"
+    )
+
+    # Build tab content based on selected tab
+    if tab == "general":
+        # Get statistics
+        stats = get_user_statistics(user_id, org_id)
+
+        tab_content = Div(
+            # Main info section
+            Div(
+                H3("Основная информация", style="margin-bottom: 1rem;"),
+                Div(
+                    Div(
+                        Div(Strong("ФИО"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("full_name") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Email"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("email") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Телефон"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("phone") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Должность"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("position") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Департамент"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("department") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Группа"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("sales_group") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Руководитель"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("manager_email") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Местонахождение"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("location") or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    cls="info-grid",
+                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;"
+                ),
+            ),
+
+            # Statistics section
+            Div(
+                H3("Статистика", style="margin: 2rem 0 1rem 0;"),
+                Div(
+                    # Customers stats
+                    Div(
+                        Div(
+                            Div("👥 Клиенты", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(str(stats["total_customers"])), style="font-size: 2.5rem; color: #2563eb;"),
+                            Div("клиентов", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    # Quotes stats
+                    Div(
+                        Div(
+                            Div("📊 КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(str(stats["total_quotes"])), style="font-size: 2.5rem; color: #16a34a;"),
+                            Div("коммерческих предложений", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    Div(
+                        Div(
+                            Div("💰 Сумма КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(f"${stats['total_quotes_sum_usd']:,.0f}"), style="font-size: 2rem; color: #9333ea;"),
+                            Div("общая сумма предложений", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    # Specs stats
+                    Div(
+                        Div(
+                            Div("📄 Спецификации", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(str(stats["total_specifications"])), style="font-size: 2.5rem; color: #ea580c;"),
+                            Div("спецификаций", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    Div(
+                        Div(
+                            Div("💎 Сумма спецификаций", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(f"${stats['total_specifications_sum_usd']:,.0f}"), style="font-size: 2rem; color: #0891b2;"),
+                            Div("общая сумма сделок", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    Div(
+                        Div(
+                            Div("💵 Профит", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(f"${stats['total_profit_usd']:,.0f}"), style="font-size: 2rem; color: #dc2626;"),
+                            Div("суммарный профит", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    cls="stats-grid",
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;"
+                ),
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "specifications":
+        # Get specifications
+        specifications = get_user_specifications(user_id, org_id)
+
+        # Build specifications table
+        spec_rows = []
+        for spec in specifications:
+            last_quote_date_str = ""
+            if spec["last_quote_date"]:
+                from datetime import datetime
+                if isinstance(spec["last_quote_date"], str):
+                    last_quote_date = datetime.fromisoformat(spec["last_quote_date"].replace("Z", "+00:00"))
+                else:
+                    last_quote_date = spec["last_quote_date"]
+                last_quote_date_str = last_quote_date.strftime("%d.%m.%Y")
+
+            updated_at_str = ""
+            if spec["updated_at"]:
+                from datetime import datetime
+                if isinstance(spec["updated_at"], str):
+                    updated_at = datetime.fromisoformat(spec["updated_at"].replace("Z", "+00:00"))
+                else:
+                    updated_at = spec["updated_at"]
+                updated_at_str = updated_at.strftime("%d.%m.%Y %H:%M")
+
+            spec_rows.append(
+                Tr(
+                    Td(spec["customer_name"]),
+                    Td(spec["customer_inn"]),
+                    Td(spec["customer_category"]),
+                    Td(f"${spec['quote_sum']:,.0f}"),
+                    Td(f"${spec['spec_sum']:,.0f}"),
+                    Td(last_quote_date_str),
+                    Td(updated_at_str),
+                )
+            )
+
+        tab_content = Div(
+            H3(f"Спецификации ({len(specifications)})", style="margin-bottom: 1rem;"),
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Клиент"),
+                            Th("ИНН"),
+                            Th("Категория"),
+                            Th("Сумма КП"),
+                            Th("Сумма спецификации"),
+                            Th("Дата последнего КП"),
+                            Th("Дата обновления"),
+                        )
+                    ),
+                    Tbody(*spec_rows) if spec_rows else Tbody(
+                        Tr(Td("Нет спецификаций", colspan="7", style="text-align: center; color: #999;"))
+                    ),
+                    cls="table-auto"
+                ),
+                cls="table-container"
+            ) if specifications else Div(
+                P("Нет спецификаций", style="text-align: center; color: #999; padding: 2rem;")
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "customers":
+        # Get customers
+        customers = get_user_customers(user_id, org_id)
+
+        # Build customers table
+        customer_rows = []
+        for customer in customers:
+            last_quote_date_str = ""
+            if customer["last_quote_date"]:
+                from datetime import datetime
+                if isinstance(customer["last_quote_date"], str):
+                    last_quote_date = datetime.fromisoformat(customer["last_quote_date"].replace("Z", "+00:00"))
+                else:
+                    last_quote_date = customer["last_quote_date"]
+                last_quote_date_str = last_quote_date.strftime("%d.%m.%Y")
+
+            updated_at_str = ""
+            if customer["updated_at"]:
+                from datetime import datetime
+                if isinstance(customer["updated_at"], str):
+                    updated_at = datetime.fromisoformat(customer["updated_at"].replace("Z", "+00:00"))
+                else:
+                    updated_at = customer["updated_at"]
+                updated_at_str = updated_at.strftime("%d.%m.%Y %H:%M")
+
+            customer_rows.append(
+                Tr(
+                    Td(A(customer["customer_name"], href=f"/customers/{customer['customer_id']}")),
+                    Td(customer["customer_inn"]),
+                    Td(customer["customer_category"]),
+                    Td(f"${customer['quotes_sum']:,.0f}"),
+                    Td(f"${customer['specs_sum']:,.0f}"),
+                    Td(last_quote_date_str),
+                    Td(updated_at_str),
+                )
+            )
+
+        tab_content = Div(
+            H3(f"Клиенты ({len(customers)})", style="margin-bottom: 1rem;"),
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Наименование"),
+                            Th("ИНН"),
+                            Th("Категория"),
+                            Th("Сумма КП"),
+                            Th("Сумма спецификаций"),
+                            Th("Дата последнего КП"),
+                            Th("Дата обновления"),
+                        )
+                    ),
+                    Tbody(*customer_rows) if customer_rows else Tbody(
+                        Tr(Td("Нет клиентов", colspan="7", style="text-align: center; color: #999;"))
+                    ),
+                    cls="table-auto"
+                ),
+                cls="table-container"
+            ) if customers else Div(
+                P("Нет клиентов", style="text-align: center; color: #999; padding: 2rem;")
+            ),
+            id="tab-content"
+        )
+
+    # Page layout
+    return page_layout(
+        f"Профиль: {profile.get('full_name') or profile.get('email')}",
+        Div(
+            Div(
+                H2(profile.get("full_name") or profile.get("email"), style="margin-bottom: 0.5rem;"),
+                P(profile.get("position") or profile.get("role_name") or "—", style="color: #666;"),
+                style="margin-bottom: 1.5rem;"
+            ),
+            tabs_nav,
+            tab_content,
+            cls="card"
+        ),
+        session=session
+    )
+
+
+# ============================================================================
 # UI-009: Customer Contracts List
 # ============================================================================
 
