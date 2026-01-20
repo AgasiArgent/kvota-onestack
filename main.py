@@ -11907,106 +11907,106 @@ def get(session, tab: str = "users"):
     # Build tab content based on selected tab
     if tab == "users":
         # Get all organization members with their roles and Telegram status
-    members_result = supabase.table("organization_members").select(
-        "user_id, status, created_at"
-    ).eq("organization_id", org_id).eq("status", "active").execute()
+        members_result = supabase.table("organization_members").select(
+            "user_id, status, created_at"
+        ).eq("organization_id", org_id).eq("status", "active").execute()
 
-    members = members_result.data if members_result.data else []
+        members = members_result.data if members_result.data else []
 
-    # Get all available roles
-    from services.role_service import get_all_roles
-    all_roles = get_all_roles()
+        # Get all available roles
+        from services.role_service import get_all_roles
+        all_roles = get_all_roles()
 
-    # Build user data with roles
-    users_data = []
-    for member in members:
-        member_user_id = member["user_id"]
+        # Build user data with roles
+        users_data = []
+        for member in members:
+            member_user_id = member["user_id"]
 
-        # Get user roles (DB uses 'slug', we call it 'code' in UI)
-        user_roles_result = supabase.table("user_roles").select(
-            "id, role_id, roles(slug, name)"
-        ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
+            # Get user roles (DB uses 'slug', we call it 'code' in UI)
+            user_roles_result = supabase.table("user_roles").select(
+                "id, role_id, roles(slug, name)"
+            ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
 
-        member_roles = user_roles_result.data if user_roles_result.data else []
-        role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
-        role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
+            member_roles = user_roles_result.data if user_roles_result.data else []
+            role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
+            role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
 
-        # Get Telegram status
-        tg_result = supabase.table("telegram_users").select(
-            "telegram_id, telegram_username, verified_at"
-        ).eq("user_id", member_user_id).limit(1).execute()
+            # Get Telegram status
+            tg_result = supabase.table("telegram_users").select(
+                "telegram_id, telegram_username, verified_at"
+            ).eq("user_id", member_user_id).limit(1).execute()
 
-        tg_data = tg_result.data[0] if tg_result.data else None
+            tg_data = tg_result.data[0] if tg_result.data else None
 
-        # Try to get email from auth.users via profiles or organization_invites
-        # Since we can't directly query auth.users, use the invite email if available
-        # Or show user_id shortened
-        email_display = member_user_id[:8] + "..."  # Default fallback
+            # Try to get email from auth.users via profiles or organization_invites
+            # Since we can't directly query auth.users, use the invite email if available
+            # Or show user_id shortened
+            email_display = member_user_id[:8] + "..."  # Default fallback
 
-        users_data.append({
-            "user_id": member_user_id,
-            "email": email_display,
-            "roles": role_codes,
-            "role_names": role_names,
-            "telegram": tg_data,
-            "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
-        })
+            users_data.append({
+                "user_id": member_user_id,
+                "email": email_display,
+                "roles": role_codes,
+                "role_names": role_names,
+                "telegram": tg_data,
+                "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
+            })
 
-    # Build users table rows
-    user_rows = []
-    for u in users_data:
-        # Roles badges
-        role_badges = []
-        for i, code in enumerate(u["roles"]):
-            name = u["role_names"][i] if i < len(u["role_names"]) else code
-            color = {
-                "admin": "#ef4444",
-                "sales": "#3b82f6",
-                "procurement": "#10b981",
-                "logistics": "#f59e0b",
-                "customs": "#8b5cf6",
-                "quote_controller": "#ec4899",
-                "spec_controller": "#06b6d4",
-                "finance": "#84cc16",
-                "top_manager": "#f97316"
-            }.get(code, "#6b7280")
-            role_badges.append(
-                Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
-            )
+        # Build users table rows
+        user_rows = []
+        for u in users_data:
+            # Roles badges
+            role_badges = []
+            for i, code in enumerate(u["roles"]):
+                name = u["role_names"][i] if i < len(u["role_names"]) else code
+                color = {
+                    "admin": "#ef4444",
+                    "sales": "#3b82f6",
+                    "procurement": "#10b981",
+                    "logistics": "#f59e0b",
+                    "customs": "#8b5cf6",
+                    "quote_controller": "#ec4899",
+                    "spec_controller": "#06b6d4",
+                    "finance": "#84cc16",
+                    "top_manager": "#f97316"
+                }.get(code, "#6b7280")
+                role_badges.append(
+                    Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
+                )
 
-        # Telegram status
-        if u["telegram"] and u["telegram"].get("verified_at"):
-            tg_status = Span("✓ @" + (u["telegram"].get("username") or str(u["telegram"]["telegram_id"])),
-                style="color: #10b981; font-size: 0.875rem;")
-        else:
-            tg_status = Span("—", style="color: #9ca3af;")
+            # Telegram status
+            if u["telegram"] and u["telegram"].get("verified_at"):
+                tg_status = Span("✓ @" + (u["telegram"].get("username") or str(u["telegram"]["telegram_id"])),
+                    style="color: #10b981; font-size: 0.875rem;")
+            else:
+                tg_status = Span("—", style="color: #9ca3af;")
 
-        user_rows.append(Tr(
-            Td(u["email"]),
-            Td(*role_badges if role_badges else [Span("—", style="color: #9ca3af;")]),
-            Td(tg_status),
-            Td(u["joined_at"]),
-            Td(
-                A("Роли", href=f"/admin/users/{u['user_id']}/roles", role="button",
-                  style="font-size: 0.75rem; padding: 4px 12px;")
-            )
-        ))
+            user_rows.append(Tr(
+                Td(u["email"]),
+                Td(*role_badges if role_badges else [Span("—", style="color: #9ca3af;")]),
+                Td(tg_status),
+                Td(u["joined_at"]),
+                Td(
+                    A("Роли", href=f"/admin/users/{u['user_id']}/roles", role="button",
+                      style="font-size: 0.75rem; padding: 4px 12px;")
+                )
+            ))
 
-    # Role legend
-    role_legend = Div(
-        H4("Доступные роли:", style="margin-bottom: 8px;"),
-        Div(
-            *[
-                Div(
-                    Span(r.code, style=f"background: #6b7280; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 8px;"),
-                    Span(r.name + (f" - {r.description}" if r.description else ""), style="font-size: 0.875rem;")
-                , style="margin-bottom: 4px;")
-                for r in all_roles
-            ],
-            style="display: grid; gap: 4px;"
-        ),
-        style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px;"
-    )
+        # Role legend
+        role_legend = Div(
+            H4("Доступные роли:", style="margin-bottom: 8px;"),
+            Div(
+                *[
+                    Div(
+                        Span(r.code, style=f"background: #6b7280; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 8px;"),
+                        Span(r.name + (f" - {r.description}" if r.description else ""), style="font-size: 0.875rem;")
+                    , style="margin-bottom: 4px;")
+                    for r in all_roles
+                ],
+                style="display: grid; gap: 4px;"
+            ),
+            style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px;"
+        )
 
         tab_content = Div(
             # Stats
