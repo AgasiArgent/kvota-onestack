@@ -16168,9 +16168,23 @@ def get(customer_id: str, field_name: str, session):
         input_elem = Textarea(
             value, name=field_name,
             autofocus=True,
-            style=input_style + " min-height: 80px; font-family: inherit;",
+            style=input_style + " min-height: 80px; font-family: inherit; padding-right: 5rem;",
             required=True if field_name == "name" else False,
-            onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
+            onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); } else if(event.metaKey && event.key === 'Enter') { event.target.form.requestSubmit(); }"
+        )
+        # For textarea, add visible Save button
+        action_buttons = Div(
+            Button("✓", type="submit",
+                  style="background: #10b981; color: white; width: 1.75rem; height: 1.75rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;",
+                  title="Сохранить (Cmd+Enter)"),
+            Button("✕", type="button",
+                  cls="cancel-btn",
+                  hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
+                  hx_target=f"#field-{field_name}",
+                  hx_swap="outerHTML",
+                  style="background: #ef4444; color: white; width: 1.75rem; height: 1.75rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center;",
+                  title="Отмена (Esc)"),
+            style="position: absolute; right: 0.5rem; top: 0.5rem; display: flex; gap: 0.5rem;"
         )
     else:
         input_elem = Input(
@@ -16180,17 +16194,19 @@ def get(customer_id: str, field_name: str, session):
             required=True if field_name == "name" else False,
             onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
         )
+        # For input, only cancel button (Enter submits automatically)
+        action_buttons = Button("✕", type="button",
+                              cls="cancel-btn",
+                              hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
+                              hx_target=f"#field-{field_name}",
+                              hx_swap="outerHTML",
+                              style="position: absolute; right: 0.5rem; top: 0.5rem; background: #ef4444; color: white; width: 1.75rem; height: 1.75rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; opacity: 0.8;",
+                              title="Отмена (Esc)")
 
     return Form(
         Div(
             input_elem,
-            Button("✕", type="button",
-                  cls="cancel-btn",
-                  hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
-                  hx_target=f"#field-{field_name}",
-                  hx_swap="outerHTML",
-                  style="position: absolute; right: 0.5rem; top: 0.5rem; background: #ef4444; color: white; width: 1.75rem; height: 1.75rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; opacity: 0.8;",
-                  title="Отмена (Esc)"),
+            action_buttons,
             style="position: relative;",
             id=f"field-{field_name}"
         ),
