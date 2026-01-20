@@ -15923,26 +15923,17 @@ def get(customer_id: str, session, tab: str = "general"):
             session=session
         )
 
-    # Tab navigation buttons
+    # Tab navigation buttons (using regular links for simplicity)
     tabs_nav = Div(
         A("Общая информация",
           href=f"/customers/{customer_id}?tab=general",
-          cls=f"tab-btn {'active' if tab == 'general' else ''}",
-          hx_get=f"/customers/{customer_id}?tab=general",
-          hx_target="#tab-content",
-          hx_push_url="true"),
+          cls=f"tab-btn {'active' if tab == 'general' else ''}"),
         A("Адреса",
           href=f"/customers/{customer_id}?tab=addresses",
-          cls=f"tab-btn {'active' if tab == 'addresses' else ''}",
-          hx_get=f"/customers/{customer_id}?tab=addresses",
-          hx_target="#tab-content",
-          hx_push_url="true"),
+          cls=f"tab-btn {'active' if tab == 'addresses' else ''}"),
         A("Контакты",
           href=f"/customers/{customer_id}?tab=contacts",
-          cls=f"tab-btn {'active' if tab == 'contacts' else ''}",
-          hx_get=f"/customers/{customer_id}?tab=contacts",
-          hx_target="#tab-content",
-          hx_push_url="true"),
+          cls=f"tab-btn {'active' if tab == 'contacts' else ''}"),
         cls="tabs-nav"
     )
 
