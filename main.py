@@ -11913,9 +11913,9 @@ def get(session, tab: str = "users"):
 
         members = members_result.data if members_result.data else []
 
-        # Get all available roles
+        # Get all available roles for this organization (system roles + org-specific roles)
         from services.role_service import get_all_roles
-        all_roles = get_all_roles()
+        all_roles = get_all_roles(organization_id=org_id)
 
         # Build user data with roles
         users_data = []

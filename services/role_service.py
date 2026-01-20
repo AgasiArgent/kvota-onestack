@@ -271,19 +271,37 @@ def remove_role(
     return len(response.data) > 0
 
 
-def get_all_roles() -> List[Role]:
+def get_all_roles(organization_id: Optional[str | UUID] = None) -> List[Role]:
     """
-    Get all available roles from the roles reference table.
+    Get available roles from the roles reference table.
+
+    If organization_id is provided, returns only:
+    - System roles (is_system_role = true)
+    - Roles belonging to the specified organization
+
+    If organization_id is None, returns all roles (legacy behavior).
+
+    Args:
+        organization_id: Optional organization UUID to filter roles
 
     Returns:
-        List of all Role objects defined in the system
+        List of Role objects available to the organization
     """
     supabase = get_supabase()
 
-    response = supabase.table("roles") \
-        .select("id, slug, name, description") \
-        .order("slug") \
-        .execute()
+    if organization_id:
+        # Filter to system roles + organization-specific roles
+        response = supabase.table("roles") \
+            .select("id, slug, name, description") \
+            .or_(f"is_system_role.eq.true,organization_id.eq.{str(organization_id)}") \
+            .order("slug") \
+            .execute()
+    else:
+        # Legacy: return all roles
+        response = supabase.table("roles") \
+            .select("id, slug, name, description") \
+            .order("slug") \
+            .execute()
 
     return [
         Role(

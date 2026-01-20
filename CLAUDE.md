@@ -9,19 +9,17 @@
 
 ### 1. Buyer/Seller Company Creation Errors
 
-**Status:** 🔴 CRITICAL - Not working
+**Status:** ✅ FIXED (2026-01-20)
 
 **Issue:**
-- Clicking "+ Добавить компанию-покупателя" shows "компания не найдена" error
-- Clicking "+ Добавить компанию-продавца" shows same error
-- Cannot add any buyer or seller companies
+- Clicking "+ Добавить компанию-покупателя" showed "компания не найдена" error
+- Root cause: Route order issue - `/buyer-companies/{company_id}` was defined BEFORE `/buyer-companies/new`
+- FastHTML/FastAPI matched "new" as a company_id parameter
 
-**Location:** `/admin?tab=buyer_companies` and `/admin?tab=seller_companies`
-
-**Need to investigate:**
-- Form submission logic
-- Company search/selection mechanism
-- Error handling
+**Fix:**
+- Moved `/buyer-companies/new` GET and POST routes to be BEFORE `/buyer-companies/{company_id}` route
+- Now matches correct pattern used in seller-companies routes
+- Commit: 18837e5 "Fix buyer-companies routing: move /new routes before /{company_id}"
 
 ---
 
