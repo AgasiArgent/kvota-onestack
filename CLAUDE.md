@@ -153,13 +153,49 @@ Before confirming deployment:
 
 ---
 
+### 5. Quote Creation Form Improvements
+
+**Status:** ✅ COMPLETED (2026-01-20)
+
+**Changes Made:**
+1. **Removed from creation form:**
+   - Currency selector (now set during calculation)
+   - Payment Terms field (now set during calculation)
+
+2. **Added to creation form:**
+   - Delivery City field
+   - Delivery Country field
+   - Default currency set to RUB on quote creation
+
+3. **Added to calculate page:**
+   - Quote Currency selector in Pricing section (RUB/USD/EUR)
+   - Currency is saved to quote after calculation completes
+
+4. **Database changes:**
+   - Added delivery_country column to kvota.quotes table (migration 118)
+
+**Workflow:**
+- Sales manager creates quote with basic info (customer, seller company, delivery location)
+- Currency and payment terms are decided during markup/calculation phase
+- More logical flow: location first, pricing later
+
+**Verification:**
+- Tested quote creation with delivery location fields
+- Verified currency selector on calculate page works
+- Confirmed delivery_city and delivery_country save correctly
+
+**Commit:** 97f1b9c "Improve quote creation form and calculation page"
+
+---
+
 ## 🎯 Next Steps
 
 ### Immediate (Current Work)
 1. ~~Fix buyer/seller company creation bug~~ ✅
 2. ~~Fix seller company selection bug~~ ✅
-3. Clean up roles table (reduce from 86 to relevant ones)
-4. Review and improve quote creation form (remove currency, payment_terms, add delivery location fields)
+3. ~~Improve quote creation form~~ ✅
+4. Clean up roles table (reduce from 86 to relevant ones)
+5. Implement sales manager workspace features (quote registry, exports, customer creation)
 
 ### Future Enhancements
 - Consider adding filters to requested items tab
