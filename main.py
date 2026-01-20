@@ -15943,66 +15943,31 @@ def get(customer_id: str, session, tab: str = "general"):
             # Main info
             Div(
                 Div(
-                    Div(Strong("Название компании"), style="color: #666; font-size: 0.9em;"),
-                    Div(
-                        Div(customer.name, style="font-size: 1.1em;"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/name",
-                              hx_target="#field-name",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-name"
-                    ),
+                    Div(Strong("Название компании"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    _render_field_display(customer_id, "name", customer.name),
                     cls="info-item"
                 ),
                 Div(
-                    Div(Strong("ИНН"), style="color: #666; font-size: 0.9em;"),
-                    Div(
-                        Div(customer.inn or "Не указан"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/inn",
-                              hx_target="#field-inn",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-inn"
-                    ),
+                    Div(Strong("ИНН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    _render_field_display(customer_id, "inn", customer.inn or ""),
                     cls="info-item"
                 ),
                 Div(
-                    Div(Strong("КПП"), style="color: #666; font-size: 0.9em;"),
-                    Div(
-                        Div(customer.kpp or "Не указан"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/kpp",
-                              hx_target="#field-kpp",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-kpp"
-                    ),
+                    Div(Strong("КПП"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    _render_field_display(customer_id, "kpp", customer.kpp or ""),
                     cls="info-item"
                 ),
                 Div(
-                    Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em;"),
-                    Div(
-                        Div(customer.ogrn or "Не указан"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/ogrn",
-                              hx_target="#field-ogrn",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-ogrn"
-                    ),
+                    Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
                     cls="info-item"
                 ),
                 Div(
-                    Div(Strong("Статус"), style="color: #666; font-size: 0.9em;"),
+                    Div(Strong("Статус"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     Div(
                         Span("✅ Активен" if customer.is_active else "❌ Неактивен",
                              cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
+                        style="padding: 0.5rem 0.75rem;"
                     ),
                     cls="info-item"
                 ),
@@ -16018,31 +15983,13 @@ def get(customer_id: str, session, tab: str = "general"):
                 # Legal address with inline editing
                 Div(
                     Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Div(
-                        Div(customer.legal_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/legal_address",
-                              hx_target="#field-legal_address",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-legal_address"
-                    ),
+                    _render_field_display(customer_id, "legal_address", customer.legal_address or ""),
                     style="margin-bottom: 1.5rem;"
                 ),
                 # Actual address with inline editing
                 Div(
                     Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Div(
-                        Div(customer.actual_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
-                        Button("✏️ Редактировать",
-                              hx_get=f"/customers/{customer_id}/edit-field/actual_address",
-                              hx_target="#field-actual_address",
-                              hx_swap="outerHTML",
-                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-                              cls="edit-btn"),
-                        id="field-actual_address"
-                    ),
+                    _render_field_display(customer_id, "actual_address", customer.actual_address or ""),
                     style="margin-bottom: 1.5rem;"
                 ),
                 # Warehouse addresses with dynamic add/delete
@@ -16214,30 +16161,43 @@ def get(customer_id: str, field_name: str, session):
 
     label, value, input_type = field_config[field_name]
 
+    # Style for modern inline editing
+    input_style = "width: 100%; padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
+
     if input_type == "textarea":
-        input_elem = Textarea(value, name=field_name, id=f"edit-{field_name}",
-                             style="width: 100%; min-height: 80px;", required=True if field_name == "name" else False)
+        input_elem = Textarea(
+            value, name=field_name,
+            autofocus=True,
+            style=input_style + " min-height: 80px; font-family: inherit;",
+            required=True if field_name == "name" else False,
+            onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
+        )
     else:
-        input_elem = Input(value=value, name=field_name, id=f"edit-{field_name}",
-                          style="width: 100%;", required=True if field_name == "name" else False)
+        input_elem = Input(
+            value=value, name=field_name,
+            autofocus=True,
+            style=input_style,
+            required=True if field_name == "name" else False,
+            onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
+        )
 
     return Form(
         Div(
             input_elem,
-            Div(
-                Button("✓ Сохранить", type="submit", style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; margin-right: 0.5rem;"),
-                Button("✕ Отмена", type="button",
-                      hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
-                      hx_target=f"#field-{field_name}",
-                      hx_swap="outerHTML",
-                      style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer;"),
-                style="display: flex; gap: 0.5rem; margin-top: 0.5rem;"
-            ),
+            Button("✕", type="button",
+                  cls="cancel-btn",
+                  hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
+                  hx_target=f"#field-{field_name}",
+                  hx_swap="outerHTML",
+                  style="position: absolute; right: 0.5rem; top: 0.5rem; background: #ef4444; color: white; width: 1.75rem; height: 1.75rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; opacity: 0.8;",
+                  title="Отмена (Esc)"),
+            style="position: relative;",
             id=f"field-{field_name}"
         ),
         hx_post=f"/customers/{customer_id}/update-field/{field_name}",
         hx_target=f"#field-{field_name}",
-        hx_swap="outerHTML"
+        hx_swap="outerHTML",
+        hx_trigger="submit"
     )
 
 
@@ -16289,24 +16249,26 @@ def get(customer_id: str, field_name: str, session):
 
 
 def _render_field_display(customer_id: str, field_name: str, value: str):
-    """Helper function to render field in display mode."""
+    """Helper function to render field in display mode with modern inline edit."""
     display_value = value if value else "Не указан"
+    display_color = "#999" if not value else "#000"
 
     # Special formatting for name field
     if field_name == "name":
-        style = "font-size: 1.1em;"
+        font_style = "font-size: 1.1em; font-weight: 500;"
     else:
-        style = ""
+        font_style = ""
 
     return Div(
-        Div(display_value, style=style),
-        Button("✏️ Редактировать",
-              hx_get=f"/customers/{customer_id}/edit-field/{field_name}",
-              hx_target=f"#field-{field_name}",
-              hx_swap="outerHTML",
-              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
-              cls="edit-btn"),
-        id=f"field-{field_name}"
+        display_value,
+        id=f"field-{field_name}",
+        hx_get=f"/customers/{customer_id}/edit-field/{field_name}",
+        hx_target=f"#field-{field_name}",
+        hx_swap="outerHTML",
+        style=f"cursor: pointer; padding: 0.5rem 0.75rem; border-radius: 0.375rem; transition: background 0.15s ease; color: {display_color}; {font_style}",
+        onmouseover="this.style.background='#f3f4f6'",
+        onmouseout="this.style.background='transparent'",
+        title="Кликните для редактирования"
     )
 
 
