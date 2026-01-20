@@ -15951,45 +15951,124 @@ def get(customer_id: str, session, tab: str = "general"):
 
     # Build tab content based on selected tab
     if tab == "general":
+        from services.customer_service import get_customer_statistics
+        from datetime import datetime
+
+        # Get statistics
+        stats = get_customer_statistics(customer_id)
+
+        # Format dates
+        created_at = ""
+        if customer.created_at:
+            created_at = customer.created_at.strftime("%d.%m.%Y %H:%M")
+
+        updated_at = ""
+        if customer.updated_at:
+            updated_at = customer.updated_at.strftime("%d.%m.%Y %H:%M")
+
         tab_content = Div(
-            # Main info
+            # Main info section
             Div(
+                H3("Основная информация", style="margin-bottom: 1rem;"),
                 Div(
-                    Div(Strong("Название компании"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "name", customer.name),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("ИНН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "inn", customer.inn or ""),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("КПП"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "kpp", customer.kpp or ""),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("Статус"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     Div(
-                        Span("✅ Активен" if customer.is_active else "❌ Неактивен",
-                             cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
-                        style="padding: 0.5rem 0.75rem;"
+                        Div(Strong("Название компании"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        _render_field_display(customer_id, "name", customer.name),
+                        cls="info-item"
                     ),
-                    cls="info-item"
+                    Div(
+                        Div(Strong("ИНН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        _render_field_display(customer_id, "inn", customer.inn or ""),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("КПП"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        _render_field_display(customer_id, "kpp", customer.kpp or ""),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Основной менеджер"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div("Не назначен", style="padding: 0.5rem 0.75rem; color: #999;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Дата добавления"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(created_at or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Дата обновления"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(updated_at or "—", style="padding: 0.5rem 0.75rem;"),
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Статус"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(
+                            Span("✅ Активен" if customer.is_active else "❌ Неактивен",
+                                 cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
+                            style="padding: 0.5rem 0.75rem;"
+                        ),
+                        cls="info-item"
+                    ),
+                    cls="info-grid",
+                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;"
                 ),
-                cls="info-grid",
-                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 1rem;"
+            ),
+
+            # Statistics section
+            Div(
+                H3("Статистика по клиенту", style="margin: 2rem 0 1rem 0;"),
+                Div(
+                    # Quotes stats
+                    Div(
+                        Div(
+                            Div("📊 КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(str(stats["quotes_count"])), style="font-size: 2.5rem; color: #2563eb;"),
+                            Div("коммерческих предложений", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    Div(
+                        Div(
+                            Div("💰 Сумма КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(f"{stats['quotes_sum']:,.0f} ₽"), style="font-size: 2rem; color: #16a34a;"),
+                            Div("общая сумма предложений", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    # Specs stats
+                    Div(
+                        Div(
+                            Div("📄 Спецификации", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(str(stats["specifications_count"])), style="font-size: 2.5rem; color: #9333ea;"),
+                            Div("подписанных спецификаций", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    Div(
+                        Div(
+                            Div("💎 Сумма спецификаций", style="font-size: 2rem; margin-bottom: 0.5rem;"),
+                            Div(Strong(f"{stats['specifications_sum']:,.0f} ₽"), style="font-size: 2rem; color: #ea580c;"),
+                            Div("общая сумма сделок", style="color: #666; font-size: 0.9em;"),
+                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
+                        )
+                    ),
+                    cls="stats-grid",
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;"
+                ),
             ),
             id="tab-content"
         )
 
     elif tab == "addresses":
+        # Show postal address only if it differs from actual_address
+        show_postal = customer.postal_address and customer.postal_address != customer.actual_address
+
         tab_content = Div(
             Div(
                 # Legal address with inline editing
@@ -16002,6 +16081,19 @@ def get(customer_id: str, session, tab: str = "general"):
                 Div(
                     Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     _render_field_display(customer_id, "actual_address", customer.actual_address or ""),
+                    style="margin-bottom: 1.5rem;"
+                ),
+                # Postal address (only if different from actual)
+                Div(
+                    Div(Strong("Почтовый адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    _render_field_display(customer_id, "postal_address", customer.postal_address or ""),
+                    style="margin-bottom: 1.5rem;"
+                ) if show_postal else Div(
+                    Div(Strong("Почтовый адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(
+                        "Совпадает с фактическим адресом",
+                        style="color: #999; padding: 0.5rem 0.75rem; font-style: italic;"
+                    ),
                     style="margin-bottom: 1.5rem;"
                 ),
                 # Warehouse addresses with dynamic add/delete
@@ -16175,12 +16267,17 @@ def get(customer_id: str, session, tab: str = "general"):
                 "cancelled": "🚫 Отменено"
             }.get(workflow_status, workflow_status)
 
+            # Format sum and profit
+            total_sum = quote.get("total_sum", 0)
+            total_profit = quote.get("total_profit", 0)
+
             quotes_rows.append(
                 Tr(
                     Td(A(Strong(quote.get("idn", "—")), href=f"/quotes/{quote['id']}")),
-                    Td(created_at or "—"),
+                    Td(f"{total_sum:,.0f} ₽" if total_sum else "—", style="text-align: right;"),
+                    Td(f"{total_profit:,.0f} ₽" if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
+                    Td(created_at or "—", style="font-size: 0.9em;"),
                     Td(Span(status_text, cls="status-badge")),
-                    Td(quote.get("deal_type", "—")),
                 )
             )
 
@@ -16193,13 +16290,14 @@ def get(customer_id: str, session, tab: str = "general"):
                 Thead(
                     Tr(
                         Th("IDN"),
-                        Th("Создано"),
+                        Th("Сумма", style="text-align: right;"),
+                        Th("Профит", style="text-align: right;"),
+                        Th("Дата"),
                         Th("Статус"),
-                        Th("Тип сделки"),
                     )
                 ),
                 Tbody(*quotes_rows) if quotes_rows else Tbody(
-                    Tr(Td("КП не найдены.", colspan="4", style="text-align: center; color: #666;"))
+                    Tr(Td("КП не найдены.", colspan="5", style="text-align: center; color: #666;"))
                 )
             ),
             id="tab-content"
@@ -16236,15 +16334,18 @@ def get(customer_id: str, session, tab: str = "general"):
             if spec.get("quotes"):
                 quote_idn = spec["quotes"].get("idn", "")
 
+            # Format sum and profit
+            total_sum = spec.get("total_sum", 0)
+            total_profit = spec.get("total_profit", 0)
+
             specs_rows.append(
                 Tr(
                     Td(Strong(spec.get("specification_number", "—"))),
                     Td(A(quote_idn, href=f"/quotes/{spec.get('quote_id')}") if spec.get("quote_id") else "—"),
-                    Td(sign_date or "—"),
+                    Td(f"{total_sum:,.0f} ₽" if total_sum else "—", style="text-align: right;"),
+                    Td(f"{total_profit:,.0f} ₽" if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
+                    Td(sign_date or "—", style="font-size: 0.9em;"),
                     Td(Span(status_text, cls="status-badge")),
-                    Td(
-                        A("📄", href=f"/specifications/{spec['id']}", title="Просмотр") if spec.get("id") else "—"
-                    )
                 )
             )
 
@@ -16253,14 +16354,15 @@ def get(customer_id: str, session, tab: str = "general"):
                 Thead(
                     Tr(
                         Th("Номер спецификации"),
-                        Th("КП IDN"),
-                        Th("Дата подписания"),
+                        Th("IDN"),
+                        Th("Сумма", style="text-align: right;"),
+                        Th("Профит", style="text-align: right;"),
+                        Th("Дата"),
                         Th("Статус"),
-                        Th(""),
                     )
                 ),
                 Tbody(*specs_rows) if specs_rows else Tbody(
-                    Tr(Td("Спецификации не найдены.", colspan="5", style="text-align: center; color: #666;"))
+                    Tr(Td("Спецификации не найдены.", colspan="6", style="text-align: center; color: #666;"))
                 )
             ),
             id="tab-content"
@@ -16288,20 +16390,26 @@ def get(customer_id: str, session, tab: str = "general"):
             # Brands as comma-separated
             brands = ", ".join(item.get("brands", [])) if item.get("brands") else "—"
 
-            # Quotes as comma-separated links
-            quote_idns = item.get("quotes", [])
-            quote_links = ", ".join(quote_idns[:3])  # Show first 3
-            if len(quote_idns) > 3:
-                quote_links += f" +{len(quote_idns) - 3}"
+            # Quantity
+            total_quantity = item.get("total_quantity", 0)
+
+            # Price
+            last_price = item.get("last_price")
+            price_display = f"{last_price:,.2f} ₽" if last_price else "—"
+
+            # Was sold status
+            was_sold = item.get("was_sold", False)
+            sold_badge = Span("✅ Продан", cls="status-badge status-approved") if was_sold else Span("—", style="color: #999;")
 
             items_rows.append(
                 Tr(
                     Td(Strong(product.get("name", "—"))),
-                    Td(product.get("sku", "—")),
                     Td(brands),
-                    Td(str(item.get("times_requested", 0))),
-                    Td(last_requested or "—"),
-                    Td(quote_links or "—", style="font-size: 0.85em;"),
+                    Td(product.get("sku", "—")),
+                    Td(f"{total_quantity:,.0f}" if total_quantity else "—", style="text-align: right;"),
+                    Td(price_display, style="text-align: right;"),
+                    Td(last_requested or "—", style="font-size: 0.9em;"),
+                    Td(sold_badge),
                 )
             )
 
@@ -16315,15 +16423,16 @@ def get(customer_id: str, session, tab: str = "general"):
                 Thead(
                     Tr(
                         Th("Название товара"),
+                        Th("Бренд"),
                         Th("Артикул"),
-                        Th("Бренды"),
-                        Th("Запрошено раз"),
-                        Th("Последний запрос"),
-                        Th("В КП"),
+                        Th("Количество", style="text-align: right;"),
+                        Th("Цена", style="text-align: right;"),
+                        Th("Дата"),
+                        Th("Продан"),
                     )
                 ),
                 Tbody(*items_rows) if items_rows else Tbody(
-                    Tr(Td("Позиции не найдены.", colspan="6", style="text-align: center; color: #666;"))
+                    Tr(Td("Позиции не найдены.", colspan="7", style="text-align: center; color: #666;"))
                 )
             ),
             id="tab-content"

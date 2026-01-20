@@ -103,6 +103,7 @@ class Customer:
     # Addresses
     legal_address: Optional[str] = None   # Юридический адрес
     actual_address: Optional[str] = None  # Фактический адрес
+    postal_address: Optional[str] = None  # Почтовый адрес (если отличается)
 
     # Director information (ЛПР подписант - signatory)
     general_director_name: Optional[str] = None
@@ -163,6 +164,7 @@ def _parse_customer(data: dict, contacts: Optional[List[dict]] = None) -> Custom
         ogrn=data.get("ogrn"),
         legal_address=data.get("legal_address"),
         actual_address=data.get("actual_address"),
+        postal_address=data.get("postal_address"),
         general_director_name=data.get("general_director_name"),
         general_director_position=data.get("general_director_position", "Генеральный директор"),
         warehouse_addresses=warehouse_addresses,
@@ -269,6 +271,7 @@ def create_customer(
     ogrn: Optional[str] = None,
     legal_address: Optional[str] = None,
     actual_address: Optional[str] = None,
+    postal_address: Optional[str] = None,
     general_director_name: Optional[str] = None,
     general_director_position: Optional[str] = "Генеральный директор",
     warehouse_addresses: Optional[List[str]] = None,
@@ -285,6 +288,7 @@ def create_customer(
         ogrn: Russian state registration number (ОГРН)
         legal_address: Legal registration address
         actual_address: Actual business address
+        postal_address: Postal address (if different from actual)
         general_director_name: Director name for documents
         general_director_position: Director position title
         warehouse_addresses: List of warehouse addresses
@@ -324,6 +328,7 @@ def create_customer(
             "ogrn": ogrn,
             "legal_address": legal_address,
             "actual_address": actual_address,
+            "postal_address": postal_address,
             "general_director_name": general_director_name,
             "general_director_position": general_director_position,
             "warehouse_addresses": warehouse_addresses or [],
@@ -610,6 +615,7 @@ def update_customer(
     ogrn: Optional[str] = None,
     legal_address: Optional[str] = None,
     actual_address: Optional[str] = None,
+    postal_address: Optional[str] = None,
     general_director_name: Optional[str] = None,
     general_director_position: Optional[str] = None,
     warehouse_addresses: Optional[List[str]] = None,
@@ -626,6 +632,7 @@ def update_customer(
         ogrn: New OGRN
         legal_address: New legal address
         actual_address: New actual address
+        postal_address: New postal address
         general_director_name: New director name
         general_director_position: New director position
         warehouse_addresses: New warehouse addresses
@@ -662,6 +669,8 @@ def update_customer(
             update_data["legal_address"] = legal_address
         if actual_address is not None:
             update_data["actual_address"] = actual_address
+        if postal_address is not None:
+            update_data["postal_address"] = postal_address
         if general_director_name is not None:
             update_data["general_director_name"] = general_director_name
         if general_director_position is not None:
@@ -1477,24 +1486,66 @@ def get_customer_contracts(customer_id: str) -> List[Dict[str, Any]]:
 
 def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
     """
-    Get all quotes (КП) for a customer.
+    Get all quotes (КП) for a customer with calculated sums and profit.
 
     Args:
         customer_id: Customer UUID
 
     Returns:
         List of quote dicts with fields:
-        - id, idn, workflow_status, deal_type, created_at, etc.
+        - id, idn, workflow_status, deal_type, created_at
+        - total_sum: sum of all items (unit_price * quantity)
+        - total_profit: difference between sale and purchase prices
     """
     try:
         supabase = _get_supabase()
 
-        result = supabase.table("quotes").select("*")\
+        # Get quotes
+        quotes_result = supabase.table("quotes").select("*")\
             .eq("customer_id", customer_id)\
             .order("created_at", desc=True)\
             .execute()
 
-        return result.data if result.data else []
+        if not quotes_result.data:
+            return []
+
+        quotes = quotes_result.data
+        quote_ids = [q["id"] for q in quotes]
+
+        # Get quote items for all quotes
+        items_result = supabase.table("quote_items").select(
+            "quote_id, quantity, unit_price, supplier_price"
+        ).in_("quote_id", quote_ids).execute()
+
+        # Calculate sums and profits per quote
+        quote_totals = {}
+        if items_result.data:
+            for item in items_result.data:
+                quote_id = item["quote_id"]
+                if quote_id not in quote_totals:
+                    quote_totals[quote_id] = {"sum": 0, "profit": 0}
+
+                quantity = item.get("quantity", 0) or 0
+                unit_price = item.get("unit_price", 0) or 0
+                supplier_price = item.get("supplier_price", 0) or 0
+
+                item_total = quantity * unit_price
+                item_profit = quantity * (unit_price - supplier_price)
+
+                quote_totals[quote_id]["sum"] += item_total
+                quote_totals[quote_id]["profit"] += item_profit
+
+        # Add totals to quotes
+        for quote in quotes:
+            quote_id = quote["id"]
+            if quote_id in quote_totals:
+                quote["total_sum"] = quote_totals[quote_id]["sum"]
+                quote["total_profit"] = quote_totals[quote_id]["profit"]
+            else:
+                quote["total_sum"] = 0
+                quote["total_profit"] = 0
+
+        return quotes
 
     except Exception as e:
         print(f"Error getting customer quotes: {e}")
@@ -1503,13 +1554,13 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
 
 def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
     """
-    Get all specifications for a customer (through quotes).
+    Get all specifications for a customer (through quotes) with calculated sums and profit.
 
     Args:
         customer_id: Customer UUID
 
     Returns:
-        List of specification dicts with quote info
+        List of specification dicts with quote info, total_sum, and total_profit
     """
     try:
         supabase = _get_supabase()
@@ -1525,21 +1576,144 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
         quote_ids = [q["id"] for q in quotes_result.data]
 
         # Get specifications for these quotes
-        result = supabase.table("specifications").select("*, quotes(idn, customer_id)")\
+        specs_result = supabase.table("specifications").select("*, quotes(idn, customer_id)")\
             .in_("quote_id", quote_ids)\
             .order("sign_date", desc=True)\
             .execute()
 
-        return result.data if result.data else []
+        if not specs_result.data:
+            return []
+
+        specifications = specs_result.data
+        spec_quote_ids = [s["quote_id"] for s in specifications if s.get("quote_id")]
+
+        # Get quote items to calculate sums
+        items_result = supabase.table("quote_items").select(
+            "quote_id, quantity, unit_price, supplier_price"
+        ).in_("quote_id", spec_quote_ids).execute()
+
+        # Calculate sums and profits per quote
+        quote_totals = {}
+        if items_result.data:
+            for item in items_result.data:
+                quote_id = item["quote_id"]
+                if quote_id not in quote_totals:
+                    quote_totals[quote_id] = {"sum": 0, "profit": 0}
+
+                quantity = item.get("quantity", 0) or 0
+                unit_price = item.get("unit_price", 0) or 0
+                supplier_price = item.get("supplier_price", 0) or 0
+
+                item_total = quantity * unit_price
+                item_profit = quantity * (unit_price - supplier_price)
+
+                quote_totals[quote_id]["sum"] += item_total
+                quote_totals[quote_id]["profit"] += item_profit
+
+        # Add totals to specifications
+        for spec in specifications:
+            quote_id = spec.get("quote_id")
+            if quote_id and quote_id in quote_totals:
+                spec["total_sum"] = quote_totals[quote_id]["sum"]
+                spec["total_profit"] = quote_totals[quote_id]["profit"]
+            else:
+                spec["total_sum"] = 0
+                spec["total_profit"] = 0
+
+        return specifications
 
     except Exception as e:
         print(f"Error getting customer specifications: {e}")
         return []
 
 
+def get_customer_statistics(customer_id: str) -> Dict[str, Any]:
+    """
+    Get aggregated statistics for a customer.
+
+    Args:
+        customer_id: Customer UUID
+
+    Returns:
+        Dict with statistics:
+        - quotes_count: Number of quotes
+        - quotes_sum: Total sum of all quotes
+        - specifications_count: Number of specifications
+        - specifications_sum: Total sum of all specifications
+    """
+    try:
+        supabase = _get_supabase()
+
+        # Get all quotes for this customer
+        quotes_result = supabase.table("quotes").select("id")\
+            .eq("customer_id", customer_id)\
+            .execute()
+
+        if not quotes_result.data:
+            return {
+                "quotes_count": 0,
+                "quotes_sum": 0,
+                "specifications_count": 0,
+                "specifications_sum": 0
+            }
+
+        quote_ids = [q["id"] for q in quotes_result.data]
+        quotes_count = len(quote_ids)
+
+        # Get all quote items to calculate quotes sum
+        items_result = supabase.table("quote_items").select(
+            "quote_id, quantity, unit_price"
+        ).in_("quote_id", quote_ids).execute()
+
+        quotes_sum = 0
+        if items_result.data:
+            for item in items_result.data:
+                quantity = item.get("quantity", 0) or 0
+                unit_price = item.get("unit_price", 0) or 0
+                quotes_sum += quantity * unit_price
+
+        # Get specifications count
+        specs_result = supabase.table("specifications").select("id, quote_id")\
+            .in_("quote_id", quote_ids)\
+            .execute()
+
+        specifications_count = len(specs_result.data) if specs_result.data else 0
+
+        # Calculate specifications sum (same as quote items sums for those quotes with specs)
+        specifications_sum = 0
+        if specs_result.data:
+            spec_quote_ids = [s["quote_id"] for s in specs_result.data if s.get("quote_id")]
+            if spec_quote_ids:
+                spec_items_result = supabase.table("quote_items").select(
+                    "quote_id, quantity, unit_price"
+                ).in_("quote_id", spec_quote_ids).execute()
+
+                if spec_items_result.data:
+                    for item in spec_items_result.data:
+                        quantity = item.get("quantity", 0) or 0
+                        unit_price = item.get("unit_price", 0) or 0
+                        specifications_sum += quantity * unit_price
+
+        return {
+            "quotes_count": quotes_count,
+            "quotes_sum": round(quotes_sum, 2),
+            "specifications_count": specifications_count,
+            "specifications_sum": round(specifications_sum, 2)
+        }
+
+    except Exception as e:
+        print(f"Error getting customer statistics: {e}")
+        return {
+            "quotes_count": 0,
+            "quotes_sum": 0,
+            "specifications_count": 0,
+            "specifications_sum": 0
+        }
+
+
 def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
     """
-    Get all unique items (products) ever requested by customer.
+    Get all unique items (products) ever requested by customer with detailed info.
 
     This returns all products from all quote_items for all quotes of this customer,
     even if no price was given.
@@ -1551,14 +1725,17 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
         List of unique products with aggregated info:
         - product details
         - times_requested (count)
+        - total_quantity (sum of all quantities requested)
+        - last_price (most recent unit_price)
         - last_requested_at
         - brands requested
+        - was_sold (boolean - was this item in a deal?)
     """
     try:
         supabase = _get_supabase()
 
         # Get all quote IDs for this customer
-        quotes_result = supabase.table("quotes").select("id")\
+        quotes_result = supabase.table("quotes").select("id, workflow_status")\
             .eq("customer_id", customer_id)\
             .execute()
 
@@ -1567,9 +1744,15 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
 
         quote_ids = [q["id"] for q in quotes_result.data]
 
+        # Track which quotes resulted in deals
+        deal_quote_ids = set([
+            q["id"] for q in quotes_result.data
+            if q.get("workflow_status") == "deal"
+        ])
+
         # Get all quote items with product details
         result = supabase.table("quote_items").select(
-            "*, products(id, name, sku, brand, unit), quotes(id, idn, created_at)"
+            "*, products(id, name, sku, brand, unit), quotes(id, idn, created_at, workflow_status)"
         )\
             .in_("quote_id", quote_ids)\
             .order("created_at", desc=True)\
@@ -1584,22 +1767,34 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
         product_map = defaultdict(lambda: {
             "product": None,
             "times_requested": 0,
+            "total_quantity": 0,
+            "last_price": None,
             "last_requested_at": None,
             "brands": set(),
-            "quotes": []
+            "quotes": [],
+            "was_sold": False
         })
 
         for item in result.data:
             product_id = item["product_id"]
+            quote_id = item["quote_id"]
+
             product_map[product_id]["product"] = item.get("products")
             product_map[product_id]["times_requested"] += 1
 
-            # Track latest request date
-            if item.get("quotes") and item["quotes"].get("created_at"):
-                request_date = item["quotes"]["created_at"]
-                if not product_map[product_id]["last_requested_at"] or \
-                   request_date > product_map[product_id]["last_requested_at"]:
-                    product_map[product_id]["last_requested_at"] = request_date
+            # Add quantity
+            quantity = item.get("quantity", 0) or 0
+            product_map[product_id]["total_quantity"] += quantity
+
+            # Track latest price
+            if item.get("unit_price"):
+                # Update price if this is the most recent request
+                if item.get("quotes") and item["quotes"].get("created_at"):
+                    request_date = item["quotes"]["created_at"]
+                    if not product_map[product_id]["last_requested_at"] or \
+                       request_date > product_map[product_id]["last_requested_at"]:
+                        product_map[product_id]["last_price"] = item["unit_price"]
+                        product_map[product_id]["last_requested_at"] = request_date
 
             # Track brands
             if item.get("brand"):
@@ -1611,6 +1806,10 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
                 if quote_idn and quote_idn not in product_map[product_id]["quotes"]:
                     product_map[product_id]["quotes"].append(quote_idn)
 
+            # Check if was sold (quote became a deal)
+            if quote_id in deal_quote_ids:
+                product_map[product_id]["was_sold"] = True
+
         # Convert to list
         items = []
         for product_id, data in product_map.items():
@@ -1618,9 +1817,12 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
                 "product_id": product_id,
                 "product": data["product"],
                 "times_requested": data["times_requested"],
+                "total_quantity": data["total_quantity"],
+                "last_price": data["last_price"],
                 "last_requested_at": data["last_requested_at"],
                 "brands": list(data["brands"]),
-                "quotes": data["quotes"]
+                "quotes": data["quotes"],
+                "was_sold": data["was_sold"]
             })
 
         # Sort by times requested (most requested first)
