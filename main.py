@@ -15900,8 +15900,8 @@ def get(session, q: str = "", status: str = ""):
 
 
 @rt("/customers/{customer_id}")
-def get(customer_id: str, session):
-    """Customer detail view page with full information and contacts."""
+def get(customer_id: str, session, tab: str = "general"):
+    """Customer detail view page with tabbed interface."""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -15923,64 +15923,37 @@ def get(customer_id: str, session):
             session=session
         )
 
-    # Build contacts list
-    contacts_rows = []
-    for contact in customer.contacts:
-        badges = []
-        if contact.is_signatory:
-            badges.append(Span("✍️ Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem;"))
-        if contact.is_primary:
-            badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+    # Tab navigation buttons
+    tabs_nav = Div(
+        A("Общая информация",
+          href=f"/customers/{customer_id}?tab=general",
+          cls=f"tab-btn {'active' if tab == 'general' else ''}",
+          hx_get=f"/customers/{customer_id}?tab=general",
+          hx_target="#tab-content",
+          hx_push_url="true"),
+        A("Адреса",
+          href=f"/customers/{customer_id}?tab=addresses",
+          cls=f"tab-btn {'active' if tab == 'addresses' else ''}",
+          hx_get=f"/customers/{customer_id}?tab=addresses",
+          hx_target="#tab-content",
+          hx_push_url="true"),
+        A("Контакты",
+          href=f"/customers/{customer_id}?tab=contacts",
+          cls=f"tab-btn {'active' if tab == 'contacts' else ''}",
+          hx_get=f"/customers/{customer_id}?tab=contacts",
+          hx_target="#tab-content",
+          hx_push_url="true"),
+        cls="tabs-nav"
+    )
 
-        contacts_rows.append(
-            Tr(
-                Td(Strong(contact.get_full_name()), *badges),
-                Td(contact.position or "—"),
-                Td(
-                    A(contact.email, href=f"mailto:{contact.email}") if contact.email else "—"
-                ),
-                Td(
-                    A(contact.phone, href=f"tel:{contact.phone}") if contact.phone else "—"
-                ),
-                Td(contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes or "—"),
-                Td(
-                    A("✏️", href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
-                )
-            )
-        )
-
-    # Build warehouse addresses list
-    warehouse_items = []
-    if customer.warehouse_addresses:
-        for addr in customer.warehouse_addresses:
-            warehouse_items.append(Li(addr))
-
-    return page_layout(f"Клиент: {customer.name}",
-        # Header with actions
-        Div(
-            H1(f"👤 {customer.name}"),
-            Div(
-                A("✏️ Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
-                A("← К списку", href="/customers", role="button", cls="secondary"),
-                style="display: flex; gap: 0.5rem;"
-            ),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Status badge
-        Div(
-            Span("✅ Активен" if customer.is_active else "❌ Неактивен",
-                 cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Main info card
-        Div(
-            H3("📋 Основная информация"),
+    # Build tab content based on selected tab
+    if tab == "general":
+        tab_content = Div(
+            # Main info
             Div(
                 Div(
                     Div(Strong("Название компании"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.name),
+                    Div(customer.name, style="font-size: 1.1em;"),
                     cls="info-item"
                 ),
                 Div(
@@ -15998,60 +15971,76 @@ def get(customer_id: str, session):
                     Div(customer.ogrn or "Не указан"),
                     cls="info-item"
                 ),
-                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
+                Div(
+                    Div(Strong("Статус"), style="color: #666; font-size: 0.9em;"),
+                    Div(
+                        Span("✅ Активен" if customer.is_active else "❌ Неактивен",
+                             cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
+                    ),
+                    cls="info-item"
+                ),
+                cls="info-grid",
+                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; margin-top: 1rem;"
             ),
-            cls="card"
-        ),
+            id="tab-content"
+        )
 
-        # Addresses card
-        Div(
-            H3("📍 Адреса"),
-            Div(
-                Div(
-                    Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.legal_address or "Не указан"),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.actual_address or "Не указан"),
-                    cls="info-item"
-                ),
-                style="margin-bottom: 1rem;"
-            ),
-            Div(
-                Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em;"),
-                Ul(*warehouse_items) if warehouse_items else Div("Нет адресов складов", style="color: #999;"),
-            ) if customer.warehouse_addresses or True else "",
-            cls="card"
-        ),
+    elif tab == "addresses":
+        # Build warehouse addresses list
+        warehouse_items = []
+        if customer.warehouse_addresses:
+            for addr in customer.warehouse_addresses:
+                warehouse_items.append(Li(addr))
 
-        # Director card
-        Div(
-            H3("👔 Руководство"),
+        tab_content = Div(
             Div(
                 Div(
-                    Div(Strong("Должность"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.general_director_position or "Генеральный директор"),
-                    cls="info-item"
+                    Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(customer.legal_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                    style="margin-bottom: 1.5rem;"
                 ),
                 Div(
-                    Div(Strong("ФИО"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.general_director_name or "Не указан"),
-                    cls="info-item"
+                    Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(customer.actual_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                    style="margin-bottom: 1.5rem;"
                 ),
-                cls="info-grid", style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                Div(
+                    Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Ul(*warehouse_items, style="padding-left: 1.5rem;") if warehouse_items else Div("Нет адресов складов", style="color: #999; font-style: italic;"),
+                ),
+                style="margin-top: 1rem;"
             ),
-            cls="card"
-        ),
+            id="tab-content"
+        )
 
-        # Contacts card
-        Div(
-            Div(
-                H3(f"👥 Контакты (ЛПР) — {len(customer.contacts)}"),
-                A("+ Добавить контакт", href=f"/customers/{customer_id}/contacts/new", role="button", cls="outline"),
-                style="display: flex; justify-content: space-between; align-items: center;"
-            ),
+    elif tab == "contacts":
+        # Build contacts list
+        contacts_rows = []
+        for contact in customer.contacts:
+            badges = []
+            if contact.is_signatory:
+                badges.append(Span("✍️ Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem;"))
+            if contact.is_primary:
+                badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+
+            contacts_rows.append(
+                Tr(
+                    Td(Strong(contact.get_full_name()), *badges),
+                    Td(contact.position or "—"),
+                    Td(
+                        A(contact.email, href=f"mailto:{contact.email}") if contact.email else "—"
+                    ),
+                    Td(
+                        A(contact.phone, href=f"tel:{contact.phone}") if contact.phone else "—"
+                    ),
+                    Td(contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes or "—"),
+                    Td(
+                        A("✏️", href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
+                    )
+                )
+            )
+
+        tab_content = Div(
             Div(
                 "💡 Отметьте одного контакта как ",
                 Span("✍️ Подписант", style="font-weight: bold;"),
@@ -16060,6 +16049,10 @@ def get(customer_id: str, session):
                 Span("★ Основной", style="font-weight: bold;"),
                 " — для основной коммуникации.",
                 cls="alert alert-info", style="margin: 1rem 0;"
+            ),
+            Div(
+                A("+ Добавить контакт", href=f"/customers/{customer_id}/contacts/new", role="button", cls="outline"),
+                style="margin-bottom: 1rem;"
             ),
             Table(
                 Thead(
@@ -16076,8 +16069,64 @@ def get(customer_id: str, session):
                     Tr(Td("Контакты не добавлены. Добавьте первого контакта.", colspan="6", style="text-align: center; color: #666;"))
                 )
             ),
-            cls="card"
+            id="tab-content"
+        )
+    else:
+        tab_content = Div("Неизвестная вкладка", id="tab-content")
+
+    return page_layout(f"Клиент: {customer.name}",
+        # Header with actions
+        Div(
+            H1(f"👤 {customer.name}"),
+            Div(
+                A("✏️ Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
+                A("← К списку", href="/customers", role="button", cls="secondary"),
+                style="display: flex; gap: 0.5rem;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"
         ),
+
+        # Tabs navigation
+        tabs_nav,
+
+        # Tab content
+        tab_content,
+
+        # Add custom CSS for tabs
+        Style("""
+            .tabs-nav {
+                display: flex;
+                gap: 0;
+                border-bottom: 2px solid #e5e7eb;
+                margin-bottom: 2rem;
+            }
+
+            .tab-btn {
+                padding: 0.75rem 1.5rem;
+                background: none;
+                border: none;
+                border-bottom: 3px solid transparent;
+                cursor: pointer;
+                font-weight: 500;
+                color: #6b7280;
+                text-decoration: none;
+                transition: all 0.2s;
+            }
+
+            .tab-btn:hover {
+                color: #3b82f6;
+                background: #f9fafb;
+            }
+
+            .tab-btn.active {
+                color: #3b82f6;
+                border-bottom-color: #3b82f6;
+            }
+
+            #tab-content {
+                min-height: 300px;
+            }
+        """),
 
         session=session
     )
