@@ -285,12 +285,11 @@ def update_user_profile(user_id: str, organization_id: str, **update_data) -> bo
 
 
 def get_departments(organization_id: str) -> List[Dict[str, Any]]:
-    """Get list of departments for organization."""
+    """Get list of departments (shared across all organizations)."""
     supabase = get_supabase()
 
     result = supabase.table("departments") \
         .select("id, name") \
-        .eq("organization_id", organization_id) \
         .order("name") \
         .execute()
 
@@ -298,12 +297,11 @@ def get_departments(organization_id: str) -> List[Dict[str, Any]]:
 
 
 def get_sales_groups(organization_id: str) -> List[Dict[str, Any]]:
-    """Get list of sales groups for organization."""
+    """Get list of sales groups (shared across all organizations)."""
     supabase = get_supabase()
 
     result = supabase.table("sales_groups") \
         .select("id, name") \
-        .eq("organization_id", organization_id) \
         .order("name") \
         .execute()
 
