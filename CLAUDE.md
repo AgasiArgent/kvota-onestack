@@ -41,22 +41,22 @@
 
 ### 3. Users Table UI Improvements
 
-**Status:** 🟡 MEDIUM - UX issues
+**Status:** ✅ COMPLETED (2026-01-20)
 
-**Current Problems:**
-1. **No ФИО column** - showing user ID instead of full name
-2. **"Действия" column with "Роли" button** - unnecessary, takes up space
-3. **Role legend section** - not needed, clutters UI
-4. **Non-interactive role badges** - should be clickable for inline role management
+**Changes Made:**
+1. ✅ Changed "ID пользователя" header to "ФИО"
+2. ✅ Removed "Действия" column with "Роли" button
+3. ✅ Removed role legend section (saved vertical space)
+4. ✅ Implemented inline role editing:
+   - Click on role badges → inline editor opens
+   - Checkboxes for all available roles (21 roles)
+   - Color-coded role badges in editor
+   - Save/Cancel buttons with HTMX
+   - No page reload - instant updates
 
-**Required Changes:**
-1. ✅ Add "ФИО" column to users table
-2. ✅ Remove "Действия" column
-3. ✅ Remove role legend section
-4. ✅ Make role badges clickable:
-   - Click on badge → inline role editor
-   - Add/remove/change roles without separate modal
-   - Similar UX to customer contacts inline editing
+**Commits:**
+- 704e536 "Improve admin users table UI"
+- b3126f8 "Add inline role editing with clickable badges"
 
 ---
 
