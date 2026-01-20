@@ -91,7 +91,7 @@ CREATE POLICY buyer_companies_insert_policy ON kvota.buyer_companies
             FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code IN ('admin', 'finance')
+            AND r.slug IN ('admin', 'finance')
         )
     );
 
@@ -104,7 +104,7 @@ CREATE POLICY buyer_companies_update_policy ON kvota.buyer_companies
             FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code IN ('admin', 'finance')
+            AND r.slug IN ('admin', 'finance')
         )
     );
 
@@ -117,7 +117,7 @@ CREATE POLICY buyer_companies_delete_policy ON kvota.buyer_companies
             FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code = 'admin'
+            AND r.slug = 'admin'
         )
     );
 

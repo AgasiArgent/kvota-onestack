@@ -56,7 +56,7 @@ CREATE POLICY brand_supplier_assignments_insert_policy ON kvota.brand_supplier_a
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
             AND ur.organization_id = brand_supplier_assignments.organization_id
-            AND r.code IN ('admin', 'procurement')
+            AND r.slug IN ('admin', 'procurement')
         )
     );
 
@@ -69,7 +69,7 @@ CREATE POLICY brand_supplier_assignments_update_policy ON kvota.brand_supplier_a
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
             AND ur.organization_id = brand_supplier_assignments.organization_id
-            AND r.code IN ('admin', 'procurement')
+            AND r.slug IN ('admin', 'procurement')
         )
     );
 
@@ -82,7 +82,7 @@ CREATE POLICY brand_supplier_assignments_delete_policy ON kvota.brand_supplier_a
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
             AND ur.organization_id = brand_supplier_assignments.organization_id
-            AND r.code = 'admin'
+            AND r.slug = 'admin'
         )
     );
 

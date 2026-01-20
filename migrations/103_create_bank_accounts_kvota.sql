@@ -105,7 +105,7 @@ CREATE POLICY bank_accounts_insert_policy ON kvota.bank_accounts
             SELECT ur.organization_id FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code IN ('admin', 'finance')
+            AND r.slug IN ('admin', 'finance')
         )
     );
 
@@ -117,7 +117,7 @@ CREATE POLICY bank_accounts_update_policy ON kvota.bank_accounts
             SELECT ur.organization_id FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code IN ('admin', 'finance')
+            AND r.slug IN ('admin', 'finance')
         )
     );
 
@@ -129,7 +129,7 @@ CREATE POLICY bank_accounts_delete_policy ON kvota.bank_accounts
             SELECT ur.organization_id FROM kvota.user_roles ur
             JOIN kvota.roles r ON ur.role_id = r.id
             WHERE ur.user_id = auth.uid()
-            AND r.code = 'admin'
+            AND r.slug = 'admin'
         )
     );
 

@@ -80,7 +80,7 @@ CREATE POLICY supplier_invoice_items_insert_policy ON kvota.supplier_invoice_ite
                 FROM kvota.user_roles ur
                 JOIN kvota.roles r ON ur.role_id = r.id
                 WHERE ur.user_id = auth.uid()
-                AND r.code IN ('admin', 'procurement', 'quote_controller', 'finance')
+                AND r.slug IN ('admin', 'procurement', 'quote_controller', 'finance')
             )
         )
     );
@@ -96,7 +96,7 @@ CREATE POLICY supplier_invoice_items_update_policy ON kvota.supplier_invoice_ite
                 FROM kvota.user_roles ur
                 JOIN kvota.roles r ON ur.role_id = r.id
                 WHERE ur.user_id = auth.uid()
-                AND r.code IN ('admin', 'procurement', 'quote_controller', 'finance')
+                AND r.slug IN ('admin', 'procurement', 'quote_controller', 'finance')
             )
         )
     );
@@ -112,7 +112,7 @@ CREATE POLICY supplier_invoice_items_delete_policy ON kvota.supplier_invoice_ite
                 FROM kvota.user_roles ur
                 JOIN kvota.roles r ON ur.role_id = r.id
                 WHERE ur.user_id = auth.uid()
-                AND r.code IN ('admin', 'procurement', 'quote_controller')
+                AND r.slug IN ('admin', 'procurement', 'quote_controller')
             )
         )
     );

@@ -94,7 +94,7 @@ WITH CHECK (
         JOIN kvota.user_roles ur ON ur.user_id = auth.uid() AND ur.organization_id = si.organization_id
         JOIN kvota.roles r ON r.id = ur.role_id
         WHERE si.id = supplier_invoice_payments.invoice_id
-        AND r.code IN ('procurement', 'finance', 'admin', 'head_of_procurement')
+        AND r.slug IN ('procurement', 'finance', 'admin', 'head_of_procurement')
     )
 );
 
@@ -107,7 +107,7 @@ USING (
         JOIN kvota.user_roles ur ON ur.user_id = auth.uid() AND ur.organization_id = si.organization_id
         JOIN kvota.roles r ON r.id = ur.role_id
         WHERE si.id = supplier_invoice_payments.invoice_id
-        AND r.code IN ('procurement', 'finance', 'admin', 'head_of_procurement')
+        AND r.slug IN ('procurement', 'finance', 'admin', 'head_of_procurement')
     )
 );
 
@@ -120,7 +120,7 @@ USING (
         JOIN kvota.user_roles ur ON ur.user_id = auth.uid() AND ur.organization_id = si.organization_id
         JOIN kvota.roles r ON r.id = ur.role_id
         WHERE si.id = supplier_invoice_payments.invoice_id
-        AND r.code IN ('admin', 'finance')
+        AND r.slug IN ('admin', 'finance')
     )
 );
 
