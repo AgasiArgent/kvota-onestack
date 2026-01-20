@@ -16242,7 +16242,7 @@ def get(customer_id: str, field_name: str, session):
 
 
 @rt("/customers/{customer_id}/update-field/{field_name}")
-def post(customer_id: str, field_name: str, session, request):
+async def post(customer_id: str, field_name: str, session, request):
     """Update a specific field via inline editing."""
     redirect = require_login(session)
     if redirect:
@@ -16255,8 +16255,7 @@ def post(customer_id: str, field_name: str, session, request):
         return Div("Клиент не найден")
 
     # Get form data
-    import asyncio
-    form_data = asyncio.run(request.form())
+    form_data = await request.form()
     new_value = form_data.get(field_name, "")
 
     # Update customer
@@ -16344,7 +16343,7 @@ def get(customer_id: str, session):
 
 
 @rt("/customers/{customer_id}/warehouses/add")
-def post(customer_id: str, session, request):
+async def post(customer_id: str, session, request):
     """Add new warehouse address."""
     redirect = require_login(session)
     if redirect:
@@ -16357,8 +16356,7 @@ def post(customer_id: str, session, request):
         return Div("Клиент не найден")
 
     # Get form data
-    import asyncio
-    form_data = asyncio.run(request.form())
+    form_data = await request.form()
     new_address = form_data.get("warehouse_address", "").strip()
 
     if not new_address:
