@@ -1225,10 +1225,8 @@ def post(customer_id: str, currency: str, delivery_terms: str, payment_terms: in
         }
 
         # v3.0: seller_company_id at quote level
-        # Note: Only add if DB schema has this column (migration 028)
-        # For now, skip since migrations may not be applied
-        # if seller_company_id and seller_company_id.strip():
-        #     insert_data["seller_company_id"] = seller_company_id.strip()
+        if seller_company_id and seller_company_id.strip():
+            insert_data["seller_company_id"] = seller_company_id.strip()
 
         result = supabase.table("quotes").insert(insert_data).execute()
 
