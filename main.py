@@ -11983,28 +11983,8 @@ def get(session, tab: str = "users"):
                 Td(u["email"]),
                 Td(*role_badges if role_badges else [Span("—", style="color: #9ca3af;")]),
                 Td(tg_status),
-                Td(u["joined_at"]),
-                Td(
-                    A("Роли", href=f"/admin/users/{u['user_id']}/roles", role="button",
-                      style="font-size: 0.75rem; padding: 4px 12px;")
-                )
+                Td(u["joined_at"])
             ))
-
-        # Role legend
-        role_legend = Div(
-            H4("Доступные роли:", style="margin-bottom: 8px;"),
-            Div(
-                *[
-                    Div(
-                        Span(r.code, style=f"background: #6b7280; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 8px;"),
-                        Span(r.name + (f" - {r.description}" if r.description else ""), style="font-size: 0.875rem;")
-                    , style="margin-bottom: 4px;")
-                    for r in all_roles
-                ],
-                style="display: grid; gap: 4px;"
-            ),
-            style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px;"
-        )
 
         tab_content = Div(
             # Stats
@@ -12020,28 +12000,24 @@ def get(session, tab: str = "users"):
                     cls="card", style="text-align: center; padding: 16px;"
                 ),
                 Div(
-                    Div(str(len(all_roles)), cls="stat-value", style="color: #8b5cf6;"),
+                    Div(str(len(all_roles)), cls="stat-value", style="color: #8b7cf6;"),
                     Div("Доступных ролей", style="font-size: 0.875rem;"),
                     cls="card", style="text-align: center; padding: 16px;"
                 ),
                 style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
             ),
 
-            # Role legend
-            role_legend,
-
             # Users table
             Div(
                 H3("Пользователи организации"),
                 Table(
                     Thead(Tr(
-                        Th("ID пользователя"),
+                        Th("ФИО"),
                         Th("Роли"),
                         Th("Telegram"),
-                        Th("Дата вступления"),
-                        Th("Действия")
+                        Th("Дата вступления")
                     )),
-                    Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="5", style="text-align: center; color: #9ca3af;"))),
+                    Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="4", style="text-align: center; color: #9ca3af;"))),
                     cls="striped"
                 ),
                 cls="card"
