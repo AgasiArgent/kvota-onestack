@@ -177,9 +177,13 @@ def nav_bar(session):
         if "finance" in roles or "admin" in roles:
             nav_items.append(Li(A("Финансы", href="/finance")))
 
+        # Supply chain navigation (procurement + admin)
+        if "procurement" in roles or "admin" in roles:
+            nav_items.append(Li(A("Поставщики", href="/suppliers")))
+
         # Admin-only navigation
         if "admin" in roles:
-            nav_items.append(Li(A("Админ", href="/admin/users")))
+            nav_items.append(Li(A("Админ", href="/admin")))
 
         # Add settings and logout at the end
         nav_items.extend([
@@ -11851,16 +11855,21 @@ def post(session, deal_id: str, item_id: str,
 # ============================================================================
 
 @rt("/admin/users")
-def get(session):
-    """Admin page for user and role management.
+def get_admin_users_redirect(session):
+    """Redirect old /admin/users to new /admin with tabs"""
+    return RedirectResponse("/admin?tab=users", status_code=303)
 
-    Feature #84: Страница /admin/users
 
-    This page allows admins to:
-    - View all users in the organization
-    - See assigned roles for each user
-    - Add/remove roles
-    - See Telegram connection status
+@rt("/admin")
+def get(session, tab: str = "users"):
+    """Admin page with tabs for user management and company management.
+
+    Feature #84: Страница /admin
+
+    Tabs:
+    - users: User and role management
+    - seller_companies: Seller companies (юрлица-продажи)
+    - buyer_companies: Buyer companies (юрлица-закупки)
     """
     redirect = require_login(session)
     if redirect:
@@ -11881,7 +11890,23 @@ def get(session):
     supabase = get_supabase()
     org_id = user["org_id"]
 
-    # Get all organization members with their roles and Telegram status
+    # Tab navigation
+    tabs_nav = Div(
+        A("Пользователи",
+          href="/admin?tab=users",
+          cls=f"tab-btn {'active' if tab == 'users' else ''}"),
+        A("Юрлица-продажи",
+          href="/admin?tab=seller_companies",
+          cls=f"tab-btn {'active' if tab == 'seller_companies' else ''}"),
+        A("Юрлица-закупки",
+          href="/admin?tab=buyer_companies",
+          cls=f"tab-btn {'active' if tab == 'buyer_companies' else ''}"),
+        cls="tabs-nav"
+    )
+
+    # Build tab content based on selected tab
+    if tab == "users":
+        # Get all organization members with their roles and Telegram status
     members_result = supabase.table("organization_members").select(
         "user_id, status, created_at"
     ).eq("organization_id", org_id).eq("status", "active").execute()
@@ -11983,55 +12008,219 @@ def get(session):
         style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-bottom: 24px;"
     )
 
-    return page_layout("Управление пользователями",
-        H1("Управление пользователями"),
-
-        # Stats
-        Div(
+        tab_content = Div(
+            # Stats
             Div(
-                Div(str(len(users_data)), cls="stat-value", style="color: #3b82f6;"),
-                Div("Всего пользователей", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                Div(
+                    Div(str(len(users_data)), cls="stat-value", style="color: #3b82f6;"),
+                    Div("Всего пользователей", style="font-size: 0.875rem;"),
+                    cls="card", style="text-align: center; padding: 16px;"
+                ),
+                Div(
+                    Div(str(sum(1 for u in users_data if u["telegram"])), cls="stat-value", style="color: #10b981;"),
+                    Div("С Telegram", style="font-size: 0.875rem;"),
+                    cls="card", style="text-align: center; padding: 16px;"
+                ),
+                Div(
+                    Div(str(len(all_roles)), cls="stat-value", style="color: #8b5cf6;"),
+                    Div("Доступных ролей", style="font-size: 0.875rem;"),
+                    cls="card", style="text-align: center; padding: 16px;"
+                ),
+                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
+            ),
+
+            # Role legend
+            role_legend,
+
+            # Users table
+            Div(
+                H3("Пользователи организации"),
+                Table(
+                    Thead(Tr(
+                        Th("ID пользователя"),
+                        Th("Роли"),
+                        Th("Telegram"),
+                        Th("Дата вступления"),
+                        Th("Действия")
+                    )),
+                    Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="5", style="text-align: center; color: #9ca3af;"))),
+                    cls="striped"
+                ),
+                cls="card"
+            ),
+
+            # Navigation
+            Div(
+                A("← На главную", href="/dashboard", role="button", cls="secondary"),
+                A("Назначение брендов →", href="/admin/brands", role="button"),
+                style="margin-top: 24px; display: flex; gap: 12px;"
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "seller_companies":
+        # Get all seller companies
+        companies = supabase.table("seller_companies").select("*")\
+            .eq("organization_id", org_id)\
+            .order("name")\
+            .execute()
+
+        companies_data = companies.data if companies.data else []
+
+        company_rows = []
+        for company in companies_data:
+            status_badge = Span("✅ Активна" if company.get("is_active") else "❌ Неактивна",
+                              cls=f"status-badge {'status-approved' if company.get('is_active') else 'status-rejected'}")
+
+            company_rows.append(
+                Tr(
+                    Td(Strong(company.get("name", "—"))),
+                    Td(company.get("supplier_code", "—")),
+                    Td(company.get("inn", "—")),
+                    Td(company.get("kpp", "—")),
+                    Td(company.get("country", "—")),
+                    Td(status_badge),
+                    Td(
+                        A("✏️", href=f"/seller-companies/{company['id']}/edit", title="Редактировать",
+                          style="margin-right: 0.5rem;"),
+                        A("👁️", href=f"/seller-companies/{company['id']}", title="Просмотр")
+                    )
+                )
+            )
+
+        tab_content = Div(
+            Div(
+                "ℹ️ Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
+                "Каждое КП привязывается к одной компании-продавцу.",
+                cls="alert alert-info",
+                style="margin-bottom: 1rem;"
             ),
             Div(
-                Div(str(sum(1 for u in users_data if u["telegram"])), cls="stat-value", style="color: #10b981;"),
-                Div("С Telegram", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                A("+ Добавить компанию-продавца", href="/seller-companies/new", role="button", cls="outline"),
+                style="margin-bottom: 1rem;"
             ),
-            Div(
-                Div(str(len(all_roles)), cls="stat-value", style="color: #8b5cf6;"),
-                Div("Доступных ролей", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
-            ),
-            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
-        ),
-
-        # Role legend
-        role_legend,
-
-        # Users table
-        Div(
-            H3("Пользователи организации"),
             Table(
-                Thead(Tr(
-                    Th("ID пользователя"),
-                    Th("Роли"),
-                    Th("Telegram"),
-                    Th("Дата вступления"),
-                    Th("Действия")
-                )),
-                Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="5", style="text-align: center; color: #9ca3af;"))),
-                cls="striped"
+                Thead(
+                    Tr(
+                        Th("Название"),
+                        Th("Код"),
+                        Th("ИНН"),
+                        Th("КПП"),
+                        Th("Страна"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*company_rows) if company_rows else Tbody(
+                    Tr(Td("Компании-продавцы не найдены. ", A("Добавить первую компанию", href="/seller-companies/new"),
+                           colspan="7", style="text-align: center; padding: 2rem;"))
+                )
             ),
-            cls="card"
-        ),
+            id="tab-content"
+        )
 
-        # Navigation
-        Div(
-            A("← На главную", href="/dashboard", role="button", cls="secondary"),
-            A("Назначение брендов →", href="/admin/brands", role="button"),
-            style="margin-top: 24px; display: flex; gap: 12px;"
-        ),
+    elif tab == "buyer_companies":
+        # Get all buyer companies
+        companies = supabase.table("buyer_companies").select("*")\
+            .eq("organization_id", org_id)\
+            .order("name")\
+            .execute()
+
+        companies_data = companies.data if companies.data else []
+
+        company_rows = []
+        for company in companies_data:
+            status_badge = Span("✅ Активна" if company.get("is_active") else "❌ Неактивна",
+                              cls=f"status-badge {'status-approved' if company.get('is_active') else 'status-rejected'}")
+
+            company_rows.append(
+                Tr(
+                    Td(Strong(company.get("name", "—"))),
+                    Td(company.get("company_code", "—")),
+                    Td(company.get("inn", "—")),
+                    Td(company.get("kpp", "—")),
+                    Td(company.get("country", "—")),
+                    Td(status_badge),
+                    Td(
+                        A("✏️", href=f"/buyer-companies/{company['id']}/edit", title="Редактировать",
+                          style="margin-right: 0.5rem;"),
+                        A("👁️", href=f"/buyer-companies/{company['id']}", title="Просмотр")
+                    )
+                )
+            )
+
+        tab_content = Div(
+            Div(
+                "💡 Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. ",
+                "Указываются на уровне позиции КП.",
+                cls="alert alert-info",
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                A("+ Добавить компанию-покупателя", href="/buyer-companies/new", role="button", cls="outline"),
+                style="margin-bottom: 1rem;"
+            ),
+            Table(
+                Thead(
+                    Tr(
+                        Th("Название"),
+                        Th("Код"),
+                        Th("ИНН"),
+                        Th("КПП"),
+                        Th("Страна"),
+                        Th("Статус"),
+                        Th("Действия"),
+                    )
+                ),
+                Tbody(*company_rows) if company_rows else Tbody(
+                    Tr(Td("Компании-покупатели не найдены. ", A("Добавить первую компанию", href="/buyer-companies/new"),
+                           colspan="7", style="text-align: center; padding: 2rem;"))
+                )
+            ),
+            id="tab-content"
+        )
+
+    else:
+        tab_content = Div("Неизвестная вкладка", id="tab-content")
+
+    return page_layout("Администрирование",
+        H1("⚙️ Администрирование"),
+
+        # Tabs navigation
+        tabs_nav,
+
+        # Tab content
+        tab_content,
+
+        # Add custom CSS for tabs (same as customer detail page)
+        Style("""
+            .tabs-nav {
+                display: flex;
+                gap: 0;
+                border-bottom: 2px solid #e5e7eb;
+                margin-bottom: 2rem;
+            }
+
+            .tab-btn {
+                padding: 0.75rem 1.5rem;
+                text-decoration: none;
+                color: #6b7280;
+                border-bottom: 2px solid transparent;
+                margin-bottom: -2px;
+                transition: all 0.2s;
+                font-weight: 500;
+            }
+
+            .tab-btn:hover {
+                color: #111827;
+                background: #f9fafb;
+            }
+
+            .tab-btn.active {
+                color: #2563eb;
+                border-bottom-color: #2563eb;
+            }
+        """),
 
         session=session
     )
