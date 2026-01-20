@@ -14533,6 +14533,126 @@ def get(session, q: str = "", status: str = ""):
     )
 
 
+@rt("/buyer-companies/new")
+def get(session):
+    """Show form to create a new buyer company."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-покупателей. Требуется роль: admin", cls="alert alert-error"),
+            session=session
+        )
+
+    return _buyer_company_form(session=session)
+
+
+@rt("/buyer-companies/new")
+def post(
+    company_code: str,
+    name: str,
+    country: str = "Россия",
+    inn: str = "",
+    kpp: str = "",
+    ogrn: str = "",
+    registration_address: str = "",
+    general_director_position: str = "Генеральный директор",
+    general_director_name: str = "",
+    session=None
+):
+    """Handle buyer company creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin only
+    if not user_has_role(session, "admin"):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания компаний-покупателей.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.buyer_company_service import (
+        create_buyer_company, validate_company_code, validate_inn, validate_kpp, validate_ogrn
+    )
+
+    # Normalize company code to uppercase
+    company_code = company_code.strip().upper() if company_code else ""
+
+    # Validate company code format
+    if not company_code or not validate_company_code(company_code):
+        return _buyer_company_form(
+            error="Код компании должен состоять из 3 заглавных латинских букв",
+            session=session
+        )
+
+    # Validate INN (required for buyer companies)
+    inn_clean = inn.strip() if inn else ""
+    if not inn_clean:
+        return _buyer_company_form(
+            error="ИНН обязателен для компании-покупателя",
+            session=session
+        )
+    if not validate_inn(inn_clean):
+        return _buyer_company_form(
+            error="ИНН должен состоять из 10 цифр (для юридического лица)",
+            session=session
+        )
+
+    # Validate KPP (optional)
+    kpp_clean = kpp.strip() if kpp else ""
+    if kpp_clean and not validate_kpp(kpp_clean):
+        return _buyer_company_form(
+            error="КПП должен состоять из 9 цифр",
+            session=session
+        )
+
+    # Validate OGRN (optional)
+    ogrn_clean = ogrn.strip() if ogrn else ""
+    if ogrn_clean and not validate_ogrn(ogrn_clean):
+        return _buyer_company_form(
+            error="ОГРН должен состоять из 13 цифр",
+            session=session
+        )
+
+    try:
+        company = create_buyer_company(
+            organization_id=org_id,
+            name=name.strip(),
+            company_code=company_code,
+            country=country.strip() or "Россия",
+            inn=inn_clean,
+            kpp=kpp_clean or None,
+            ogrn=ogrn_clean or None,
+            registration_address=registration_address.strip() or None,
+            general_director_position=general_director_position.strip() or "Генеральный директор",
+            general_director_name=general_director_name.strip() or None,
+            is_active=True,
+            created_by=user_id,
+        )
+
+        if company:
+            return RedirectResponse(f"/buyer-companies/{company.id}", status_code=303)
+        else:
+            return _buyer_company_form(
+                error="Компания с таким кодом или ИНН уже существует",
+                session=session
+            )
+
+    except ValueError as e:
+        return _buyer_company_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating buyer company: {e}")
+        return _buyer_company_form(error=f"Ошибка при создании: {e}", session=session)
+
+
 @rt("/buyer-companies/{company_id}")
 def get(company_id: str, session):
     """View single buyer company details."""
@@ -14805,126 +14925,6 @@ def _buyer_company_form(company=None, error=None, session=None):
         ),
         session=session
     )
-
-
-@rt("/buyer-companies/new")
-def get(session):
-    """Show form to create a new buyer company."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания компаний-покупателей. Требуется роль: admin", cls="alert alert-error"),
-            session=session
-        )
-
-    return _buyer_company_form(session=session)
-
-
-@rt("/buyer-companies/new")
-def post(
-    company_code: str,
-    name: str,
-    country: str = "Россия",
-    inn: str = "",
-    kpp: str = "",
-    ogrn: str = "",
-    registration_address: str = "",
-    general_director_position: str = "Генеральный директор",
-    general_director_name: str = "",
-    session=None
-):
-    """Handle buyer company creation form submission."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания компаний-покупателей.", cls="alert alert-error"),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-    user_id = user.get("id")
-
-    from services.buyer_company_service import (
-        create_buyer_company, validate_company_code, validate_inn, validate_kpp, validate_ogrn
-    )
-
-    # Normalize company code to uppercase
-    company_code = company_code.strip().upper() if company_code else ""
-
-    # Validate company code format
-    if not company_code or not validate_company_code(company_code):
-        return _buyer_company_form(
-            error="Код компании должен состоять из 3 заглавных латинских букв",
-            session=session
-        )
-
-    # Validate INN (required for buyer companies)
-    inn_clean = inn.strip() if inn else ""
-    if not inn_clean:
-        return _buyer_company_form(
-            error="ИНН обязателен для компании-покупателя",
-            session=session
-        )
-    if not validate_inn(inn_clean):
-        return _buyer_company_form(
-            error="ИНН должен состоять из 10 цифр (для юридического лица)",
-            session=session
-        )
-
-    # Validate KPP (optional)
-    kpp_clean = kpp.strip() if kpp else ""
-    if kpp_clean and not validate_kpp(kpp_clean):
-        return _buyer_company_form(
-            error="КПП должен состоять из 9 цифр",
-            session=session
-        )
-
-    # Validate OGRN (optional)
-    ogrn_clean = ogrn.strip() if ogrn else ""
-    if ogrn_clean and not validate_ogrn(ogrn_clean):
-        return _buyer_company_form(
-            error="ОГРН должен состоять из 13 цифр",
-            session=session
-        )
-
-    try:
-        company = create_buyer_company(
-            organization_id=org_id,
-            name=name.strip(),
-            company_code=company_code,
-            country=country.strip() or "Россия",
-            inn=inn_clean,
-            kpp=kpp_clean or None,
-            ogrn=ogrn_clean or None,
-            registration_address=registration_address.strip() or None,
-            general_director_position=general_director_position.strip() or "Генеральный директор",
-            general_director_name=general_director_name.strip() or None,
-            is_active=True,
-            created_by=user_id,
-        )
-
-        if company:
-            return RedirectResponse(f"/buyer-companies/{company.id}", status_code=303)
-        else:
-            return _buyer_company_form(
-                error="Компания с таким кодом или ИНН уже существует",
-                session=session
-            )
-
-    except ValueError as e:
-        return _buyer_company_form(error=str(e), session=session)
-    except Exception as e:
-        print(f"Error creating buyer company: {e}")
-        return _buyer_company_form(error=f"Ошибка при создании: {e}", session=session)
 
 
 @rt("/buyer-companies/{company_id}/edit")
