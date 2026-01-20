@@ -21,7 +21,7 @@ def get_supabase() -> Client:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
 
     # Use ClientOptions to set schema to kvota
-    opts = ClientOptions().replace(schema="kvota")
+    opts = ClientOptions(schema="kvota")
     return create_client(url, key, options=opts)
 
 

@@ -35,7 +35,7 @@ def _get_supabase():
     """Get Supabase client with service role key for admin operations."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
-    opts = ClientOptions().replace(schema="kvota")
+    opts = ClientOptions(schema="kvota")
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY, options=opts)
 
 
