@@ -1443,3 +1443,191 @@ def get_signatory_for_specification(customer_id: str) -> Optional[Dict[str, str]
         }
 
     return None
+
+
+# =============================================================================
+# CUSTOMER RELATED DATA - For Customer Detail Page Tabs
+# =============================================================================
+
+def get_customer_contracts(customer_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all contracts for a customer.
+
+    Args:
+        customer_id: Customer UUID
+
+    Returns:
+        List of contract dicts with fields:
+        - id, contract_number, contract_date, status, notes, created_at
+    """
+    try:
+        supabase = _get_supabase()
+
+        result = supabase.table("customer_contracts").select("*")\
+            .eq("customer_id", customer_id)\
+            .order("contract_date", desc=True)\
+            .execute()
+
+        return result.data if result.data else []
+
+    except Exception as e:
+        print(f"Error getting customer contracts: {e}")
+        return []
+
+
+def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all quotes (КП) for a customer.
+
+    Args:
+        customer_id: Customer UUID
+
+    Returns:
+        List of quote dicts with fields:
+        - id, idn, workflow_status, deal_type, created_at, etc.
+    """
+    try:
+        supabase = _get_supabase()
+
+        result = supabase.table("quotes").select("*")\
+            .eq("customer_id", customer_id)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        return result.data if result.data else []
+
+    except Exception as e:
+        print(f"Error getting customer quotes: {e}")
+        return []
+
+
+def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all specifications for a customer (through quotes).
+
+    Args:
+        customer_id: Customer UUID
+
+    Returns:
+        List of specification dicts with quote info
+    """
+    try:
+        supabase = _get_supabase()
+
+        # First get all quote IDs for this customer
+        quotes_result = supabase.table("quotes").select("id")\
+            .eq("customer_id", customer_id)\
+            .execute()
+
+        if not quotes_result.data:
+            return []
+
+        quote_ids = [q["id"] for q in quotes_result.data]
+
+        # Get specifications for these quotes
+        result = supabase.table("specifications").select("*, quotes(idn, customer_id)")\
+            .in_("quote_id", quote_ids)\
+            .order("sign_date", desc=True)\
+            .execute()
+
+        return result.data if result.data else []
+
+    except Exception as e:
+        print(f"Error getting customer specifications: {e}")
+        return []
+
+
+def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all unique items (products) ever requested by customer.
+
+    This returns all products from all quote_items for all quotes of this customer,
+    even if no price was given.
+
+    Args:
+        customer_id: Customer UUID
+
+    Returns:
+        List of unique products with aggregated info:
+        - product details
+        - times_requested (count)
+        - last_requested_at
+        - brands requested
+    """
+    try:
+        supabase = _get_supabase()
+
+        # Get all quote IDs for this customer
+        quotes_result = supabase.table("quotes").select("id")\
+            .eq("customer_id", customer_id)\
+            .execute()
+
+        if not quotes_result.data:
+            return []
+
+        quote_ids = [q["id"] for q in quotes_result.data]
+
+        # Get all quote items with product details
+        result = supabase.table("quote_items").select(
+            "*, products(id, name, sku, brand, unit), quotes(id, idn, created_at)"
+        )\
+            .in_("quote_id", quote_ids)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        if not result.data:
+            return []
+
+        # Group by product_id and aggregate
+        from collections import defaultdict
+
+        product_map = defaultdict(lambda: {
+            "product": None,
+            "times_requested": 0,
+            "last_requested_at": None,
+            "brands": set(),
+            "quotes": []
+        })
+
+        for item in result.data:
+            product_id = item["product_id"]
+            product_map[product_id]["product"] = item.get("products")
+            product_map[product_id]["times_requested"] += 1
+
+            # Track latest request date
+            if item.get("quotes") and item["quotes"].get("created_at"):
+                request_date = item["quotes"]["created_at"]
+                if not product_map[product_id]["last_requested_at"] or \
+                   request_date > product_map[product_id]["last_requested_at"]:
+                    product_map[product_id]["last_requested_at"] = request_date
+
+            # Track brands
+            if item.get("brand"):
+                product_map[product_id]["brands"].add(item["brand"])
+
+            # Track quotes
+            if item.get("quotes"):
+                quote_idn = item["quotes"].get("idn")
+                if quote_idn and quote_idn not in product_map[product_id]["quotes"]:
+                    product_map[product_id]["quotes"].append(quote_idn)
+
+        # Convert to list
+        items = []
+        for product_id, data in product_map.items():
+            items.append({
+                "product_id": product_id,
+                "product": data["product"],
+                "times_requested": data["times_requested"],
+                "last_requested_at": data["last_requested_at"],
+                "brands": list(data["brands"]),
+                "quotes": data["quotes"]
+            })
+
+        # Sort by times requested (most requested first)
+        items.sort(key=lambda x: x["times_requested"], reverse=True)
+
+        return items
+
+    except Exception as e:
+        print(f"Error getting customer requested items: {e}")
+        return []

@@ -15934,6 +15934,18 @@ def get(customer_id: str, session, tab: str = "general"):
         A("Контакты",
           href=f"/customers/{customer_id}?tab=contacts",
           cls=f"tab-btn {'active' if tab == 'contacts' else ''}"),
+        A("Договоры",
+          href=f"/customers/{customer_id}?tab=contracts",
+          cls=f"tab-btn {'active' if tab == 'contracts' else ''}"),
+        A("КП",
+          href=f"/customers/{customer_id}?tab=quotes",
+          cls=f"tab-btn {'active' if tab == 'quotes' else ''}"),
+        A("Спецификации",
+          href=f"/customers/{customer_id}?tab=specifications",
+          cls=f"tab-btn {'active' if tab == 'specifications' else ''}"),
+        A("Запрашиваемые позиции",
+          href=f"/customers/{customer_id}?tab=requested_items",
+          cls=f"tab-btn {'active' if tab == 'requested_items' else ''}"),
         cls="tabs-nav"
     )
 
@@ -16068,6 +16080,255 @@ def get(customer_id: str, session, tab: str = "general"):
             ),
             id="tab-content"
         )
+
+    elif tab == "contracts":
+        from services.customer_service import get_customer_contracts
+
+        contracts = get_customer_contracts(customer_id)
+
+        contracts_rows = []
+        for contract in contracts:
+            # Format date
+            contract_date = contract.get("contract_date", "")
+            if contract_date:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(contract_date.replace("Z", "+00:00"))
+                    contract_date = dt.strftime("%d.%m.%Y")
+                except:
+                    pass
+
+            # Status badge
+            status = contract.get("status", "")
+            status_text = {
+                "active": "✅ Активен",
+                "suspended": "⏸️ Приостановлен",
+                "terminated": "❌ Расторгнут"
+            }.get(status, status)
+
+            status_class = {
+                "active": "status-approved",
+                "suspended": "status-pending",
+                "terminated": "status-rejected"
+            }.get(status, "")
+
+            contracts_rows.append(
+                Tr(
+                    Td(Strong(contract.get("contract_number", "—"))),
+                    Td(contract_date or "—"),
+                    Td(Span(status_text, cls=f"status-badge {status_class}")),
+                    Td(contract.get("notes", "—")[:100]),
+                    Td(
+                        A("📄", href=f"/contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
+                    )
+                )
+            )
+
+        tab_content = Div(
+            Div(
+                A("+ Добавить договор", href=f"/customers/{customer_id}/contracts/new", role="button", cls="outline"),
+                style="margin-bottom: 1rem;"
+            ),
+            Table(
+                Thead(
+                    Tr(
+                        Th("Номер договора"),
+                        Th("Дата"),
+                        Th("Статус"),
+                        Th("Примечания"),
+                        Th(""),
+                    )
+                ),
+                Tbody(*contracts_rows) if contracts_rows else Tbody(
+                    Tr(Td("Договоры не найдены. Добавьте первый договор.", colspan="5", style="text-align: center; color: #666;"))
+                )
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "quotes":
+        from services.customer_service import get_customer_quotes
+
+        quotes = get_customer_quotes(customer_id)
+
+        quotes_rows = []
+        for quote in quotes:
+            # Format date
+            created_at = quote.get("created_at", "")
+            if created_at:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                    created_at = dt.strftime("%d.%m.%Y %H:%M")
+                except:
+                    pass
+
+            # Status badge
+            workflow_status = quote.get("workflow_status", "")
+            status_text = {
+                "draft": "📝 Черновик",
+                "pending_procurement": "🔄 Закупка",
+                "approved": "✅ Согласовано",
+                "sent_to_client": "📧 Отправлено",
+                "deal": "🤝 Сделка",
+                "rejected": "❌ Отклонено",
+                "cancelled": "🚫 Отменено"
+            }.get(workflow_status, workflow_status)
+
+            quotes_rows.append(
+                Tr(
+                    Td(A(Strong(quote.get("idn", "—")), href=f"/quotes/{quote['id']}")),
+                    Td(created_at or "—"),
+                    Td(Span(status_text, cls="status-badge")),
+                    Td(quote.get("deal_type", "—")),
+                )
+            )
+
+        tab_content = Div(
+            Div(
+                A("+ Создать КП", href=f"/quotes/new?customer_id={customer_id}", role="button", cls="outline"),
+                style="margin-bottom: 1rem;"
+            ),
+            Table(
+                Thead(
+                    Tr(
+                        Th("IDN"),
+                        Th("Создано"),
+                        Th("Статус"),
+                        Th("Тип сделки"),
+                    )
+                ),
+                Tbody(*quotes_rows) if quotes_rows else Tbody(
+                    Tr(Td("КП не найдены.", colspan="4", style="text-align: center; color: #666;"))
+                )
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "specifications":
+        from services.customer_service import get_customer_specifications
+
+        specifications = get_customer_specifications(customer_id)
+
+        specs_rows = []
+        for spec in specifications:
+            # Format date
+            sign_date = spec.get("sign_date", "")
+            if sign_date:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(sign_date.replace("Z", "+00:00"))
+                    sign_date = dt.strftime("%d.%m.%Y")
+                except:
+                    pass
+
+            # Status badge
+            status = spec.get("status", "")
+            status_text = {
+                "draft": "📝 Черновик",
+                "pending_review": "🔄 На проверке",
+                "approved": "✅ Согласовано",
+                "signed": "✍️ Подписано"
+            }.get(status, status)
+
+            # Get quote IDN if available
+            quote_idn = ""
+            if spec.get("quotes"):
+                quote_idn = spec["quotes"].get("idn", "")
+
+            specs_rows.append(
+                Tr(
+                    Td(Strong(spec.get("specification_number", "—"))),
+                    Td(A(quote_idn, href=f"/quotes/{spec.get('quote_id')}") if spec.get("quote_id") else "—"),
+                    Td(sign_date or "—"),
+                    Td(Span(status_text, cls="status-badge")),
+                    Td(
+                        A("📄", href=f"/specifications/{spec['id']}", title="Просмотр") if spec.get("id") else "—"
+                    )
+                )
+            )
+
+        tab_content = Div(
+            Table(
+                Thead(
+                    Tr(
+                        Th("Номер спецификации"),
+                        Th("КП IDN"),
+                        Th("Дата подписания"),
+                        Th("Статус"),
+                        Th(""),
+                    )
+                ),
+                Tbody(*specs_rows) if specs_rows else Tbody(
+                    Tr(Td("Спецификации не найдены.", colspan="5", style="text-align: center; color: #666;"))
+                )
+            ),
+            id="tab-content"
+        )
+
+    elif tab == "requested_items":
+        from services.customer_service import get_customer_requested_items
+
+        items = get_customer_requested_items(customer_id)
+
+        items_rows = []
+        for item in items:
+            product = item.get("product", {}) or {}
+
+            # Format last requested date
+            last_requested = item.get("last_requested_at", "")
+            if last_requested:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(last_requested.replace("Z", "+00:00"))
+                    last_requested = dt.strftime("%d.%m.%Y")
+                except:
+                    pass
+
+            # Brands as comma-separated
+            brands = ", ".join(item.get("brands", [])) if item.get("brands") else "—"
+
+            # Quotes as comma-separated links
+            quote_idns = item.get("quotes", [])
+            quote_links = ", ".join(quote_idns[:3])  # Show first 3
+            if len(quote_idns) > 3:
+                quote_links += f" +{len(quote_idns) - 3}"
+
+            items_rows.append(
+                Tr(
+                    Td(Strong(product.get("name", "—"))),
+                    Td(product.get("sku", "—")),
+                    Td(brands),
+                    Td(str(item.get("times_requested", 0))),
+                    Td(last_requested or "—"),
+                    Td(quote_links or "—", style="font-size: 0.85em;"),
+                )
+            )
+
+        tab_content = Div(
+            Div(
+                f"📊 Всего уникальных позиций: {len(items)}",
+                cls="alert alert-info",
+                style="margin-bottom: 1rem;"
+            ),
+            Table(
+                Thead(
+                    Tr(
+                        Th("Название товара"),
+                        Th("Артикул"),
+                        Th("Бренды"),
+                        Th("Запрошено раз"),
+                        Th("Последний запрос"),
+                        Th("В КП"),
+                    )
+                ),
+                Tbody(*items_rows) if items_rows else Tbody(
+                    Tr(Td("Позиции не найдены.", colspan="6", style="text-align: center; color: #666;"))
+                )
+            ),
+            id="tab-content"
+        )
+
     else:
         tab_content = Div("Неизвестная вкладка", id="tab-content")
 
