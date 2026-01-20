@@ -11979,9 +11979,23 @@ def get(session, tab: str = "users"):
             else:
                 tg_status = Span("—", style="color: #9ca3af;")
 
+            # Make roles cell clickable for inline editing
+            roles_cell = Td(
+                Div(
+                    *role_badges if role_badges else [Span("—", style="color: #9ca3af;")],
+                    id=f"roles-display-{u['user_id']}",
+                    style="cursor: pointer;",
+                    hx_get=f"/admin/users/{u['user_id']}/roles/edit",
+                    hx_target=f"#roles-cell-{u['user_id']}",
+                    hx_swap="innerHTML",
+                    title="Кликните для редактирования ролей"
+                ),
+                id=f"roles-cell-{u['user_id']}"
+            )
+
             user_rows.append(Tr(
                 Td(u["email"]),
-                Td(*role_badges if role_badges else [Span("—", style="color: #9ca3af;")]),
+                roles_cell,
                 Td(tg_status),
                 Td(u["joined_at"])
             ))
@@ -12197,6 +12211,210 @@ def get(session, tab: str = "users"):
         """),
 
         session=session
+    )
+
+
+@rt("/admin/users/{user_id}/roles/edit")
+def get(user_id: str, session):
+    """Inline role editor - returns form HTML fragment for HTMX."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+    org_id = admin_user["org_id"]
+
+    # Only admins can edit roles
+    if "admin" not in roles:
+        return Div("Нет прав", style="color: #ef4444;")
+
+    supabase = get_supabase()
+    from services.role_service import get_all_roles, get_user_role_codes
+
+    # Get available roles for organization
+    all_roles = get_all_roles(organization_id=org_id)
+
+    # Get current user roles
+    current_role_codes = get_user_role_codes(user_id, org_id)
+
+    # Build checkboxes for each role
+    role_checkboxes = []
+    for role in all_roles:
+        color = {
+            "admin": "#ef4444",
+            "sales": "#3b82f6",
+            "procurement": "#10b981",
+            "logistics": "#f59e0b",
+            "customs": "#8b5cf6",
+            "quote_controller": "#ec4899",
+            "spec_controller": "#06b6d4",
+            "finance": "#84cc16",
+            "top_manager": "#f97316"
+        }.get(role.code, "#6b7280")
+
+        is_checked = role.code in current_role_codes
+
+        role_checkboxes.append(
+            Label(
+                Input(
+                    type="checkbox",
+                    name="roles",
+                    value=role.code,
+                    checked=is_checked,
+                    style="margin-right: 6px;"
+                ),
+                Span(role.name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem;"),
+                style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px; cursor: pointer;"
+            )
+        )
+
+    # Return inline form
+    return Form(
+        Div(
+            *role_checkboxes,
+            style="display: flex; flex-direction: column; background: #f9fafb; padding: 12px; border-radius: 8px; margin: 4px 0;"
+        ),
+        Div(
+            Button("💾 Сохранить", type="submit", style="font-size: 0.75rem; padding: 4px 12px; margin-right: 8px;"),
+            Button("✖ Отмена",
+                   type="button",
+                   style="font-size: 0.75rem; padding: 4px 12px; background: #6b7280;",
+                   hx_get=f"/admin/users/{user_id}/roles/cancel",
+                   hx_target=f"#roles-cell-{user_id}",
+                   hx_swap="innerHTML"),
+            style="display: flex; gap: 8px; margin-top: 8px;"
+        ),
+        hx_post=f"/admin/users/{user_id}/roles/update",
+        hx_target=f"#roles-cell-{user_id}",
+        hx_swap="innerHTML",
+        style="margin: 0;"
+    )
+
+
+@rt("/admin/users/{user_id}/roles/update")
+def post(user_id: str, session, roles: list = []):
+    """Update user roles inline - returns updated badges HTML fragment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    admin_roles = admin_user.get("roles", [])
+    org_id = admin_user["org_id"]
+    admin_id = admin_user["id"]
+
+    # Only admins can edit roles
+    if "admin" not in admin_roles:
+        return Div("Нет прав", style="color: #ef4444;")
+
+    from services.role_service import (
+        get_user_role_codes, assign_role, remove_role,
+        get_all_roles, get_role_by_code
+    )
+
+    # Get current roles
+    current_roles = get_user_role_codes(user_id, org_id)
+
+    # Convert single value to list
+    if isinstance(roles, str):
+        roles = [roles]
+
+    # Determine which roles to add/remove
+    roles_to_add = [r for r in roles if r not in current_roles]
+    roles_to_remove = [r for r in current_roles if r not in roles]
+
+    # Add new roles
+    for role_code in roles_to_add:
+        assign_role(user_id, org_id, role_code, admin_id)
+
+    # Remove old roles
+    for role_code in roles_to_remove:
+        remove_role(user_id, org_id, role_code)
+
+    # Get updated roles
+    updated_role_codes = get_user_role_codes(user_id, org_id)
+
+    # Build updated badges
+    role_badges = []
+    all_roles_dict = {r.code: r.name for r in get_all_roles(organization_id=org_id)}
+
+    for code in updated_role_codes:
+        name = all_roles_dict.get(code, code)
+        color = {
+            "admin": "#ef4444",
+            "sales": "#3b82f6",
+            "procurement": "#10b981",
+            "logistics": "#f59e0b",
+            "customs": "#8b5cf6",
+            "quote_controller": "#ec4899",
+            "spec_controller": "#06b6d4",
+            "finance": "#84cc16",
+            "top_manager": "#f97316"
+        }.get(code, "#6b7280")
+
+        role_badges.append(
+            Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
+        )
+
+    # Return updated display
+    return Div(
+        *role_badges if role_badges else [Span("—", style="color: #9ca3af;")],
+        id=f"roles-display-{user_id}",
+        style="cursor: pointer;",
+        hx_get=f"/admin/users/{user_id}/roles/edit",
+        hx_target=f"#roles-cell-{user_id}",
+        hx_swap="innerHTML",
+        title="Кликните для редактирования ролей"
+    )
+
+
+@rt("/admin/users/{user_id}/roles/cancel")
+def get(user_id: str, session):
+    """Cancel inline editing - returns original badges HTML fragment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    org_id = admin_user["org_id"]
+
+    from services.role_service import get_user_role_codes, get_all_roles
+
+    # Get current roles
+    role_codes = get_user_role_codes(user_id, org_id)
+
+    # Build badges
+    role_badges = []
+    all_roles_dict = {r.code: r.name for r in get_all_roles(organization_id=org_id)}
+
+    for code in role_codes:
+        name = all_roles_dict.get(code, code)
+        color = {
+            "admin": "#ef4444",
+            "sales": "#3b82f6",
+            "procurement": "#10b981",
+            "logistics": "#f59e0b",
+            "customs": "#8b5cf6",
+            "quote_controller": "#ec4899",
+            "spec_controller": "#06b6d4",
+            "finance": "#84cc16",
+            "top_manager": "#f97316"
+        }.get(code, "#6b7280")
+
+        role_badges.append(
+            Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
+        )
+
+    # Return original display
+    return Div(
+        *role_badges if role_badges else [Span("—", style="color: #9ca3af;")],
+        id=f"roles-display-{user_id}",
+        style="cursor: pointer;",
+        hx_get=f"/admin/users/{user_id}/roles/edit",
+        hx_target=f"#roles-cell-{user_id}",
+        hx_swap="innerHTML",
+        title="Кликните для редактирования ролей"
     )
 
 
