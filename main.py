@@ -15944,22 +15944,58 @@ def get(customer_id: str, session, tab: str = "general"):
             Div(
                 Div(
                     Div(Strong("Название компании"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.name, style="font-size: 1.1em;"),
+                    Div(
+                        Div(customer.name, style="font-size: 1.1em;"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/name",
+                              hx_target="#field-name",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-name"
+                    ),
                     cls="info-item"
                 ),
                 Div(
                     Div(Strong("ИНН"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.inn or "Не указан"),
+                    Div(
+                        Div(customer.inn or "Не указан"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/inn",
+                              hx_target="#field-inn",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-inn"
+                    ),
                     cls="info-item"
                 ),
                 Div(
                     Div(Strong("КПП"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.kpp or "Не указан"),
+                    Div(
+                        Div(customer.kpp or "Не указан"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/kpp",
+                              hx_target="#field-kpp",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-kpp"
+                    ),
                     cls="info-item"
                 ),
                 Div(
                     Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em;"),
-                    Div(customer.ogrn or "Не указан"),
+                    Div(
+                        Div(customer.ogrn or "Не указан"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/ogrn",
+                              hx_target="#field-ogrn",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-ogrn"
+                    ),
                     cls="info-item"
                 ),
                 Div(
@@ -15977,27 +16013,50 @@ def get(customer_id: str, session, tab: str = "general"):
         )
 
     elif tab == "addresses":
-        # Build warehouse addresses list
-        warehouse_items = []
-        if customer.warehouse_addresses:
-            for addr in customer.warehouse_addresses:
-                warehouse_items.append(Li(addr))
-
         tab_content = Div(
             Div(
+                # Legal address with inline editing
                 Div(
                     Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Div(customer.legal_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                    Div(
+                        Div(customer.legal_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/legal_address",
+                              hx_target="#field-legal_address",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-legal_address"
+                    ),
                     style="margin-bottom: 1.5rem;"
                 ),
+                # Actual address with inline editing
                 Div(
                     Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Div(customer.actual_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                    Div(
+                        Div(customer.actual_address or "Не указан", style="padding: 0.75rem; background: #f9fafb; border-radius: 0.375rem;"),
+                        Button("✏️ Редактировать",
+                              hx_get=f"/customers/{customer_id}/edit-field/actual_address",
+                              hx_target="#field-actual_address",
+                              hx_swap="outerHTML",
+                              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+                              cls="edit-btn"),
+                        id="field-actual_address"
+                    ),
                     style="margin-bottom: 1.5rem;"
                 ),
+                # Warehouse addresses with dynamic add/delete
                 Div(
                     Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Ul(*warehouse_items, style="padding-left: 1.5rem;") if warehouse_items else Div("Нет адресов складов", style="color: #999; font-style: italic;"),
+                    _render_warehouses_list(customer_id, customer.warehouse_addresses or []),
+                    Button("+ Добавить адрес склада",
+                          hx_get=f"/customers/{customer_id}/warehouses/add",
+                          hx_target="#add-warehouse-form",
+                          hx_swap="outerHTML",
+                          id="add-warehouse-form",
+                          role="button",
+                          cls="outline",
+                          style="margin-top: 1rem;"),
                 ),
                 style="margin-top: 1rem;"
             ),
@@ -16120,6 +16179,258 @@ def get(customer_id: str, session, tab: str = "general"):
         """),
 
         session=session
+    )
+
+
+# ============================================================================
+# Customer Inline Editing
+# ============================================================================
+
+@rt("/customers/{customer_id}/edit-field/{field_name}")
+def get(customer_id: str, field_name: str, session):
+    """Return inline edit form for a specific field."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    # Map field names to labels and current values
+    field_config = {
+        "name": ("Название компании", customer.name, "text"),
+        "inn": ("ИНН", customer.inn or "", "text"),
+        "kpp": ("КПП", customer.kpp or "", "text"),
+        "ogrn": ("ОГРН", customer.ogrn or "", "text"),
+        "legal_address": ("Юридический адрес", customer.legal_address or "", "textarea"),
+        "actual_address": ("Фактический адрес", customer.actual_address or "", "textarea"),
+    }
+
+    if field_name not in field_config:
+        return Div("Неизвестное поле")
+
+    label, value, input_type = field_config[field_name]
+
+    if input_type == "textarea":
+        input_elem = Textarea(value, name=field_name, id=f"edit-{field_name}",
+                             style="width: 100%; min-height: 80px;", required=True if field_name == "name" else False)
+    else:
+        input_elem = Input(value=value, name=field_name, id=f"edit-{field_name}",
+                          style="width: 100%;", required=True if field_name == "name" else False)
+
+    return Form(
+        Div(
+            input_elem,
+            Div(
+                Button("✓ Сохранить", type="submit", style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; margin-right: 0.5rem;"),
+                Button("✕ Отмена", type="button",
+                      hx_get=f"/customers/{customer_id}/cancel-edit/{field_name}",
+                      hx_target=f"#field-{field_name}",
+                      hx_swap="outerHTML",
+                      style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer;"),
+                style="display: flex; gap: 0.5rem; margin-top: 0.5rem;"
+            ),
+            id=f"field-{field_name}"
+        ),
+        hx_post=f"/customers/{customer_id}/update-field/{field_name}",
+        hx_target=f"#field-{field_name}",
+        hx_swap="outerHTML"
+    )
+
+
+@rt("/customers/{customer_id}/update-field/{field_name}")
+def post(customer_id: str, field_name: str, session, request):
+    """Update a specific field via inline editing."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer, update_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    # Get form data
+    import asyncio
+    form_data = asyncio.run(request.form())
+    new_value = form_data.get(field_name, "")
+
+    # Update customer
+    update_data = {field_name: new_value}
+    success = update_customer(customer_id, **update_data)
+
+    if not success:
+        return Div("Ошибка обновления", id=f"field-{field_name}")
+
+    # Return updated display
+    return _render_field_display(customer_id, field_name, new_value)
+
+
+@rt("/customers/{customer_id}/cancel-edit/{field_name}")
+def get(customer_id: str, field_name: str, session):
+    """Cancel inline editing and return to display mode."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    # Get current value
+    value = getattr(customer, field_name, "")
+
+    return _render_field_display(customer_id, field_name, value)
+
+
+def _render_field_display(customer_id: str, field_name: str, value: str):
+    """Helper function to render field in display mode."""
+    display_value = value if value else "Не указан"
+
+    # Special formatting for name field
+    if field_name == "name":
+        style = "font-size: 1.1em;"
+    else:
+        style = ""
+
+    return Div(
+        Div(display_value, style=style),
+        Button("✏️ Редактировать",
+              hx_get=f"/customers/{customer_id}/edit-field/{field_name}",
+              hx_target=f"#field-{field_name}",
+              hx_swap="outerHTML",
+              style="opacity: 0.7; padding: 0.25rem 0.5rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem; margin-top: 0.5rem;",
+              cls="edit-btn"),
+        id=f"field-{field_name}"
+    )
+
+
+# ============================================================================
+# Customer Warehouse Addresses Management
+# ============================================================================
+
+@rt("/customers/{customer_id}/warehouses/add")
+def get(customer_id: str, session):
+    """Return form to add new warehouse address."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    return Form(
+        Input(type="text", name="warehouse_address", placeholder="Введите адрес склада",
+              style="width: 100%; padding: 0.5rem; border: 2px solid #3b82f6; border-radius: 0.375rem;", required=True),
+        Div(
+            Button("✓ Добавить", type="submit",
+                  style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; margin-right: 0.5rem;"),
+            Button("✕ Отмена", type="button",
+                  hx_get=f"/customers/{customer_id}/warehouses/cancel-add",
+                  hx_target="#add-warehouse-form",
+                  hx_swap="outerHTML",
+                  style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer;"),
+            style="display: flex; gap: 0.5rem; margin-top: 0.5rem;"
+        ),
+        hx_post=f"/customers/{customer_id}/warehouses/add",
+        hx_target="#warehouses-list",
+        hx_swap="outerHTML",
+        id="add-warehouse-form",
+        style="margin-bottom: 1rem;"
+    )
+
+
+@rt("/customers/{customer_id}/warehouses/add")
+def post(customer_id: str, session, request):
+    """Add new warehouse address."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer, update_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    # Get form data
+    import asyncio
+    form_data = asyncio.run(request.form())
+    new_address = form_data.get("warehouse_address", "").strip()
+
+    if not new_address:
+        return _render_warehouses_list(customer_id, customer.warehouse_addresses or [])
+
+    # Add to warehouse addresses
+    warehouses = customer.warehouse_addresses or []
+    warehouses.append(new_address)
+
+    # Update customer
+    update_customer(customer_id, warehouse_addresses=warehouses)
+
+    return _render_warehouses_list(customer_id, warehouses)
+
+
+@rt("/customers/{customer_id}/warehouses/cancel-add")
+def get(customer_id: str, session):
+    """Cancel adding warehouse address."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    return Button("+ Добавить адрес склада",
+                 hx_get=f"/customers/{customer_id}/warehouses/add",
+                 hx_target="#add-warehouse-form",
+                 hx_swap="outerHTML",
+                 id="add-warehouse-form",
+                 role="button",
+                 cls="outline")
+
+
+@rt("/customers/{customer_id}/warehouses/delete/{index}")
+def post(customer_id: str, index: int, session):
+    """Delete warehouse address by index."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer, update_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    warehouses = customer.warehouse_addresses or []
+    if 0 <= index < len(warehouses):
+        warehouses.pop(index)
+        update_customer(customer_id, warehouse_addresses=warehouses)
+
+    return _render_warehouses_list(customer_id, warehouses)
+
+
+def _render_warehouses_list(customer_id: str, warehouses: list):
+    """Helper function to render warehouses list."""
+    warehouse_items = []
+    for i, addr in enumerate(warehouses):
+        warehouse_items.append(
+            Li(
+                Span(addr, style="flex: 1;"),
+                Button("🗑️ Удалить",
+                      hx_post=f"/customers/{customer_id}/warehouses/delete/{i}",
+                      hx_target="#warehouses-list",
+                      hx_swap="outerHTML",
+                      hx_confirm="Удалить этот адрес склада?",
+                      style="background: #ef4444; color: white; padding: 0.25rem 0.5rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;"),
+                style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;"
+            )
+        )
+
+    return Div(
+        Ul(*warehouse_items, style="padding-left: 1.5rem; list-style: none;") if warehouse_items else Div("Нет адресов складов", style="color: #999; font-style: italic;"),
+        id="warehouses-list"
     )
 
 
