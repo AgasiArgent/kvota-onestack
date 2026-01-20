@@ -178,7 +178,8 @@ def get_user_customers(user_id: str, organization_id: str) -> List[Dict[str, Any
     """
     supabase = get_supabase()
 
-    # Get customers with their quotes
+    # Get all customers in organization with their quotes
+    # We'll filter in Python to avoid complex OR conditions
     result = supabase.table("customers") \
         .select("""
             id,
@@ -186,6 +187,7 @@ def get_user_customers(user_id: str, organization_id: str) -> List[Dict[str, Any
             inn,
             industry,
             updated_at,
+            created_by,
             quotes:quotes(
                 id,
                 total_amount,
@@ -196,7 +198,6 @@ def get_user_customers(user_id: str, organization_id: str) -> List[Dict[str, Any
             )
         """) \
         .eq("organization_id", organization_id) \
-        .or_(f"created_by.eq.{user_id},quotes.created_by_user_id.eq.{user_id}") \
         .order("updated_at", desc=True) \
         .execute()
 
@@ -209,6 +210,7 @@ def get_user_customers(user_id: str, organization_id: str) -> List[Dict[str, Any
         # Filter quotes created by this user
         user_quotes = [q for q in quotes if q.get("created_by_user_id") == user_id]
 
+        # Include customer if: user created it OR user has quotes for it
         if not user_quotes and customer.get("created_by") != user_id:
             # Skip if user didn't create customer and has no quotes
             continue
