@@ -236,3 +236,88 @@ def get_user_customers(user_id: str, organization_id: str) -> List[Dict[str, Any
         }
 
     return list(customers_map.values())
+
+
+def update_user_profile(user_id: str, organization_id: str, **update_data) -> bool:
+    """
+    Update user profile fields.
+
+    Args:
+        user_id: User ID
+        organization_id: Organization ID
+        **update_data: Fields to update (full_name, position, phone, location, etc.)
+
+    Returns:
+        True if successful, False otherwise
+    """
+    supabase = get_supabase()
+
+    try:
+        # Check if profile exists
+        result = supabase.table("user_profiles") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("organization_id", organization_id) \
+            .execute()
+
+        if result.data and len(result.data) > 0:
+            # Update existing profile
+            supabase.table("user_profiles") \
+                .update(update_data) \
+                .eq("user_id", user_id) \
+                .eq("organization_id", organization_id) \
+                .execute()
+        else:
+            # Create new profile
+            insert_data = {
+                "user_id": user_id,
+                "organization_id": organization_id,
+                **update_data
+            }
+            supabase.table("user_profiles") \
+                .insert(insert_data) \
+                .execute()
+
+        return True
+    except Exception as e:
+        print(f"Error updating user profile: {e}")
+        return False
+
+
+def get_departments(organization_id: str) -> List[Dict[str, Any]]:
+    """Get list of departments for organization."""
+    supabase = get_supabase()
+
+    result = supabase.table("departments") \
+        .select("id, name") \
+        .eq("organization_id", organization_id) \
+        .order("name") \
+        .execute()
+
+    return result.data
+
+
+def get_sales_groups(organization_id: str) -> List[Dict[str, Any]]:
+    """Get list of sales groups for organization."""
+    supabase = get_supabase()
+
+    result = supabase.table("sales_groups") \
+        .select("id, name") \
+        .eq("organization_id", organization_id) \
+        .order("name") \
+        .execute()
+
+    return result.data
+
+
+def get_organization_users(organization_id: str) -> List[Dict[str, Any]]:
+    """Get list of users in organization (for manager selection)."""
+    supabase = get_supabase()
+
+    # Get users through RPC to access email from auth.users
+    result = supabase.rpc(
+        "get_organization_users_list",
+        {"p_organization_id": organization_id}
+    ).execute()
+
+    return result.data if result.data else []

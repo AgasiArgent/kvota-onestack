@@ -17019,6 +17019,24 @@ def get(user_id: str, session, tab: str = "general"):
         # Get statistics
         stats = get_user_statistics(user_id, org_id)
 
+        # Build editable fields for admins
+        if is_admin:
+            full_name_display = _render_profile_field_display(user_id, "full_name", profile.get("full_name") or "")
+            phone_display = _render_profile_field_display(user_id, "phone", profile.get("phone") or "")
+            position_display = _render_profile_field_display(user_id, "position", profile.get("position") or "")
+            department_display = _render_profile_field_display(user_id, "department_id", profile.get("department") or "")
+            sales_group_display = _render_profile_field_display(user_id, "sales_group_id", profile.get("sales_group") or "")
+            manager_display = _render_profile_field_display(user_id, "manager_id", profile.get("manager_email") or "")
+            location_display = _render_profile_field_display(user_id, "location", profile.get("location") or "")
+        else:
+            full_name_display = Div(profile.get("full_name") or "—", style="padding: 0.5rem 0.75rem;")
+            phone_display = Div(profile.get("phone") or "—", style="padding: 0.5rem 0.75rem;")
+            position_display = Div(profile.get("position") or "—", style="padding: 0.5rem 0.75rem;")
+            department_display = Div(profile.get("department") or "—", style="padding: 0.5rem 0.75rem;")
+            sales_group_display = Div(profile.get("sales_group") or "—", style="padding: 0.5rem 0.75rem;")
+            manager_display = Div(profile.get("manager_email") or "—", style="padding: 0.5rem 0.75rem;")
+            location_display = Div(profile.get("location") or "—", style="padding: 0.5rem 0.75rem;")
+
         tab_content = Div(
             # Main info section
             Div(
@@ -17026,7 +17044,7 @@ def get(user_id: str, session, tab: str = "general"):
                 Div(
                     Div(
                         Div(Strong("ФИО"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("full_name") or "—", style="padding: 0.5rem 0.75rem;"),
+                        full_name_display,
                         cls="info-item"
                     ),
                     Div(
@@ -17036,32 +17054,37 @@ def get(user_id: str, session, tab: str = "general"):
                     ),
                     Div(
                         Div(Strong("Телефон"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("phone") or "—", style="padding: 0.5rem 0.75rem;"),
+                        phone_display,
                         cls="info-item"
                     ),
                     Div(
                         Div(Strong("Должность"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("position") or "—", style="padding: 0.5rem 0.75rem;"),
+                        position_display,
                         cls="info-item"
                     ),
                     Div(
                         Div(Strong("Департамент"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("department") or "—", style="padding: 0.5rem 0.75rem;"),
+                        department_display,
                         cls="info-item"
                     ),
                     Div(
                         Div(Strong("Группа"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("sales_group") or "—", style="padding: 0.5rem 0.75rem;"),
+                        sales_group_display,
                         cls="info-item"
                     ),
                     Div(
                         Div(Strong("Руководитель"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("manager_email") or "—", style="padding: 0.5rem 0.75rem;"),
+                        manager_display,
                         cls="info-item"
                     ),
                     Div(
                         Div(Strong("Местонахождение"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(profile.get("location") or "—", style="padding: 0.5rem 0.75rem;"),
+                        location_display,
+                        cls="info-item"
+                    ),
+                    Div(
+                        Div(Strong("Роль"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                        Div(profile.get("role_name") or "—", style="padding: 0.5rem 0.75rem;"),
                         cls="info-item"
                     ),
                     cls="info-grid",
@@ -17273,6 +17296,236 @@ def get(user_id: str, session, tab: str = "general"):
             cls="card"
         ),
         session=session
+    )
+
+
+@rt("/profile/{user_id}/edit-field/{field_name}")
+def get(user_id: str, field_name: str, session):
+    """Return inline edit form for a specific profile field (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - only admins can edit profiles
+    if not user_has_any_role(session, ["admin", "top_manager"]):
+        return Div("У вас нет прав для редактирования профиля", id=f"field-{field_name}")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.user_profile_service import (
+        get_user_profile,
+        get_departments,
+        get_sales_groups,
+        get_organization_users
+    )
+
+    profile = get_user_profile(user_id, org_id)
+    if not profile:
+        return Div("Пользователь не найден")
+
+    # Map field names to labels and current values
+    field_config = {
+        "full_name": ("ФИО", profile.get("full_name") or "", "text"),
+        "phone": ("Телефон", profile.get("phone") or "", "text"),
+        "position": ("Должность", profile.get("position") or "", "text"),
+        "location": ("Местонахождение", profile.get("location") or "", "text"),
+        "department_id": ("Департамент", None, "select"),
+        "sales_group_id": ("Группа", None, "select"),
+        "manager_id": ("Руководитель", None, "select"),
+    }
+
+    if field_name not in field_config:
+        return Div("Неизвестное поле")
+
+    label, value, input_type = field_config[field_name]
+
+    # Style for modern inline editing
+    input_style = "width: 100%; padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
+
+    if input_type == "text":
+        input_elem = Input(
+            type="text", value=value, name=field_name,
+            autofocus=True,
+            style=input_style,
+            onkeydown="if(event.key === 'Escape') { document.getElementById('cancel-btn-" + field_name + "').click(); } else if(event.key === 'Enter') { event.target.form.requestSubmit(); }"
+        )
+        # Simple input - no visible buttons
+        action_buttons = Div(
+            Button("✕", type="button", id=f"cancel-btn-{field_name}",
+                  hx_get=f"/profile/{user_id}/cancel-edit/{field_name}",
+                  hx_target=f"#field-{field_name}",
+                  hx_swap="outerHTML",
+                  style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #999; cursor: pointer; padding: 0.25rem 0.5rem; font-size: 1.2em;"),
+            style="position: relative;"
+        )
+    elif input_type == "select":
+        # Get options based on field
+        if field_name == "department_id":
+            departments = get_departments(org_id)
+            current_value = None
+            for dept in departments:
+                if profile.get("department") == dept.get("name"):
+                    current_value = dept.get("id")
+                    break
+            options = [Option("Не указан", value="", selected=(not current_value))]
+            options.extend([
+                Option(dept.get("name"), value=dept.get("id"), selected=(dept.get("id") == current_value))
+                for dept in departments
+            ])
+        elif field_name == "sales_group_id":
+            sales_groups = get_sales_groups(org_id)
+            current_value = None
+            for sg in sales_groups:
+                if profile.get("sales_group") == sg.get("name"):
+                    current_value = sg.get("id")
+                    break
+            options = [Option("Не указан", value="", selected=(not current_value))]
+            options.extend([
+                Option(sg.get("name"), value=sg.get("id"), selected=(sg.get("id") == current_value))
+                for sg in sales_groups
+            ])
+        elif field_name == "manager_id":
+            users = get_organization_users(org_id)
+            current_value = None
+            for u in users:
+                if profile.get("manager_email") == u.get("email"):
+                    current_value = u.get("id")
+                    break
+            options = [Option("Не указан", value="", selected=(not current_value))]
+            options.extend([
+                Option(u.get("full_name") or u.get("email"), value=u.get("id"), selected=(u.get("id") == current_value))
+                for u in users
+                if u.get("id") != user_id  # Don't allow selecting self as manager
+            ])
+        else:
+            options = [Option("Не указан", value="")]
+
+        input_elem = Select(
+            *options,
+            name=field_name,
+            autofocus=True,
+            style=input_style,
+            onchange="this.form.requestSubmit();"
+        )
+        # Select dropdown - auto-submit on change
+        action_buttons = Div(
+            Button("✕", type="button", id=f"cancel-btn-{field_name}",
+                  hx_get=f"/profile/{user_id}/cancel-edit/{field_name}",
+                  hx_target=f"#field-{field_name}",
+                  hx_swap="outerHTML",
+                  style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #999; cursor: pointer; padding: 0.25rem 0.5rem; font-size: 1.2em;"),
+            style="position: relative;"
+        )
+
+    return Form(
+        Div(
+            input_elem,
+            action_buttons,
+            style="position: relative;"
+        ),
+        id=f"field-{field_name}",
+        hx_post=f"/profile/{user_id}/update-field/{field_name}",
+        hx_target=f"#field-{field_name}",
+        hx_swap="outerHTML",
+        style="margin: 0;"
+    )
+
+
+@rt("/profile/{user_id}/update-field/{field_name}")
+async def post(user_id: str, field_name: str, session, request):
+    """Update a specific profile field via inline editing (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - only admins can edit profiles
+    if not user_has_any_role(session, ["admin", "top_manager"]):
+        return Div("У вас нет прав для редактирования профиля", id=f"field-{field_name}")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.user_profile_service import get_user_profile, update_user_profile
+
+    profile = get_user_profile(user_id, org_id)
+    if not profile:
+        return Div("Пользователь не найден")
+
+    # Get form data
+    form_data = await request.form()
+    new_value = form_data.get(field_name, "")
+
+    # Update profile
+    update_data = {field_name: new_value if new_value else None}
+    success = update_user_profile(user_id, org_id, **update_data)
+
+    if not success:
+        return Div("Ошибка обновления", id=f"field-{field_name}")
+
+    # Get updated profile to show new value
+    updated_profile = get_user_profile(user_id, org_id)
+
+    # Map field names to display values
+    display_values = {
+        "full_name": updated_profile.get("full_name") or "—",
+        "phone": updated_profile.get("phone") or "—",
+        "position": updated_profile.get("position") or "—",
+        "location": updated_profile.get("location") or "—",
+        "department_id": updated_profile.get("department") or "—",
+        "sales_group_id": updated_profile.get("sales_group") or "—",
+        "manager_id": updated_profile.get("manager_email") or "—",
+    }
+
+    # Return updated display
+    return _render_profile_field_display(user_id, field_name, display_values.get(field_name, "—"))
+
+
+@rt("/profile/{user_id}/cancel-edit/{field_name}")
+def get(user_id: str, field_name: str, session):
+    """Cancel inline editing and return to display mode."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.user_profile_service import get_user_profile
+
+    profile = get_user_profile(user_id, org_id)
+    if not profile:
+        return Div("Пользователь не найден")
+
+    # Map field names to display values
+    display_values = {
+        "full_name": profile.get("full_name") or "—",
+        "phone": profile.get("phone") or "—",
+        "position": profile.get("position") or "—",
+        "location": profile.get("location") or "—",
+        "department_id": profile.get("department") or "—",
+        "sales_group_id": profile.get("sales_group") or "—",
+        "manager_id": profile.get("manager_email") or "—",
+    }
+
+    return _render_profile_field_display(user_id, field_name, display_values.get(field_name, "—"))
+
+
+def _render_profile_field_display(user_id: str, field_name: str, value: str):
+    """Helper function to render profile field in display mode with modern inline edit."""
+    display_value = value if value and value != "—" else "Не указан"
+    display_color = "#999" if not value or value == "—" else "#000"
+
+    return Div(
+        display_value,
+        id=f"field-{field_name}",
+        hx_get=f"/profile/{user_id}/edit-field/{field_name}",
+        hx_target=f"#field-{field_name}",
+        hx_swap="outerHTML",
+        style=f"cursor: pointer; padding: 0.5rem 0.75rem; border-radius: 0.375rem; transition: background 0.15s ease; color: {display_color};",
+        onmouseover="this.style.background='#f3f4f6'",
+        onmouseout="this.style.background='transparent'",
+        title="Кликните для редактирования"
     )
 
 
