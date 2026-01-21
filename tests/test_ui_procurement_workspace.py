@@ -564,7 +564,7 @@ class TestBackwardCompatibility:
         )
 
         dropdown_str = to_xml(dropdown)
-        assert "Выберите поставщика" in dropdown_str
+        assert "Начните печатать название..." in dropdown_str
 
     @requires_fasthtml
     def test_null_buyer_company_id_handled(self):
@@ -577,7 +577,7 @@ class TestBackwardCompatibility:
         )
 
         dropdown_str = to_xml(dropdown)
-        assert "Выберите компанию" in dropdown_str
+        assert "Начните печатать название..." in dropdown_str
 
     @requires_fasthtml
     def test_null_pickup_location_id_handled(self):
@@ -590,7 +590,7 @@ class TestBackwardCompatibility:
         )
 
         dropdown_str = to_xml(dropdown)
-        assert "Выберите локацию" in dropdown_str
+        assert "Поиск локации..." in dropdown_str
 
 
 if __name__ == "__main__":
