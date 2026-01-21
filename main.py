@@ -145,13 +145,21 @@ def nav_bar(session):
     if user:
         roles = user.get("roles", [])
 
-        # Base navigation items
-        nav_items = [
-            Li(A("Dashboard", href="/dashboard")),
-            Li(A("Quotes", href="/quotes")),
-            Li(A("Customers", href="/customers")),
-            Li(A("New Quote", href="/quotes/new")),
-        ]
+        # Check if user is procurement-only (no access to sales features)
+        is_procurement_only = "procurement" in roles and not any(
+            role in roles for role in ["admin", "sales", "sales_manager", "quote_controller"]
+        )
+
+        # Base navigation items (hidden from procurement-only users)
+        nav_items = [Li(A("Dashboard", href="/dashboard"))]
+
+        # Hide Quotes/Customers/New Quote from procurement-only users
+        if not is_procurement_only:
+            nav_items.extend([
+                Li(A("Quotes", href="/quotes")),
+                Li(A("Customers", href="/customers")),
+                Li(A("New Quote", href="/quotes/new")),
+            ])
 
         # Role-specific navigation items
         if "procurement" in roles or "admin" in roles:
@@ -5355,19 +5363,16 @@ def get(quote_id: str, session):
     def item_row(item, index):
         item_id = item["id"]
         brand = item.get("brand", "—")
-        name = item.get("name", "")
+        name = item.get("product_name", item.get("name", ""))
         product_code = item.get("product_code", "")
         quantity = item.get("quantity", 1)
         is_completed = item.get("procurement_status") == "completed"
 
-        # Current values - basic fields
-        base_price = item.get("base_price_vat", "")
-        weight = item.get("weight_in_kg", "")
-        volume = item.get("volume_m3", "")
+        # Current values - procurement fields (simplified 2026-01-21)
+        purchase_price = item.get("purchase_price_original", "")
+        purchase_currency = item.get("purchase_currency", "USD")
+        supplier_country = item.get("supplier_country", "")
         production_time = item.get("production_time_days", "")
-        advance_percent = item.get("advance_to_supplier_percent", 100)
-        payment_terms = item.get("supplier_payment_terms", "")
-        notes = item.get("procurement_notes", "")
 
         # v3.0 supply chain fields
         supplier_id = item.get("supplier_id")
@@ -5458,64 +5463,54 @@ def get(quote_id: str, session):
                 style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;"
             ),
 
-            # Row 2: Price, Weight, Volume, Production time
+            # Row 2: Price, Currency, Country, Production time (Simplified 2026-01-21)
             Div(
-                Label("Цена за ед. (с НДС) *",
-                    Input(name=f"base_price_vat_{item_id}", type="number", step="0.01", min="0",
-                          value=str(base_price) if base_price else "",
-                          placeholder="1500.00", required=True if can_edit else False,
+                Label("Закупочная цена *",
+                    Input(name=f"purchase_price_original_{item_id}", type="number", step="0.01", min="0",
+                          value=str(purchase_price) if purchase_price else "",
+                          placeholder="150.00", required=True if can_edit else False,
                           disabled=not can_edit),
+                    Small("Цена от поставщика", style="display: block; color: #666; margin-top: 0.25rem;"),
                     style="flex: 1;"
                 ),
-                Label("Вес, кг",
-                    Input(name=f"weight_in_kg_{item_id}", type="number", step="0.001", min="0",
-                          value=str(weight) if weight else "",
-                          placeholder="0.5",
-                          disabled=not can_edit),
+                Label("Валюта *",
+                    Select(
+                        Option("USD", value="USD", selected=purchase_currency == "USD"),
+                        Option("EUR", value="EUR", selected=purchase_currency == "EUR"),
+                        Option("RUB", value="RUB", selected=purchase_currency == "RUB"),
+                        Option("CNY", value="CNY", selected=purchase_currency == "CNY"),
+                        Option("TRY", value="TRY", selected=purchase_currency == "TRY"),
+                        name=f"purchase_currency_{item_id}",
+                        required=True if can_edit else False,
+                        disabled=not can_edit
+                    ),
+                    Small("Валюта поставщика", style="display: block; color: #666; margin-top: 0.25rem;"),
                     style="flex: 1;"
                 ),
-                Label("Объём, м³",
-                    Input(name=f"volume_m3_{item_id}", type="number", step="0.001", min="0",
-                          value=str(volume) if volume else "",
-                          placeholder="0.01",
-                          disabled=not can_edit),
+                Label("Страна закупки *",
+                    Select(
+                        Option("Выберите страну...", value="", selected=not supplier_country),
+                        Option("Россия", value="RU", selected=supplier_country == "RU"),
+                        Option("Китай", value="CN", selected=supplier_country == "CN"),
+                        Option("Турция", value="TR", selected=supplier_country == "TR"),
+                        Option("Германия", value="DE", selected=supplier_country == "DE"),
+                        Option("США", value="US", selected=supplier_country == "US"),
+                        Option("Италия", value="IT", selected=supplier_country == "IT"),
+                        Option("Другая", value="OTHER", selected=supplier_country == "OTHER"),
+                        name=f"supplier_country_{item_id}",
+                        required=True if can_edit else False,
+                        disabled=not can_edit
+                    ),
                     style="flex: 1;"
                 ),
-                Label("Срок пр-ва, дней",
+                Label("Срок пр-ва, дней *",
                     Input(name=f"production_time_days_{item_id}", type="number", min="0",
                           value=str(production_time) if production_time else "",
-                          placeholder="30",
+                          placeholder="30", required=True if can_edit else False,
                           disabled=not can_edit),
                     style="flex: 1;"
                 ),
                 style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-            ),
-
-            # Row 3: Advance %, Payment terms
-            Div(
-                Label("Аванс поставщику, %",
-                    Input(name=f"advance_to_supplier_percent_{item_id}", type="number", min="0", max="100",
-                          value=str(advance_percent) if advance_percent is not None else "100",
-                          placeholder="100",
-                          disabled=not can_edit),
-                    style="flex: 1;"
-                ),
-                Label("Условия оплаты поставщику",
-                    Input(name=f"supplier_payment_terms_{item_id}", type="text",
-                          value=payment_terms or "",
-                          placeholder="30% аванс, 70% до отгрузки",
-                          disabled=not can_edit),
-                    style="flex: 2;"
-                ),
-                style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1rem;"
-            ),
-
-            # Notes field
-            Label("Примечания",
-                Textarea(notes or "", name=f"procurement_notes_{item_id}",
-                         placeholder="Дополнительная информация о позиции...",
-                         style="width: 100%; min-height: 60px;",
-                         disabled=not can_edit)
             ),
 
             # Hidden field for item ID
@@ -5614,6 +5609,35 @@ def get(quote_id: str, session):
                 cls="card"
             ),
 
+            # Total weight and volume section (2026-01-21)
+            Div(
+                H3("📦 Общие показатели", style="margin: 0 0 1rem;"),
+                P("Укажите общий вес и объем по всем прогоцененным вами товарам:",
+                  style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
+                Div(
+                    Label("Общий вес, кг *",
+                        Input(name="procurement_total_weight_kg", type="number", step="0.001", min="0",
+                              value=str(quote.get("procurement_total_weight_kg", "")) if quote.get("procurement_total_weight_kg") else "",
+                              placeholder="Например: 125.5",
+                              required=can_edit if my_items else False,
+                              disabled=not can_edit),
+                        Small("Вес всегда известен", style="display: block; color: #666; margin-top: 0.25rem;"),
+                        style="flex: 1;"
+                    ),
+                    Label("Общий объем, м³",
+                        Input(name="procurement_total_volume_m3", type="number", step="0.0001", min="0",
+                              value=str(quote.get("procurement_total_volume_m3", "")) if quote.get("procurement_total_volume_m3") else "",
+                              placeholder="Например: 2.5",
+                              disabled=not can_edit),
+                        Small("Необязательно (если известно)", style="display: block; color: #666; margin-top: 0.25rem;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
+                ),
+                cls="card",
+                style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-bottom: 1rem;"
+            ) if my_items and can_edit else None,
+
             # Action buttons (Feature #37: Smart completion button)
             Div(
                 Button("💾 Сохранить данные", type="submit", name="action", value="save",
@@ -5709,22 +5733,23 @@ async def post(quote_id: str, session, request):
         if not item or (item.get("brand") or "").lower() not in my_brands_lower:
             continue
 
-        # Build update data
+        # Build update data (Simplified 2026-01-21)
         update_data = {}
 
-        # Get values from form (using item_id suffix)
-        base_price = form_data.get(f"base_price_vat_{item_id}")
-        if base_price:
-            update_data["base_price_vat"] = float(base_price)
+        # NEW: Purchase price in supplier's currency
+        purchase_price = form_data.get(f"purchase_price_original_{item_id}")
+        if purchase_price:
+            update_data["purchase_price_original"] = float(purchase_price)
 
-        weight = form_data.get(f"weight_in_kg_{item_id}")
-        if weight:
-            update_data["weight_in_kg"] = float(weight)
+        # NEW: Purchase currency (USD/EUR/RUB/CNY/TRY)
+        purchase_currency = form_data.get(f"purchase_currency_{item_id}")
+        if purchase_currency:
+            update_data["purchase_currency"] = purchase_currency
 
-        # v3.0: Volume field (column doesn't exist yet - skip for now)
-        # volume = form_data.get(f"volume_m3_{item_id}")
-        # if volume:
-        #     update_data["volume_m3"] = float(volume)
+        # NEW: Supplier country
+        supplier_country = form_data.get(f"supplier_country_{item_id}")
+        if supplier_country:
+            update_data["supplier_country"] = supplier_country
 
         # v3.0: Supply chain fields
         supplier_id = form_data.get(f"supplier_id_{item_id}")
@@ -5733,33 +5758,22 @@ async def post(quote_id: str, session, request):
         else:
             update_data["supplier_id"] = None
 
-        # Note: column is "purchasing_company_id", not "buyer_company_id"
         buyer_company_id = form_data.get(f"buyer_company_id_{item_id}")
         if buyer_company_id:
-            update_data["purchasing_company_id"] = buyer_company_id
+            update_data["buyer_company_id"] = buyer_company_id
         else:
-            update_data["purchasing_company_id"] = None
+            update_data["buyer_company_id"] = None
 
-        # pickup_location_id column doesn't exist yet - skip for now
-        # pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
-        # if pickup_location_id:
-        #     update_data["pickup_location_id"] = pickup_location_id
-        # else:
-        #     update_data["pickup_location_id"] = None
+        pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
+        if pickup_location_id:
+            update_data["pickup_location_id"] = pickup_location_id
+        else:
+            update_data["pickup_location_id"] = None
 
+        # Production time
         production_time = form_data.get(f"production_time_days_{item_id}")
         if production_time:
             update_data["production_time_days"] = int(production_time)
-
-        advance_percent = form_data.get(f"advance_to_supplier_percent_{item_id}")
-        if advance_percent:
-            update_data["advance_to_supplier_percent"] = float(advance_percent)
-
-        payment_terms = form_data.get(f"supplier_payment_terms_{item_id}")
-        update_data["supplier_payment_terms"] = payment_terms or None
-
-        notes = form_data.get(f"procurement_notes_{item_id}")
-        update_data["procurement_notes"] = notes or None
 
         # If completing, mark procurement status
         if action == "complete":
@@ -5774,6 +5788,19 @@ async def post(quote_id: str, session, request):
                 .eq("id", item_id) \
                 .execute()
             updated_items += 1
+
+    # Save total weight/volume to quote (2026-01-21)
+    total_weight = form_data.get("procurement_total_weight_kg")
+    total_volume = form_data.get("procurement_total_volume_m3")
+
+    quote_update = {}
+    if total_weight:
+        quote_update["procurement_total_weight_kg"] = float(total_weight)
+    if total_volume:
+        quote_update["procurement_total_volume_m3"] = float(total_volume)
+
+    if quote_update:
+        supabase.table("quotes").update(quote_update).eq("id", quote_id).execute()
 
     # Feature #37: If completing, check if ALL procurement is done and trigger workflow transition
     if action == "complete" and updated_items > 0:
