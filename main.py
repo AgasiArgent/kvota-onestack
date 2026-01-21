@@ -1294,6 +1294,19 @@ def get(session):
                     ),
                     cls="form-row"
                 ),
+                Div(
+                    Label("Delivery Method",
+                        Select(
+                            Option("-- Select delivery method --", value="", selected=True),
+                            Option("Авиа", value="air"),
+                            Option("Авто", value="auto"),
+                            Option("Море", value="sea"),
+                            Option("Мультимодально (все)", value="multimodal"),
+                            name="delivery_method"
+                        )
+                    ),
+                    cls="form-group"
+                ),
                 Label("Notes", Textarea(name="notes", placeholder="Additional notes...", rows="3")),
                 Div(
                     Button("Create Quote", type="submit"),
@@ -1321,7 +1334,7 @@ def get(session):
 @rt("/quotes/new")
 def post(customer_id: str, delivery_terms: str, notes: str,
          delivery_city: str = None, delivery_country: str = None,
-         seller_company_id: str = None, session=None):
+         delivery_method: str = None, seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -1365,6 +1378,8 @@ def post(customer_id: str, delivery_terms: str, notes: str,
             insert_data["delivery_city"] = delivery_city.strip()
         if delivery_country and delivery_country.strip():
             insert_data["delivery_country"] = delivery_country.strip()
+        if delivery_method and delivery_method.strip():
+            insert_data["delivery_method"] = delivery_method.strip()
 
         # v3.0: seller_company_id at quote level
         if seller_company_id and seller_company_id.strip():
@@ -1456,6 +1471,13 @@ def get(quote_id: str, session):
             Table(
                 Tr(Td("Currency:"), Td(quote.get("currency", "RUB"))),
                 Tr(Td("Delivery Terms:"), Td(quote.get("delivery_terms", "—"))),
+                (Tr(Td("Delivery City:"), Td(quote.get("delivery_city", "—"))) if quote.get("delivery_city") else None),
+                (Tr(Td("Delivery Country:"), Td(quote.get("delivery_country", "—"))) if quote.get("delivery_country") else None),
+                (Tr(Td("Delivery Method:"), Td(
+                    {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мультимодально (все)"}.get(
+                        quote.get("delivery_method"), "—"
+                    )
+                )) if quote.get("delivery_method") else None),
                 Tr(Td("Payment Terms:"), Td(f"{quote.get('payment_terms', 0)} days")),
                 Tr(Td("Created:"), Td(quote.get("created_at", "")[:10])),
             ),
@@ -2470,6 +2492,41 @@ def get(quote_id: str, session):
                     ),
                     cls="form-row"
                 ),
+                # Delivery location fields
+                Div(
+                    Label("Delivery City",
+                        Input(
+                            name="delivery_city",
+                            type="text",
+                            value=quote.get("delivery_city", "") or "",
+                            placeholder="Moscow, Beijing, etc.",
+                            required=False
+                        )
+                    ),
+                    Label("Delivery Country",
+                        Input(
+                            name="delivery_country",
+                            type="text",
+                            value=quote.get("delivery_country", "") or "",
+                            placeholder="Russia, China, etc.",
+                            required=False
+                        )
+                    ),
+                    cls="form-row"
+                ),
+                Div(
+                    Label("Delivery Method",
+                        Select(
+                            Option("-- Select delivery method --", value="", selected=not quote.get("delivery_method")),
+                            Option("Авиа", value="air", selected=quote.get("delivery_method") == "air"),
+                            Option("Авто", value="auto", selected=quote.get("delivery_method") == "auto"),
+                            Option("Море", value="sea", selected=quote.get("delivery_method") == "sea"),
+                            Option("Мультимодально (все)", value="multimodal", selected=quote.get("delivery_method") == "multimodal"),
+                            name="delivery_method"
+                        )
+                    ),
+                    cls="form-group"
+                ),
                 Div(
                     Label("Payment Terms (days)",
                         Input(name="payment_terms", type="number", value=str(quote.get("payment_terms", 30)), min="0")
@@ -2500,7 +2557,9 @@ def get(quote_id: str, session):
 
 @rt("/quotes/{quote_id}/edit")
 def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_terms: str,
-         payment_terms: int, delivery_days: int, notes: str, seller_company_id: str = None, session=None):
+         payment_terms: int, delivery_days: int, notes: str,
+         delivery_city: str = None, delivery_country: str = None, delivery_method: str = None,
+         seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -2519,6 +2578,22 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
             "notes": notes or None,
             "updated_at": datetime.now().isoformat()
         }
+
+        # Add delivery location if provided
+        if delivery_city and delivery_city.strip():
+            update_data["delivery_city"] = delivery_city.strip()
+        else:
+            update_data["delivery_city"] = None
+
+        if delivery_country and delivery_country.strip():
+            update_data["delivery_country"] = delivery_country.strip()
+        else:
+            update_data["delivery_country"] = None
+
+        if delivery_method and delivery_method.strip():
+            update_data["delivery_method"] = delivery_method.strip()
+        else:
+            update_data["delivery_method"] = None
 
         # v3.0: seller_company_id at quote level
         # If provided and not empty, set it; otherwise keep existing or set to None
