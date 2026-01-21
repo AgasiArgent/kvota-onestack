@@ -1393,7 +1393,8 @@ def check_and_auto_transition_to_sales_review(
     # Auto-transition should only happen from pending_logistics or pending_customs
     allowed_statuses = [
         WorkflowStatus.PENDING_LOGISTICS.value,
-        WorkflowStatus.PENDING_CUSTOMS.value
+        WorkflowStatus.PENDING_CUSTOMS.value,
+        "pending_logistics_and_customs"  # Parallel logistics+customs stage
     ]
 
     if current_status not in allowed_statuses:
