@@ -6004,8 +6004,11 @@ def get(quote_id: str, session):
 
             Div(
                 Button("💾 Сохранить инвойсы", type="submit", name="action", value="save",
+                       style="margin-right: 1rem;"),
+                Button("✓ Завершить оценку", type="submit", name="action", value="complete",
                        style="margin-right: 1rem; background: #16a34a;"),
-                A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button", cls="secondary"),
+                A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button", cls="secondary",
+                  style="margin-left: auto;"),
                 style="display: flex; align-items: center; margin-top: 2rem;"
             ),
 
@@ -6013,6 +6016,177 @@ def get(quote_id: str, session):
             action=f"/procurement/{quote_id}/invoices"
         )
     )
+
+
+@rt("/procurement/{quote_id}/invoices")
+async def post(quote_id: str, session):
+    """
+    Save invoices to database (Screen 2 POST handler).
+
+    Groups items into invoices and saves invoice metadata:
+    - invoice_number, total_weight_kg, total_volume_m3
+    - Links quote_items to invoices via invoice_id
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get form data
+    form = await request.form()
+    form_data = dict(form)
+
+    action = form_data.get("action", "save")
+    invoice_count = int(form_data.get("invoice_count", 0))
+
+    if invoice_count == 0:
+        return RedirectResponse(f"/procurement/{quote_id}/invoices", status_code=303)
+
+    # Get user's assigned brands
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get all items for this quote (only my brands)
+    items_result = supabase.table("quote_items") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    all_items = items_result.data or []
+
+    # Filter items for my brands
+    my_items = [item for item in all_items
+                if (item.get("brand") or "").lower() in my_brands_lower]
+
+    # Validate: check currency consistency within each group
+    from collections import defaultdict
+    invoice_groups = defaultdict(list)
+
+    for item in my_items:
+        if not all([item.get("supplier_id"), item.get("buyer_company_id"), item.get("purchase_currency")]):
+            continue
+
+        key = (
+            item.get("supplier_id"),
+            item.get("buyer_company_id"),
+            item.get("pickup_location_id"),
+            item.get("purchase_currency")
+        )
+        invoice_groups[key].append(item)
+
+    # Process each invoice
+    saved_invoices = 0
+    for idx in range(1, invoice_count + 1):
+        invoice_number = form_data.get(f"invoice_number_{idx}", "").strip()
+        total_weight_kg = form_data.get(f"total_weight_kg_{idx}")
+        total_volume_m3 = form_data.get(f"total_volume_m3_{idx}")
+        supplier_id = form_data.get(f"supplier_id_{idx}")
+        buyer_company_id = form_data.get(f"buyer_company_id_{idx}")
+        pickup_location_id = form_data.get(f"pickup_location_id_{idx}")
+        currency = form_data.get(f"currency_{idx}")
+
+        # Validation
+        if not invoice_number:
+            continue
+        if not total_weight_kg:
+            continue
+
+        # Create grouping key to match items
+        key = (
+            supplier_id,
+            buyer_company_id,
+            pickup_location_id if pickup_location_id else None,
+            currency
+        )
+
+        items_for_invoice = invoice_groups.get(key, [])
+        if not items_for_invoice:
+            continue
+
+        # Check if invoice already exists
+        existing_invoice_result = supabase.table("invoices") \
+            .select("id") \
+            .eq("quote_id", quote_id) \
+            .eq("supplier_id", supplier_id) \
+            .eq("buyer_company_id", buyer_company_id) \
+            .eq("currency", currency)
+
+        if pickup_location_id:
+            existing_invoice_result = existing_invoice_result.eq("pickup_location_id", pickup_location_id)
+        else:
+            existing_invoice_result = existing_invoice_result.is_("pickup_location_id", "null")
+
+        existing_invoice = existing_invoice_result.execute()
+
+        invoice_data = {
+            "quote_id": quote_id,
+            "supplier_id": supplier_id,
+            "buyer_company_id": buyer_company_id,
+            "pickup_location_id": pickup_location_id if pickup_location_id else None,
+            "invoice_number": invoice_number,
+            "currency": currency,
+            "total_weight_kg": float(total_weight_kg),
+            "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
+        }
+
+        if existing_invoice.data:
+            # Update existing invoice
+            invoice_id = existing_invoice.data[0]["id"]
+            supabase.table("invoices") \
+                .update(invoice_data) \
+                .eq("id", invoice_id) \
+                .execute()
+        else:
+            # Insert new invoice
+            invoice_result = supabase.table("invoices") \
+                .insert(invoice_data) \
+                .execute()
+            invoice_id = invoice_result.data[0]["id"]
+
+        # Link items to this invoice
+        item_ids = [item["id"] for item in items_for_invoice]
+        if item_ids:
+            supabase.table("quote_items") \
+                .update({"invoice_id": invoice_id}) \
+                .in_("id", item_ids) \
+                .execute()
+
+        saved_invoices += 1
+
+    # Mark all my items as procurement completed if action is complete
+    if action == "complete":
+        # Mark items as completed
+        item_ids = [item["id"] for item in my_items]
+        if item_ids:
+            supabase.table("quote_items") \
+                .update({
+                    "procurement_status": "completed",
+                    "procurement_completed_at": datetime.utcnow().isoformat(),
+                    "procurement_completed_by": user_id
+                }) \
+                .in_("id", item_ids) \
+                .execute()
+
+        # Check if ALL items are complete and trigger workflow transition
+        user_roles = get_user_roles_from_session(session)
+        completion_result = complete_procurement(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles
+        )
+
+    # Redirect back to procurement list
+    return RedirectResponse(f"/procurement", status_code=303)
 
 
 @rt("/procurement/{quote_id}/export")
