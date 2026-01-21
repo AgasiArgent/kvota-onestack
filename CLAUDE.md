@@ -1,7 +1,7 @@
 # OneStack Project - Development Notes
 
 **Last Updated:** 2026-01-21
-**Current Work:** Sales Workflow Simplification
+**Current Work:** Procurement Workflow Enhancement
 
 ---
 
@@ -300,6 +300,70 @@ Before confirming deployment:
 **Commits:**
 - da813d9 "Add delivery method dropdown to quote forms (migration 120)"
 - 3a8b28e "Improve migration script: handle errors gracefully and track migrations separately"
+
+---
+
+### 8. Procurement Workflow Enhancement
+
+**Status:** ✅ COMPLETED (2026-01-21)
+
+**User Requirements:**
+1. Procurement must enter price in supplier's currency (not base_price_vat)
+2. Auto-conversion to quote currency will be implemented later
+3. Payment terms NOT needed from procurement (stored in supplier record)
+4. Production time - YES, needed
+5. Weight and volume per item - NOT mandatory, but need TOTAL weight/volume fields at quote level
+6. Typically procurement knows total weight (always), sometimes total volume
+7. HS code - NO, filled by customs department
+8. Menu access: Hide "Quotes", "Customers", "New Quote" from procurement-only users
+
+**Changes Made:**
+
+1. **Database changes (migrations 121, 122):**
+   - Added `purchase_currency` column to quote_items (VARCHAR(3), default 'USD')
+   - Added `procurement_total_weight_kg` to quotes (DECIMAL(10,3))
+   - Added `procurement_total_volume_m3` to quotes (DECIMAL(10,4))
+   - Added check constraints and indexes
+
+2. **Procurement form simplified (main.py:5354-5631):**
+   - **Replaced:** base_price_vat → purchase_price_original + purchase_currency
+   - **Removed:** per-item weight, per-item volume, advance_percent, payment_terms, notes
+   - **Added:** Currency dropdown (USD/EUR/RUB/CNY/TRY)
+   - **Added:** Supplier country dropdown (required)
+   - **Kept:** Production time (required)
+   - **Kept:** Supply chain fields (supplier_id, buyer_company_id, pickup_location_id)
+
+3. **Total weight/volume section added:**
+   - Yellow card section "📦 Общие показатели"
+   - Total weight in kg (required) - "Вес всегда известен"
+   - Total volume in m³ (optional) - "Необязательно (если известно)"
+   - Values entered at quote level, not per item
+
+4. **POST handler updated (main.py:5728-5804):**
+   - Saves purchase_price_original and purchase_currency per item
+   - Saves supplier_country per item
+   - Saves procurement_total_weight_kg and procurement_total_volume_m3 to quotes table
+
+5. **Menu access control (main.py:142-165):**
+   - Detects procurement-only users (no admin/sales/sales_manager roles)
+   - Hides "Quotes", "Customers", "New Quote" from navigation
+   - Keeps "Dashboard" and "Закупки" visible
+
+**Workflow:**
+- Sales enters basic product info (name, SKU, brand, quantity)
+- Procurement enters: price (in supplier's currency), currency, country, production time, supply chain info
+- Procurement enters total weight/volume for all priced items
+- System will later auto-convert prices to quote currency
+
+**Verification:**
+- ✅ Migrations 121, 122 applied successfully
+- ✅ GitHub Actions CI/CD passed
+- ✅ Tested deployment at https://kvotaflow.ru
+- ✅ Procurement page loads without errors
+- ✅ Menu items hidden correctly based on role
+
+**Commit:**
+- 4f28d32 "Complete procurement workspace form with currency-based pricing"
 
 ---
 
