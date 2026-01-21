@@ -1516,7 +1516,7 @@ def get(quote_id: str, session):
                 Tbody(
                     *[Tr(
                         Td(str(idx + 1)),
-                        Td(item.get("idn_sku", "—")),
+                        Td(f"{quote.get('idn_quote', '')}-{idx + 1}" if quote.get('idn_quote') else "—"),
                         Td(item.get("brand", "—")),
                         Td(item.get("product_name", "—")),
                         Td(str(item.get("quantity", 0))),
@@ -3372,6 +3372,7 @@ def post(
         supabase.table("quotes").update({
             "subtotal": float(total_purchase),
             "total_amount": float(total_with_vat),
+            "total_profit_usd": float(total_profit),
             "updated_at": datetime.now().isoformat()
         }).eq("id", quote_id).execute()
 
@@ -3445,6 +3446,13 @@ def post(
                 supabase.table("quote_calculation_results") \
                     .insert(item_result) \
                     .execute()
+
+            # Update quote_items with calculated prices
+            quantity = item.get("quantity", 1)
+            base_price_vat_per_unit = float(result.sales_price_total_with_vat) / quantity if quantity > 0 else 0
+            supabase.table("quote_items").update({
+                "base_price_vat": base_price_vat_per_unit
+            }).eq("id", item["id"]).execute()
 
         # Store calculation summary
         calc_summary = {
