@@ -179,10 +179,11 @@ def nav_bar(session):
         # Admin-only navigation
         if "admin" in roles:
             nav_items.append(Li(A("Админ", href="/admin")))
+            nav_items.append(Li(A("Settings", href="/settings")))
 
-        # Add settings and logout at the end
+        # Add profile and logout at the end
         nav_items.extend([
-            Li(A("Settings", href="/settings")),
+            Li(A("Профиль", href="/profile")),
             Li(A(f"Logout ({user.get('email', 'User')})", href="/logout")),
         ])
 
@@ -3964,6 +3965,18 @@ def get(session):
         return redirect
 
     user = session["user"]
+    roles = user.get("roles", [])
+
+    # Only admins can access settings
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Настройки доступны только администраторам. Используйте раздел 'Профиль' для управления своими данными."),
+            A("← На главную", href="/dashboard", role="button"),
+            A("Мой профиль", href="/profile", role="button"),
+            session=session
+        )
+
     supabase = get_supabase()
 
     # Get organization settings
@@ -4022,16 +4035,6 @@ def get(session):
                 ),
                 method="post",
                 action="/settings"
-            ),
-            cls="card"
-        ),
-
-        # User info
-        Div(
-            H3("Your Account"),
-            Table(
-                Tr(Td("Email:"), Td(user.get("email", "—"))),
-                Tr(Td("User ID:"), Td(Code(user.get("id", "—")[:8] + "..."))),
             ),
             cls="card"
         ),
@@ -4702,6 +4705,291 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
             style="background: #f9fafb;"
         )
 
+
+
+# ============================================================================
+# USER PROFILE PAGE
+# ============================================================================
+
+@rt("/profile")
+def get(session):
+    """User profile page - view and edit own profile."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    supabase = get_supabase()
+
+    from services.user_profile_service import (
+        get_departments, get_sales_groups, get_organization_users
+    )
+
+    # Get user profile
+    profile_result = supabase.table("user_profiles").select(
+        "*, departments(name), sales_groups(name)"
+    ).eq("user_id", user_id).eq("organization_id", org_id).limit(1).execute()
+
+    if profile_result.data:
+        profile = profile_result.data[0]
+    else:
+        profile = {
+            "full_name": "", "position": "", "phone": "",
+            "date_of_birth": None, "hire_date": None, "location": "",
+            "timezone": "Europe/Moscow", "bio": "",
+            "department_id": None, "sales_group_id": None, "manager_id": None
+        }
+
+    # Get Telegram status
+    tg_result = supabase.table("telegram_users").select(
+        "telegram_id, telegram_username, verified_at"
+    ).eq("user_id", user_id).limit(1).execute()
+
+    tg_linked, tg_display = False, "—"
+    if tg_result.data and tg_result.data[0].get("verified_at"):
+        tg_linked = True
+        tg_data = tg_result.data[0]
+        tg_display = f"@{tg_data.get('telegram_username') or tg_data.get('telegram_id')}"
+
+    departments = get_departments(org_id)
+    sales_groups = get_sales_groups(org_id)
+    users = get_organization_users(org_id)
+
+    return page_layout("Мой профиль",
+        H1("👤 Мой профиль"),
+        Form(
+            Div(H3("Личная информация"),
+                Div(Label("ФИО *", Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True)),
+                    Label("Email", Input(value=user.get("email", "—"), readonly=True, disabled=True, style="background: #f3f4f6; cursor: not-allowed;")),
+                    cls="form-row"),
+                Div(Label("Телефон", Input(name="phone", type="tel", value=profile.get("phone") or "", placeholder="+7 (999) 123-45-67")),
+                    Label("Дата рождения", Input(name="date_of_birth", type="date", value=profile.get("date_of_birth") or "")),
+                    cls="form-row"),
+                Div(Label("Telegram",
+                        Div(Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'};"),
+                            Small(" (привязан)" if tg_linked else " (не привязан)", style="color: #666;"),
+                            A(" → Настроить" if not tg_linked else " → Изменить", href="/settings/telegram", style="margin-left: 0.5rem; font-size: 0.875rem;"),
+                            style="display: flex; align-items: center; padding: 0.5rem; background: #f9fafb; border-radius: 4px;")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("Организация"),
+                Div(Label("Должность", Input(name="position", value=profile.get("position") or "", placeholder="Менеджер по продажам")),
+                    Label("Дата приема на работу", Input(name="hire_date", type="date", value=profile.get("hire_date") or "")),
+                    cls="form-row"),
+                Div(Label("Департамент", Select(Option("— Не выбрано —", value="", selected=not profile.get("department_id")),
+                        *[Option(dept["name"], value=dept["id"], selected=dept["id"] == profile.get("department_id")) for dept in departments], name="department_id")),
+                    Label("Группа продаж", Select(Option("— Не выбрано —", value="", selected=not profile.get("sales_group_id")),
+                        *[Option(sg["name"], value=sg["id"], selected=sg["id"] == profile.get("sales_group_id")) for sg in sales_groups], name="sales_group_id")),
+                    cls="form-row"),
+                Div(Label("Руководитель", Select(Option("— Не выбрано —", value="", selected=not profile.get("manager_id")),
+                        *[Option(u["full_name"], value=u["user_id"], selected=u["user_id"] == profile.get("manager_id")) for u in users if u.get("full_name")], name="manager_id")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("Настройки"),
+                Div(Label("Часовой пояс", Select(
+                        Option("Europe/Moscow (МСК, UTC+3)", value="Europe/Moscow", selected=profile.get("timezone") == "Europe/Moscow" or not profile.get("timezone")),
+                        Option("Asia/Shanghai (CST, UTC+8)", value="Asia/Shanghai", selected=profile.get("timezone") == "Asia/Shanghai"),
+                        Option("Asia/Hong_Kong (HKT, UTC+8)", value="Asia/Hong_Kong", selected=profile.get("timezone") == "Asia/Hong_Kong"),
+                        Option("Asia/Dubai (GST, UTC+4)", value="Asia/Dubai", selected=profile.get("timezone") == "Asia/Dubai"),
+                        Option("Europe/Istanbul (TRT, UTC+3)", value="Europe/Istanbul", selected=profile.get("timezone") == "Europe/Istanbul"),
+                        name="timezone")),
+                    Label("Офис/локация", Input(name="location", value=profile.get("location") or "", placeholder="Москва, офис на Тверской")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("О себе"),
+                Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
+                cls="card"),
+            Div(Button("💾 Сохранить изменения", type="submit", cls="primary"),
+                A("← Назад", href="/dashboard", role="button", cls="secondary"),
+                cls="form-actions"),
+            method="post", action="/profile"),
+        session=session)
+
+
+@rt("/profile")
+def post(session, full_name: str, phone: str = "", date_of_birth: str = "",
+         position: str = "", hire_date: str = "", department_id: str = "",
+         sales_group_id: str = "", manager_id: str = "", timezone: str = "Europe/Moscow",
+         location: str = "", bio: str = ""):
+    """Save user profile."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    from services.user_profile_service import update_user_profile
+
+    update_data = {
+        "full_name": full_name.strip() if full_name else None,
+        "phone": phone.strip() if phone else None,
+        "date_of_birth": date_of_birth if date_of_birth else None,
+        "position": position.strip() if position else None,
+        "hire_date": hire_date if hire_date else None,
+        "department_id": department_id if department_id else None,
+        "sales_group_id": sales_group_id if sales_group_id else None,
+        "manager_id": manager_id if manager_id else None,
+        "timezone": timezone,
+        "location": location.strip() if location else None,
+        "bio": bio.strip() if bio else None
+    }
+
+    success = update_user_profile(user["id"], user["org_id"], **update_data)
+
+    if success:
+        return page_layout("Профиль сохранен",
+            Div(Div("✅ Профиль успешно обновлен!", cls="alert alert-success"),
+                Script("setTimeout(() => window.location.href = '/profile', 1500);")),
+            session=session)
+    else:
+        return page_layout("Ошибка",
+            Div(Div("❌ Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
+                A("← Назад к профилю", href="/profile", role="button")),
+            session=session)
+
+
+@rt("/profile/{user_id}")
+def get(session, user_id: str):
+    """Admin view/edit other user's profile."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user, roles = session["user"], session["user"].get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён", H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"), session=session)
+
+    supabase = get_supabase()
+    from services.user_profile_service import get_departments, get_sales_groups, get_organization_users
+
+    profile_result = supabase.table("user_profiles").select("*, departments(name), sales_groups(name)")        .eq("user_id", user_id).eq("organization_id", user["org_id"]).limit(1).execute()
+
+    profile = profile_result.data[0] if profile_result.data else {
+        "full_name": "", "position": "", "phone": "", "date_of_birth": None,
+        "hire_date": None, "location": "", "timezone": "Europe/Moscow", "bio": "",
+        "department_id": None, "sales_group_id": None, "manager_id": None
+    }
+
+    # Get email via RPC
+    try:
+        email_result = supabase.rpc("get_user_profile_data", {"p_user_id": user_id, "p_organization_id": user["org_id"]}).execute()
+        target_email = email_result.data[0].get("email") if email_result.data else "—"
+    except:
+        target_email = "—"
+
+    # Get Telegram status
+    tg_result = supabase.table("telegram_users").select("telegram_id, telegram_username, verified_at").eq("user_id", user_id).limit(1).execute()
+    tg_linked, tg_display = False, "—"
+    if tg_result.data and tg_result.data[0].get("verified_at"):
+        tg_linked, tg_data = True, tg_result.data[0]
+        tg_display = f"@{tg_data.get('telegram_username') or tg_data.get('telegram_id')}"
+
+    departments = get_departments(user["org_id"])
+    sales_groups = get_sales_groups(user["org_id"])
+    users = get_organization_users(user["org_id"])
+
+    return page_layout(f"Профиль пользователя",
+        H1(f"👤 Профиль: {profile.get('full_name') or 'Пользователь'}"),
+        Div(Span("👨‍💼 Режим администратора", style="font-weight: 600; color: #ef4444;"),
+            Span(" — вы можете редактировать этот профиль", style="color: #666; font-size: 0.875rem;"),
+            cls="alert alert-info", style="background: #fef3c7; border-color: #fbbf24;"),
+        Form(
+            Div(H3("Личная информация"),
+                Div(Label("ФИО *", Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True)),
+                    Label("Email", Input(value=target_email, readonly=True, disabled=True, style="background: #f3f4f6; cursor: not-allowed;")),
+                    cls="form-row"),
+                Div(Label("Телефон", Input(name="phone", type="tel", value=profile.get("phone") or "", placeholder="+7 (999) 123-45-67")),
+                    Label("Дата рождения", Input(name="date_of_birth", type="date", value=profile.get("date_of_birth") or "")),
+                    cls="form-row"),
+                Div(Label("Telegram", Div(Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'};"),
+                        Small(" (привязан, редактирование недоступно)" if tg_linked else " (не привязан)", style="color: #666;"),
+                        style="display: flex; align-items: center; padding: 0.5rem; background: #f9fafb; border-radius: 4px;")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("Организация"),
+                Div(Label("Должность", Input(name="position", value=profile.get("position") or "", placeholder="Менеджер по продажам")),
+                    Label("Дата приема на работу", Input(name="hire_date", type="date", value=profile.get("hire_date") or "")),
+                    cls="form-row"),
+                Div(Label("Департамент", Select(Option("— Не выбрано —", value="", selected=not profile.get("department_id")),
+                        *[Option(dept["name"], value=dept["id"], selected=dept["id"] == profile.get("department_id")) for dept in departments], name="department_id")),
+                    Label("Группа продаж", Select(Option("— Не выбрано —", value="", selected=not profile.get("sales_group_id")),
+                        *[Option(sg["name"], value=sg["id"], selected=sg["id"] == profile.get("sales_group_id")) for sg in sales_groups], name="sales_group_id")),
+                    cls="form-row"),
+                Div(Label("Руководитель", Select(Option("— Не выбрано —", value="", selected=not profile.get("manager_id")),
+                        *[Option(u["full_name"], value=u["user_id"], selected=u["user_id"] == profile.get("manager_id")) for u in users if u.get("full_name") and u["user_id"] != user_id], name="manager_id")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("Настройки"),
+                Div(Label("Часовой пояс", Select(
+                        Option("Europe/Moscow (МСК, UTC+3)", value="Europe/Moscow", selected=profile.get("timezone") == "Europe/Moscow" or not profile.get("timezone")),
+                        Option("Asia/Shanghai (CST, UTC+8)", value="Asia/Shanghai", selected=profile.get("timezone") == "Asia/Shanghai"),
+                        Option("Asia/Hong_Kong (HKT, UTC+8)", value="Asia/Hong_Kong", selected=profile.get("timezone") == "Asia/Hong_Kong"),
+                        Option("Asia/Dubai (GST, UTC+4)", value="Asia/Dubai", selected=profile.get("timezone") == "Asia/Dubai"),
+                        Option("Europe/Istanbul (TRT, UTC+3)", value="Europe/Istanbul", selected=profile.get("timezone") == "Europe/Istanbul"),
+                        name="timezone")),
+                    Label("Офис/локация", Input(name="location", value=profile.get("location") or "", placeholder="Москва, офис на Тверской")),
+                    cls="form-row"),
+                cls="card"),
+            Div(H3("О себе"),
+                Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
+                cls="card"),
+            Div(Button("💾 Сохранить изменения", type="submit", cls="primary"),
+                A("← К списку пользователей", href="/admin?tab=users", role="button", cls="secondary"),
+                cls="form-actions"),
+            method="post", action=f"/profile/{user_id}"),
+        session=session)
+
+
+@rt("/profile/{user_id}")
+def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: str = "",
+         position: str = "", hire_date: str = "", department_id: str = "",
+         sales_group_id: str = "", manager_id: str = "", timezone: str = "Europe/Moscow",
+         location: str = "", bio: str = ""):
+    """Admin save other user's profile."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user, roles = session["user"], session["user"].get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён", H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            A("← На главную", href="/dashboard", role="button"), session=session)
+
+    from services.user_profile_service import update_user_profile
+
+    update_data = {
+        "full_name": full_name.strip() if full_name else None,
+        "phone": phone.strip() if phone else None,
+        "date_of_birth": date_of_birth if date_of_birth else None,
+        "position": position.strip() if position else None,
+        "hire_date": hire_date if hire_date else None,
+        "department_id": department_id if department_id else None,
+        "sales_group_id": sales_group_id if sales_group_id else None,
+        "manager_id": manager_id if manager_id else None,
+        "timezone": timezone,
+        "location": location.strip() if location else None,
+        "bio": bio.strip() if bio else None
+    }
+
+    success = update_user_profile(user_id, user["org_id"], **update_data)
+
+    if success:
+        return page_layout("Профиль сохранен",
+            Div(Div("✅ Профиль успешно обновлен!", cls="alert alert-success"),
+                Script(f"setTimeout(() => window.location.href = '/profile/{user_id}', 1500);")),
+            session=session)
+    else:
+        return page_layout("Ошибка",
+            Div(Div("❌ Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
+                A("← Назад к профилю", href=f"/profile/{user_id}", role="button")),
+            session=session)
 
 @rt("/procurement")
 def get(session, status_filter: str = None):
