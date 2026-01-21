@@ -1020,7 +1020,7 @@ def get(session):
     supabase = get_supabase()
 
     result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), status, total_amount, created_at") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, created_at") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True) \
         .execute()
@@ -1040,7 +1040,7 @@ def get(session):
                 *[Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(status_badge(q.get("status", "draft"))),
+                    Td(status_badge(q.get("workflow_status", "draft"))),
                     Td(format_money(q.get("total_amount"))),
                     Td(q.get("created_at", "")[:10]),
                     Td(
