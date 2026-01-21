@@ -6587,7 +6587,7 @@ def get(session, quote_id: str):
 
     invoices = invoices_result.data or []
 
-    # For each invoice, fetch its items
+    # For each invoice, fetch its items and related data (location, supplier)
     invoices_with_items = []
     for invoice in invoices:
         items_result = supabase.table("quote_items") \
@@ -6597,6 +6597,35 @@ def get(session, quote_id: str):
 
         invoice_data = dict(invoice)
         invoice_data["items"] = items_result.data or []
+
+        # Load pickup location info
+        pickup_location_id = invoice.get("pickup_location_id")
+        if pickup_location_id:
+            try:
+                from services.location_service import get_location
+                loc = get_location(pickup_location_id)
+                if loc:
+                    invoice_data["pickup_location"] = {
+                        "city": loc.city,
+                        "country": loc.country
+                    }
+            except:
+                pass
+
+        # Load supplier info
+        supplier_id = invoice.get("supplier_id")
+        if supplier_id:
+            try:
+                from services.supplier_service import get_supplier
+                sup = get_supplier(supplier_id)
+                if sup:
+                    invoice_data["supplier"] = {
+                        "name": sup.name,
+                        "country": sup.country
+                    }
+            except:
+                pass
+
         invoices_with_items.append(invoice_data)
 
     # Calculate summary stats from invoices
@@ -6664,6 +6693,34 @@ def get(session, quote_id: str):
                 ),
                 Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+            ),
+
+            # Route and delivery method - CRITICAL FOR LOGISTICS PRICING
+            Div(
+                # Route: From → To
+                Div(
+                    Span("🗺️ Маршрут: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem;"),
+                    Span(
+                        (invoice.get("pickup_location", {}).get("city", "—") + ", " + invoice.get("pickup_location", {}).get("country", "—")) if invoice.get("pickup_location") else
+                        (invoice.get("supplier", {}).get("country", "—")) if invoice.get("supplier") else "—",
+                        style="color: #059669;"
+                    ),
+                    Span(" → ", style="margin: 0 0.5rem; color: #999;"),
+                    Span(f"{quote.get('delivery_city', '—')}, {quote.get('delivery_country', '—')}", style="color: #3b82f6;"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                # Delivery method
+                Div(
+                    Span("🚚 Доставка: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem;"),
+                    Span(
+                        {"air": "Авиа ✈️", "auto": "Авто 🚛", "sea": "Море 🚢", "multimodal": "Мультимодально 🚚✈️🚢"}.get(
+                            quote.get("delivery_method", ""), "Не указан"
+                        ),
+                        style="color: #d97706; font-weight: 600;"
+                    ),
+                    style="margin-bottom: 0.75rem;"
+                ),
+                style="background: #fef3c7; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; border-left: 3px solid #f59e0b;"
             ),
 
             # Invoice info badges - WEIGHT/VOLUME CRITICAL FOR LOGISTICS
