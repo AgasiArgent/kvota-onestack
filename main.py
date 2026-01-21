@@ -211,6 +211,9 @@ def page_layout(title, *content, session=None):
             Meta(name="viewport", content="width=device-width, initial-scale=1"),
             # PicoCSS - Modern, semantic CSS framework
             Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"),
+            # DaisyUI + TailwindCSS - Component library
+            Script(src="https://cdn.tailwindcss.com"),
+            Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/daisyui@4/dist/full.min.css"),
             # Custom styles (nav, badges, app-specific overrides)
             Style(APP_STYLES),
             # HTMX
@@ -220,6 +223,122 @@ def page_layout(title, *content, session=None):
             nav_bar(session or {}),
             Main(Div(*content, cls="container"))
         )
+    )
+
+
+# ============================================================================
+# DAISYUI COMPONENT HELPERS
+# ============================================================================
+
+def tab_nav(tabs: list, active_tab: str = None, target_id: str = "tab-content"):
+    """
+    DaisyUI tab navigation with HTMX integration
+
+    Args:
+        tabs: List of dicts with {'id': str, 'label': str, 'url': str}
+        active_tab: ID of the currently active tab
+        target_id: HTMX target element ID for tab content
+
+    Example:
+        tab_nav([
+            {'id': 'general', 'label': 'Общая информация', 'url': '/customers/123/tab/general'},
+            {'id': 'addresses', 'label': 'Адреса', 'url': '/customers/123/tab/addresses'}
+        ], active_tab='general')
+    """
+    return Div(
+        *[
+            A(
+                tab["label"],
+                href=tab.get("url", "#"),
+                cls=f"tab tab-lifted {'tab-active' if tab['id'] == active_tab else ''}",
+                hx_get=tab.get("url") if tab.get("url") and tab.get("url") != "#" else None,
+                hx_target=f"#{target_id}" if tab.get("url") and tab.get("url") != "#" else None,
+                hx_swap="innerHTML"
+            )
+            for tab in tabs
+        ],
+        role="tablist",
+        cls="tabs tabs-lifted"
+    )
+
+
+def badge(text: str, type: str = "neutral", size: str = "md"):
+    """
+    DaisyUI badge component
+
+    Args:
+        text: Badge text
+        type: Badge color - 'neutral', 'primary', 'secondary', 'accent', 'success', 'warning', 'error', 'info'
+        size: Badge size - 'xs', 'sm', 'md', 'lg'
+
+    Example:
+        badge("Активен", type="success")
+        badge("Админ", type="error", size="sm")
+    """
+    type_class = f"badge-{type}" if type != "neutral" else ""
+    size_class = f"badge-{size}" if size != "md" else ""
+    return Span(text, cls=f"badge {type_class} {size_class}".strip())
+
+
+def stat_card(value: str, label: str, description: str = None, icon: str = None):
+    """
+    DaisyUI stat card for dashboard statistics
+
+    Args:
+        value: Main value to display (large text)
+        label: Label above the value
+        description: Optional description below the value
+        icon: Optional emoji or icon
+
+    Example:
+        stat_card(value="₽38,620", label="Выручка", description="Одобренные КП")
+    """
+    return Div(
+        Div(icon, cls="stat-figure text-4xl") if icon else None,
+        Div(label, cls="stat-title"),
+        Div(value, cls="stat-value text-primary"),
+        Div(description, cls="stat-desc") if description else None,
+        cls="stat"
+    )
+
+
+def modal_dialog(id: str, title: str, content, actions=None):
+    """
+    DaisyUI modal dialog
+
+    Args:
+        id: Modal ID for targeting
+        title: Modal title
+        content: Modal body content (can be Div, Form, etc.)
+        actions: Optional list of button elements for modal actions
+
+    Example:
+        modal_dialog(
+            id="delete-confirm",
+            title="Подтвердите удаление",
+            content=P("Вы уверены, что хотите удалить этот элемент?"),
+            actions=[
+                Button("Отмена", cls="btn", onclick=f"document.getElementById('delete-confirm').close()"),
+                Button("Удалить", cls="btn btn-error")
+            ]
+        )
+    """
+    return Div(
+        Div(
+            Div(
+                H3(title, cls="font-bold text-lg"),
+                content,
+                Div(
+                    *actions if actions else [],
+                    cls="modal-action"
+                ) if actions else None,
+                cls="modal-box"
+            ),
+            Form(method="dialog", cls="modal-backdrop"),
+            cls="modal-content"
+        ),
+        id=id,
+        cls="modal"
     )
 
 
@@ -305,8 +424,16 @@ def format_money(value, currency="RUB"):
 
 
 def status_badge(status):
-    """Status badge component"""
-    return Span(status.capitalize(), cls=f"status-badge status-{status}")
+    """Status badge component with DaisyUI styling"""
+    # Map old status classes to DaisyUI badge types
+    type_map = {
+        "draft": "warning",
+        "sent": "info",
+        "approved": "success",
+        "rejected": "error"
+    }
+    badge_type = type_map.get(status, "neutral")
+    return badge(status.capitalize(), type=badge_type)
 
 
 # ============================================================================
@@ -13961,8 +14088,8 @@ def get(session, q: str = "", country: str = "", status: str = ""):
     # Build supplier rows
     supplier_rows = []
     for s in suppliers:
-        status_class = "status-approved" if s.is_active else "status-rejected"
         status_text = "Активен" if s.is_active else "Неактивен"
+        status_badge_type = "success" if s.is_active else "error"
 
         supplier_rows.append(
             Tr(
@@ -13975,7 +14102,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                 Td(s.inn or "—"),
                 Td(s.contact_person or "—"),
                 Td(s.contact_email or "—"),
-                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(badge(status_text, type=status_badge_type)),
                 Td(
                     A("✏️", href=f"/suppliers/{s.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
                     A("👁️", href=f"/suppliers/{s.id}", title="Просмотр"),
@@ -14655,8 +14782,8 @@ def get(session, q: str = "", status: str = ""):
     # Build company rows
     company_rows = []
     for c in companies:
-        status_class = "status-approved" if c.is_active else "status-rejected"
         status_text = "Активна" if c.is_active else "Неактивна"
+        status_badge_type = "success" if c.is_active else "error"
 
         company_rows.append(
             Tr(
@@ -14669,7 +14796,7 @@ def get(session, q: str = "", status: str = ""):
                 Td(c.kpp or "—"),
                 Td(c.ogrn or "—"),
                 Td(c.general_director_name or "—"),
-                Td(Span(status_text, cls=f"status-badge {status_class}")),
+                Td(badge(status_text, type=status_badge_type)),
                 Td(
                     A("✏️", href=f"/buyer-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
                     A("👁️", href=f"/buyer-companies/{c.id}", title="Просмотр"),
