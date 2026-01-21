@@ -6062,7 +6062,7 @@ def get(quote_id: str, session):
 
 
 @rt("/procurement/{quote_id}/invoices")
-async def post(quote_id: str, session):
+async def post(quote_id: str, request: Request, session):
     """
     Save invoices to database (Screen 2 POST handler).
 
