@@ -14105,10 +14105,15 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
                 limit=min(limit, 50),
             )
 
-        # Build HTML options
-        options = [Option("Выберите локацию...", value="")]
+        # Build HTML options for datalist
+        options = []
         for item in dropdown_items:
-            options.append(Option(item["label"], value=item["value"]))
+            # For datalist: value = display text, data-id = UUID
+            options.append(Option(
+                item["label"],
+                value=item["label"],
+                **{"data-id": item["value"]}
+            ))
 
         # If no results found
         if len(dropdown_items) == 0 and q:
@@ -14260,8 +14265,9 @@ def location_dropdown(
     # Generate unique ID if not provided
     import uuid
     component_id = dropdown_id or f"loc-{uuid.uuid4().hex[:8]}"
-    search_id = f"search-{component_id}"
-    select_id = f"select-{component_id}"
+    datalist_id = f"datalist-{component_id}"
+    hidden_id = f"hidden-{component_id}"
+    input_id = f"input-{component_id}"
 
     # Build hx-vals for query parameters
     hx_vals_dict = {}
@@ -14274,26 +14280,6 @@ def location_dropdown(
     import json
     hx_vals = json.dumps(hx_vals_dict) if hx_vals_dict else None
 
-    # Build the search input attributes
-    search_attrs = {
-        "type": "text",
-        "id": search_id,
-        "placeholder": placeholder,
-        "autocomplete": "off",
-        "hx-get": "/api/locations/search",
-        "hx-trigger": "input changed delay:300ms, focus",
-        "hx-target": f"#{select_id}",
-        "name": "q",  # Query parameter for search
-        "style": "margin-bottom: 0.5rem;",
-    }
-    if hx_vals:
-        search_attrs["hx-vals"] = hx_vals
-
-    # Build select options
-    options = [Option("Выберите локацию...", value="")]
-    if selected_id and selected_label:
-        options.append(Option(selected_label, value=selected_id, selected=True))
-
     # Build label with required indicator
     label_text = f"{label} *" if required else label
 
@@ -14303,20 +14289,58 @@ def location_dropdown(
     # Build the container class
     container_cls = f"location-dropdown {cls}".strip()
 
+    # Inline script to sync datalist selection with hidden field
+    sync_script = Script(f"""
+        (function() {{
+            const input = document.getElementById('{input_id}');
+            const datalist = document.getElementById('{datalist_id}');
+            const hidden = document.getElementById('{hidden_id}');
+
+            if (!input || !datalist || !hidden) return;
+
+            input.addEventListener('input', function() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
+                if (option) {{
+                    hidden.value = option.getAttribute('data-id') || '';
+                }} else {{
+                    hidden.value = '';
+                }}
+            }});
+        }})();
+    """)
+
+    # Build input attributes for datalist
+    input_attrs = {
+        "type": "text",
+        "id": input_id,
+        "list": datalist_id,
+        "value": selected_label or "",
+        "placeholder": placeholder,
+        "autocomplete": "off",
+        "required": required,
+        "style": "width: 100%;",
+        "hx-get": "/api/locations/search",
+        "hx-trigger": "input changed delay:300ms, focus",
+        "hx-target": f"#{datalist_id}",
+        "hx-include": f"[id='{input_id}']",
+        "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
+    }
+    if hx_vals:
+        # Merge hx-vals with existing dict
+        existing_vals = json.loads(input_attrs["hx-vals"])
+        existing_vals.update(json.loads(hx_vals))
+        input_attrs["hx-vals"] = json.dumps(existing_vals)
+
     # Construct the component
     return Div(
         Label(
             label_text,
-            Input(**search_attrs),
-            Select(
-                *options,
-                id=select_id,
-                name=name,
-                required=required,
-                style="width: 100%;",
-            ),
+            Input(**input_attrs),
+            Datalist(id=datalist_id),
+            Input(type="hidden", name=name, id=hidden_id, value=selected_id or ""),
             help_element,
         ),
+        sync_script,
         cls=container_cls,
         id=component_id,
     )
@@ -14374,16 +14398,16 @@ def supplier_dropdown(
     selected_id: str = None,
     selected_label: str = None,
     required: bool = False,
-    placeholder: str = "Поиск поставщика...",
+    placeholder: str = "Начните печатать название...",
     help_text: str = None,
     cls: str = "",
     dropdown_id: str = None,
 ) -> Div:
     """
-    Reusable HTMX-powered supplier dropdown component.
+    Reusable HTMX-powered supplier dropdown component using datalist.
 
-    Creates a searchable dropdown that fetches supplier options from
-    /api/suppliers/search as user types.
+    Creates a searchable input with suggestions that fetches supplier options from
+    /api/suppliers/search as user types. Uses HTML5 datalist for native autocomplete.
 
     Args:
         name: Form field name (default: "supplier_id")
@@ -14408,36 +14432,59 @@ def supplier_dropdown(
     """
     import uuid
     component_id = dropdown_id or f"sup-{uuid.uuid4().hex[:8]}"
-    search_id = f"search-{component_id}"
-    select_id = f"select-{component_id}"
-
-    search_attrs = {
-        "type": "text",
-        "id": search_id,
-        "placeholder": placeholder,
-        "autocomplete": "off",
-        "hx-get": "/api/suppliers/search",
-        "hx-trigger": "input changed delay:300ms, focus",
-        "hx-target": f"#{select_id}",
-        "name": "q",
-        "style": "margin-bottom: 0.5rem;",
-    }
-
-    options = [Option("Выберите поставщика...", value="")]
-    if selected_id and selected_label:
-        options.append(Option(selected_label, value=selected_id, selected=True))
+    datalist_id = f"datalist-{component_id}"
+    hidden_id = f"hidden-{component_id}"
+    input_id = f"input-{component_id}"
 
     label_text = f"{label} *" if required else label
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"supplier-dropdown {cls}".strip()
 
+    # Inline script to sync datalist selection with hidden field
+    sync_script = Script(f"""
+        (function() {{
+            const input = document.getElementById('{input_id}');
+            const datalist = document.getElementById('{datalist_id}');
+            const hidden = document.getElementById('{hidden_id}');
+
+            if (!input || !datalist || !hidden) return;
+
+            input.addEventListener('input', function() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
+                if (option) {{
+                    hidden.value = option.getAttribute('data-id') || '';
+                }} else {{
+                    hidden.value = '';
+                }}
+            }});
+        }})();
+    """)
+
     return Div(
         Label(
             label_text,
-            Input(**search_attrs),
-            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            Input(
+                type="text",
+                id=input_id,
+                list=datalist_id,
+                value=selected_label or "",
+                placeholder=placeholder,
+                autocomplete="off",
+                required=required,
+                style="width: 100%;",
+                **{
+                    "hx-get": "/api/suppliers/search",
+                    "hx-trigger": "input changed delay:300ms, focus",
+                    "hx-target": f"#{datalist_id}",
+                    "hx-include": f"[id='{input_id}']",
+                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
+                }
+            ),
+            Datalist(id=datalist_id),
+            Input(type="hidden", name=name, id=hidden_id, value=selected_id or ""),
             help_element,
         ),
+        sync_script,
         cls=container_cls,
         id=component_id,
     )
@@ -14449,15 +14496,16 @@ def buyer_company_dropdown(
     selected_id: str = None,
     selected_label: str = None,
     required: bool = False,
-    placeholder: str = "Поиск компании...",
+    placeholder: str = "Начните печатать название...",
     help_text: str = None,
     cls: str = "",
     dropdown_id: str = None,
 ) -> Div:
     """
-    Reusable HTMX-powered buyer company dropdown component.
+    Reusable HTMX-powered buyer company dropdown component using datalist.
 
-    Creates a searchable dropdown for selecting our purchasing legal entities.
+    Creates a searchable input with suggestions for selecting our purchasing legal entities.
+    Uses HTML5 datalist for native autocomplete without separate search field.
 
     Args:
         name: Form field name (default: "buyer_company_id")
@@ -14471,40 +14519,63 @@ def buyer_company_dropdown(
         dropdown_id: Custom ID
 
     Returns:
-        Div: FastHTML element containing the dropdown
+        Div: FastHTML element containing the input with datalist
     """
     import uuid
     component_id = dropdown_id or f"buy-{uuid.uuid4().hex[:8]}"
-    search_id = f"search-{component_id}"
-    select_id = f"select-{component_id}"
-
-    search_attrs = {
-        "type": "text",
-        "id": search_id,
-        "placeholder": placeholder,
-        "autocomplete": "off",
-        "hx-get": "/api/buyer-companies/search",
-        "hx-trigger": "input changed delay:300ms, focus",
-        "hx-target": f"#{select_id}",
-        "name": "q",
-        "style": "margin-bottom: 0.5rem;",
-    }
-
-    options = [Option("Выберите компанию...", value="")]
-    if selected_id and selected_label:
-        options.append(Option(selected_label, value=selected_id, selected=True))
+    datalist_id = f"datalist-{component_id}"
+    hidden_id = f"hidden-{component_id}"
+    input_id = f"input-{component_id}"
 
     label_text = f"{label} *" if required else label
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"buyer-company-dropdown {cls}".strip()
 
+    # Inline script to sync datalist selection with hidden field
+    sync_script = Script(f"""
+        (function() {{
+            const input = document.getElementById('{input_id}');
+            const datalist = document.getElementById('{datalist_id}');
+            const hidden = document.getElementById('{hidden_id}');
+
+            if (!input || !datalist || !hidden) return;
+
+            input.addEventListener('input', function() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
+                if (option) {{
+                    hidden.value = option.getAttribute('data-id') || '';
+                }} else {{
+                    hidden.value = '';
+                }}
+            }});
+        }})();
+    """)
+
     return Div(
         Label(
             label_text,
-            Input(**search_attrs),
-            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            Input(
+                type="text",
+                id=input_id,
+                list=datalist_id,
+                value=selected_label or "",
+                placeholder=placeholder,
+                autocomplete="off",
+                required=required,
+                style="width: 100%;",
+                **{
+                    "hx-get": "/api/buyer-companies/search",
+                    "hx-trigger": "input changed delay:300ms, focus",
+                    "hx-target": f"#{datalist_id}",
+                    "hx-include": f"[id='{input_id}']",
+                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
+                }
+            ),
+            Datalist(id=datalist_id),
+            Input(type="hidden", name=name, id=hidden_id, value=selected_id or ""),
             help_element,
         ),
+        sync_script,
         cls=container_cls,
         id=component_id,
     )
@@ -14516,16 +14587,16 @@ def seller_company_dropdown(
     selected_id: str = None,
     selected_label: str = None,
     required: bool = False,
-    placeholder: str = "Поиск компании...",
+    placeholder: str = "Начните печатать название...",
     help_text: str = None,
     cls: str = "",
     dropdown_id: str = None,
 ) -> Div:
     """
-    Reusable HTMX-powered seller company dropdown component.
+    Reusable HTMX-powered seller company dropdown component using datalist.
 
-    Creates a searchable dropdown for selecting our selling legal entities
-    at the quote level.
+    Creates a searchable input with suggestions for selecting our selling legal entities
+    at the quote level. Uses HTML5 datalist for native autocomplete.
 
     Args:
         name: Form field name (default: "seller_company_id")
@@ -14539,40 +14610,63 @@ def seller_company_dropdown(
         dropdown_id: Custom ID
 
     Returns:
-        Div: FastHTML element containing the dropdown
+        Div: FastHTML element containing the input with datalist
     """
     import uuid
     component_id = dropdown_id or f"sel-{uuid.uuid4().hex[:8]}"
-    search_id = f"search-{component_id}"
-    select_id = f"select-{component_id}"
-
-    search_attrs = {
-        "type": "text",
-        "id": search_id,
-        "placeholder": placeholder,
-        "autocomplete": "off",
-        "hx-get": "/api/seller-companies/search",
-        "hx-trigger": "input changed delay:300ms, focus",
-        "hx-target": f"#{select_id}",
-        "name": "q",
-        "style": "margin-bottom: 0.5rem;",
-    }
-
-    options = [Option("Выберите компанию...", value="")]
-    if selected_id and selected_label:
-        options.append(Option(selected_label, value=selected_id, selected=True))
+    datalist_id = f"datalist-{component_id}"
+    hidden_id = f"hidden-{component_id}"
+    input_id = f"input-{component_id}"
 
     label_text = f"{label} *" if required else label
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"seller-company-dropdown {cls}".strip()
 
+    # Inline script to sync datalist selection with hidden field
+    sync_script = Script(f"""
+        (function() {{
+            const input = document.getElementById('{input_id}');
+            const datalist = document.getElementById('{datalist_id}');
+            const hidden = document.getElementById('{hidden_id}');
+
+            if (!input || !datalist || !hidden) return;
+
+            input.addEventListener('input', function() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
+                if (option) {{
+                    hidden.value = option.getAttribute('data-id') || '';
+                }} else {{
+                    hidden.value = '';
+                }}
+            }});
+        }})();
+    """)
+
     return Div(
         Label(
             label_text,
-            Input(**search_attrs),
-            Select(*options, id=select_id, name=name, required=required, style="width: 100%;"),
+            Input(
+                type="text",
+                id=input_id,
+                list=datalist_id,
+                value=selected_label or "",
+                placeholder=placeholder,
+                autocomplete="off",
+                required=required,
+                style="width: 100%;",
+                **{
+                    "hx-get": "/api/seller-companies/search",
+                    "hx-trigger": "input changed delay:300ms, focus",
+                    "hx-target": f"#{datalist_id}",
+                    "hx-include": f"[id='{input_id}']",
+                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
+                }
+            ),
+            Datalist(id=datalist_id),
+            Input(type="hidden", name=name, id=hidden_id, value=selected_id or ""),
             help_element,
         ),
+        sync_script,
         cls=container_cls,
         id=component_id,
     )
@@ -14622,10 +14716,15 @@ def get(session, q: str = "", country: str = "", limit: int = 20):
                 limit=min(limit, 50),
             )
 
-        options = [Option("Выберите поставщика...", value="")]
+        options = []
         for sup in suppliers:
             label = format_supplier_for_dropdown(sup)
-            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+            # For datalist: value = display text, data-id = UUID
+            options.append(Option(
+                label.get("label", ""),
+                value=label.get("label", ""),
+                **{"data-id": label.get("value", "")}
+            ))
 
         if len(suppliers) == 0 and q:
             options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
@@ -14676,10 +14775,15 @@ def get(session, q: str = "", limit: int = 20):
                 limit=min(limit, 50),
             )
 
-        options = [Option("Выберите компанию...", value="")]
+        options = []
         for comp in companies:
             label = format_buyer_company_for_dropdown(comp)
-            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+            # For datalist: value = display text, data-id = UUID
+            options.append(Option(
+                label.get("label", ""),
+                value=label.get("label", ""),
+                **{"data-id": label.get("value", "")}
+            ))
 
         if len(companies) == 0 and q:
             options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
@@ -14730,10 +14834,15 @@ def get(session, q: str = "", limit: int = 20):
                 limit=min(limit, 50),
             )
 
-        options = [Option("Выберите компанию...", value="")]
+        options = []
         for comp in companies:
             label = format_seller_company_for_dropdown(comp)
-            options.append(Option(label.get("label", ""), value=label.get("value", "")))
+            # For datalist: value = display text, data-id = UUID
+            options.append(Option(
+                label.get("label", ""),
+                value=label.get("label", ""),
+                **{"data-id": label.get("value", "")}
+            ))
 
         if len(companies) == 0 and q:
             options.append(Option(f"Ничего не найдено по запросу '{q}'", value="", disabled=True))
