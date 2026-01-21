@@ -14073,7 +14073,7 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
         return Option("Требуется авторизация", value="", disabled=True)
 
     user = session["user"]
-    org_id = user.get("organization_id")
+    org_id = user.get("org_id")
 
     if not org_id:
         return Option("Организация не найдена", value="", disabled=True)
@@ -14143,7 +14143,7 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
         return {"error": "Unauthorized", "items": []}
 
     user = session["user"]
-    org_id = user.get("organization_id")
+    org_id = user.get("org_id")
 
     if not org_id:
         return {"error": "Organization not found", "items": []}
@@ -14688,12 +14688,9 @@ def get(session, q: str = "", country: str = "", limit: int = 20):
         return Option("Требуется авторизация", value="", disabled=True)
 
     user = session["user"]
-    org_id = user.get("organization_id")
-
-    print(f"[SUPPLIERS SEARCH] user_id: {user.get('id')}, org_id: {org_id}, query: {q}")
+    org_id = user.get("org_id")  # Fixed: session stores 'org_id' not 'organization_id'
 
     if not org_id:
-        print(f"[SUPPLIERS SEARCH] NO ORG_ID - user dict keys: {list(user.keys())}")
         return Option("Организация не найдена", value="", disabled=True)
 
     try:
@@ -14750,7 +14747,7 @@ def get(session, q: str = "", limit: int = 20):
         return Option("Требуется авторизация", value="", disabled=True)
 
     user = session["user"]
-    org_id = user.get("organization_id")
+    org_id = user.get("org_id")
 
     if not org_id:
         return Option("Организация не найдена", value="", disabled=True)
@@ -14809,7 +14806,7 @@ def get(session, q: str = "", limit: int = 20):
         return Option("Требуется авторизация", value="", disabled=True)
 
     user = session["user"]
-    org_id = user.get("organization_id")
+    org_id = user.get("org_id")
 
     if not org_id:
         return Option("Организация не найдена", value="", disabled=True)
