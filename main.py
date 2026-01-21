@@ -16464,31 +16464,16 @@ def get(customer_id: str, session, tab: str = "general"):
             session=session
         )
 
-    # Tab navigation buttons (using regular links for simplicity)
-    tabs_nav = Div(
-        A("Общая информация",
-          href=f"/customers/{customer_id}?tab=general",
-          cls=f"tab-btn {'active' if tab == 'general' else ''}"),
-        A("Адреса",
-          href=f"/customers/{customer_id}?tab=addresses",
-          cls=f"tab-btn {'active' if tab == 'addresses' else ''}"),
-        A("Контакты",
-          href=f"/customers/{customer_id}?tab=contacts",
-          cls=f"tab-btn {'active' if tab == 'contacts' else ''}"),
-        A("Договоры",
-          href=f"/customers/{customer_id}?tab=contracts",
-          cls=f"tab-btn {'active' if tab == 'contracts' else ''}"),
-        A("КП",
-          href=f"/customers/{customer_id}?tab=quotes",
-          cls=f"tab-btn {'active' if tab == 'quotes' else ''}"),
-        A("Спецификации",
-          href=f"/customers/{customer_id}?tab=specifications",
-          cls=f"tab-btn {'active' if tab == 'specifications' else ''}"),
-        A("Запрашиваемые позиции",
-          href=f"/customers/{customer_id}?tab=requested_items",
-          cls=f"tab-btn {'active' if tab == 'requested_items' else ''}"),
-        cls="tabs-nav"
-    )
+    # Tab navigation using DaisyUI tabs
+    tabs_nav = tab_nav([
+        {'id': 'general', 'label': 'Общая информация', 'url': f'/customers/{customer_id}?tab=general'},
+        {'id': 'addresses', 'label': 'Адреса', 'url': f'/customers/{customer_id}?tab=addresses'},
+        {'id': 'contacts', 'label': 'Контакты', 'url': f'/customers/{customer_id}?tab=contacts'},
+        {'id': 'contracts', 'label': 'Договоры', 'url': f'/customers/{customer_id}?tab=contracts'},
+        {'id': 'quotes', 'label': 'КП', 'url': f'/customers/{customer_id}?tab=quotes'},
+        {'id': 'specifications', 'label': 'Спецификации', 'url': f'/customers/{customer_id}?tab=specifications'},
+        {'id': 'requested_items', 'label': 'Запрашиваемые позиции', 'url': f'/customers/{customer_id}?tab=requested_items'}
+    ], active_tab=tab, target_id="tab-content")
 
     # Build tab content based on selected tab
     if tab == "general":
@@ -16994,47 +16979,11 @@ def get(customer_id: str, session, tab: str = "general"):
             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"
         ),
 
-        # Tabs navigation
+        # Tabs navigation (DaisyUI)
         tabs_nav,
 
-        # Tab content
-        tab_content,
-
-        # Add custom CSS for tabs
-        Style("""
-            .tabs-nav {
-                display: flex;
-                gap: 0;
-                border-bottom: 2px solid #e5e7eb;
-                margin-bottom: 2rem;
-            }
-
-            .tab-btn {
-                padding: 0.75rem 1.5rem;
-                background: none;
-                border: none;
-                border-bottom: 3px solid transparent;
-                cursor: pointer;
-                font-weight: 500;
-                color: #6b7280;
-                text-decoration: none;
-                transition: all 0.2s;
-            }
-
-            .tab-btn:hover {
-                color: #3b82f6;
-                background: #f9fafb;
-            }
-
-            .tab-btn.active {
-                color: #3b82f6;
-                border-bottom-color: #3b82f6;
-            }
-
-            #tab-content {
-                min-height: 300px;
-            }
-        """),
+        # Tab content wrapper for HTMX targeting
+        Div(tab_content, id="tab-content", style="min-height: 300px;"),
 
         session=session
     )
