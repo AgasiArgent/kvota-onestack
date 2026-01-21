@@ -5095,7 +5095,7 @@ def get(session, status_filter: str = None):
     all_quotes_count = len(quotes_with_details)
     pending_count = len(pending_quotes)
     in_progress_count = len([q for q in quotes_with_details
-                             if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_sales_review"]])
+                             if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "pending_sales_review"]])
     completed_count = len([q for q in quotes_with_details
                            if q.get("workflow_status") in ["approved", "deal", "sent_to_client"]])
 
@@ -6419,7 +6419,7 @@ def get(session, status_filter: str = None):
             Td(
                 A("Работать", href=f"/logistics/{q['id']}", role="button",
                   style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs"] else
+                if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"] else
                 A("Просмотр", href=f"/logistics/{q['id']}", style="font-size: 0.875rem;")
             )
         )
@@ -7781,7 +7781,7 @@ async def post(session, quote_id: str, request):
     workflow_status = quote.get("workflow_status", "draft")
 
     # Check if editable
-    editable_statuses = ["pending_customs", "pending_logistics", "draft", "pending_procurement"]
+    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
     if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
         return RedirectResponse(f"/customs/{quote_id}", status_code=303)
 
