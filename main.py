@@ -3006,13 +3006,13 @@ def get(quote_id: str, session):
     from services.seller_company_service import get_seller_company
     seller_company_info = None
     seller_company_display = "Не выбрана"
-    seller_company_name = ""
+    seller_company_code = ""
     if quote.get("seller_company_id"):
         seller_company = get_seller_company(quote["seller_company_id"])
         if seller_company:
             seller_company_info = {"id": seller_company.id, "supplier_code": seller_company.supplier_code, "name": seller_company.name}
             seller_company_display = f"{seller_company.supplier_code} - {seller_company.name}"
-            seller_company_name = seller_company.name
+            seller_company_code = seller_company.supplier_code
 
     # Get quote items
     items_result = supabase.table("quote_items") \
@@ -3048,8 +3048,8 @@ def get(quote_id: str, session):
             Label("Компания-продавец",
                 Div(
                     Strong(seller_company_display),
-                    # Hidden input to pass seller_company name to preview
-                    Input(type="hidden", name="seller_company", value=seller_company_name),
+                    # Hidden input to pass seller_company CODE (not name) to preview/calculation
+                    Input(type="hidden", name="seller_company", value=seller_company_code),
                     style="padding: 0.5rem; background: #f5f5f5; border-radius: 4px;"
                 ),
                 Small(
