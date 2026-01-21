@@ -605,6 +605,76 @@ These can be done in future sessions if needed:
 
 ---
 
+### Phase 4: Searchable Dropdowns - Datalist Pattern ✅ COMPLETED (2026-01-21)
+
+**Goal:** Simplify searchable dropdown UX by using native HTML5 datalist instead of dual-element pattern
+
+**Problem Identified:**
+
+User feedback: "зачем отдельное окошко для поиска?" (why separate search box?)
+
+Old pattern had TWO separate elements:
+
+1. Search textbox "Поиск компании..." for typing query
+2. Separate combobox dropdown "Выберите компанию..." for selecting result
+
+This created confusion - users didn't immediately understand they needed to type in one field to populate another.
+
+**Solution Implemented:**
+
+Refactored all searchable dropdowns to use HTML5 datalist pattern:
+
+```python
+# Single input with native browser autocomplete
+Input(
+    type="text",
+    list="datalist-id",
+    placeholder="Начните печатать название...",
+    hx_get="/api/companies/search",
+    hx_trigger="input changed delay:300ms",
+    hx_target="#datalist-id"
+)
+Datalist(id="datalist-id")
+Input(type="hidden", name="company_id")  # Stores UUID
+
+# Minimal JS to sync visible name with hidden UUID (5-10 lines)
+Script("""
+    input.addEventListener('input', () => {
+        const option = datalist.options.find(opt => opt.value === input.value);
+        if (option) hidden.value = option.getAttribute('data-id');
+    });
+""")
+```
+
+**Benefits:**
+
+- **Simpler UX:** User types where they select (single mental model)
+- **Native behavior:** Browser handles autocomplete natively
+- **Zero dependencies:** No JavaScript libraries required
+- **Minimal JS:** Only 5-10 lines for UUID sync
+- **Accessible:** Works with keyboard navigation out of the box
+
+**Design Guideline:**
+
+> **Searchable Dropdowns Rule:**
+>
+> Always use single HTML5 datalist element for searchable dropdowns.
+> Never create separate search textbox + results combobox.
+> Single field is more intuitive - user types where they select.
+
+**Implementation:**
+
+- Refactored 4 dropdown functions: `buyer_company_dropdown`, `seller_company_dropdown`, `supplier_dropdown`, `location_dropdown`
+- Updated 4 API endpoints to return `<option data-id="uuid">` format for datalist
+- Commit: 31b706e
+- Deployed to production
+
+**Files Modified:**
+
+- `main.py` - All dropdown functions and search API endpoints
+
+---
+
 ## Summary
 
 **Phase 1 (✅ DONE):** PicoCSS foundation - instant visual upgrade
