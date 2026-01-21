@@ -11691,18 +11691,14 @@ def post(session, spec_id: str):
 # ============================================================================
 
 @rt("/finance")
-def get(session, status_filter: str = None):
+def get(session, tab: str = "workspace", status_filter: str = None):
     """
-    Finance workspace - shows active deals and plan-fact management
-    for finance role.
+    Finance page with tabs: Workspace, ERPS, Calendar
 
-    Feature #77: Basic finance page structure
-    Feature #78: List of active deals (included)
-
-    This page shows:
-    1. Deal statistics (active, completed, total amounts)
-    2. Active deals list with navigation to deal details
-    3. Quick summary of amounts
+    Tabs:
+    - workspace: Shows active deals and plan-fact management
+    - erps: Единый реестр подписанных спецификаций
+    - calendar: Календарь платежей
     """
     redirect = require_login(session)
     if redirect:
@@ -11713,9 +11709,71 @@ def get(session, status_filter: str = None):
     org_id = user["org_id"]
 
     # Check if user has finance role
-    if not user_has_any_role(session, ["finance", "admin"]):
+    if not user_has_any_role(session, ["finance", "admin", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    # Tab navigation
+    tabs_style = """
+        .finance-tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0;
+        }
+        .finance-tab {
+            padding: 0.75rem 1.5rem;
+            text-decoration: none;
+            color: #6b7280;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .finance-tab:hover {
+            color: #3b82f6;
+            background-color: #f3f4f6;
+        }
+        .finance-tab.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+            font-weight: 600;
+        }
+    """
+
+    tabs = Div(
+        Style(tabs_style),
+        Div(
+            A("Рабочая зона",
+              href="/finance?tab=workspace",
+              cls="finance-tab" + (" active" if tab == "workspace" else "")),
+            A("ERPS",
+              href="/finance?tab=erps",
+              cls="finance-tab" + (" active" if tab == "erps" else "")),
+            A("Календарь",
+              href="/finance?tab=calendar",
+              cls="finance-tab" + (" active" if tab == "calendar" else "")),
+            cls="finance-tabs"
+        )
+    )
+
+    # Render selected tab
+    if tab == "erps":
+        content = finance_erps_tab(session, user, org_id)
+    elif tab == "calendar":
+        content = finance_calendar_tab(session, user, org_id)
+    else:
+        content = finance_workspace_tab(session, user, org_id, status_filter)
+
+    return page_layout("Финансы",
+        H1("Финансы"),
+        tabs,
+        content,
+        session=session
+    )
+
+
+def finance_workspace_tab(session, user, org_id, status_filter=None):
+    """Finance workspace tab - shows active deals"""
     supabase = get_supabase()
 
     # Get deal statistics
@@ -11881,8 +11939,8 @@ def get(session, status_filter: str = None):
             deals_table(cancelled_deals, "Отменённые сделки", "#ef4444") if cancelled_deals else "",
         )
 
-    return page_layout("Финансы",
-        H1("Финансовый менеджер"),
+    return Div(
+        H2("Финансовый менеджер", style="margin-bottom: 1.5rem;"),
 
         # Stats cards
         Div(
@@ -11918,9 +11976,176 @@ def get(session, status_filter: str = None):
         filter_buttons,
 
         # Deals section
-        deals_section,
+        deals_section
+    )
 
-        session=session
+
+def finance_erps_tab(session, user, org_id):
+    """ERPS tab - Единый реестр подписанных спецификаций"""
+    supabase = get_supabase()
+
+    # Fetch data from erps_registry view
+    try:
+        result = supabase.from_("erps_registry").select("*").execute()
+        specs = result.data or []
+    except Exception as e:
+        print(f"Error fetching ERPS data: {e}")
+        specs = []
+
+    # Helper to format money
+    def fmt_money(value):
+        if value is None:
+            return "-"
+        return f"${value:,.2f}"
+
+    # Helper to format date
+    def fmt_date(value):
+        if not value:
+            return "-"
+        # Extract date part if it's a datetime string
+        return str(value)[:10] if isinstance(value, str) else str(value)
+
+    # Helper to format percent
+    def fmt_percent(value):
+        if value is None:
+            return "-"
+        return f"{value:.1f}%"
+
+    # Build table
+    table = Table(
+        Thead(
+            Tr(
+                Th("IDN"),
+                Th("Клиент"),
+                Th("Дата подписания"),
+                Th("Тип сделки"),
+                Th("Условия оплаты"),
+                Th("Аванс %"),
+                Th("Отсрочка, дни"),
+                Th("Сумма спец. USD"),
+                Th("Профит USD"),
+                Th("Крайний срок поставки"),
+                Th("Всего оплачено USD"),
+                Th("Остаток USD"),
+                Th("Остаток %"),
+            )
+        ),
+        Tbody(
+            *[Tr(
+                Td(spec.get('idn', '-')),
+                Td(spec.get('client_name', '-')),
+                Td(fmt_date(spec.get('sign_date'))),
+                Td(spec.get('deal_type', '-')),
+                Td(spec.get('payment_terms', '-')),
+                Td(fmt_percent(spec.get('advance_percent'))),
+                Td(str(spec.get('payment_deferral_days', '-'))),
+                Td(fmt_money(spec.get('spec_sum_usd')), style="text-align: right; font-weight: 500;"),
+                Td(fmt_money(spec.get('spec_profit_usd')), style="text-align: right; color: #059669; font-weight: 500;"),
+                Td(fmt_date(spec.get('delivery_deadline'))),
+                Td(fmt_money(spec.get('total_paid_usd')), style="text-align: right;"),
+                Td(fmt_money(spec.get('remaining_payment_usd')), style="text-align: right; color: #dc2626;"),
+                Td(fmt_percent(spec.get('remaining_payment_percent')), style="text-align: right;"),
+            ) for spec in specs]
+        ) if specs else Tbody(
+            Tr(Td("Нет данных", colspan="13", style="text-align: center; padding: 2rem; color: #666;"))
+        ),
+        cls="striped",
+        style="width: 100%; overflow-x: auto; font-size: 0.875rem;"
+    )
+
+    return Div(
+        H2("Единый реестр подписанных спецификаций (ERPS)", style="margin-bottom: 1.5rem;"),
+        P(f"Всего спецификаций: {len(specs)}", style="margin-bottom: 1rem; color: #666;"),
+        Div(table, style="overflow-x: auto;")
+    )
+
+
+def finance_calendar_tab(session, user, org_id):
+    """Calendar tab - Календарь платежей"""
+    supabase = get_supabase()
+
+    # Fetch payment schedule
+    try:
+        result = supabase.table("payment_schedule") \
+            .select("*, specifications(specification_number)") \
+            .order("expected_payment_date") \
+            .execute()
+        payments = result.data or []
+    except Exception as e:
+        print(f"Error fetching payment schedule: {e}")
+        payments = []
+
+    # Helper to format date
+    def fmt_date(value):
+        if not value:
+            return "-"
+        return str(value)[:10] if isinstance(value, str) else str(value)
+
+    # Helper to format money
+    def fmt_money(value, currency="USD"):
+        if value is None:
+            return "-"
+        return f"{value:,.2f} {currency}"
+
+    # Translation maps
+    variant_map = {
+        "from_order_date": "от даты заказа",
+        "from_agreement_date": "от даты согласования",
+        "from_shipment_date": "от даты отгрузки",
+        "until_shipment_date": "до даты отгрузки"
+    }
+
+    purpose_map = {
+        "advance": "Аванс",
+        "additional": "Доплата",
+        "final": "Закрывающий"
+    }
+
+    # Build table
+    table = Table(
+        Thead(
+            Tr(
+                Th("IDN"),
+                Th("№ платежа"),
+                Th("Срок дней"),
+                Th("Вариант расчета"),
+                Th("Ожидаемая дата"),
+                Th("Фактическая дата"),
+                Th("Сумма"),
+                Th("Назначение"),
+                Th("Комментарий"),
+            )
+        ),
+        Tbody(
+            *[Tr(
+                Td(p.get('specifications', {}).get('specification_number', '-') if p.get('specifications') else '-'),
+                Td(str(p.get('payment_number', '-'))),
+                Td(str(p.get('days_term', '-'))),
+                Td(variant_map.get(p.get('calculation_variant', ''), p.get('calculation_variant', '-'))),
+                Td(fmt_date(p.get('expected_payment_date'))),
+                Td(fmt_date(p.get('actual_payment_date'))),
+                Td(fmt_money(p.get('payment_amount'), p.get('payment_currency', 'USD')), style="text-align: right;"),
+                Td(purpose_map.get(p.get('payment_purpose', ''), p.get('payment_purpose', '-'))),
+                Td(p.get('comment', '-'), style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
+            ) for p in payments]
+        ) if payments else Tbody(
+            Tr(Td("Нет данных", colspan="9", style="text-align: center; padding: 2rem; color: #666;"))
+        ),
+        cls="striped",
+        style="width: 100%; font-size: 0.875rem;"
+    )
+
+    return Div(
+        H2("Календарь платежей", style="margin-bottom: 1.5rem;"),
+        P(f"Всего записей: {len(payments)}", style="margin-bottom: 1rem; color: #666;"),
+        Div(
+            A("+ Добавить платеж",
+              href="/finance/calendar/new",
+              role="button",
+              style="margin-bottom: 1rem; display: inline-block;"),
+            style="margin-bottom: 1rem;"
+        ),
+        Div(table, style="overflow-x: auto;")
     )
 
 
