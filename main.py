@@ -1498,8 +1498,13 @@ def get(quote_id: str, session):
         Div(
             Div(
                 H3(f"Позиции ({len(items)})", style="margin: 0;"),
-                (Div(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
-                    style="font-size: 1.1rem; font-weight: 500; color: #059669;") if quote.get('total_amount') else None),
+                Div(
+                    (Div(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
+                        style="font-size: 1.1rem; font-weight: 500; color: #059669; margin-right: 1.5rem;") if quote.get('total_amount') else None),
+                    (Div(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
+                        style="font-size: 1.1rem; font-weight: 500; color: #059669;") if quote.get('total_profit_usd') is not None else None),
+                    style="display: flex; align-items: center;"
+                ),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
             ),
             Table(
