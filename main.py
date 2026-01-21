@@ -7325,7 +7325,7 @@ def get(session, quote_id: str):
     - Editable fields for HS codes (ТН ВЭД), duty percent, and extra costs
     - Pickup location and supplier display for each item (v3.0 supply chain)
     - Only editable when quote is in pending_customs or pending_logistics status
-    - Uses v3.0 field names: hs_code, customs_duty_percent, customs_extra_cost
+    - Uses v3.0 field names: hs_code, customs_duty, customs_extra
     """
     redirect = require_login(session)
     if redirect:
@@ -7368,7 +7368,7 @@ def get(session, quote_id: str):
             base_price_vat, purchase_price_original, purchase_currency,
             weight_in_kg, volume_m3, supplier_country,
             pickup_location_id, supplier_id,
-            hs_code, customs_duty_percent, customs_extra_cost
+            hs_code, customs_duty, customs_extra
         """) \
         .eq("quote_id", quote_id) \
         .order("created_at") \
@@ -7429,8 +7429,8 @@ def get(session, quote_id: str):
     total_customs_cost = 0
 
     for item in items:
-        duty_percent = float(item.get("customs_duty_percent") or 0)
-        extra_cost = float(item.get("customs_extra_cost") or 0)
+        duty_percent = float(item.get("customs_duty") or 0)
+        extra_cost = float(item.get("customs_extra") or 0)
         purchase_price = float(item.get("purchase_price_original") or item.get("base_price_vat") or 0)
         quantity = float(item.get("quantity") or 1)
 
@@ -7438,7 +7438,7 @@ def get(session, quote_id: str):
         duty_amount = purchase_price * quantity * (duty_percent / 100)
         item_customs_total = duty_amount + extra_cost
 
-        if item.get("hs_code") and item.get("customs_duty_percent") is not None:
+        if item.get("hs_code") and item.get("customs_duty") is not None:
             items_with_customs += 1
         total_customs_cost += item_customs_total
 
@@ -7450,8 +7450,8 @@ def get(session, quote_id: str):
 
         # Get current item customs values (v3.0 fields)
         hs_code = item.get("hs_code") or ""
-        duty_percent = item.get("customs_duty_percent") or 0
-        extra_cost = item.get("customs_extra_cost") or 0
+        duty_percent = item.get("customs_duty") or 0
+        extra_cost = item.get("customs_extra") or 0
 
         # Calculate duty amount for display
         purchase_price = float(item.get("purchase_price_original") or item.get("base_price_vat") or 0)
@@ -7530,7 +7530,7 @@ def get(session, quote_id: str):
                     Div(
                         Label("Пошлина %",
                             Input(
-                                name=f"customs_duty_percent_{item_id}",
+                                name=f"customs_duty_{item_id}",
                                 type="number",
                                 value=str(duty_percent),
                                 min="0",
@@ -7548,7 +7548,7 @@ def get(session, quote_id: str):
                     Div(
                         Label("Доп. расходы",
                             Input(
-                                name=f"customs_extra_cost_{item_id}",
+                                name=f"customs_extra_{item_id}",
                                 type="number",
                                 value=str(extra_cost),
                                 min="0",
@@ -7744,7 +7744,7 @@ async def post(session, quote_id: str, request):
 
     Feature UI-021 (v3.0): Customs workspace POST handler
     - Saves item-level customs data to quote_items table
-    - Uses v3.0 fields: hs_code, customs_duty_percent, customs_extra_cost
+    - Uses v3.0 fields: hs_code, customs_duty, customs_extra
     - Saves quote-level customs_notes
     - Handles 'complete' action to mark customs as done
     """
@@ -7804,17 +7804,17 @@ async def post(session, quote_id: str, request):
     for item in items:
         item_id = item["id"]
         hs_code = form_data.get(f"hs_code_{item_id}", "")
-        # v3.0: Use customs_duty_percent instead of customs_duty
-        customs_duty_percent = form_data.get(f"customs_duty_percent_{item_id}", "0")
-        # v3.0: Use customs_extra_cost instead of customs_extra
-        customs_extra_cost = form_data.get(f"customs_extra_cost_{item_id}", "0")
+        # v3.0: Use customs_duty instead of customs_duty
+        customs_duty = form_data.get(f"customs_duty_{item_id}", "0")
+        # v3.0: Use customs_extra instead of customs_extra
+        customs_extra = form_data.get(f"customs_extra_{item_id}", "0")
 
         # Update item with v3.0 column names
         supabase.table("quote_items") \
             .update({
                 "hs_code": hs_code if hs_code else None,
-                "customs_duty_percent": safe_decimal(customs_duty_percent),
-                "customs_extra_cost": safe_decimal(customs_extra_cost)
+                "customs_duty": safe_decimal(customs_duty),
+                "customs_extra": safe_decimal(customs_extra)
             }) \
             .eq("id", item_id) \
             .execute()
