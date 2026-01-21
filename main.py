@@ -2082,28 +2082,30 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Add product form - simplified for sales role
+        # Add product form - simplified for sales role (2026-01-21: improved validation)
         Div(
             H3("Добавить товар"),
+            # Error message container
+            Div(id="form-error", style="display: none; color: #d32f2f; background: #ffebee; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; border-left: 4px solid #d32f2f;"),
             Form(
                 Div(
-                    Label("Название товара *", Input(name="product_name", required=True, placeholder="Подшипник SKF 6205")),
+                    Label("Название товара *", Input(name="product_name", id="product_name", required=True, placeholder="Например: Подшипник SKF 6205")),
                     cls="form-row"
                 ),
                 Div(
-                    Label("SKU / Product Code", Input(name="product_code", placeholder="SKF-6205-2RS")),
-                    Label("Бренд", Input(name="brand", placeholder="SKF")),
+                    Label("SKU / Product Code", Input(name="product_code", id="product_code", placeholder="Например: SKF-6205-2RS")),
+                    Label("Бренд", Input(name="brand", id="brand", placeholder="Например: SKF")),
                     cls="form-row"
                 ),
                 Div(
-                    Label("Количество *", Input(name="quantity", type="number", value="1", min="1", required=True)),
+                    Label("Количество *", Input(name="quantity", id="quantity", type="number", value="1", min="1", required=True)),
                     cls="form-row"
                 ),
                 Small("Остальные поля (поставщик, цены, вес, страна) заполняются отделом закупок",
                       style="display: block; color: #666; margin-top: 0.5rem; margin-bottom: 1rem;"),
                 Input(type="hidden", name="quote_id", value=quote_id),
                 Div(
-                    Button("Добавить товар", type="submit"),
+                    Button("Добавить товар", type="submit", id="submit-product"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -2111,8 +2113,49 @@ def get(quote_id: str, session):
                 enctype="application/x-www-form-urlencoded",
                 hx_post=f"/quotes/{quote_id}/products",
                 hx_target="#products-list",
-                hx_swap="beforeend"
+                hx_swap="beforeend",
+                id="add-product-form",
+                onsubmit="return validateProductForm(event)"
             ),
+            # Validation script
+            Script("""
+function validateProductForm(event) {
+    const form = document.getElementById('add-product-form');
+    const errorDiv = document.getElementById('form-error');
+    const productName = document.getElementById('product_name');
+    const quantity = document.getElementById('quantity');
+
+    // Clear previous errors
+    errorDiv.style.display = 'none';
+    errorDiv.textContent = '';
+    productName.style.borderColor = '';
+    quantity.style.borderColor = '';
+
+    let errors = [];
+
+    // Validate product name
+    if (!productName.value || productName.value.trim() === '') {
+        errors.push('Название товара');
+        productName.style.borderColor = '#d32f2f';
+    }
+
+    // Validate quantity
+    if (!quantity.value || quantity.value < 1) {
+        errors.push('Количество (должно быть больше 0)');
+        quantity.style.borderColor = '#d32f2f';
+    }
+
+    // Show errors if any
+    if (errors.length > 0) {
+        errorDiv.textContent = '❌ Пожалуйста, заполните обязательные поля: ' + errors.join(', ');
+        errorDiv.style.display = 'block';
+        event.preventDefault();
+        return false;
+    }
+
+    return true;
+}
+            """),
             cls="card"
         ),
 
