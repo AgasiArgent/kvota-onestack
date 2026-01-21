@@ -809,9 +809,9 @@ class TestProcurementAutoTransition:
             actor_roles=["procurement"]
         )
 
-        # Should succeed with procurement role
+        # Should succeed with procurement role and transition to parallel stage
         assert result.success is True
-        assert result.to_status == WorkflowStatus.PENDING_LOGISTICS.value
+        assert result.to_status == WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
 
     @patch('services.workflow_service.get_supabase')
     def test_complete_procurement_admin_role_accepted(self, mock_supabase):
