@@ -1020,7 +1020,7 @@ def get(session):
     supabase = get_supabase()
 
     result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, created_at") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True) \
         .execute()
@@ -1035,20 +1035,21 @@ def get(session):
         ),
 
         Table(
-            Thead(Tr(Th("Quote #"), Th("Customer"), Th("Status"), Th("Total"), Th("Created"), Th("Actions"))),
+            Thead(Tr(Th("Quote #"), Th("Customer"), Th("Status"), Th("Total"), Th("Profit"), Th("Created"), Th("Actions"))),
             Tbody(
                 *[Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
                     Td(status_badge(q.get("workflow_status", "draft"))),
                     Td(format_money(q.get("total_amount"))),
+                    Td(format_money(q.get("total_profit_usd")), style="color: #059669; font-weight: 500;"),
                     Td(q.get("created_at", "")[:10]),
                     Td(
                         A("View", href=f"/quotes/{q['id']}", style="margin-right: 0.5rem;"),
                         A("Edit", href=f"/quotes/{q['id']}/edit")
                     )
                 ) for q in quotes]
-            ) if quotes else Tbody(Tr(Td("No quotes yet. Create your first quote!", colspan="6", style="text-align: center;")))
+            ) if quotes else Tbody(Tr(Td("No quotes yet. Create your first quote!", colspan="7", style="text-align: center;")))
         ),
         session=session
     )
@@ -1493,24 +1494,40 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Products
+        # Products (extended view with all columns)
         Div(
-            H3(f"Товары ({len(items)})"),
+            Div(
+                H3(f"Позиции ({len(items)})", style="margin: 0;"),
+                (Div(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
+                    style="font-size: 1.1rem; font-weight: 500; color: #059669;") if quote.get('total_amount') else None),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+            ),
             Table(
-                Thead(Tr(Th("Название"), Th("SKU"), Th("Бренд"), Th("Кол-во"), Th("Цена"), Th("Сумма"))),
+                Thead(Tr(
+                    Th("№"),
+                    Th("IDN-SKU"),
+                    Th("БРЕНД"),
+                    Th("НАИМЕНОВАНИЕ"),
+                    Th("КОЛ-ВО"),
+                    Th("ЕД.ИЗМ"),
+                    Th("ЦЕНА С НДС"),
+                    Th("СУММА С НДС")
+                )),
                 Tbody(
                     *[Tr(
-                        Td(item.get("product_name", "—")),
-                        Td(item.get("product_code", "—")),
+                        Td(str(idx + 1)),
+                        Td(item.get("idn_sku", "—")),
                         Td(item.get("brand", "—")),
+                        Td(item.get("product_name", "—")),
                         Td(str(item.get("quantity", 0))),
-                        Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB")) if item.get("base_price_vat") else "Не указана"),
+                        Td(item.get("unit", "шт")),
+                        Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB")) if item.get("base_price_vat") else "—"),
                         Td(format_money(
                             (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else None,
                             quote.get("currency", "RUB")
                         ) if item.get("base_price_vat") else "—")
-                    ) for item in items]
-                ) if items else Tbody(Tr(Td("Нет товаров", colspan="6", style="text-align: center;")))
+                    ) for idx, item in enumerate(items)]
+                ) if items else Tbody(Tr(Td("Нет товаров", colspan="8", style="text-align: center;")))
             ),
             A("+ Добавить товары", href=f"/quotes/{quote_id}/products") if not items else None,
             cls="card"
