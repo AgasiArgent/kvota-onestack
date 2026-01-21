@@ -16441,7 +16441,7 @@ def get(session, q: str = "", status: str = ""):
 
 
 @rt("/customers/{customer_id}")
-def get(customer_id: str, session, tab: str = "general"):
+def get(customer_id: str, session, request, tab: str = "general"):
     """Customer detail view page with tabbed interface."""
     redirect = require_login(session)
     if redirect:
@@ -16587,8 +16587,7 @@ def get(customer_id: str, session, tab: str = "general"):
                     cls="stats-grid",
                     style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;"
                 ),
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "addresses":
@@ -16636,8 +16635,7 @@ def get(customer_id: str, session, tab: str = "general"):
                           style="margin-top: 1rem;"),
                 ),
                 style="margin-top: 1rem;"
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "contacts":
@@ -16695,8 +16693,7 @@ def get(customer_id: str, session, tab: str = "general"):
                 Tbody(*contacts_rows) if contacts_rows else Tbody(
                     Tr(Td("Контакты не добавлены. Добавьте первого контакта.", colspan="6", style="text-align: center; color: #666;"))
                 )
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "contracts":
@@ -16760,8 +16757,7 @@ def get(customer_id: str, session, tab: str = "general"):
                 Tbody(*contracts_rows) if contracts_rows else Tbody(
                     Tr(Td("Договоры не найдены. Добавьте первый договор.", colspan="5", style="text-align: center; color: #666;"))
                 )
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "quotes":
@@ -16825,8 +16821,7 @@ def get(customer_id: str, session, tab: str = "general"):
                 Tbody(*quotes_rows) if quotes_rows else Tbody(
                     Tr(Td("КП не найдены.", colspan="5", style="text-align: center; color: #666;"))
                 )
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "specifications":
@@ -16890,8 +16885,7 @@ def get(customer_id: str, session, tab: str = "general"):
                 Tbody(*specs_rows) if specs_rows else Tbody(
                     Tr(Td("Спецификации не найдены.", colspan="6", style="text-align: center; color: #666;"))
                 )
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "requested_items":
@@ -16960,12 +16954,15 @@ def get(customer_id: str, session, tab: str = "general"):
                 Tbody(*items_rows) if items_rows else Tbody(
                     Tr(Td("Позиции не найдены.", colspan="7", style="text-align: center; color: #666;"))
                 )
-            ),
-            id="tab-content"
+            )
         )
 
     else:
-        tab_content = Div("Неизвестная вкладка", id="tab-content")
+        tab_content = Div("Неизвестная вкладка")
+
+    # If this is an HTMX request (tab switch), return only the tab content
+    if request and request.headers.get("HX-Request"):
+        return tab_content
 
     return page_layout(f"Клиент: {customer.name}",
         # Header with actions
