@@ -7092,7 +7092,7 @@ async def post(session, quote_id: str, request):
 
         if not result.success:
             # Log error but still redirect
-            print(f"Error completing logistics: {result.error}")
+            print(f"Error completing logistics: {result.error_message}")
 
     return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
 
