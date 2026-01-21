@@ -6351,6 +6351,7 @@ def get(session, status_filter: str = None):
     logistics_statuses = [
         "pending_logistics",
         "pending_customs",  # Can work in parallel
+        "pending_logistics_and_customs",  # Parallel logistics+customs stage
         "pending_sales_review",  # Already done, for reference
     ]
 
@@ -6374,7 +6375,7 @@ def get(session, status_filter: str = None):
 
     # Separate quotes by status
     pending_quotes = [q for q in quotes_with_details
-                      if q.get("workflow_status") in ["pending_logistics", "pending_customs"]
+                      if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"]
                       and not q.get("logistics_done")]
     completed_quotes = [q for q in quotes_with_details
                         if q.get("logistics_done")]
@@ -7172,6 +7173,7 @@ def get(session, status_filter: str = None):
     customs_statuses = [
         "pending_customs",
         "pending_logistics",  # Can work in parallel
+        "pending_logistics_and_customs",  # Parallel logistics+customs stage
         "pending_sales_review",  # Already done, for reference
     ]
 
@@ -7195,7 +7197,7 @@ def get(session, status_filter: str = None):
 
     # Separate quotes by status
     pending_quotes = [q for q in quotes_with_details
-                      if q.get("workflow_status") in ["pending_customs", "pending_logistics"]
+                      if q.get("workflow_status") in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"]
                       and not q.get("customs_done")]
     completed_quotes = [q for q in quotes_with_details
                         if q.get("customs_done")]
