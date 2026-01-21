@@ -1,7 +1,7 @@
 # OneStack Project - Development Notes
 
-**Last Updated:** 2026-01-20
-**Current Work:** Admin Section UI Improvements & Bug Fixes
+**Last Updated:** 2026-01-21
+**Current Work:** Quote Creation Enhancements & Automated Migrations
 
 ---
 
@@ -100,7 +100,8 @@
 ### Database Schema
 - **Schema:** Always use `kvota` prefix, never `public`
 - **Role column:** Use `r.slug` not `r.code` in RLS policies
-- **Migrations:** Sequential numbering (latest: 111)
+- **Migrations:** Sequential numbering (latest: 120)
+- **Automated Migrations:** Use `scripts/apply-migrations.sh` via SSH
 
 ### Code Organization
 - **Service functions:** `services/customer_service.py`
@@ -185,6 +186,47 @@ Before confirming deployment:
 - Confirmed delivery_city and delivery_country save correctly
 
 **Commit:** 97f1b9c "Improve quote creation form and calculation page"
+
+---
+
+### 6. Delivery Method Selection
+
+**Status:** ✅ COMPLETED (2026-01-21)
+
+**Changes Made:**
+1. **Added delivery_method dropdown to quote creation form** with 4 options:
+   - Авиа (Air) - value: "air"
+   - Авто (Auto) - value: "auto"
+   - Море (Sea) - value: "sea"
+   - Мультимодально (все) (Multimodal - all) - value: "multimodal"
+
+2. **Database changes:**
+   - Added delivery_method column to kvota.quotes table (migration 120)
+   - Column type: TEXT (nullable)
+
+3. **UI integration:**
+   - Added dropdown to create quote form (main.py:1297-1309)
+   - Added dropdown to edit quote form (main.py:2517-2529)
+   - Added display on quote detail page with Russian translations (main.py:1476-1480)
+   - Updated POST handlers to save/update delivery_method
+
+4. **Automated migration system created:**
+   - Created `scripts/apply-migrations.sh` - Simple bash script using docker exec
+   - Tracks migrations in `kvota.migrations` table
+   - Handles errors gracefully (continues on non-critical errors like "already exists")
+   - Updated `.claude/skills/db-kvota/skill.md` with migration instructions
+
+**Verification:**
+- ✅ Migration #120 applied successfully via automated script
+- ✅ delivery_method column exists in kvota.quotes table
+- ✅ All 4 dropdown options work correctly in UI
+- ✅ Form saves delivery_method value to database
+- ✅ GitHub Actions CI/CD passed
+- ✅ Tested through UI at https://kvotaflow.ru/quotes/new
+
+**Commits:**
+- da813d9 "Add delivery method dropdown to quote forms (migration 120)"
+- 3a8b28e "Improve migration script: handle errors gracefully and track migrations separately"
 
 ---
 
