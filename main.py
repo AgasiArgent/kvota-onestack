@@ -7365,7 +7365,7 @@ def get(session, quote_id: str):
     items_result = supabase.table("quote_items") \
         .select("""
             id, brand, product_code, product_name, quantity, unit,
-            base_price_vat, purchase_price_rub, purchase_price_original,
+            base_price_vat, purchase_price_original, purchase_currency,
             weight_in_kg, weight_kg, volume_m3, supplier_country,
             pickup_location_id, supplier_id,
             hs_code, customs_duty_percent, customs_extra_cost
@@ -7431,7 +7431,7 @@ def get(session, quote_id: str):
     for item in items:
         duty_percent = float(item.get("customs_duty_percent") or 0)
         extra_cost = float(item.get("customs_extra_cost") or 0)
-        purchase_price = float(item.get("purchase_price_rub") or item.get("base_price_vat") or 0)
+        purchase_price = float(item.get("purchase_price_original") or item.get("base_price_vat") or 0)
         quantity = float(item.get("quantity") or 1)
 
         # Calculate duty amount based on purchase price * duty percent
@@ -7454,7 +7454,7 @@ def get(session, quote_id: str):
         extra_cost = item.get("customs_extra_cost") or 0
 
         # Calculate duty amount for display
-        purchase_price = float(item.get("purchase_price_rub") or item.get("base_price_vat") or 0)
+        purchase_price = float(item.get("purchase_price_original") or item.get("base_price_vat") or 0)
         quantity = float(item.get("quantity") or 1)
         duty_amount = purchase_price * quantity * (float(duty_percent) / 100)
         item_customs_total = duty_amount + float(extra_cost)
