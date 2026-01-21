@@ -2100,6 +2100,7 @@ def get(quote_id: str, session):
                 ),
                 method="post",
                 action=f"/quotes/{quote_id}/products",
+                enctype="application/x-www-form-urlencoded",
                 hx_post=f"/quotes/{quote_id}/products",
                 hx_target="#products-list",
                 hx_swap="beforeend"
