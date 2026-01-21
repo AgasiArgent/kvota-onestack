@@ -6599,7 +6599,7 @@ def get(session, quote_id: str):
     items = items_result.data or []
 
     # Check if logistics is editable
-    editable_statuses = ["pending_logistics", "pending_customs", "draft", "pending_procurement"]
+    editable_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "draft", "pending_procurement"]
     is_editable = workflow_status in editable_statuses and quote.get("logistics_completed_at") is None
     logistics_done = quote.get("logistics_completed_at") is not None
 
@@ -7412,7 +7412,7 @@ def get(session, quote_id: str):
     items = items_result.data or []
 
     # Check if customs is editable
-    editable_statuses = ["pending_customs", "pending_logistics", "draft", "pending_procurement"]
+    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
     is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
     customs_done = quote.get("customs_completed_at") is not None
 
