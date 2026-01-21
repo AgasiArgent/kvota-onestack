@@ -7366,7 +7366,7 @@ def get(session, quote_id: str):
         .select("""
             id, brand, product_code, product_name, quantity, unit,
             base_price_vat, purchase_price_original, purchase_currency,
-            weight_in_kg, volume_m3, supplier_country,
+            weight_in_kg, supplier_country,
             pickup_location_id, supplier_id,
             hs_code, customs_duty_percent, customs_extra_cost
         """) \
