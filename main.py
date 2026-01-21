@@ -6814,6 +6814,21 @@ def get(session, quote_id: str):
                     ),
                     style="display: flex; gap: 0.75rem;"
                 ),
+                # Comments field
+                Div(
+                    Label("💬 Комментарий логиста",
+                        Textarea(
+                            invoice.get("logistics_notes", ""),
+                            name=f"logistics_notes_{invoice_id}",
+                            rows="2",
+                            placeholder="Примечания, особенности доставки...",
+                            disabled=not is_editable,
+                            style="width: 100%; margin-top: 0.25rem;"
+                        ),
+                        style="display: block; font-size: 0.875rem; font-weight: 500; color: #374151;"
+                    ),
+                    style="margin-top: 0.75rem;"
+                ),
                 # Invoice total display
                 Div(
                     Span(f"Итого по инвойсу: {format_money(invoice_logistics_total, inv_currency)}",
@@ -7040,6 +7055,7 @@ async def post(session, quote_id: str, request):
         h2c = form_data.get(f"logistics_hub_to_customs_{invoice_id}")
         c2c = form_data.get(f"logistics_customs_to_customer_{invoice_id}")
         days = form_data.get(f"logistics_total_days_{invoice_id}")
+        notes = form_data.get(f"logistics_notes_{invoice_id}")
 
         # Build update data
         update_data = {}
@@ -7053,6 +7069,8 @@ async def post(session, quote_id: str, request):
         if days is not None:
             days_val = safe_int(days)
             update_data["logistics_total_days"] = days_val if days_val and days_val > 0 else None
+        if notes is not None:
+            update_data["logistics_notes"] = notes
 
         # Update invoice if we have data
         if update_data:
