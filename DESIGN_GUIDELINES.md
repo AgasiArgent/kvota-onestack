@@ -397,6 +397,57 @@ These can be done in future sessions if needed:
 
 **Phase 2 is COMPLETE.** All core goals achieved and deployed to production.
 
+---
+
+### 🐛 Phase 2 Bug Fixes (2026-01-21)
+
+**Two critical issues were discovered after Phase 2 deployment:**
+
+#### Bug #1: Tab Navigation Duplication ✅ FIXED
+
+**Problem:** When clicking tabs like "Адреса" on customer detail page, the full page HTML (including navigation bar, header, tabs) was loading inside the tab-content div, causing duplicate navigation and tabs.
+
+**Root Cause:** HTMX was using regular href links that loaded full page HTML instead of just content fragments.
+
+**Solution (Commit: TBD):**
+
+- Added `request` parameter to route handler (main.py:16444)
+- Check for `HX-Request` header to detect HTMX requests
+- Return only `tab_content` for HTMX requests
+- Return full `page_layout()` only for initial page loads
+- Removed duplicate `id="tab-content"` from all 7 individual tab content Divs
+
+**Verification:** ✅ Tested live at https://kvotaflow.ru/customers/[customer_id] - tabs switch correctly without duplication
+
+---
+
+#### Bug #2: Inconsistent Stat Card Styling ✅ FIXED
+
+**Problem:** Stat cards had inconsistent appearance:
+
+- Different emoji sizes (📊💰📄💎)
+- Random value colors (blue, green, purple, orange, cyan, red)
+- Inconsistent padding and borders
+- No unified design system
+
+**Solution (Commit: TBD):**
+
+- Replaced all custom stat card Divs with `stat_card()` DaisyUI helper
+- Applied DaisyUI's `stats` component with consistent styling
+- Used `stats-vertical lg:stats-horizontal` for responsive layout
+- Customer detail page (main.py:16912-16934): 4 stat cards
+- User profile page (main.py:17931-17961): 6 stat cards
+
+**Code Reduction:**
+
+- Removed 83 lines of custom stat card code
+- Replaced with 47 lines using DaisyUI helpers
+- Net reduction: -36 lines
+
+**Verification:** ✅ Tested live at https://kvotaflow.ru/customers/[customer_id] - all stat cards now have uniform appearance with consistent DaisyUI styling
+
+---
+
 **Original Plan (for reference):**
 
 1. **TailwindCSS + DaisyUI CDN** ✅ DONE
