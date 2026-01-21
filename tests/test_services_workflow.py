@@ -32,12 +32,13 @@ class TestWorkflowStatusEnum:
     """Tests for WorkflowStatus enum."""
 
     def test_all_statuses_defined(self):
-        """All 15 workflow statuses should be defined."""
+        """All 16 workflow statuses should be defined."""
         expected_statuses = [
             "draft",
             "pending_procurement",
             "pending_logistics",
             "pending_customs",
+            "pending_logistics_and_customs",
             "pending_sales_review",
             "pending_quote_control",
             "pending_approval",

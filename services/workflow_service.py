@@ -121,6 +121,7 @@ IN_PROGRESS_STATUSES: Set[WorkflowStatus] = {
     WorkflowStatus.PENDING_PROCUREMENT,
     WorkflowStatus.PENDING_LOGISTICS,
     WorkflowStatus.PENDING_CUSTOMS,
+    WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS,
     WorkflowStatus.PENDING_SALES_REVIEW,
     WorkflowStatus.PENDING_QUOTE_CONTROL,
     WorkflowStatus.PENDING_APPROVAL,
