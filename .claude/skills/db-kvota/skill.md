@@ -150,16 +150,81 @@ ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres \
 SELECT kvota.function_name();
 ```
 
-## Before Every Migration
+## Applying Migrations (AUTOMATED)
+
+### Quick Command (Use This!)
+
+```bash
+# Apply all pending migrations
+ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh"
+```
+
+This will:
+- ✅ Create `kvota.migrations` table if needed
+- ✅ Check which migrations are already applied
+- ✅ Apply only pending migrations
+- ✅ Track applied migrations automatically
+- ✅ Stop on error and rollback
+
+### Other Commands
+
+```bash
+# Check migration status
+ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh status"
+
+# List all migrations
+ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh list"
+```
+
+### How It Works
+
+**Files:**
+- `scripts/migrate.py` - Python migration runner
+- `scripts/migrate.sh` - Bash wrapper (auto-installs dependencies)
+- `migrations/*.sql` - Migration files (numbered: `120_name.sql`)
+- `kvota.migrations` table - Tracks applied migrations
+
+**Migration Naming:**
+- Format: `{number}_{description}.sql`
+- Example: `120_add_delivery_method_to_quotes.sql`
+- Numbering: Sequential (001, 002, ..., 120, 121, ...)
+
+### Creating New Migrations
+
+1. **Create file:**
+   ```bash
+   # Find next number
+   ls migrations/*.sql | tail -1  # See last number
+
+   # Create new migration
+   touch migrations/121_your_description.sql
+   ```
+
+2. **Write SQL (ALWAYS use kvota schema):**
+   ```sql
+   -- Migration: Description
+   -- Created: YYYY-MM-DD
+
+   SET search_path TO kvota;
+
+   ALTER TABLE kvota.your_table ADD COLUMN your_column TEXT;
+   ```
+
+3. **Apply migration:**
+   ```bash
+   ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh"
+   ```
+
+### Before Every Migration
 
 **Checklist:**
-1. ✅ Create backup
-2. ✅ Test on copy first (if possible)
-3. ✅ Use `kvota` schema prefix
-4. ✅ Use `r.slug` not `r.code` in RLS
-5. ✅ Check foreign keys reference `kvota.table`
+1. ✅ Create backup (optional but recommended)
+2. ✅ Use `kvota` schema prefix in SQL
+3. ✅ Use `r.slug` not `r.code` in RLS
+4. ✅ Check foreign keys reference `kvota.table`
+5. ✅ Test SQL syntax if complex
 
-**Create backup:**
+**Create backup (optional):**
 ```bash
 ssh beget-kvota "cd /root/onestack && \
   docker exec supabase-db pg_dump -U postgres -d postgres \
