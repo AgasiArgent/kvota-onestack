@@ -14690,7 +14690,10 @@ def get(session, q: str = "", country: str = "", limit: int = 20):
     user = session["user"]
     org_id = user.get("organization_id")
 
+    print(f"[SUPPLIERS SEARCH] user_id: {user.get('id')}, org_id: {org_id}, query: {q}")
+
     if not org_id:
+        print(f"[SUPPLIERS SEARCH] NO ORG_ID - user dict keys: {list(user.keys())}")
         return Option("Организация не найдена", value="", disabled=True)
 
     try:
