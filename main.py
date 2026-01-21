@@ -14313,6 +14313,7 @@ def location_dropdown(
     input_attrs = {
         "type": "text",
         "id": input_id,
+        "name": "q",  # HTMX will send this value as query parameter
         "list": datalist_id,
         "value": selected_label or "",
         "placeholder": placeholder,
@@ -14322,14 +14323,10 @@ def location_dropdown(
         "hx-get": "/api/locations/search",
         "hx-trigger": "input changed delay:300ms, focus",
         "hx-target": f"#{datalist_id}",
-        "hx-include": f"[id='{input_id}']",
-        "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
     }
+    # Add filter parameters (hub_only, customs_only) if provided
     if hx_vals:
-        # Merge hx-vals with existing dict
-        existing_vals = json.loads(input_attrs["hx-vals"])
-        existing_vals.update(json.loads(hx_vals))
-        input_attrs["hx-vals"] = json.dumps(existing_vals)
+        input_attrs["hx-vals"] = hx_vals
 
     # Construct the component
     return Div(
@@ -14466,6 +14463,7 @@ def supplier_dropdown(
             Input(
                 type="text",
                 id=input_id,
+                name="q",  # HTMX will send this value as query parameter
                 list=datalist_id,
                 value=selected_label or "",
                 placeholder=placeholder,
@@ -14476,8 +14474,6 @@ def supplier_dropdown(
                     "hx-get": "/api/suppliers/search",
                     "hx-trigger": "input changed delay:300ms, focus",
                     "hx-target": f"#{datalist_id}",
-                    "hx-include": f"[id='{input_id}']",
-                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
                 }
             ),
             Datalist(id=datalist_id),
@@ -14557,6 +14553,7 @@ def buyer_company_dropdown(
             Input(
                 type="text",
                 id=input_id,
+                name="q",  # HTMX will send this value as query parameter
                 list=datalist_id,
                 value=selected_label or "",
                 placeholder=placeholder,
@@ -14567,8 +14564,6 @@ def buyer_company_dropdown(
                     "hx-get": "/api/buyer-companies/search",
                     "hx-trigger": "input changed delay:300ms, focus",
                     "hx-target": f"#{datalist_id}",
-                    "hx-include": f"[id='{input_id}']",
-                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
                 }
             ),
             Datalist(id=datalist_id),
@@ -14648,6 +14643,7 @@ def seller_company_dropdown(
             Input(
                 type="text",
                 id=input_id,
+                name="q",  # HTMX will send this value as query parameter
                 list=datalist_id,
                 value=selected_label or "",
                 placeholder=placeholder,
@@ -14658,8 +14654,6 @@ def seller_company_dropdown(
                     "hx-get": "/api/seller-companies/search",
                     "hx-trigger": "input changed delay:300ms, focus",
                     "hx-target": f"#{datalist_id}",
-                    "hx-include": f"[id='{input_id}']",
-                    "hx-vals": f'{{"q": "js:document.getElementById(\'{input_id}\').value"}}'
                 }
             ),
             Datalist(id=datalist_id),
