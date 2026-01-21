@@ -7206,7 +7206,7 @@ def get(session, status_filter: str = None):
             Td(
                 A("Работать", href=f"/customs/{q['id']}", role="button",
                   style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics"] else
+                if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"] else
                 A("Просмотр", href=f"/customs/{q['id']}", style="font-size: 0.875rem;")
             )
         )
