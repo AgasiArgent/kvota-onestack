@@ -156,7 +156,7 @@ SELECT kvota.function_name();
 
 ```bash
 # Apply all pending migrations
-ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh"
+ssh beget-kvota "cd /root/onestack && bash scripts/apply-migrations.sh"
 ```
 
 This will:
@@ -164,25 +164,24 @@ This will:
 - ✅ Check which migrations are already applied
 - ✅ Apply only pending migrations
 - ✅ Track applied migrations automatically
-- ✅ Stop on error and rollback
-
-### Other Commands
-
-```bash
-# Check migration status
-ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh status"
-
-# List all migrations
-ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh list"
-```
+- ✅ Handle non-critical errors gracefully (continues on "already exists" warnings)
+- ✅ Show success/failed counts at end
 
 ### How It Works
 
 **Files:**
-- `scripts/migrate.py` - Python migration runner
-- `scripts/migrate.sh` - Bash wrapper (auto-installs dependencies)
+- `scripts/apply-migrations.sh` - Main migration tool (uses docker exec + psql)
 - `migrations/*.sql` - Migration files (numbered: `120_name.sql`)
 - `kvota.migrations` table - Tracks applied migrations
+
+**Process:**
+1. Creates `kvota.migrations` tracking table if not exists
+2. Gets list of already applied migrations from table
+3. Scans `migrations/` directory for SQL files
+4. Applies each pending migration in order
+5. Records successful migrations in tracking table
+6. Continues on non-critical errors (like "column already exists")
+7. Reports critical errors but doesn't stop entire process
 
 **Migration Naming:**
 - Format: `{number}_{description}.sql`
@@ -212,7 +211,7 @@ ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh list"
 
 3. **Apply migration:**
    ```bash
-   ssh beget-kvota "cd /root/onestack && bash scripts/migrate.sh"
+   ssh beget-kvota "cd /root/onestack && bash scripts/apply-migrations.sh"
    ```
 
 ### Before Every Migration
