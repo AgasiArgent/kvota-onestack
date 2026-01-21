@@ -2749,17 +2749,21 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 # ============================================================================
 
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
-    """Build calculation inputs for all quote items."""
+    """Build calculation inputs for all quote items.
+
+    Note: Uses purchase_price_original as base_price_vat for calculation engine.
+    Calculation engine is NOT modified - we adapt data to match its expectations.
+    """
     calc_inputs = []
     for item in items:
-        # Product fields
+        # Product fields (adapt new schema to calculation engine expectations)
         product = {
-            'base_price_vat': safe_decimal(item.get('base_price_vat')),
+            'base_price_vat': safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')),
             'quantity': item.get('quantity', 1),
             'weight_in_kg': safe_decimal(item.get('weight_in_kg')),
             'customs_code': item.get('customs_code', '0000000000'),
             'supplier_country': item.get('supplier_country', variables.get('supplier_country', 'Турция')),
-            'currency_of_base_price': item.get('currency_of_base_price', variables.get('currency_of_base_price', 'USD')),
+            'currency_of_base_price': item.get('purchase_currency') or item.get('currency_of_base_price', variables.get('currency_of_base_price', 'USD')),
             'import_tariff': item.get('import_tariff'),
             'markup': item.get('markup'),
             'supplier_discount': item.get('supplier_discount'),

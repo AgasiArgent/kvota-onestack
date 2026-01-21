@@ -5,6 +5,26 @@
 
 ---
 
+## ⚠️ CRITICAL RULE - DO NOT MODIFY CALCULATION ENGINE
+
+**Rule:** NEVER make changes to the calculation engine or calculation models.
+
+**Files to NEVER modify:**
+- `calculation_engine.py`
+- `calculation_models.py`
+- `calculation_mapper.py`
+
+**Reason:** Calculation engine is complex, tested, and working correctly. Any changes risk breaking critical business logic.
+
+**If data schema changes:** Adapt data in `build_calculation_inputs()` (main.py) to match calculation engine expectations. Transform new field names to old field names that calculation engine expects.
+
+**Example:**
+- Old schema: `base_price_vat`
+- New schema: `purchase_price_original`
+- **Solution:** `'base_price_vat': item.get('purchase_price_original')` in build_calculation_inputs()
+
+---
+
 ## 🐛 Current Issues
 
 ### 1. Product Entry Form - HTMX Initialization Issue
