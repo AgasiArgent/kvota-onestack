@@ -5609,41 +5609,10 @@ def get(quote_id: str, session):
                 cls="card"
             ),
 
-            # Total weight and volume section (2026-01-21)
+            # Action buttons (2026-01-21: Two-screen workflow with invoices)
             Div(
-                H3("📦 Общие показатели", style="margin: 0 0 1rem;"),
-                P("Укажите общий вес и объем по всем прогоцененным вами товарам:",
-                  style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
-                Div(
-                    Label("Общий вес, кг *",
-                        Input(name="procurement_total_weight_kg", type="number", step="0.001", min="0",
-                              value=str(quote.get("procurement_total_weight_kg", "")) if quote.get("procurement_total_weight_kg") else "",
-                              placeholder="Например: 125.5",
-                              required=can_edit if my_items else False,
-                              disabled=not can_edit),
-                        Small("Вес всегда известен", style="display: block; color: #666; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    Label("Общий объем, м³",
-                        Input(name="procurement_total_volume_m3", type="number", step="0.0001", min="0",
-                              value=str(quote.get("procurement_total_volume_m3", "")) if quote.get("procurement_total_volume_m3") else "",
-                              placeholder="Например: 2.5",
-                              disabled=not can_edit),
-                        Small("Необязательно (если известно)", style="display: block; color: #666; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
-                ),
-                cls="card",
-                style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-bottom: 1rem;"
-            ) if my_items and can_edit else None,
-
-            # Action buttons (Feature #37: Smart completion button)
-            Div(
-                Button("💾 Сохранить данные", type="submit", name="action", value="save",
-                       style="margin-right: 1rem;") if can_edit and not my_items_complete else None,
-                Button("✓ Завершить оценку", type="submit", name="action", value="complete",
-                       style="background: #16a34a;") if can_edit and total_items > 0 and not my_items_complete else None,
+                Button("→ Далее к инвойсам", type="submit", name="action", value="next_to_invoices",
+                       style="margin-right: 1rem; background: #3b82f6;") if can_edit and not my_items_complete else None,
                 # Show a disabled "already complete" button when user's items are done
                 Button("✓ Моя оценка завершена", disabled=True,
                        style="background: #6b7280; cursor: default;") if can_edit and my_items_complete else None,
@@ -5789,19 +5758,6 @@ async def post(quote_id: str, session, request):
                 .execute()
             updated_items += 1
 
-    # Save total weight/volume to quote (2026-01-21)
-    total_weight = form_data.get("procurement_total_weight_kg")
-    total_volume = form_data.get("procurement_total_volume_m3")
-
-    quote_update = {}
-    if total_weight:
-        quote_update["procurement_total_weight_kg"] = float(total_weight)
-    if total_volume:
-        quote_update["procurement_total_volume_m3"] = float(total_volume)
-
-    if quote_update:
-        supabase.table("quotes").update(quote_update).eq("id", quote_id).execute()
-
     # Feature #37: If completing, check if ALL procurement is done and trigger workflow transition
     if action == "complete" and updated_items > 0:
         # Get user's roles for the workflow transition
@@ -5821,13 +5777,243 @@ async def post(quote_id: str, session, request):
         # If transition was successful, show success message (via redirect)
         # If not (other items still pending), user sees updated progress on the page
 
-    # Redirect back to the procurement detail page
-    return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+    # Redirect based on action (2026-01-21: Two-screen workflow)
+    if action == "next_to_invoices":
+        return RedirectResponse(f"/procurement/{quote_id}/invoices", status_code=303)
+    else:
+        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
 
 
 # ============================================================================
 # PROCUREMENT EXCEL EXPORT (Feature #36)
 # ============================================================================
+
+# ============================================================================
+# PROCUREMENT INVOICES (Feature: Invoice-based workflow)
+# ============================================================================
+
+@rt("/procurement/{quote_id}/invoices")
+def get(quote_id: str, session):
+    """
+    Procurement invoices screen (Screen 2 of 2-screen workflow).
+
+    Groups quote items into invoices by (supplier + buyer_company + pickup_location).
+    Procurement manager enters: invoice_number, total_weight_kg, total_volume_m3.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has procurement role
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote with customer info
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    quote = quote_result.data
+    if not quote:
+        return RedirectResponse("/procurement", status_code=303)
+
+    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+    quote_number = quote.get("quote_number", "")
+
+    # Get user's assigned brands
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get all items for this quote (only my brands)
+    items_result = supabase.table("quote_items") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    all_items = items_result.data or []
+
+    # Filter items for my brands
+    my_items = [item for item in all_items
+                if (item.get("brand") or "").lower() in my_brands_lower]
+
+    if not my_items:
+        return page_layout("Инвойсы",
+            H1("Нет товаров для группировки"),
+            P("У вас нет товаров в этом КП."),
+            A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button")
+        )
+
+    # Group items into invoices by (supplier + buyer_company + pickup_location + currency)
+    from collections import defaultdict
+    invoice_groups = defaultdict(list)
+
+    for item in my_items:
+        # Skip items without required fields
+        if not all([item.get("supplier_id"), item.get("buyer_company_id"), item.get("purchase_currency")]):
+            continue
+
+        # Create grouping key
+        key = (
+            item.get("supplier_id"),
+            item.get("buyer_company_id"),
+            item.get("pickup_location_id"),  # Can be None
+            item.get("purchase_currency")
+        )
+        invoice_groups[key].append(item)
+
+    if not invoice_groups:
+        return page_layout("Инвойсы",
+            H1("Нет товаров для группировки"),
+            P("Товары не заполнены полностью (поставщик, компания-покупатель, валюта)."),
+            A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button")
+        )
+
+    # Fetch supplier and buyer company names for display
+    supplier_ids = list(set(item.get("supplier_id") for group in invoice_groups.values() for item in group if item.get("supplier_id")))
+    buyer_company_ids = list(set(item.get("buyer_company_id") for group in invoice_groups.values() for item in group if item.get("buyer_company_id")))
+
+    suppliers = {}
+    if supplier_ids:
+        suppliers_result = supabase.table("suppliers").select("id, name").in_("id", supplier_ids).execute()
+        suppliers = {s["id"]: s["name"] for s in suppliers_result.data or []}
+
+    buyer_companies = {}
+    if buyer_company_ids:
+        buyers_result = supabase.table("buyer_companies").select("id, name").in_("id", buyer_company_ids).execute()
+        buyer_companies = {b["id"]: b["name"] for b in buyers_result.data or []}
+
+    # Check if invoices already exist for this quote
+    existing_invoices_result = supabase.table("invoices") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    existing_invoices = {
+        (inv["supplier_id"], inv["buyer_company_id"], inv["pickup_location_id"], inv["currency"]): inv
+        for inv in (existing_invoices_result.data or [])
+    }
+
+    # Build invoice cards
+    invoice_cards = []
+    for idx, (key, items) in enumerate(invoice_groups.items(), 1):
+        supplier_id, buyer_company_id, pickup_location_id, currency = key
+
+        # Get existing invoice if any
+        existing_invoice = existing_invoices.get(key)
+
+        # Calculate total sum for this invoice
+        total_sum = sum(
+            (item.get("purchase_price_original", 0) or 0) * (item.get("quantity", 0) or 0)
+            for item in items
+        )
+
+        supplier_name = suppliers.get(supplier_id, "Неизвестный поставщик")
+        buyer_name = buyer_companies.get(buyer_company_id, "Неизвестная компания")
+
+        invoice_cards.append(
+            Div(
+                H3(f"📦 Инвойс #{idx}: {supplier_name}", style="margin: 0 0 0.5rem;"),
+                P(f"Компания-покупатель: {buyer_name}", style="color: #666; font-size: 0.875rem; margin: 0 0 1rem;"),
+
+                # Items list
+                Div(
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("Товар"),
+                                Th("Количество"),
+                                Th(f"Цена ({currency})"),
+                                Th(f"Сумма ({currency})")
+                            )
+                        ),
+                        Tbody(
+                            *[Tr(
+                                Td(item.get("product_name", "—")),
+                                Td(str(item.get("quantity", 0))),
+                                Td(f"{item.get('purchase_price_original', 0):.2f}"),
+                                Td(f"{(item.get('purchase_price_original', 0) or 0) * (item.get('quantity', 0) or 0):.2f}")
+                            ) for item in items]
+                        ),
+                        style="margin-bottom: 1rem; font-size: 0.875rem;"
+                    ),
+                    Div(
+                        Strong(f"Общая сумма закупки: {total_sum:.2f} {currency}"),
+                        style="text-align: right; font-size: 1rem; margin-bottom: 1rem; color: #16a34a;"
+                    ),
+                    P("Для сверки с инвойсом поставщика", style="color: #666; font-size: 0.75rem; text-align: right; margin: 0;")
+                ),
+
+                # Invoice input fields
+                Div(
+                    Label("Номер инвойса *",
+                        Input(name=f"invoice_number_{idx}", type="text",
+                              value=existing_invoice.get("invoice_number", "") if existing_invoice else "",
+                              placeholder="INV-2024-001",
+                              required=True),
+                        style="flex: 1;"
+                    ),
+                    Label("Общий вес, кг *",
+                        Input(name=f"total_weight_kg_{idx}", type="number", step="0.001", min="0",
+                              value=str(existing_invoice.get("total_weight_kg", "")) if existing_invoice else "",
+                              placeholder="125.5",
+                              required=True),
+                        Small("Вес всегда известен", style="color: #666; display: block; margin-top: 0.25rem;"),
+                        style="flex: 1;"
+                    ),
+                    Label("Общий объем, м³",
+                        Input(name=f"total_volume_m3_{idx}", type="number", step="0.0001", min="0",
+                              value=str(existing_invoice.get("total_volume_m3", "")) if existing_invoice else "",
+                              placeholder="2.5"),
+                        Small("Необязательно (если известно)", style="color: #666; display: block; margin-top: 0.25rem;"),
+                        style="flex: 1;"
+                    ),
+                    # Hidden fields to store grouping key
+                    Input(type="hidden", name=f"supplier_id_{idx}", value=supplier_id),
+                    Input(type="hidden", name=f"buyer_company_id_{idx}", value=buyer_company_id),
+                    Input(type="hidden", name=f"pickup_location_id_{idx}", value=pickup_location_id or ""),
+                    Input(type="hidden", name=f"currency_{idx}", value=currency),
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;"
+                ),
+
+                cls="card",
+                style="background: white; border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;"
+            )
+        )
+
+    # Hidden field for total invoice count
+    hidden_invoice_count = Input(type="hidden", name="invoice_count", value=str(len(invoice_cards)))
+
+    return page_layout(f"Инвойсы — {quote_number}",
+        A("← Назад к товарам", href=f"/procurement/{quote_id}", style="display: inline-block; margin-bottom: 1rem;"),
+        H1(f"Инвойсы: {quote_number}"),
+        P(f"Клиент: {customer_name}", style="color: #666; margin-bottom: 2rem;"),
+
+        Form(
+            *invoice_cards,
+            hidden_invoice_count,
+
+            Div(
+                Button("💾 Сохранить инвойсы", type="submit", name="action", value="save",
+                       style="margin-right: 1rem; background: #16a34a;"),
+                A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button", cls="secondary"),
+                style="display: flex; align-items: center; margin-top: 2rem;"
+            ),
+
+            method="post",
+            action=f"/procurement/{quote_id}/invoices"
+        )
+    )
+
 
 @rt("/procurement/{quote_id}/export")
 def get(quote_id: str, session):
