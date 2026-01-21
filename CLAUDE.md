@@ -1,13 +1,86 @@
 # OneStack Project - Development Notes
 
 **Last Updated:** 2026-01-21
-**Current Work:** Quote Creation Enhancements & Automated Migrations
+**Current Work:** Sales Workflow Simplification
+
+---
+
+## 🐛 Current Issues
+
+### 1. Product Entry Form - HTMX Initialization Issue
+
+**Status:** 🔴 CRITICAL - Form not submitting via HTMX
+
+**Issue:**
+- Simplified product entry form displays correctly (only name, SKU, brand, quantity)
+- HTMX не отправляет форму - требуется ручной вызов `htmx.process(form)`
+- Root cause: HTMX загружается ПОСЛЕ построения DOM в FastHTML
+
+**Temporary Workaround:**
+- User can submit form via standard POST (without HTMX)
+- Form will redirect to products page, but item will be added
+
+**Proper Fix Needed:**
+- Add HTMX initialization script in page footer
+- OR use FastHTML's built-in HTMX loading mechanism
+- OR move product form to use standard form submission without HTMX
+
+**Commits:**
+- a333b68 "Simplify product entry form for sales role"
+- 88651ca "Fix HTMX form submission for product creation"
 
 ---
 
 ## 🐛 Current Issues (Admin Section)
 
-### 1. Buyer/Seller Company Creation Errors
+### 1. Sales Product Entry Form Simplification
+
+**Status:** ✅ COMPLETED (2026-01-21)
+
+**User Request:**
+- "IDN-SKU не должно быть поля для ввода, потому что присваивается автоматически"
+- "Продажник может внести только название, SKU, бренд, количество"
+- "Поставщика, компанию покупателя, точку отгрузки, цену, страну - он не знает"
+- "Он ввел товары и передал дальше следующему отделу"
+
+**Changes Made:**
+1. ✅ Removed from form:
+   - IDN-SKU field (auto-generated, not editable)
+   - Price field (filled by procurement)
+   - Weight field (filled by procurement)
+   - Country field (filled by procurement)
+   - Customs code field (filled by procurement)
+   - Supplier dropdown (filled by procurement)
+   - Buyer company dropdown (filled by procurement)
+   - Pickup location dropdown (filled by procurement)
+
+2. ✅ Sales form now only has:
+   - Product name * (required)
+   - SKU / Product Code (optional)
+   - Brand (optional)
+   - Quantity * (required, default=1)
+   - Help text: "Остальные поля заполняются отделом закупок"
+
+3. ✅ Updated display:
+   - Shows "Не указана" for empty prices
+   - Shows SKU and brand inline
+   - Quote detail table: replaced IDN-SKU column with Brand column
+
+**Workflow:**
+- Sales manager adds basic product info (name, SKU, brand, qty)
+- Procurement team fills rest (supplier, price, weight, country, etc.)
+
+**Known Issue:**
+- HTMX doesn't auto-initialize form on page load (see Current Issues #1)
+- Form works via standard POST, just no inline HTMX update
+
+**Commits:**
+- a333b68 "Simplify product entry form for sales role"
+- 88651ca "Fix HTMX form submission for product creation"
+
+---
+
+### 2. Buyer/Seller Company Creation Errors
 
 **Status:** ✅ FIXED (2026-01-20)
 
@@ -23,7 +96,7 @@
 
 ---
 
-### 2. Roles Cleanup
+### 3. Roles Cleanup
 
 **Status:** 🟡 MEDIUM - Too many roles displayed
 
@@ -39,7 +112,7 @@
 
 ---
 
-### 3. Users Table UI Improvements
+### 4. Users Table UI Improvements
 
 **Status:** ✅ COMPLETED (2026-01-20)
 
@@ -128,7 +201,7 @@ Before confirming deployment:
 
 ---
 
-### 4. Seller Company Selection Bug
+### 5. Seller Company Selection Bug
 
 **Status:** ✅ FIXED (2026-01-20)
 
@@ -154,7 +227,7 @@ Before confirming deployment:
 
 ---
 
-### 5. Quote Creation Form Improvements
+### 6. Quote Creation Form Improvements
 
 **Status:** ✅ COMPLETED (2026-01-20)
 
@@ -189,7 +262,7 @@ Before confirming deployment:
 
 ---
 
-### 6. Delivery Method Selection
+### 7. Delivery Method Selection
 
 **Status:** ✅ COMPLETED (2026-01-21)
 
