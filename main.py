@@ -245,14 +245,40 @@ button:hover, [role="button"]:hover, .button:hover {
     margin-top: 0.25rem;
 }
 
-/* ========== Tables with Hover ========== */
+/* ========== Tables with Zebra Stripes & Hover ========== */
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
 table tbody tr {
     transition: background-color 0.2s ease;
 }
 
+/* Zebra striping - alternating row colors */
+table tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.02);
+}
+
 table tbody tr:hover {
-    background: rgba(0, 0, 0, 0.03);
+    background: rgba(99, 102, 241, 0.08) !important;
     cursor: pointer;
+}
+
+/* Table headers */
+table thead th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 0.75rem;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Table cells */
+table tbody td {
+    padding: 0.75rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 /* ========== Forms ========== */
