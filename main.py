@@ -7376,6 +7376,23 @@ def get(session, quote_id: str):
 
     items = items_result.data or []
 
+    # Load calculation variables (for quote-level costs)
+    calc_vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    calc_vars = {}
+    if calc_vars_result.data:
+        calc_vars = calc_vars_result.data[0].get("variables", {})
+
+    # Extract quote-level customs costs (defaults to 0)
+    brokerage_hub = calc_vars.get("brokerage_hub", 0)
+    brokerage_customs = calc_vars.get("brokerage_customs", 0)
+    warehousing_at_customs = calc_vars.get("warehousing_at_customs", 0)
+    customs_documentation = calc_vars.get("customs_documentation", 0)
+    brokerage_extra = calc_vars.get("brokerage_extra", 0)
+
     # Check if customs is editable
     editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
     is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
@@ -7589,6 +7606,116 @@ def get(session, quote_id: str):
         cls="card"
     )
 
+    # Quote-level costs section (customs/brokerage expenses)
+    quote_level_costs_section = Div(
+        H3("💰 Общие расходы на КП", style="margin-bottom: 0.75rem;"),
+        P("Укажите общие расходы на всю квоту в валюте КП (" + currency + "). Эти суммы будут распределены пропорционально стоимости товаров.",
+          style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
+        Div(
+            # Row 1: brokerage_hub + brokerage_customs
+            Div(
+                Div(
+                    Label("Брокерские (хаб)",
+                        Input(
+                            name="brokerage_hub",
+                            type="number",
+                            value=str(brokerage_hub),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                    ),
+                    Small("Брокерские услуги на хабе", style="color: #999;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Брокерские (таможня)",
+                        Input(
+                            name="brokerage_customs",
+                            type="number",
+                            value=str(brokerage_customs),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                    ),
+                    Small("Брокерские услуги на таможне", style="color: #999;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+            ),
+            # Row 2: warehousing_at_customs + customs_documentation
+            Div(
+                Div(
+                    Label("СВХ",
+                        Input(
+                            name="warehousing_at_customs",
+                            type="number",
+                            value=str(warehousing_at_customs),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                    ),
+                    Small("Стоимость склада временного хранения", style="color: #999;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Сертификаты/документация",
+                        Input(
+                            name="customs_documentation",
+                            type="number",
+                            value=str(customs_documentation),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                    ),
+                    Small("Сертификация, документация", style="color: #999;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+            ),
+            # Row 3: brokerage_extra (full width)
+            Div(
+                Label("Дополнительные брокерские",
+                    Input(
+                        name="brokerage_extra",
+                        type="number",
+                        value=str(brokerage_extra),
+                        min="0",
+                        step="0.01",
+                        disabled=not is_editable,
+                        style="width: 100%;"
+                    ),
+                    style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                ),
+                Small("Дополнительные брокерские расходы", style="color: #999;"),
+                style="width: 50%;"
+            ),
+            # Total display
+            Div(
+                Strong("Итого общих расходов: "),
+                Span(format_money(
+                    float(brokerage_hub) + float(brokerage_customs) + float(warehousing_at_customs) +
+                    float(customs_documentation) + float(brokerage_extra),
+                    currency
+                ), style="color: #059669;"),
+                style="text-align: right; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.95rem;"
+            ) if any([brokerage_hub, brokerage_customs, warehousing_at_customs, customs_documentation, brokerage_extra]) else None,
+        ),
+        cls="card",
+        style="margin-bottom: 1rem; background-color: #fffbeb; border-left: 3px solid #f59e0b;"
+    )
+
     # Quote-level notes section
     quote_level_section = Div(
         H3("📝 Примечания"),
@@ -7611,6 +7738,9 @@ def get(session, quote_id: str):
     customs_form = Form(
         # Item-level customs (v3.0)
         item_customs_section,
+
+        # Quote-level costs (brokerage, SVH, documentation)
+        quote_level_costs_section,
 
         # Quote-level notes
         quote_level_section,
@@ -7824,6 +7954,52 @@ async def post(session, quote_id: str, request):
         supabase.table("quotes") \
             .update({"customs_notes": customs_notes}) \
             .eq("id", quote_id) \
+            .execute()
+
+    # Save quote-level costs to quote_calculation_variables
+    brokerage_hub = safe_decimal(form_data.get("brokerage_hub", 0))
+    brokerage_customs = safe_decimal(form_data.get("brokerage_customs", 0))
+    warehousing_at_customs = safe_decimal(form_data.get("warehousing_at_customs", 0))
+    customs_documentation = safe_decimal(form_data.get("customs_documentation", 0))
+    brokerage_extra = safe_decimal(form_data.get("brokerage_extra", 0))
+
+    # Load existing variables or create empty dict
+    calc_vars_result = supabase.table("quote_calculation_variables") \
+        .select("id, variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    if calc_vars_result.data:
+        # Update existing record
+        calc_var_id = calc_vars_result.data[0]["id"]
+        existing_vars = calc_vars_result.data[0].get("variables", {})
+
+        # Update the 5 cost fields
+        existing_vars["brokerage_hub"] = brokerage_hub
+        existing_vars["brokerage_customs"] = brokerage_customs
+        existing_vars["warehousing_at_customs"] = warehousing_at_customs
+        existing_vars["customs_documentation"] = customs_documentation
+        existing_vars["brokerage_extra"] = brokerage_extra
+
+        supabase.table("quote_calculation_variables") \
+            .update({"variables": existing_vars}) \
+            .eq("id", calc_var_id) \
+            .execute()
+    else:
+        # Create new record with 5 cost fields
+        import uuid
+        supabase.table("quote_calculation_variables") \
+            .insert({
+                "id": str(uuid.uuid4()),
+                "quote_id": quote_id,
+                "variables": {
+                    "brokerage_hub": brokerage_hub,
+                    "brokerage_customs": brokerage_customs,
+                    "warehousing_at_customs": warehousing_at_customs,
+                    "customs_documentation": customs_documentation,
+                    "brokerage_extra": brokerage_extra
+                }
+            }) \
             .execute()
 
     # If action is complete, mark customs as done
