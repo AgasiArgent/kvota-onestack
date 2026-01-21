@@ -2305,11 +2305,11 @@ def complete_procurement(
     1. Validates the user has procurement or admin role
     2. Checks if ALL procurement items are complete
     3. If complete, sets procurement_completed_at timestamp
-    4. Transitions quote to pending_logistics (and pending_customs starts in parallel)
+    4. Transitions quote to pending_logistics_and_customs (parallel stage)
 
     Note: The workflow handles logistics and customs as parallel stages.
-    When procurement completes, the quote goes to pending_logistics status,
-    but customs can be worked on simultaneously.
+    When procurement completes, the quote goes to pending_logistics_and_customs status
+    where both departments can work simultaneously.
 
     Args:
         quote_id: UUID of the quote
@@ -2389,12 +2389,12 @@ def complete_procurement(
             from_status=current_status
         )
 
-    # All items complete! Set procurement_completed_at and transition to pending_logistics
+    # All items complete! Set procurement_completed_at and transition to parallel stage
     try:
         update_response = supabase.table("quotes") \
             .update({
                 "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
-                "workflow_status": WorkflowStatus.PENDING_LOGISTICS.value
+                "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
             }) \
             .eq("id", quote_id) \
             .execute()
@@ -2412,10 +2412,10 @@ def complete_procurement(
         transition_data = {
             "quote_id": quote_id,
             "from_status": current_status,
-            "to_status": WorkflowStatus.PENDING_LOGISTICS.value,
+            "to_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
             "actor_id": actor_id,
             "actor_role": actor_role,
-            "comment": "Оценка закупок завершена. Все позиции оценены."
+            "comment": "Оценка закупок завершена. Все позиции оценены. Переход в параллельную стадию (логистика + таможня)."
         }
         log_response = supabase.table("workflow_transitions").insert(transition_data).execute()
         transition_id = log_response.data[0].get("id") if log_response.data else None
@@ -2427,6 +2427,6 @@ def complete_procurement(
         error_message=None,
         quote_id=quote_id,
         from_status=current_status,
-        to_status=WorkflowStatus.PENDING_LOGISTICS.value,
+        to_status=WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
         transition_id=transition_id
     )
