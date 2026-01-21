@@ -29,6 +29,7 @@ class WorkflowStatus(str, Enum):
     PENDING_PROCUREMENT = "pending_procurement"
     PENDING_LOGISTICS = "pending_logistics"
     PENDING_CUSTOMS = "pending_customs"
+    PENDING_LOGISTICS_AND_CUSTOMS = "pending_logistics_and_customs"  # Parallel logistics+customs stage
 
     # Sales review after evaluation
     PENDING_SALES_REVIEW = "pending_sales_review"
@@ -58,6 +59,7 @@ STATUS_NAMES: Dict[WorkflowStatus, str] = {
     WorkflowStatus.PENDING_PROCUREMENT: "Ожидает оценки закупок",
     WorkflowStatus.PENDING_LOGISTICS: "Ожидает логистики",
     WorkflowStatus.PENDING_CUSTOMS: "Ожидает таможни",
+    WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS: "Ожидает логистики и таможни",
     WorkflowStatus.PENDING_SALES_REVIEW: "Ожидает менеджера продаж",
     WorkflowStatus.PENDING_QUOTE_CONTROL: "Ожидает проверки КП",
     WorkflowStatus.PENDING_APPROVAL: "Ожидает согласования",
@@ -78,6 +80,7 @@ STATUS_NAMES_SHORT: Dict[WorkflowStatus, str] = {
     WorkflowStatus.PENDING_PROCUREMENT: "Закупки",
     WorkflowStatus.PENDING_LOGISTICS: "Логистика",
     WorkflowStatus.PENDING_CUSTOMS: "Таможня",
+    WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS: "Логистика+Таможня",
     WorkflowStatus.PENDING_SALES_REVIEW: "Продажи",
     WorkflowStatus.PENDING_QUOTE_CONTROL: "Контроль КП",
     WorkflowStatus.PENDING_APPROVAL: "Согласование",
@@ -98,6 +101,7 @@ STATUS_COLORS: Dict[WorkflowStatus, str] = {
     WorkflowStatus.PENDING_PROCUREMENT: "bg-yellow-100 text-yellow-800",
     WorkflowStatus.PENDING_LOGISTICS: "bg-blue-100 text-blue-800",
     WorkflowStatus.PENDING_CUSTOMS: "bg-purple-100 text-purple-800",
+    WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS: "bg-teal-100 text-teal-800",  # Parallel stage
     WorkflowStatus.PENDING_SALES_REVIEW: "bg-orange-100 text-orange-800",
     WorkflowStatus.PENDING_QUOTE_CONTROL: "bg-pink-100 text-pink-800",
     WorkflowStatus.PENDING_APPROVAL: "bg-amber-100 text-amber-800",
@@ -1483,7 +1487,7 @@ def complete_logistics(
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
         WorkflowStatus.PENDING_CUSTOMS.value,
-        "pending_logistics_and_customs"  # Parallel stage (no enum constant yet)
+        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
     ]:
         return TransitionResult(
             success=False,
@@ -1619,7 +1623,7 @@ def complete_customs(
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
         WorkflowStatus.PENDING_CUSTOMS.value,
-        "pending_logistics_and_customs"  # Parallel stage (no enum constant yet)
+        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
     ]:
         return TransitionResult(
             success=False,
