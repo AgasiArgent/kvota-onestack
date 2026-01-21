@@ -12011,46 +12011,105 @@ def finance_erps_tab(session, user, org_id):
             return "-"
         return f"{value:.1f}%"
 
-    # Build table
+    # Helper to format priority tag
+    def fmt_priority(value):
+        if not value:
+            return "-"
+        labels = {
+            'important': 'Важно',
+            'normal': 'Обычно',
+            'problem': 'Проблема'
+        }
+        return labels.get(value, value)
+
+    # Build table with all columns from erps_registry VIEW
     table = Table(
         Thead(
             Tr(
-                Th("IDN"),
+                # Блок "Спецификация"
+                Th("IDN", style="background: #fef3c7;"),
                 Th("Клиент"),
                 Th("Дата подписания"),
                 Th("Тип сделки"),
                 Th("Условия оплаты"),
                 Th("Аванс %"),
                 Th("Отсрочка, дни"),
-                Th("Сумма спец. USD"),
-                Th("Профит USD"),
+                Th("Сумма спец. USD", style="background: #fef3c7;"),
+                Th("Профит USD", style="background: #fef3c7;"),
                 Th("Крайний срок поставки"),
-                Th("Всего оплачено USD"),
-                Th("Остаток USD"),
-                Th("Остаток %"),
+                Th("Крайний срок оплаты аванса"),
+                # Блок "Авто" (расчетные)
+                Th("Остаток дней до аванса", style="background: #e9d5ff;"),
+                Th("Планируемая сумма аванса USD", style="background: #e9d5ff;"),
+                Th("Всего оплачено USD", style="background: #e9d5ff;"),
+                Th("Остаток к оплате USD", style="background: #e9d5ff;"),
+                Th("Остаток %", style="background: #e9d5ff;"),
+                Th("Срок поставки, к.д.", style="background: #e9d5ff;"),
+                Th("Срок поставки, р.д.", style="background: #e9d5ff;"),
+                # Блок "Финансы"
+                Th("Дата оплаты аванса", style="background: #fecdd3;"),
+                Th("Дата последней оплаты", style="background: #fecdd3;"),
+                Th("Комментарий", style="background: #fecdd3;"),
+                # Блок "Закупки"
+                Th("Дата оплаты поставщику", style="background: #bfdbfe;"),
+                Th("Всего потрачено USD", style="background: #bfdbfe;"),
+                # Блок "Логистика"
+                Th("Планируемая дата доставки", style="background: #ddd6fe;"),
+                Th("Фактическая дата доставки", style="background: #ddd6fe;"),
+                Th("Планируемая дата довоза", style="background: #ddd6fe;"),
+                # Блок "Финансы/Руководство"
+                Th("Тег приоритетности", style="background: #fecdd3;"),
+                Th("Фактический профит USD", style="background: #fef3c7;"),
+                # Блок "Авто" (системные)
+                Th("Дата создания", style="background: #e5e7eb;"),
+                Th("Дата изменения", style="background: #e5e7eb;"),
             )
         ),
         Tbody(
             *[Tr(
-                Td(spec.get('idn', '-')),
+                # Блок "Спецификация"
+                Td(spec.get('idn', '-'), style="background: #fef3c7;"),
                 Td(spec.get('client_name', '-')),
                 Td(fmt_date(spec.get('sign_date'))),
                 Td(spec.get('deal_type', '-')),
                 Td(spec.get('payment_terms', '-')),
                 Td(fmt_percent(spec.get('advance_percent'))),
                 Td(str(spec.get('payment_deferral_days', '-'))),
-                Td(fmt_money(spec.get('spec_sum_usd')), style="text-align: right; font-weight: 500;"),
-                Td(fmt_money(spec.get('spec_profit_usd')), style="text-align: right; color: #059669; font-weight: 500;"),
+                Td(fmt_money(spec.get('spec_sum_usd')), style="text-align: right; font-weight: 500; background: #fef3c7;"),
+                Td(fmt_money(spec.get('spec_profit_usd')), style="text-align: right; color: #059669; font-weight: 500; background: #fef3c7;"),
                 Td(fmt_date(spec.get('delivery_deadline'))),
-                Td(fmt_money(spec.get('total_paid_usd')), style="text-align: right;"),
-                Td(fmt_money(spec.get('remaining_payment_usd')), style="text-align: right; color: #dc2626;"),
-                Td(fmt_percent(spec.get('remaining_payment_percent')), style="text-align: right;"),
+                Td(fmt_date(spec.get('advance_payment_deadline'))),
+                # Блок "Авто"
+                Td(str(spec.get('days_until_advance', '-')), style="text-align: right; background: #e9d5ff;"),
+                Td(fmt_money(spec.get('planned_advance_usd')), style="text-align: right; background: #e9d5ff;"),
+                Td(fmt_money(spec.get('total_paid_usd')), style="text-align: right; background: #e9d5ff;"),
+                Td(fmt_money(spec.get('remaining_payment_usd')), style="text-align: right; color: #dc2626; background: #e9d5ff;"),
+                Td(fmt_percent(spec.get('remaining_payment_percent')), style="text-align: right; background: #e9d5ff;"),
+                Td(str(spec.get('delivery_period_calendar_days', '-')), style="text-align: right; background: #e9d5ff;"),
+                Td(str(spec.get('delivery_period_working_days', '-')), style="text-align: right; background: #e9d5ff;"),
+                # Блок "Финансы"
+                Td(fmt_date(spec.get('advance_payment_date')), style="background: #fecdd3;"),
+                Td(fmt_date(spec.get('last_payment_date')), style="background: #fecdd3;"),
+                Td(spec.get('comment', '-'), style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; background: #fecdd3;"),
+                # Блок "Закупки"
+                Td(fmt_date(spec.get('supplier_payment_date')), style="background: #bfdbfe;"),
+                Td(fmt_money(spec.get('total_spent_usd')), style="text-align: right; background: #bfdbfe;"),
+                # Блок "Логистика"
+                Td(fmt_date(spec.get('planned_delivery_date')), style="background: #ddd6fe;"),
+                Td(fmt_date(spec.get('actual_delivery_date')), style="background: #ddd6fe;"),
+                Td(fmt_date(spec.get('planned_dovoz_date')), style="background: #ddd6fe;"),
+                # Блок "Финансы/Руководство"
+                Td(fmt_priority(spec.get('priority_tag')), style="background: #fecdd3;"),
+                Td(fmt_money(spec.get('actual_profit_usd')), style="text-align: right; color: #059669; font-weight: 500; background: #fef3c7;"),
+                # Блок "Авто"
+                Td(fmt_date(spec.get('created_at')), style="background: #e5e7eb;"),
+                Td(fmt_date(spec.get('updated_at')), style="background: #e5e7eb;"),
             ) for spec in specs]
         ) if specs else Tbody(
-            Tr(Td("Нет данных", colspan="13", style="text-align: center; padding: 2rem; color: #666;"))
+            Tr(Td("Нет данных", colspan="30", style="text-align: center; padding: 2rem; color: #666;"))
         ),
         cls="striped",
-        style="width: 100%; overflow-x: auto; font-size: 0.875rem;"
+        style="width: 100%; overflow-x: auto; font-size: 0.75rem;"
     )
 
     return Div(
