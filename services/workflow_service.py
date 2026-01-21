@@ -1483,7 +1483,7 @@ def complete_logistics(
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
         WorkflowStatus.PENDING_CUSTOMS.value,
-        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
+        "pending_logistics_and_customs"  # Parallel stage (no enum constant yet)
     ]:
         return TransitionResult(
             success=False,
@@ -1619,7 +1619,7 @@ def complete_customs(
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
         WorkflowStatus.PENDING_CUSTOMS.value,
-        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
+        "pending_logistics_and_customs"  # Parallel stage (no enum constant yet)
     ]:
         return TransitionResult(
             success=False,
