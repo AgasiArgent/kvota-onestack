@@ -12138,13 +12138,6 @@ def finance_calendar_tab(session, user, org_id):
     return Div(
         H2("Календарь платежей", style="margin-bottom: 1.5rem;"),
         P(f"Всего записей: {len(payments)}", style="margin-bottom: 1rem; color: #666;"),
-        Div(
-            A("+ Добавить платеж",
-              href="/finance/calendar/new",
-              role="button",
-              style="margin-bottom: 1rem; display: inline-block;"),
-            style="margin-bottom: 1rem;"
-        ),
         Div(table, style="overflow-x: auto;")
     )
 
