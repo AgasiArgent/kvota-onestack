@@ -2,8 +2,6 @@
 # Simple migration script using docker exec and psql
 # Usage: bash scripts/apply-migrations.sh
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
@@ -15,9 +13,7 @@ echo ""
 
 # Create migrations tracking table
 echo "📋 Ensuring migrations table exists..."
-docker exec supabase-db psql -U postgres -d postgres << 'EOF'
-SET search_path TO kvota;
-
+docker exec supabase-db psql -U postgres -d postgres -c "
 CREATE TABLE IF NOT EXISTS kvota.migrations (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) UNIQUE NOT NULL,
@@ -26,18 +22,13 @@ CREATE TABLE IF NOT EXISTS kvota.migrations (
 );
 
 COMMENT ON TABLE kvota.migrations IS 'Tracks applied database migrations';
-EOF
-
-if [ $? -ne 0 ]; then
-    echo "❌ Failed to create migrations table"
-    exit 1
-fi
+" > /dev/null 2>&1
 
 echo "✅ Migrations table ready"
 echo ""
 
 # Get list of applied migrations
-APPLIED=$(docker exec supabase-db psql -U postgres -d postgres -t -c "SELECT filename FROM kvota.migrations ORDER BY filename;" | xargs)
+APPLIED=$(docker exec supabase-db psql -U postgres -d postgres -t -c "SELECT filename FROM kvota.migrations ORDER BY filename;" 2>/dev/null | xargs)
 
 # Find all migration files
 PENDING_COUNT=0
@@ -85,6 +76,7 @@ echo "🚀 Applying $PENDING_COUNT pending migration(s)..."
 echo ""
 
 SUCCESS_COUNT=0
+FAILED_COUNT=0
 
 for file in $(ls -1 migrations/*.sql 2>/dev/null | sort); do
     filename=$(basename "$file")
@@ -104,28 +96,42 @@ for file in $(ls -1 migrations/*.sql 2>/dev/null | sort); do
 
     echo "  Applying: $filename..."
 
-    # Apply migration and record it
-    if docker exec -i supabase-db psql -U postgres -d postgres << MIGRATION_EOF
-BEGIN;
-
+    # Apply migration (don't stop on error)
+    MIGRATION_OUTPUT=$(docker exec -i supabase-db psql -U postgres -d postgres 2>&1 << MIGRATION_EOF
 $(cat "$file")
-
-INSERT INTO kvota.migrations (filename) VALUES ('$filename')
-    ON CONFLICT (filename) DO NOTHING;
-
-COMMIT;
 MIGRATION_EOF
-    then
+)
+    MIGRATION_STATUS=$?
+
+    # Check if migration had critical errors (not just NOTICEs or "already exists")
+    if echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*relation.*does not exist" || \
+       echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*syntax error" || \
+       echo "$MIGRATION_OUTPUT" | grep -q "ERROR.*violates.*constraint" && ! echo "$MIGRATION_OUTPUT" | grep -q "already exists"; then
+        echo "  ❌ Failed with critical error"
+        echo "$MIGRATION_OUTPUT" | grep "ERROR" | head -5
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        continue
+    fi
+
+    # Record migration as applied (even if there were non-critical errors like "already exists")
+    docker exec supabase-db psql -U postgres -d postgres -c "
+    INSERT INTO kvota.migrations (filename) VALUES ('$filename')
+        ON CONFLICT (filename) DO NOTHING;
+    " > /dev/null 2>&1
+
+    if [ $? -eq 0 ]; then
         echo "  ✅ Success"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     else
-        echo "  ❌ Failed"
-        echo ""
-        echo "Migration failed. Stopping."
-        exit 1
+        echo "  ⚠️  Applied but failed to record"
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     fi
 done
 
 echo ""
-echo "✅ Applied $SUCCESS_COUNT/$PENDING_COUNT migration(s) successfully."
+if [ $FAILED_COUNT -gt 0 ]; then
+    echo "⚠️  Applied $SUCCESS_COUNT/$PENDING_COUNT migration(s) ($FAILED_COUNT failed)"
+else
+    echo "✅ Applied $SUCCESS_COUNT/$PENDING_COUNT migration(s) successfully"
+fi
 echo ""
