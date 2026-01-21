@@ -1487,24 +1487,24 @@ def get(quote_id: str, session):
 
         # Products
         Div(
-            H3(f"Products ({len(items)})"),
+            H3(f"Товары ({len(items)})"),
             Table(
-                Thead(Tr(Th("Product"), Th("SKU"), Th("IDN-SKU"), Th("Qty"), Th("Unit Price"), Th("Total"))),
+                Thead(Tr(Th("Название"), Th("SKU"), Th("Бренд"), Th("Кол-во"), Th("Цена"), Th("Сумма"))),
                 Tbody(
                     *[Tr(
                         Td(item.get("product_name", "—")),
                         Td(item.get("product_code", "—")),
-                        Td(item.get("idn_sku", "—")),
+                        Td(item.get("brand", "—")),
                         Td(str(item.get("quantity", 0))),
-                        Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB"))),
+                        Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB")) if item.get("base_price_vat") else "Не указана"),
                         Td(format_money(
                             (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else None,
                             quote.get("currency", "RUB")
-                        ))
+                        ) if item.get("base_price_vat") else "—")
                     ) for item in items]
-                ) if items else Tbody(Tr(Td("No products yet", colspan="6", style="text-align: center;")))
+                ) if items else Tbody(Tr(Td("Нет товаров", colspan="6", style="text-align: center;")))
             ),
-            A("+ Add Products", href=f"/quotes/{quote_id}/products") if not items else None,
+            A("+ Добавить товары", href=f"/quotes/{quote_id}/products") if not items else None,
             cls="card"
         ),
 
@@ -2074,87 +2074,28 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Add product form
+        # Add product form - simplified for sales role
         Div(
-            H3("Add Product"),
+            H3("Добавить товар"),
             Form(
                 Div(
-                    Label("Product Name *", Input(name="product_name", required=True, placeholder="Bearing SKF 6205")),
+                    Label("Название товара *", Input(name="product_name", required=True, placeholder="Подшипник SKF 6205")),
                     cls="form-row"
                 ),
                 Div(
-                    Label("Product Code (SKU)", Input(name="product_code", placeholder="SKF-6205-2RS")),
-                    Label("IDN-SKU (Артикул)", Input(name="idn_sku", placeholder="IDN-12345")),
+                    Label("SKU / Product Code", Input(name="product_code", placeholder="SKF-6205-2RS")),
+                    Label("Бренд", Input(name="brand", placeholder="SKF")),
                     cls="form-row"
                 ),
                 Div(
-                    Label("Brand", Input(name="brand", placeholder="SKF")),
-                    Label("Quantity *", Input(name="quantity", type="number", value="1", min="1", required=True)),
+                    Label("Количество *", Input(name="quantity", type="number", value="1", min="1", required=True)),
                     cls="form-row"
                 ),
-                # Supply chain: Supplier selector (UI-016)
-                Div(
-                    supplier_dropdown(
-                        name="supplier_id",
-                        label="Поставщик",
-                        required=False,
-                        placeholder="Выберите поставщика...",
-                        help_text="Внешний поставщик для данной позиции"
-                    ),
-                    cls="form-row"
-                ),
-                # Supply chain: Buyer company selector (UI-017)
-                Div(
-                    buyer_company_dropdown(
-                        name="buyer_company_id",
-                        label="Компания-покупатель",
-                        required=False,
-                        placeholder="Выберите компанию...",
-                        help_text="Наше юрлицо для закупки данной позиции"
-                    ),
-                    cls="form-row"
-                ),
-                # Supply chain: Pickup location selector (UI-018)
-                Div(
-                    location_dropdown(
-                        name="pickup_location_id",
-                        label="Точка отгрузки",
-                        required=False,
-                        placeholder="Поиск локации...",
-                        help_text="Откуда забирать товар у поставщика"
-                    ),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Unit Price (with VAT) *",
-                        Input(name="base_price_vat", type="number", step="0.01", min="0", required=True, placeholder="1500.00")
-                    ),
-                    Label("Weight per unit (kg)",
-                        Input(name="weight_in_kg", type="number", step="0.001", min="0", placeholder="0.5")
-                    ),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Supplier Country",
-                        Select(
-                            Option("Select country...", value=""),
-                            Option("Turkey", value="TR"),
-                            Option("China", value="CN"),
-                            Option("Germany", value="DE"),
-                            Option("Italy", value="IT"),
-                            Option("USA", value="US"),
-                            Option("Russia", value="RU"),
-                            name="supplier_country"
-                        )
-                    ),
-                    Label("HS Code (Customs)",
-                        Input(name="customs_code", placeholder="8482109000")
-                    ),
-                    cls="form-row"
-                ),
+                Small("Остальные поля (поставщик, цены, вес, страна) заполняются отделом закупок",
+                      style="display: block; color: #666; margin-top: 0.5rem; margin-bottom: 1rem;"),
                 Input(type="hidden", name="quote_id", value=quote_id),
                 Div(
-                    Button("Add Product", type="submit"),
+                    Button("Добавить товар", type="submit"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -2181,11 +2122,18 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
     """Render a single product row with optional supplier, buyer company, and pickup location info (UI-016, UI-017, UI-018)"""
     total = (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else Decimal(0)
 
-    # Build product info with supplier/buyer company badges if available
+    # Build product info with brand badge
     product_content = [
         Strong(item.get("product_name", "—")),
-        Small(f" ({item.get('product_code', 'No SKU')})", style="color: #666;"),
     ]
+
+    # Add SKU if present
+    if item.get('product_code'):
+        product_content.append(Small(f" SKU: {item.get('product_code')}", style="color: #666; margin-left: 0.5rem;"))
+
+    # Add brand if present
+    if item.get('brand'):
+        product_content.append(Small(f" | {item.get('brand')}", style="color: #0066cc; margin-left: 0.5rem;"))
 
     # Add supplier badge if supplier is assigned (v3.0 - UI-016)
     if supplier_info:
@@ -2237,11 +2185,15 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
                  title="Точка отгрузки назначена")
         )
 
+    # Show price or "not specified" message
+    price_display = format_money(item.get("base_price_vat"), currency) if item.get("base_price_vat") else Span("Не указана", style="color: #999; font-style: italic;")
+    total_display = format_money(total, currency) if item.get("base_price_vat") else Span("—", style="color: #999;")
+
     return Div(
         Div(*product_content, style="flex: 2;"),
-        Div(f"Qty: {item.get('quantity', 0)}", style="flex: 1;"),
-        Div(format_money(item.get("base_price_vat"), currency), style="flex: 1;"),
-        Div(format_money(total, currency), style="flex: 1; font-weight: bold;"),
+        Div(f"Кол-во: {item.get('quantity', 0)}", style="flex: 1;"),
+        Div(price_display, style="flex: 1;"),
+        Div(total_display, style="flex: 1; font-weight: bold;" if item.get("base_price_vat") else "flex: 1;"),
         Div(
             Button("×",
                 hx_delete=f"/quotes/{item['quote_id']}/products/{item['id']}",
@@ -2258,10 +2210,16 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
 
 
 @rt("/quotes/{quote_id}/products")
-def post(quote_id: str, product_name: str, quantity: str, base_price_vat: str,
-         product_code: str = "", idn_sku: str = "", brand: str = "", weight_in_kg: str = "",
+def post(quote_id: str, product_name: str, quantity: str,
+         product_code: str = "", brand: str = "",
+         base_price_vat: str = "", idn_sku: str = "", weight_in_kg: str = "",
          supplier_country: str = "", customs_code: str = "",
          supplier_id: str = "", buyer_company_id: str = "", pickup_location_id: str = "", session=None):
+    """
+    Simplified product creation for sales role.
+    Sales manager only provides: product_name, product_code, brand, quantity.
+    Other fields (price, supplier, etc.) are filled by procurement team later.
+    """
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -2272,7 +2230,7 @@ def post(quote_id: str, product_name: str, quantity: str, base_price_vat: str,
     # Convert numeric parameters (handle empty strings from form)
     try:
         qty = int(quantity) if quantity else 1
-        price = float(base_price_vat) if base_price_vat else 0.0
+        price = float(base_price_vat) if base_price_vat else 0.0  # Default to 0 for now
         weight = float(weight_in_kg) if weight_in_kg else None
     except (ValueError, TypeError):
         return Div("Invalid numeric values", cls="alert alert-error")
