@@ -14289,7 +14289,7 @@ def location_dropdown(
     # Build the container class
     container_cls = f"location-dropdown {cls}".strip()
 
-    # Inline script to sync datalist selection with hidden field
+    # Inline script to sync datalist selection with hidden field and handle Enter key
     sync_script = Script(f"""
         (function() {{
             const input = document.getElementById('{input_id}');
@@ -14298,12 +14298,37 @@ def location_dropdown(
 
             if (!input || !datalist || !hidden) return;
 
-            input.addEventListener('input', function() {{
-                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
-                if (option) {{
-                    hidden.value = option.getAttribute('data-id') || '';
-                }} else {{
-                    hidden.value = '';
+            function syncValue() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === input.value);
+                hidden.value = option ? (option.getAttribute('data-id') || '') : '';
+            }}
+
+            input.addEventListener('input', syncValue);
+            input.addEventListener('change', syncValue);
+
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{
+                    const options = Array.from(datalist.options);
+                    if (options.length === 1) {{
+                        input.value = options[0].value;
+                        syncValue();
+                        e.preventDefault();
+                    }} else if (options.length > 1) {{
+                        const exact = options.find(opt => opt.value === input.value);
+                        if (exact) {{
+                            syncValue();
+                            e.preventDefault();
+                        }} else {{
+                            const partial = options.find(opt =>
+                                opt.value.toLowerCase().includes(input.value.toLowerCase())
+                            );
+                            if (partial) {{
+                                input.value = partial.value;
+                                syncValue();
+                                e.preventDefault();
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }})();
@@ -14437,7 +14462,7 @@ def supplier_dropdown(
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"supplier-dropdown {cls}".strip()
 
-    # Inline script to sync datalist selection with hidden field
+    # Inline script to sync datalist selection with hidden field and handle Enter key
     sync_script = Script(f"""
         (function() {{
             const input = document.getElementById('{input_id}');
@@ -14446,12 +14471,37 @@ def supplier_dropdown(
 
             if (!input || !datalist || !hidden) return;
 
-            input.addEventListener('input', function() {{
-                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
-                if (option) {{
-                    hidden.value = option.getAttribute('data-id') || '';
-                }} else {{
-                    hidden.value = '';
+            function syncValue() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === input.value);
+                hidden.value = option ? (option.getAttribute('data-id') || '') : '';
+            }}
+
+            input.addEventListener('input', syncValue);
+            input.addEventListener('change', syncValue);
+
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{
+                    const options = Array.from(datalist.options);
+                    if (options.length === 1) {{
+                        input.value = options[0].value;
+                        syncValue();
+                        e.preventDefault();
+                    }} else if (options.length > 1) {{
+                        const exact = options.find(opt => opt.value === input.value);
+                        if (exact) {{
+                            syncValue();
+                            e.preventDefault();
+                        }} else {{
+                            const partial = options.find(opt =>
+                                opt.value.toLowerCase().includes(input.value.toLowerCase())
+                            );
+                            if (partial) {{
+                                input.value = partial.value;
+                                syncValue();
+                                e.preventDefault();
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }})();
@@ -14527,7 +14577,7 @@ def buyer_company_dropdown(
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"buyer-company-dropdown {cls}".strip()
 
-    # Inline script to sync datalist selection with hidden field
+    # Inline script to sync datalist selection with hidden field and handle Enter key
     sync_script = Script(f"""
         (function() {{
             const input = document.getElementById('{input_id}');
@@ -14536,12 +14586,37 @@ def buyer_company_dropdown(
 
             if (!input || !datalist || !hidden) return;
 
-            input.addEventListener('input', function() {{
-                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
-                if (option) {{
-                    hidden.value = option.getAttribute('data-id') || '';
-                }} else {{
-                    hidden.value = '';
+            function syncValue() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === input.value);
+                hidden.value = option ? (option.getAttribute('data-id') || '') : '';
+            }}
+
+            input.addEventListener('input', syncValue);
+            input.addEventListener('change', syncValue);
+
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{
+                    const options = Array.from(datalist.options);
+                    if (options.length === 1) {{
+                        input.value = options[0].value;
+                        syncValue();
+                        e.preventDefault();
+                    }} else if (options.length > 1) {{
+                        const exact = options.find(opt => opt.value === input.value);
+                        if (exact) {{
+                            syncValue();
+                            e.preventDefault();
+                        }} else {{
+                            const partial = options.find(opt =>
+                                opt.value.toLowerCase().includes(input.value.toLowerCase())
+                            );
+                            if (partial) {{
+                                input.value = partial.value;
+                                syncValue();
+                                e.preventDefault();
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }})();
@@ -14617,7 +14692,7 @@ def seller_company_dropdown(
     help_element = Small(help_text, style="color: #666; display: block; margin-top: 0.25rem;") if help_text else None
     container_cls = f"seller-company-dropdown {cls}".strip()
 
-    # Inline script to sync datalist selection with hidden field
+    # Inline script to sync datalist selection with hidden field and handle Enter key
     sync_script = Script(f"""
         (function() {{
             const input = document.getElementById('{input_id}');
@@ -14626,12 +14701,37 @@ def seller_company_dropdown(
 
             if (!input || !datalist || !hidden) return;
 
-            input.addEventListener('input', function() {{
-                const option = Array.from(datalist.options).find(opt => opt.value === this.value);
-                if (option) {{
-                    hidden.value = option.getAttribute('data-id') || '';
-                }} else {{
-                    hidden.value = '';
+            function syncValue() {{
+                const option = Array.from(datalist.options).find(opt => opt.value === input.value);
+                hidden.value = option ? (option.getAttribute('data-id') || '') : '';
+            }}
+
+            input.addEventListener('input', syncValue);
+            input.addEventListener('change', syncValue);
+
+            input.addEventListener('keydown', function(e) {{
+                if (e.key === 'Enter') {{
+                    const options = Array.from(datalist.options);
+                    if (options.length === 1) {{
+                        input.value = options[0].value;
+                        syncValue();
+                        e.preventDefault();
+                    }} else if (options.length > 1) {{
+                        const exact = options.find(opt => opt.value === input.value);
+                        if (exact) {{
+                            syncValue();
+                            e.preventDefault();
+                        }} else {{
+                            const partial = options.find(opt =>
+                                opt.value.toLowerCase().includes(input.value.toLowerCase())
+                            );
+                            if (partial) {{
+                                input.value = partial.value;
+                                syncValue();
+                                e.preventDefault();
+                            }}
+                        }}
+                    }}
                 }}
             }});
         }})();
