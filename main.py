@@ -3106,98 +3106,40 @@ def get(quote_id: str, session):
                         cls="card"
                     ),
 
-                    # Pricing
+                    # Pricing (Sales Manager fields only)
                     Div(
                         H3("Pricing"),
-                        Div(
-                            Label("Quote Currency *",
-                                Select(
-                                    Option("RUB - Russian Ruble", value="RUB", selected=currency == "RUB"),
-                                    Option("USD - US Dollar", value="USD", selected=currency == "USD"),
-                                    Option("EUR - Euro", value="EUR", selected=currency == "EUR"),
-                                    name="quote_currency"
-                                ),
-                                Small("Currency for the commercial proposal", style="color: #666; display: block; margin-top: 0.25rem;")
-                            ),
-                            cls="form-group"
-                        ),
                         Div(
                             Label("Markup %",
                                 Input(name="markup", type="number", value=str(get_var('markup', 15)), min="0", max="100", step="0.1")
                             ),
-                            Label("Supplier Discount %",
-                                Input(name="supplier_discount", type="number", value=str(get_var('supplier_discount', 0)), min="0", max="100", step="0.1")
-                            ),
-                            cls="form-row"
+                            cls="form-group"
                         ),
-                        Div(
-                            Label("Exchange Rate (to quote currency)",
-                                Input(name="exchange_rate", type="number", value=str(get_var('exchange_rate', 1.0)), min="0.0001", step="0.0001")
-                            ),
-                            Label("Delivery Time (days)",
-                                Input(name="delivery_time", type="number", value=str(get_var('delivery_time', 30)), min="1", max="365")
-                            ),
-                            cls="form-row"
-                        ),
+                        # Hidden fields: other departments' data passed through but not shown
+                        Input(type="hidden", name="quote_currency", value=currency),
+                        Input(type="hidden", name="supplier_discount", value=str(get_var('supplier_discount', 0))),
+                        Input(type="hidden", name="exchange_rate", value=str(get_var('exchange_rate', 1.0))),
+                        Input(type="hidden", name="delivery_time", value=str(get_var('delivery_time', 30))),
+                        Input(type="hidden", name="logistics_supplier_hub", value=str(get_var('logistics_supplier_hub', 0))),
+                        Input(type="hidden", name="logistics_hub_customs", value=str(get_var('logistics_hub_customs', 0))),
+                        Input(type="hidden", name="logistics_customs_client", value=str(get_var('logistics_customs_client', 0))),
+                        Input(type="hidden", name="brokerage_hub", value=str(get_var('brokerage_hub', 0))),
+                        Input(type="hidden", name="brokerage_customs", value=str(get_var('brokerage_customs', 0))),
+                        Input(type="hidden", name="warehousing_at_customs", value=str(get_var('warehousing_at_customs', 0))),
+                        Input(type="hidden", name="customs_documentation", value=str(get_var('customs_documentation', 0))),
+                        Input(type="hidden", name="brokerage_extra", value=str(get_var('brokerage_extra', 0))),
+                        Input(type="hidden", name="advance_to_supplier", value=str(get_var('advance_to_supplier', 100))),
                         cls="card"
                     ),
 
-                    # Logistics
-                    Div(
-                        H3("Logistics Costs"),
-                        Div(
-                            Label("Supplier → Hub",
-                                Input(name="logistics_supplier_hub", type="number", value=str(get_var('logistics_supplier_hub', 0)), min="0", step="0.01")
-                            ),
-                            Label("Hub → Customs",
-                                Input(name="logistics_hub_customs", type="number", value=str(get_var('logistics_hub_customs', 0)), min="0", step="0.01")
-                            ),
-                            Label("Customs → Client",
-                                Input(name="logistics_customs_client", type="number", value=str(get_var('logistics_customs_client', 0)), min="0", step="0.01")
-                            ),
-                            cls="form-row", style="grid-template-columns: 1fr 1fr 1fr;"
-                        ),
-                        cls="card"
-                    ),
-
-                    # Brokerage
-                    Div(
-                        H3("Brokerage Costs"),
-                        Div(
-                            Label("Hub Brokerage",
-                                Input(name="brokerage_hub", type="number", value=str(get_var('brokerage_hub', 0)), min="0", step="0.01")
-                            ),
-                            Label("Customs Brokerage",
-                                Input(name="brokerage_customs", type="number", value=str(get_var('brokerage_customs', 0)), min="0", step="0.01")
-                            ),
-                            cls="form-row"
-                        ),
-                        Div(
-                            Label("Warehousing",
-                                Input(name="warehousing_at_customs", type="number", value=str(get_var('warehousing_at_customs', 0)), min="0", step="0.01")
-                            ),
-                            Label("Documentation",
-                                Input(name="customs_documentation", type="number", value=str(get_var('customs_documentation', 0)), min="0", step="0.01")
-                            ),
-                            Label("Extra",
-                                Input(name="brokerage_extra", type="number", value=str(get_var('brokerage_extra', 0)), min="0", step="0.01")
-                            ),
-                            cls="form-row", style="grid-template-columns: 1fr 1fr 1fr;"
-                        ),
-                        cls="card"
-                    ),
-
-                    # Payment Terms
+                    # Payment Terms (Sales Manager fields only)
                     Div(
                         H3("Payment Terms"),
                         Div(
                             Label("Client Advance %",
                                 Input(name="advance_from_client", type="number", value=str(get_var('advance_from_client', 100)), min="0", max="100", step="1")
                             ),
-                            Label("Supplier Advance %",
-                                Input(name="advance_to_supplier", type="number", value=str(get_var('advance_to_supplier', 100)), min="0", max="100", step="1")
-                            ),
-                            cls="form-row"
+                            cls="form-group"
                         ),
                         Div(
                             Label("Days to Advance",
