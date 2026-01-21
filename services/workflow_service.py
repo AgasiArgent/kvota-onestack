@@ -1478,11 +1478,12 @@ def complete_logistics(
     quote = response.data
     current_status = quote.get("workflow_status")
 
-    # Validate current status - must be pending_logistics or pending_customs
+    # Validate current status - must be pending_logistics or pending_customs or parallel stage
     # (logistics can be completed in parallel with customs)
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
-        WorkflowStatus.PENDING_CUSTOMS.value
+        WorkflowStatus.PENDING_CUSTOMS.value,
+        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
     ]:
         return TransitionResult(
             success=False,
@@ -1614,10 +1615,11 @@ def complete_customs(
     quote = response.data
     current_status = quote.get("workflow_status")
 
-    # Validate current status - must be pending_logistics or pending_customs
+    # Validate current status - must be pending_logistics or pending_customs or parallel stage
     if current_status not in [
         WorkflowStatus.PENDING_LOGISTICS.value,
-        WorkflowStatus.PENDING_CUSTOMS.value
+        WorkflowStatus.PENDING_CUSTOMS.value,
+        WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
     ]:
         return TransitionResult(
             success=False,
