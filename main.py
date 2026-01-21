@@ -16909,46 +16909,32 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 ),
             ),
 
-            # Statistics section
+            # Statistics section (DaisyUI stats)
             Div(
                 H3("Статистика по клиенту", style="margin: 2rem 0 1rem 0;"),
                 Div(
-                    # Quotes stats
-                    Div(
-                        Div(
-                            Div("📊 КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(str(stats["quotes_count"])), style="font-size: 2.5rem; color: #2563eb;"),
-                            Div("коммерческих предложений", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=str(stats["quotes_count"]),
+                        label="КП",
+                        description="коммерческих предложений"
                     ),
-                    Div(
-                        Div(
-                            Div("💰 Сумма КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(f"{stats['quotes_sum']:,.0f} ₽"), style="font-size: 2rem; color: #16a34a;"),
-                            Div("общая сумма предложений", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=f"{stats['quotes_sum']:,.0f} ₽",
+                        label="Сумма КП",
+                        description="общая сумма предложений"
                     ),
-                    # Specs stats
-                    Div(
-                        Div(
-                            Div("📄 Спецификации", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(str(stats["specifications_count"])), style="font-size: 2.5rem; color: #9333ea;"),
-                            Div("подписанных спецификаций", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=str(stats["specifications_count"]),
+                        label="Спецификации",
+                        description="подписанных спецификаций"
                     ),
-                    Div(
-                        Div(
-                            Div("💎 Сумма спецификаций", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(f"{stats['specifications_sum']:,.0f} ₽"), style="font-size: 2rem; color: #ea580c;"),
-                            Div("общая сумма сделок", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=f"{stats['specifications_sum']:,.0f} ₽",
+                        label="Сумма спецификаций",
+                        description="общая сумма сделок"
                     ),
-                    cls="stats-grid",
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;"
+                    cls="stats stats-vertical lg:stats-horizontal shadow",
+                    style="background: var(--card-background-color);"
                 ),
             )
         )
@@ -17942,66 +17928,44 @@ def get(user_id: str, session, tab: str = "general"):
                 ),
             ),
 
-            # Statistics section
+            # Statistics section (DaisyUI stats)
             Div(
                 H3("Статистика", style="margin: 2rem 0 1rem 0;"),
                 Div(
-                    # Customers stats
-                    Div(
-                        Div(
-                            Div("👥 Клиенты", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(str(stats["total_customers"])), style="font-size: 2.5rem; color: #2563eb;"),
-                            Div("клиентов", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=str(stats["total_customers"]),
+                        label="Клиенты",
+                        description="клиентов"
                     ),
-                    # Quotes stats
-                    Div(
-                        Div(
-                            Div("📊 КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(str(stats["total_quotes"])), style="font-size: 2.5rem; color: #16a34a;"),
-                            Div("коммерческих предложений", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=str(stats["total_quotes"]),
+                        label="КП",
+                        description="коммерческих предложений"
                     ),
-                    Div(
-                        Div(
-                            Div("💰 Сумма КП", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(f"${stats['total_quotes_sum_usd']:,.0f}"), style="font-size: 2rem; color: #9333ea;"),
-                            Div("общая сумма предложений", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=f"${stats['total_quotes_sum_usd']:,.0f}",
+                        label="Сумма КП",
+                        description="общая сумма предложений"
                     ),
-                    # Specs stats
-                    Div(
-                        Div(
-                            Div("📄 Спецификации", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(str(stats["total_specifications"])), style="font-size: 2.5rem; color: #ea580c;"),
-                            Div("спецификаций", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=str(stats["total_specifications"]),
+                        label="Спецификации",
+                        description="спецификаций"
                     ),
-                    Div(
-                        Div(
-                            Div("💎 Сумма спецификаций", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(f"${stats['total_specifications_sum_usd']:,.0f}"), style="font-size: 2rem; color: #0891b2;"),
-                            Div("общая сумма сделок", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=f"${stats['total_specifications_sum_usd']:,.0f}",
+                        label="Сумма спецификаций",
+                        description="общая сумма сделок"
                     ),
-                    Div(
-                        Div(
-                            Div("💵 Профит", style="font-size: 2rem; margin-bottom: 0.5rem;"),
-                            Div(Strong(f"${stats['total_profit_usd']:,.0f}"), style="font-size: 2rem; color: #dc2626;"),
-                            Div("суммарный профит", style="color: #666; font-size: 0.9em;"),
-                            style="text-align: center; padding: 1.5rem; background: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb;"
-                        )
+                    stat_card(
+                        value=f"${stats['total_profit_usd']:,.0f}",
+                        label="Профит",
+                        description="суммарный профит"
                     ),
-                    cls="stats-grid",
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;"
+                    cls="stats stats-vertical lg:stats-horizontal shadow",
+                    style="background: var(--card-background-color); display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));"
                 ),
-            ),
-            id="tab-content"
+            )
         )
 
     elif tab == "specifications":
