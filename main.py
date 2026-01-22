@@ -1410,33 +1410,33 @@ def sidebar(session, current_path: str = ""):
     if sales_items:
         menu_sections.append({"title": "Продажи", "items": sales_items})
 
-    # === OPERATIONS SECTION (role-based workspaces) ===
+    # === OPERATIONS SECTION (role-based workspaces - now point to dashboard tabs) ===
     operations_items = []
 
     if is_admin or "procurement" in roles:
-        operations_items.append({"icon": "🛒", "label": "Закупки", "href": "/procurement", "roles": ["procurement", "admin"]})
+        operations_items.append({"icon": "🛒", "label": "Закупки", "href": "/dashboard?tab=procurement", "roles": ["procurement", "admin"]})
         operations_items.append({"icon": "🏭", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
-    if is_admin or "logistics" in roles:
-        operations_items.append({"icon": "🚚", "label": "Логистика", "href": "/logistics", "roles": ["logistics", "admin"]})
+    if is_admin or any(r in roles for r in ["logistics", "head_of_logistics"]):
+        operations_items.append({"icon": "🚚", "label": "Логистика", "href": "/dashboard?tab=logistics", "roles": ["logistics", "head_of_logistics", "admin"]})
 
-    if is_admin or "customs" in roles:
-        operations_items.append({"icon": "🛃", "label": "Таможня", "href": "/customs", "roles": ["customs", "admin"]})
+    if is_admin or any(r in roles for r in ["customs", "head_of_customs"]):
+        operations_items.append({"icon": "🛃", "label": "Таможня", "href": "/dashboard?tab=customs", "roles": ["customs", "head_of_customs", "admin"]})
 
     if operations_items:
         menu_sections.append({"title": "Операции", "items": operations_items})
 
-    # === CONTROL SECTION ===
+    # === CONTROL SECTION (now point to dashboard tabs except finance) ===
     control_items = []
 
     if is_admin or "quote_controller" in roles:
-        control_items.append({"icon": "✅", "label": "Контроль КП", "href": "/quote-control", "roles": ["quote_controller", "admin"]})
+        control_items.append({"icon": "✅", "label": "Контроль КП", "href": "/dashboard?tab=quote-control", "roles": ["quote_controller", "admin"]})
 
     if is_admin or "spec_controller" in roles:
-        control_items.append({"icon": "📑", "label": "Спецификации", "href": "/spec-control", "roles": ["spec_controller", "admin"]})
+        control_items.append({"icon": "📑", "label": "Спецификации", "href": "/dashboard?tab=spec-control", "roles": ["spec_controller", "admin"]})
 
-    if is_admin or "finance" in roles:
-        control_items.append({"icon": "💰", "label": "Финансы", "href": "/finance", "roles": ["finance", "admin"]})
+    if is_admin or any(r in roles for r in ["finance", "top_manager"]):
+        control_items.append({"icon": "💰", "label": "Финансы", "href": "/finance", "roles": ["finance", "top_manager", "admin"]})
 
     if control_items:
         menu_sections.append({"title": "Контроль", "items": control_items})
@@ -1994,6 +1994,105 @@ def get(session):
 # DASHBOARD (Feature #86: Role-based tasks)
 # ============================================================================
 
+# Dashboard tab configuration
+DASHBOARD_TABS = [
+    {
+        "id": "overview",
+        "label": "📊 Обзор",
+        "roles": ["admin", "top_manager"],  # Only admin/top_manager see overview
+        "priority": 0,
+    },
+    {
+        "id": "procurement",
+        "label": "🛒 Закупки",
+        "roles": ["procurement", "admin"],
+        "priority": 1,
+    },
+    {
+        "id": "logistics",
+        "label": "🚚 Логистика",
+        "roles": ["logistics", "head_of_logistics", "admin"],
+        "priority": 2,
+    },
+    {
+        "id": "customs",
+        "label": "🛃 Таможня",
+        "roles": ["customs", "head_of_customs", "admin"],
+        "priority": 3,
+    },
+    {
+        "id": "quote-control",
+        "label": "✅ Контроль КП",
+        "roles": ["quote_controller", "admin"],
+        "priority": 4,
+    },
+    {
+        "id": "spec-control",
+        "label": "📑 Спецификации",
+        "roles": ["spec_controller", "admin"],
+        "priority": 5,
+    },
+    {
+        "id": "finance",
+        "label": "💰 Финансы",
+        "roles": ["finance", "top_manager", "admin"],
+        "priority": 6,
+    },
+]
+
+
+def get_dashboard_tabs(roles: list) -> list:
+    """
+    Get visible dashboard tabs based on user roles.
+
+    Returns list of tab dicts the user can see, sorted by priority.
+    """
+    visible_tabs = []
+    for tab in DASHBOARD_TABS:
+        if any(role in roles for role in tab["roles"]):
+            visible_tabs.append(tab)
+
+    # Sort by priority
+    visible_tabs.sort(key=lambda t: t["priority"])
+    return visible_tabs
+
+
+def get_default_dashboard_tab(roles: list) -> str:
+    """
+    Get default tab for user based on roles.
+
+    Priority:
+    1. overview (if admin/top_manager)
+    2. First workspace tab by priority
+    """
+    visible_tabs = get_dashboard_tabs(roles)
+    if not visible_tabs:
+        return "overview"  # Fallback
+
+    return visible_tabs[0]["id"]
+
+
+def should_show_dashboard_tabs(roles: list) -> bool:
+    """
+    Determine if dashboard tabs should be shown.
+
+    Key UX principle: if user has only ONE workspace role (excluding overview),
+    show workspace directly without tabs.
+
+    Returns True if tabs should be shown, False otherwise.
+    """
+    visible_tabs = get_dashboard_tabs(roles)
+
+    # Separate overview from workspace tabs
+    workspace_tabs = [t for t in visible_tabs if t["id"] != "overview"]
+    has_overview = any(t["id"] == "overview" for t in visible_tabs)
+
+    # Show tabs if:
+    # - User has access to overview (admin/top_manager)
+    # - User has multiple workspace tabs
+    return has_overview or len(workspace_tabs) > 1
+
+
 def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -> list:
     """
     Build role-specific task sections for the dashboard.
@@ -2305,24 +2404,11 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     return sections
 
 
-@rt("/dashboard")
-def get(session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user.get("id")
-    org_id = user.get("org_id")
-    supabase = get_supabase()
-
-    # Get user roles
-    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
-
-    # If no roles, show standard dashboard
-    if not roles:
-        roles = []
-
+def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: dict, supabase) -> list:
+    """
+    Overview tab content - overall stats and role-specific task summaries.
+    Used for admin and top_manager roles.
+    """
     # Get overall quotes stats
     quotes_result = supabase.table("quotes") \
         .select("id, status, workflow_status, total_amount") \
@@ -2373,7 +2459,7 @@ def get(session):
         for r in roles
     ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
 
-    return page_layout("Dashboard",
+    return [
         # Header with roles
         Div(
             H1(f"👋 Добро пожаловать!"),
@@ -2405,12 +2491,12 @@ def get(session):
         ),
 
         # Role-specific task sections
-        H2("📋 Ваши задачи", style="margin-top: 1.5rem; margin-bottom: 1rem;") if task_sections else "",
+        H2("📋 Задачи по отделам", style="margin-top: 1.5rem; margin-bottom: 1rem;") if task_sections else "",
         *task_sections,
 
         # If no tasks, show helpful message
         Div(
-            P("✅ У вас нет активных задач! Все под контролем.", style="color: #059669; font-size: 1.1rem;"),
+            P("✅ Нет активных задач! Все под контролем.", style="color: #059669; font-size: 1.1rem;"),
             cls="card", style="text-align: center; background: #ecfdf5;"
         ) if not task_sections else "",
 
@@ -2429,8 +2515,1082 @@ def get(session):
             ) if recent_quotes else Tbody(Tr(Td("Нет КП", colspan="5", style="text-align: center;")))
         ),
         A("Все КП →", href="/quotes"),
-        session=session
+    ]
+
+
+def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+    """
+    Procurement workspace tab content.
+    Shows quotes with items having brands assigned to current user.
+    """
+    # Get brands assigned to this user
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    quotes_with_details = []
+
+    if my_brands:
+        # Query quote_items with my brands
+        items_result = supabase.table("quote_items") \
+            .select("id, quote_id, brand, procurement_status, quantity, product_name") \
+            .execute()
+
+        # Filter items for my brands (case-insensitive)
+        my_items = [item for item in (items_result.data or [])
+                    if (item.get("brand") or "").lower() in my_brands_lower]
+
+        # Group items by quote_id
+        items_by_quote = {}
+        for item in my_items:
+            qid = item["quote_id"]
+            if qid not in items_by_quote:
+                items_by_quote[qid] = []
+            items_by_quote[qid].append(item)
+
+        quote_ids_with_my_brands = list(items_by_quote.keys())
+
+        if quote_ids_with_my_brands:
+            # Get full quote data for those quotes
+            quotes_result = supabase.table("quotes") \
+                .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at") \
+                .eq("organization_id", org_id) \
+                .in_("id", quote_ids_with_my_brands) \
+                .order("created_at", desc=True) \
+                .execute()
+
+            # Enrich quotes with item details
+            for q in (quotes_result.data or []):
+                q_items = items_by_quote.get(q["id"], [])
+                total_items = len(q_items)
+                completed_items = len([i for i in q_items if i.get("procurement_status") == "completed"])
+                brands_in_quote = list(set([i.get("brand", "") for i in q_items]))
+
+                quotes_with_details.append({
+                    **q,
+                    "my_items": q_items,
+                    "my_items_total": total_items,
+                    "my_items_completed": completed_items,
+                    "my_items_pending": total_items - completed_items,
+                    "my_brands_in_quote": brands_in_quote
+                })
+
+    # Apply status filter if provided
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    # Separate quotes by workflow status
+    pending_quotes = [q for q in quotes_with_details
+                      if q.get("workflow_status") == "pending_procurement"]
+    other_quotes = [q for q in quotes_with_details
+                    if q.get("workflow_status") != "pending_procurement"]
+
+    # Count stats
+    pending_count = len(pending_quotes)
+    in_progress_count = len([q for q in quotes_with_details
+                             if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "pending_sales_review"]])
+    completed_count = len([q for q in quotes_with_details
+                           if q.get("workflow_status") in ["approved", "deal", "sent_to_client"]])
+
+    # Build the table rows
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+
+        my_total = q.get("my_items_total", 0)
+        my_completed = q.get("my_items_completed", 0)
+        brands_list = q.get("my_brands_in_quote", [])
+
+        progress_pct = int((my_completed / my_total * 100) if my_total > 0 else 0)
+        progress_bar = Div(
+            Div(style=f"width: {progress_pct}%; height: 100%; background: #22c55e;"),
+            style="width: 60px; height: 8px; background: #e5e7eb; border-radius: 4px; display: inline-block; margin-right: 0.5rem; overflow: hidden;",
+            title=f"{my_completed}/{my_total} позиций оценено"
+        )
+
+        items_info = Span(progress_bar, f"{my_completed}/{my_total}", style="font-size: 0.875rem; color: #666;")
+
+        brands_display = ", ".join(brands_list[:3])
+        if len(brands_list) > 3:
+            brands_display += f" +{len(brands_list) - 3}"
+
+        return Tr(
+            Td(
+                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
+                Div(brands_display, style="font-size: 0.75rem; color: #888; margin-top: 2px;")
+            ),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(items_info),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Открыть", href=f"/procurement/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and workflow_status == "pending_procurement" else
+                A("Просмотр", href=f"/quotes/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    # Status filter options
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_procurement", "🔶 Ожидают оценки"),
+        ("pending_logistics", "📦 На логистике"),
+        ("pending_customs", "🛃 На таможне"),
+        ("pending_sales_review", "👤 У менеджера продаж"),
+        ("pending_quote_control", "✓ На проверке"),
+        ("approved", "✅ Одобрено"),
+        ("deal", "💼 Сделка"),
+    ]
+
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/dashboard",
+        Hidden(name="tab", value="procurement"),
+        style="margin-bottom: 1rem;"
     )
+
+    return [
+        # Header
+        Div(
+            H1("🛒 Закупки"),
+            P("Рабочая зона менеджера по закупкам"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # My assigned brands
+        Div(
+            H3("Мои бренды"),
+            P(", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору."),
+            cls="card"
+        ),
+
+        # Stats
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("Ожидает оценки"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(in_progress_count), cls="stat-value"),
+                Div("В процессе"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(completed_count), cls="stat-value"),
+                Div("Завершено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(quotes_with_details)), cls="stat-value"),
+                Div("Всего моих КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        # Filter
+        filter_form,
+
+        # Pending quotes section
+        Div(
+            H2("🔶 Ожидают оценки"),
+            P(f"Найдено: {pending_count} КП", style="color: #666; margin-bottom: 1rem;") if status_filter == "all" or not status_filter else "",
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        # Filtered view
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        # Other quotes
+        Div(
+            H2("📋 Остальные КП"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in other_quotes]
+                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if (not status_filter or status_filter == "all") and other_quotes else None,
+    ]
+
+
+def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+    """
+    Logistics workspace tab content.
+    Shows quotes in logistics stage.
+    """
+    # Get quotes for this organization
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_logistics_user") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_quotes = quotes_result.data or []
+
+    logistics_statuses = [
+        "pending_logistics",
+        "pending_customs",
+        "pending_logistics_and_customs",
+        "pending_sales_review",
+    ]
+
+    quotes_with_details = []
+    for q in all_quotes:
+        ws = q.get("workflow_status")
+        if ws in logistics_statuses or status_filter:
+            logistics_done = q.get("logistics_completed_at") is not None
+            customs_done = q.get("customs_completed_at") is not None
+            quotes_with_details.append({
+                **q,
+                "logistics_done": logistics_done,
+                "customs_done": customs_done,
+                "assigned_to_me": q.get("assigned_logistics_user") == user_id
+            })
+
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    pending_quotes = [q for q in quotes_with_details
+                      if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"]
+                      and not q.get("logistics_done")]
+    completed_quotes = [q for q in quotes_with_details
+                        if q.get("logistics_done")]
+
+    pending_count = len(pending_quotes)
+    completed_count = len(completed_quotes)
+
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+        logistics_done = q.get("logistics_done", False)
+        customs_done = q.get("customs_done", False)
+
+        stages_status = []
+        if logistics_done:
+            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
+        else:
+            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
+
+        if customs_done:
+            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
+        else:
+            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
+
+        return Tr(
+            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;")),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(*stages_status),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Работать", href=f"/logistics/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"] else
+                A("Просмотр", href=f"/logistics/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_logistics", "📦 На логистике"),
+        ("pending_customs", "🛃 На таможне (параллельно)"),
+        ("pending_sales_review", "👤 У менеджера продаж"),
+    ]
+
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/dashboard",
+        Hidden(name="tab", value="logistics"),
+        style="margin-bottom: 1rem;"
+    )
+
+    return [
+        Div(
+            H1("🚚 Логистика"),
+            P("Рабочая зона логиста"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("Ожидает логистики"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(completed_count), cls="stat-value"),
+                Div("Завершено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(quotes_with_details)), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        filter_form,
+
+        Div(
+            H2("📦 Ожидают логистики"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        Div(
+            H2("✅ Завершено"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in completed_quotes]
+                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if (not status_filter or status_filter == "all") and completed_quotes else None,
+    ]
+
+
+def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+    """
+    Customs workspace tab content.
+    Shows quotes in customs stage.
+    """
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_customs_user") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_quotes = quotes_result.data or []
+
+    customs_statuses = [
+        "pending_customs",
+        "pending_logistics",
+        "pending_logistics_and_customs",
+        "pending_sales_review",
+    ]
+
+    quotes_with_details = []
+    for q in all_quotes:
+        ws = q.get("workflow_status")
+        if ws in customs_statuses or status_filter:
+            logistics_done = q.get("logistics_completed_at") is not None
+            customs_done = q.get("customs_completed_at") is not None
+            quotes_with_details.append({
+                **q,
+                "logistics_done": logistics_done,
+                "customs_done": customs_done,
+                "assigned_to_me": q.get("assigned_customs_user") == user_id
+            })
+
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    pending_quotes = [q for q in quotes_with_details
+                      if q.get("workflow_status") in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"]
+                      and not q.get("customs_done")]
+    completed_quotes = [q for q in quotes_with_details
+                        if q.get("customs_done")]
+
+    pending_count = len(pending_quotes)
+    completed_count = len(completed_quotes)
+
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+        logistics_done = q.get("logistics_done", False)
+        customs_done = q.get("customs_done", False)
+
+        stages_status = []
+        if logistics_done:
+            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
+        else:
+            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
+
+        if customs_done:
+            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
+        else:
+            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
+
+        return Tr(
+            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;")),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(*stages_status),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Работать", href=f"/customs/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"] else
+                A("Просмотр", href=f"/customs/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_customs", "🛃 На таможне"),
+        ("pending_logistics", "📦 На логистике (параллельно)"),
+        ("pending_sales_review", "👤 У менеджера продаж"),
+    ]
+
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/dashboard",
+        Hidden(name="tab", value="customs"),
+        style="margin-bottom: 1rem;"
+    )
+
+    return [
+        Div(
+            H1("🛃 Таможня"),
+            P("Рабочая зона таможенного отдела"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("Ожидает таможни"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(completed_count), cls="stat-value"),
+                Div("Завершено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(quotes_with_details)), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        filter_form,
+
+        Div(
+            H2("🛃 Ожидают таможни"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        Div(
+            H2("✅ Завершено"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in completed_quotes]
+                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if (not status_filter or status_filter == "all") and completed_quotes else None,
+    ]
+
+
+def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+    """
+    Quote Control workspace tab content.
+    Shows quotes pending review for quote_controller role.
+    """
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, deal_type, current_version_id") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_quotes = quotes_result.data or []
+
+    control_statuses = [
+        "pending_quote_control",
+        "pending_approval",
+        "approved",
+        "sent_to_client",
+    ]
+
+    quotes_with_details = []
+    for q in all_quotes:
+        ws = q.get("workflow_status")
+        if ws in control_statuses or status_filter:
+            quotes_with_details.append({
+                **q,
+                "needs_review": ws == "pending_quote_control",
+                "pending_approval": ws == "pending_approval",
+                "is_approved": ws == "approved",
+                "sent_to_client": ws == "sent_to_client",
+            })
+
+    if status_filter and status_filter != "all":
+        quotes_with_details = [q for q in quotes_with_details
+                               if q.get("workflow_status") == status_filter]
+
+    pending_quotes = [q for q in quotes_with_details if q.get("needs_review")]
+    awaiting_approval_quotes = [q for q in quotes_with_details if q.get("pending_approval")]
+    approved_quotes = [q for q in quotes_with_details if q.get("is_approved") or q.get("sent_to_client")]
+
+    pending_count = len(pending_quotes)
+    awaiting_count = len(awaiting_approval_quotes)
+    approved_count = len(approved_quotes)
+
+    def quote_row(q, show_work_button=True):
+        customer_name = "—"
+        if q.get("customers"):
+            customer_name = q["customers"].get("name", "—")
+
+        workflow_status = q.get("workflow_status") or q.get("status", "draft")
+        deal_type = q.get("deal_type")
+        deal_type_badge = ""
+        if deal_type == "supply":
+            deal_type_badge = Span("Поставка", style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
+        elif deal_type == "transit":
+            deal_type_badge = Span("Транзит", style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
+
+        return Tr(
+            Td(
+                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
+                deal_type_badge if deal_type else "",
+            ),
+            Td(customer_name),
+            Td(workflow_status_badge(workflow_status)),
+            Td(format_money(q.get("total_amount"))),
+            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(
+                A("Проверить", href=f"/quote-control/{q['id']}", role="button",
+                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                if show_work_button and q.get("needs_review") else
+                A("Просмотр", href=f"/quote-control/{q['id']}", style="font-size: 0.875rem;")
+            )
+        )
+
+    status_options = [
+        ("all", "Все статусы"),
+        ("pending_quote_control", "📋 На проверке"),
+        ("pending_approval", "⏳ Ожидает согласования"),
+        ("approved", "✅ Одобрено"),
+        ("sent_to_client", "📤 Отправлено клиенту"),
+    ]
+
+    filter_form = Form(
+        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
+        Select(
+            *[Option(label, value=value, selected=(value == (status_filter or "all")))
+              for value, label in status_options],
+            name="status_filter",
+            id="status_filter",
+            onchange="this.form.submit()",
+            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
+        ),
+        method="get",
+        action="/dashboard",
+        Hidden(name="tab", value="quote-control"),
+        style="margin-bottom: 1rem;"
+    )
+
+    return [
+        Div(
+            H1("✅ Контроль КП"),
+            P("Рабочая зона контроллера КП"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        Div(
+            Div(
+                Div(str(pending_count), cls="stat-value"),
+                Div("На проверке"),
+                cls="card stat-card",
+                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
+            ),
+            Div(
+                Div(str(awaiting_count), cls="stat-value"),
+                Div("Ожидает согласования"),
+                cls="card stat-card",
+                style="border-left: 4px solid #3b82f6;" if awaiting_count > 0 else ""
+            ),
+            Div(
+                Div(str(approved_count), cls="stat-value"),
+                Div("Одобрено/Отправлено"),
+                cls="card stat-card"
+            ),
+            Div(
+                Div(str(len(quotes_with_details)), cls="stat-value"),
+                Div("Всего КП"),
+                cls="card stat-card"
+            ),
+            cls="stats-grid"
+        ),
+
+        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
+
+        Div(
+            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
+            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in quotes_with_details]
+                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if status_filter and status_filter != "all" else None,
+
+        Div(
+            H2("📋 Ожидают проверки"),
+            P("КП требующие проверки контроллера", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if not status_filter or status_filter == "all" else None,
+
+        Div(
+            H2("⏳ Ожидают согласования"),
+            P("КП отправленные на согласование топ-менеджеру", style="color: #666; margin-bottom: 1rem;"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
+                ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if (not status_filter or status_filter == "all") and awaiting_approval_quotes else None,
+
+        Div(
+            H2("✅ Одобренные КП"),
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
+                Tbody(
+                    *[quote_row(q, show_work_button=False) for q in approved_quotes]
+                ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
+            ),
+            cls="card"
+        ) if (not status_filter or status_filter == "all") and approved_quotes else None,
+    ]
+
+
+def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+    """
+    Spec Control workspace tab content.
+    Shows quotes pending specification and existing specifications.
+    """
+    # Get quotes awaiting specification creation
+    quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, currency, created_at, deal_type, current_version_id") \
+        .eq("organization_id", org_id) \
+        .eq("workflow_status", "pending_spec_control") \
+        .order("created_at", desc=True) \
+        .execute()
+
+    pending_quotes = quotes_result.data or []
+
+    # Get all specifications
+    specs_result = supabase.table("specifications") \
+        .select("id, quote_id, specification_number, proposal_idn, status, sign_date, specification_currency, created_at, updated_at, quotes(idn_quote, customers(name))") \
+        .eq("organization_id", org_id) \
+        .order("created_at", desc=True) \
+        .execute()
+
+    all_specs = specs_result.data or []
+
+    if status_filter and status_filter != "all":
+        if status_filter == "pending_quotes":
+            filtered_specs = []
+        else:
+            filtered_specs = [s for s in all_specs if s.get("status") == status_filter]
+    else:
+        filtered_specs = all_specs
+
+    draft_specs = [s for s in all_specs if s.get("status") == "draft"]
+    pending_review_specs = [s for s in all_specs if s.get("status") == "pending_review"]
+    approved_specs = [s for s in all_specs if s.get("status") == "approved"]
+    signed_specs = [s for s in all_specs if s.get("status") == "signed"]
+
+    stats = {
+        "pending_quotes": len(pending_quotes),
+        "draft_specs": len(draft_specs),
+        "pending_review": len(pending_review_specs),
+        "approved": len(approved_specs),
+        "signed": len(signed_specs),
+        "total_specs": len(all_specs),
+    }
+
+    def spec_status_badge(status):
+        status_map = {
+            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
+            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
+            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
+            "signed": ("Подписана", "bg-green-200 text-green-800"),
+        }
+        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
+        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+
+    def deal_type_badge(deal_type):
+        if deal_type == "supply":
+            return Span("Поставка", cls="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800")
+        elif deal_type == "transit":
+            return Span("Транзит", cls="px-2 py-1 rounded text-sm bg-yellow-100 text-yellow-800")
+        return None
+
+    def pending_quote_row(quote):
+        customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
+        return Tr(
+            Td(A(quote.get("idn_quote", "-"), href=f"/quotes/{quote['id']}")),
+            Td(customer_name),
+            Td(deal_type_badge(quote.get("deal_type")) or "-"),
+            Td(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
+            Td(quote.get("created_at", "")[:10] if quote.get("created_at") else "-"),
+            Td(
+                A("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", role="button",
+                  style="background: #28a745; border-color: #28a745; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
+            ),
+        )
+
+    def spec_row(spec, show_work_button=True):
+        quote = spec.get("quotes", {}) or {}
+        customer = quote.get("customers", {}) or {}
+        quote_idn = quote.get("idn_quote", "-")
+        customer_name = customer.get("name", "Unknown")
+
+        return Tr(
+            Td(spec.get("specification_number", "-") or A(quote_idn, href=f"/quotes/{spec.get('quote_id')}")),
+            Td(customer_name),
+            Td(spec_status_badge(spec.get("status", "draft"))),
+            Td(spec.get("specification_currency", "-")),
+            Td(spec.get("created_at", "")[:10] if spec.get("created_at") else "-"),
+            Td(
+                A("Редактировать", href=f"/spec-control/{spec['id']}", role="button",
+                  style="background: #007bff; border-color: #007bff; font-size: 0.875rem; padding: 0.25rem 0.5rem;") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
+                A("Просмотр", href=f"/spec-control/{spec['id']}", style="color: #666; font-size: 0.875rem;"),
+            ),
+        )
+
+    return [
+        H1("📑 Контроль спецификаций"),
+
+        Div(
+            Div(
+                Div(str(stats["pending_quotes"]), cls="stat-value", style="color: #f59e0b;"),
+                Div("Ожидают спецификации", style="font-size: 0.875rem;"),
+                cls="stat-card",
+                style="border-left: 4px solid #f59e0b;" if stats["pending_quotes"] > 0 else ""
+            ),
+            Div(
+                Div(str(stats["pending_review"]), cls="stat-value", style="color: #3b82f6;"),
+                Div("На проверке", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["approved"]), cls="stat-value", style="color: #22c55e;"),
+                Div("Утверждены", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            Div(
+                Div(str(stats["signed"]), cls="stat-value", style="color: #10b981;"),
+                Div("Подписаны", style="font-size: 0.875rem;"),
+                cls="stat-card"
+            ),
+            cls="grid",
+            style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
+        ),
+
+        Div(
+            Label("Фильтр: ", For="status_filter"),
+            Select(
+                Option("Все", value="all", selected=not status_filter or status_filter == "all"),
+                Option(f"Ожидают спецификации ({stats['pending_quotes']})", value="pending_quotes", selected=status_filter == "pending_quotes"),
+                Option(f"Черновики ({stats['draft_specs']})", value="draft", selected=status_filter == "draft"),
+                Option(f"На проверке ({stats['pending_review']})", value="pending_review", selected=status_filter == "pending_review"),
+                Option(f"Утверждены ({stats['approved']})", value="approved", selected=status_filter == "approved"),
+                Option(f"Подписаны ({stats['signed']})", value="signed", selected=status_filter == "signed"),
+                id="status_filter",
+                onchange="window.location.href='/dashboard?tab=spec-control&status_filter=' + this.value"
+            ),
+            style="margin-bottom: 1.5rem;"
+        ),
+
+        Div(
+            H2(f"КП ожидающие спецификации ({stats['pending_quotes']})"),
+            Table(
+                Thead(Tr(Th("№ КП"), Th("Клиент"), Th("Тип сделки"), Th("Сумма"), Th("Дата"), Th("Действие"))),
+                Tbody(
+                    *[pending_quote_row(q) for q in pending_quotes]
+                ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "pending_quotes"] else None,
+
+        Div(
+            H2(f"Спецификации на проверке ({stats['pending_review']})"),
+            Table(
+                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
+                Tbody(
+                    *[spec_row(s) for s in pending_review_specs]
+                ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if not status_filter or status_filter in ["all", "pending_review"] else None,
+
+        Div(
+            H2(f"Черновики ({stats['draft_specs']})"),
+            Table(
+                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
+                Tbody(
+                    *[spec_row(s) for s in draft_specs]
+                ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if status_filter == "draft" else None,
+
+        Div(
+            H2(f"Утверждённые спецификации ({stats['approved']})"),
+            Table(
+                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
+                Tbody(
+                    *[spec_row(s, show_work_button=False) for s in approved_specs]
+                ) if approved_specs else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if status_filter == "approved" else None,
+
+        Div(
+            H2(f"Подписанные спецификации ({stats['signed']})"),
+            Table(
+                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
+                Tbody(
+                    *[spec_row(s, show_work_button=False) for s in signed_specs]
+                ) if signed_specs else Tbody(Tr(Td("Нет подписанных спецификаций", colspan="6", style="text-align: center; color: #666;"))),
+            ),
+            cls="card",
+            style="margin-bottom: 2rem;"
+        ) if status_filter == "signed" or (not status_filter or status_filter == "all") and signed_specs else None,
+    ]
+
+
+def _dashboard_finance_content(user_id: str, org_id: str, supabase) -> list:
+    """
+    Finance workspace tab content.
+    Redirects to the existing /finance page which already has tabs.
+    """
+    # For finance, we show a simple redirect message or embed the finance content
+    # For now, return a link to the full finance page
+    return [
+        H1("💰 Финансы"),
+        P("Финансовый раздел имеет собственные табы для детальной работы."),
+        Div(
+            A("Открыть полный раздел Финансы →", href="/finance", role="button"),
+            style="margin-top: 1rem;"
+        ),
+    ]
+
+
+def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
+    """
+    Build the dashboard tab navigation.
+    """
+    tab_links = []
+    for tab in tabs:
+        is_active = tab["id"] == active_tab
+        tab_links.append(
+            A(
+                tab["label"],
+                href=f"/dashboard?tab={tab['id']}",
+                cls=f"tab tab-lifted {'tab-active' if is_active else ''}",
+                style="font-size: 0.9rem;"
+            )
+        )
+
+    return Div(
+        *tab_links,
+        role="tablist",
+        cls="tabs tabs-lifted",
+        style="margin-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb;"
+    )
+
+
+@rt("/dashboard")
+def get(session, tab: str = None, status_filter: str = None):
+    """
+    Unified Dashboard with role-based tabs.
+
+    - Admin/top_manager see all tabs including overview
+    - Single-role users see their workspace directly without tabs
+    - Multi-role users see relevant tabs
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+    supabase = get_supabase()
+
+    # Get user roles
+    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
+    if not roles:
+        roles = []
+
+    # Get visible tabs for this user
+    visible_tabs = get_dashboard_tabs(roles)
+    show_tabs = should_show_dashboard_tabs(roles)
+
+    # Determine active tab
+    if not tab:
+        tab = get_default_dashboard_tab(roles)
+
+    # Validate that user has access to requested tab
+    valid_tab_ids = [t["id"] for t in visible_tabs]
+    if tab not in valid_tab_ids:
+        # Fallback to default if invalid tab
+        tab = get_default_dashboard_tab(roles)
+
+    # Get tab title for page
+    tab_titles = {
+        "overview": "Обзор",
+        "procurement": "Закупки",
+        "logistics": "Логистика",
+        "customs": "Таможня",
+        "quote-control": "Контроль КП",
+        "spec-control": "Спецификации",
+        "finance": "Финансы",
+    }
+    page_title = f"Dashboard - {tab_titles.get(tab, tab)}"
+
+    # Build tab content based on active tab
+    if tab == "overview":
+        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
+    elif tab == "procurement":
+        content = _dashboard_procurement_content(user_id, org_id, supabase, status_filter)
+    elif tab == "logistics":
+        content = _dashboard_logistics_content(user_id, org_id, supabase, status_filter)
+    elif tab == "customs":
+        content = _dashboard_customs_content(user_id, org_id, supabase, status_filter)
+    elif tab == "quote-control":
+        content = _dashboard_quote_control_content(user_id, org_id, supabase, status_filter)
+    elif tab == "spec-control":
+        content = _dashboard_spec_control_content(user_id, org_id, supabase, status_filter)
+    elif tab == "finance":
+        content = _dashboard_finance_content(user_id, org_id, supabase)
+    else:
+        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
+
+    # Build page with or without tabs
+    if show_tabs:
+        return page_layout(page_title,
+            _build_dashboard_tabs_nav(visible_tabs, tab),
+            Div(*content, id="tab-content"),
+            session=session,
+            current_path="/dashboard"
+        )
+    else:
+        # Single workspace user - show content directly without tabs
+        return page_layout(page_title,
+            *content,
+            session=session,
+            current_path="/dashboard"
+        )
 
 
 # ============================================================================
@@ -6407,264 +7567,13 @@ def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: 
 @rt("/procurement")
 def get(session, status_filter: str = None):
     """
-    Procurement workspace - shows quotes with items having brands assigned to current user.
-
-    Feature #33: Basic procurement page structure
-    Feature #34: Filtered list with my brands, status filter, and item details
+    Redirect to unified dashboard procurement tab.
+    Old URL preserved for backwards compatibility.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has procurement role
-    if not user_has_any_role(session, ["procurement", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get brands assigned to this user
-    my_brands = get_assigned_brands(user_id, org_id)
-    my_brands_lower = [b.lower() for b in my_brands]  # For case-insensitive matching
-
-    # Get quotes that have items with brands assigned to this user
-    # Enhanced: Also get item details for each quote
-
-    quotes_with_details = []
-
-    if my_brands:
-        # Query quote_items with my brands - get more details
-        items_result = supabase.table("quote_items") \
-            .select("id, quote_id, brand, procurement_status, quantity, product_name") \
-            .execute()
-
-        # Filter items for my brands (case-insensitive)
-        my_items = [item for item in (items_result.data or [])
-                    if (item.get("brand") or "").lower() in my_brands_lower]
-
-        # Group items by quote_id
-        items_by_quote = {}
-        for item in my_items:
-            qid = item["quote_id"]
-            if qid not in items_by_quote:
-                items_by_quote[qid] = []
-            items_by_quote[qid].append(item)
-
-        quote_ids_with_my_brands = list(items_by_quote.keys())
-
-        if quote_ids_with_my_brands:
-            # Get full quote data for those quotes
-            quotes_result = supabase.table("quotes") \
-                .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at") \
-                .eq("organization_id", org_id) \
-                .in_("id", quote_ids_with_my_brands) \
-                .order("created_at", desc=True) \
-                .execute()
-
-            # Enrich quotes with item details
-            for q in (quotes_result.data or []):
-                q_items = items_by_quote.get(q["id"], [])
-                # Calculate item stats
-                total_items = len(q_items)
-                completed_items = len([i for i in q_items if i.get("procurement_status") == "completed"])
-                pending_items = total_items - completed_items
-                # Get unique brands in this quote from my assignments
-                brands_in_quote = list(set([i.get("brand", "") for i in q_items]))
-
-                quotes_with_details.append({
-                    **q,
-                    "my_items": q_items,
-                    "my_items_total": total_items,
-                    "my_items_completed": completed_items,
-                    "my_items_pending": pending_items,
-                    "my_brands_in_quote": brands_in_quote
-                })
-
-    # Apply status filter if provided
-    if status_filter and status_filter != "all":
-        quotes_with_details = [q for q in quotes_with_details
-                               if q.get("workflow_status") == status_filter]
-
-    # Separate quotes by workflow status for default view
-    pending_quotes = [q for q in quotes_with_details
-                      if q.get("workflow_status") == "pending_procurement"]
-    other_quotes = [q for q in quotes_with_details
-                    if q.get("workflow_status") != "pending_procurement"]
-
-    # Count stats
-    all_quotes_count = len(quotes_with_details)
-    pending_count = len(pending_quotes)
-    in_progress_count = len([q for q in quotes_with_details
-                             if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "pending_sales_review"]])
-    completed_count = len([q for q in quotes_with_details
-                           if q.get("workflow_status") in ["approved", "deal", "sent_to_client"]])
-
-    # Build the table rows with enhanced item details
-    def quote_row(q, show_work_button=True):
-        customer_name = "—"
-        if q.get("customers"):
-            customer_name = q["customers"].get("name", "—")
-
-        workflow_status = q.get("workflow_status") or q.get("status", "draft")
-
-        # Item progress display
-        my_total = q.get("my_items_total", 0)
-        my_completed = q.get("my_items_completed", 0)
-        brands_list = q.get("my_brands_in_quote", [])
-
-        # Progress bar for items
-        progress_pct = int((my_completed / my_total * 100) if my_total > 0 else 0)
-        progress_bar = Div(
-            Div(style=f"width: {progress_pct}%; height: 100%; background: #22c55e;"),
-            style="width: 60px; height: 8px; background: #e5e7eb; border-radius: 4px; display: inline-block; margin-right: 0.5rem; overflow: hidden;",
-            title=f"{my_completed}/{my_total} позиций оценено"
-        )
-
-        items_info = Span(
-            progress_bar,
-            f"{my_completed}/{my_total}",
-            style="font-size: 0.875rem; color: #666;"
-        )
-
-        # Brands display (truncate if many)
-        brands_display = ", ".join(brands_list[:3])
-        if len(brands_list) > 3:
-            brands_display += f" +{len(brands_list) - 3}"
-
-        return Tr(
-            Td(
-                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
-                Div(brands_display, style="font-size: 0.75rem; color: #888; margin-top: 2px;")
-            ),
-            Td(customer_name),
-            Td(workflow_status_badge(workflow_status)),
-            Td(items_info),
-            Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-            Td(
-                A("Открыть", href=f"/procurement/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and workflow_status == "pending_procurement" else
-                A("Просмотр", href=f"/quotes/{q['id']}", style="font-size: 0.875rem;")
-            )
-        )
-
-    # Status filter options for procurement perspective
-    status_options = [
-        ("all", "Все статусы"),
-        ("pending_procurement", "🔶 Ожидают оценки"),
-        ("pending_logistics", "📦 На логистике"),
-        ("pending_customs", "🛃 На таможне"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
-        ("pending_quote_control", "✓ На проверке"),
-        ("approved", "✅ Одобрено"),
-        ("deal", "💼 Сделка"),
-    ]
-
-    # Status filter form
-    filter_form = Form(
-        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
-        Select(
-            *[Option(label, value=value, selected=(value == (status_filter or "all")))
-              for value, label in status_options],
-            name="status_filter",
-            id="status_filter",
-            onchange="this.form.submit()",
-            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
-        ),
-        method="get",
-        action="/procurement",
-        style="margin-bottom: 1rem;"
-    )
-
-    return page_layout("Procurement Workspace",
-        # Header
-        Div(
-            H1("Закупки"),
-            P(f"Рабочая зона менеджера по закупкам"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # My assigned brands
-        Div(
-            H3("Мои бренды"),
-            P(", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору."),
-            cls="card"
-        ) if True else None,
-
-        # Stats
-        Div(
-            Div(
-                Div(str(pending_count), cls="stat-value"),
-                Div("Ожидает оценки"),
-                cls="card stat-card",
-                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
-            ),
-            Div(
-                Div(str(in_progress_count), cls="stat-value"),
-                Div("В работе"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(len(my_brands)), cls="stat-value"),
-                Div("Моих брендов"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(all_quotes_count), cls="stat-value"),
-                Div("Всего КП"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
-        ),
-
-        # Status filter
-        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
-
-        # Show filtered view if filter is active
-        Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=True) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if status_filter and status_filter != "all" else None,
-
-        # Default view: Pending quotes (requiring my attention) - only when no filter
-        Div(
-            H2("🔶 Ожидают оценки"),
-            P("КП на этапе закупок с моими брендами — требуется моя работа", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        # Other quotes with my brands - only when no filter
-        Div(
-            H2("📋 Другие КП с моими брендами"),
-            P("КП на других этапах workflow", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП # / Бренды"), Th("Клиент"), Th("Статус"), Th("Мои позиции"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in other_quotes]
-                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if (not status_filter or status_filter == "all") and other_quotes else None,
-
-        session=session
-    )
+    url = "/dashboard?tab=procurement"
+    if status_filter:
+        url += f"&status_filter={status_filter}"
+    return RedirectResponse(url, status_code=303)
 
 
 # ============================================================================
@@ -7719,212 +8628,13 @@ def get(quote_id: str, session):
 @rt("/logistics")
 def get(session, status_filter: str = None):
     """
-    Logistics workspace - shows quotes in logistics stage for logistics role.
-
-    Feature UI-020 (v3.0): Logistics workspace list view
-    - Shows quotes in pending_logistics or pending_customs status
-    - Supports head_of_logistics role (sees all quotes)
-    - Logistics role sees quotes on their assigned routes
+    Redirect to unified dashboard logistics tab.
+    Old URL preserved for backwards compatibility.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has logistics role (v3.0: added head_of_logistics)
-    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get quotes for this organization
-    # Logistics sees quotes in pending_logistics or pending_customs (parallel) or pending_sales_review (after)
-    quotes_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_logistics_user") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
-
-    all_quotes = quotes_result.data or []
-
-    # Filter to quotes that are relevant to logistics
-    logistics_statuses = [
-        "pending_logistics",
-        "pending_customs",  # Can work in parallel
-        "pending_logistics_and_customs",  # Parallel logistics+customs stage
-        "pending_sales_review",  # Already done, for reference
-    ]
-
-    quotes_with_details = []
-    for q in all_quotes:
-        ws = q.get("workflow_status")
-        if ws in logistics_statuses or status_filter:
-            logistics_done = q.get("logistics_completed_at") is not None
-            customs_done = q.get("customs_completed_at") is not None
-            quotes_with_details.append({
-                **q,
-                "logistics_done": logistics_done,
-                "customs_done": customs_done,
-                "assigned_to_me": q.get("assigned_logistics_user") == user_id
-            })
-
-    # Apply status filter if provided
-    if status_filter and status_filter != "all":
-        quotes_with_details = [q for q in quotes_with_details
-                               if q.get("workflow_status") == status_filter]
-
-    # Separate quotes by status
-    pending_quotes = [q for q in quotes_with_details
-                      if q.get("workflow_status") in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"]
-                      and not q.get("logistics_done")]
-    completed_quotes = [q for q in quotes_with_details
-                        if q.get("logistics_done")]
-
-    # Count stats
-    all_count = len(quotes_with_details)
-    pending_count = len(pending_quotes)
-    completed_count = len(completed_quotes)
-
-    # Build the table rows
-    def quote_row(q, show_work_button=True):
-        customer_name = "—"
-        if q.get("customers"):
-            customer_name = q["customers"].get("name", "—")
-
-        workflow_status = q.get("workflow_status") or q.get("status", "draft")
-        logistics_done = q.get("logistics_done", False)
-        customs_done = q.get("customs_done", False)
-
-        # Parallel stage progress indicator
-        stages_status = []
-        if logistics_done:
-            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
-        else:
-            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
-
-        if customs_done:
-            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
-        else:
-            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
-
-        return Tr(
-            Td(
-                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
-            ),
-            Td(customer_name),
-            Td(workflow_status_badge(workflow_status)),
-            Td(*stages_status),
-            Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-            Td(
-                A("Работать", href=f"/logistics/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"] else
-                A("Просмотр", href=f"/logistics/{q['id']}", style="font-size: 0.875rem;")
-            )
-        )
-
-    # Status filter options
-    status_options = [
-        ("all", "Все статусы"),
-        ("pending_logistics", "📦 На логистике"),
-        ("pending_customs", "🛃 На таможне (параллельно)"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
-    ]
-
-    # Status filter form
-    filter_form = Form(
-        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
-        Select(
-            *[Option(label, value=value, selected=(value == (status_filter or "all")))
-              for value, label in status_options],
-            name="status_filter",
-            id="status_filter",
-            onchange="this.form.submit()",
-            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
-        ),
-        method="get",
-        action="/logistics",
-        style="margin-bottom: 1rem;"
-    )
-
-    return page_layout("Logistics Workspace",
-        # Header
-        Div(
-            H1("Логистика"),
-            P(f"Рабочая зона логиста"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Stats
-        Div(
-            Div(
-                Div(str(pending_count), cls="stat-value"),
-                Div("Ожидает логистики"),
-                cls="card stat-card",
-                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
-            ),
-            Div(
-                Div(str(completed_count), cls="stat-value"),
-                Div("Завершено"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(all_count), cls="stat-value"),
-                Div("Всего КП"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
-        ),
-
-        # Status filter
-        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
-
-        # Show filtered view if filter is active
-        Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if status_filter and status_filter != "all" else None,
-
-        # Default view: Pending quotes
-        Div(
-            H2("📦 Ожидают логистики"),
-            P("КП требующие расчёта логистики", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        # Completed quotes
-        Div(
-            H2("✅ Завершённые"),
-            P("КП с завершённой логистикой", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in completed_quotes[:10]]
-                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            P(f"Показано 10 из {len(completed_quotes)}", style="color: #888; font-size: 0.875rem; margin-top: 0.5rem;") if len(completed_quotes) > 10 else None,
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        session=session
-    )
+    url = "/dashboard?tab=logistics"
+    if status_filter:
+        url += f"&status_filter={status_filter}"
+    return RedirectResponse(url, status_code=303)
 
 
 # ============================================================================
@@ -8507,211 +9217,13 @@ async def post(session, quote_id: str, request):
 @rt("/customs")
 def get(session, status_filter: str = None):
     """
-    Customs workspace - shows quotes in customs stage for customs role.
-
-    Feature UI-021 (v3.0): Customs workspace list view
-    - Shows quotes in pending_customs or pending_logistics status
-    - Added head_of_customs role access
+    Redirect to unified dashboard customs tab.
+    Old URL preserved for backwards compatibility.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has customs role (includes head_of_customs for v3.0)
-    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get quotes for this organization
-    # Customs sees quotes in pending_customs or pending_logistics (parallel) or pending_sales_review (after)
-    quotes_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_customs_user") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
-
-    all_quotes = quotes_result.data or []
-
-    # Filter to quotes that are relevant to customs
-    customs_statuses = [
-        "pending_customs",
-        "pending_logistics",  # Can work in parallel
-        "pending_logistics_and_customs",  # Parallel logistics+customs stage
-        "pending_sales_review",  # Already done, for reference
-    ]
-
-    quotes_with_details = []
-    for q in all_quotes:
-        ws = q.get("workflow_status")
-        if ws in customs_statuses or status_filter:
-            logistics_done = q.get("logistics_completed_at") is not None
-            customs_done = q.get("customs_completed_at") is not None
-            quotes_with_details.append({
-                **q,
-                "logistics_done": logistics_done,
-                "customs_done": customs_done,
-                "assigned_to_me": q.get("assigned_customs_user") == user_id
-            })
-
-    # Apply status filter if provided
-    if status_filter and status_filter != "all":
-        quotes_with_details = [q for q in quotes_with_details
-                               if q.get("workflow_status") == status_filter]
-
-    # Separate quotes by status
-    pending_quotes = [q for q in quotes_with_details
-                      if q.get("workflow_status") in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"]
-                      and not q.get("customs_done")]
-    completed_quotes = [q for q in quotes_with_details
-                        if q.get("customs_done")]
-
-    # Count stats
-    all_count = len(quotes_with_details)
-    pending_count = len(pending_quotes)
-    completed_count = len(completed_quotes)
-
-    # Build the table rows
-    def quote_row(q, show_work_button=True):
-        customer_name = "—"
-        if q.get("customers"):
-            customer_name = q["customers"].get("name", "—")
-
-        workflow_status = q.get("workflow_status") or q.get("status", "draft")
-        logistics_done = q.get("logistics_done", False)
-        customs_done = q.get("customs_done", False)
-
-        # Parallel stage progress indicator
-        stages_status = []
-        if logistics_done:
-            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
-        else:
-            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
-
-        if customs_done:
-            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
-        else:
-            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
-
-        return Tr(
-            Td(
-                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
-            ),
-            Td(customer_name),
-            Td(workflow_status_badge(workflow_status)),
-            Td(*stages_status),
-            Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-            Td(
-                A("Работать", href=f"/customs/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"] else
-                A("Просмотр", href=f"/customs/{q['id']}", style="font-size: 0.875rem;")
-            )
-        )
-
-    # Status filter options
-    status_options = [
-        ("all", "Все статусы"),
-        ("pending_customs", "🛃 На таможне"),
-        ("pending_logistics", "📦 На логистике (параллельно)"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
-    ]
-
-    # Status filter form
-    filter_form = Form(
-        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
-        Select(
-            *[Option(label, value=value, selected=(value == (status_filter or "all")))
-              for value, label in status_options],
-            name="status_filter",
-            id="status_filter",
-            onchange="this.form.submit()",
-            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
-        ),
-        method="get",
-        action="/customs",
-        style="margin-bottom: 1rem;"
-    )
-
-    return page_layout("Customs Workspace",
-        # Header
-        Div(
-            H1("🛃 Таможня"),
-            P(f"Рабочая зона менеджера ТО (Олег Князев)"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Stats
-        Div(
-            Div(
-                Div(str(pending_count), cls="stat-value"),
-                Div("Ожидает таможни"),
-                cls="card stat-card",
-                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
-            ),
-            Div(
-                Div(str(completed_count), cls="stat-value"),
-                Div("Завершено"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(all_count), cls="stat-value"),
-                Div("Всего КП"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
-        ),
-
-        # Status filter
-        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
-
-        # Show filtered view if filter is active
-        Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if status_filter and status_filter != "all" else None,
-
-        # Default view: Pending quotes
-        Div(
-            H2("🛃 Ожидают таможни"),
-            P("КП требующие таможенного оформления", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        # Completed quotes
-        Div(
-            H2("✅ Завершённые"),
-            P("КП с завершённой таможней", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Параллельные этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in completed_quotes[:10]]
-                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            P(f"Показано 10 из {len(completed_quotes)}", style="color: #888; font-size: 0.875rem; margin-top: 0.5rem;") if len(completed_quotes) > 10 else None,
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        session=session
-    )
+    url = "/dashboard?tab=customs"
+    if status_filter:
+        url += f"&status_filter={status_filter}"
+    return RedirectResponse(url, status_code=303)
 
 
 # ============================================================================
@@ -9399,223 +9911,13 @@ async def post(session, quote_id: str, request):
 @rt("/quote-control")
 def get(session, status_filter: str = None):
     """
-    Quote Control workspace - shows quotes pending review for quote_controller role (Жанна).
-
-    Feature #46: Basic quote control page structure
-    Feature #47: List quotes at pending_quote_control status (included)
+    Redirect to unified dashboard quote-control tab.
+    Old URL preserved for backwards compatibility.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has quote_controller role
-    if not user_has_any_role(session, ["quote_controller", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get quotes for this organization
-    # Quote controller sees quotes at pending_quote_control stage and can view history
-    quotes_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, deal_type, current_version_id") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
-
-    all_quotes = quotes_result.data or []
-
-    # Statuses relevant to quote control
-    control_statuses = [
-        "pending_quote_control",  # Main work status
-        "pending_approval",  # Sent for top manager approval
-        "approved",  # Approved by controller or top manager
-        "sent_to_client",  # Sent to client
-    ]
-
-    quotes_with_details = []
-    for q in all_quotes:
-        ws = q.get("workflow_status")
-        if ws in control_statuses or status_filter:
-            quotes_with_details.append({
-                **q,
-                "needs_review": ws == "pending_quote_control",
-                "pending_approval": ws == "pending_approval",
-                "is_approved": ws == "approved",
-                "sent_to_client": ws == "sent_to_client",
-            })
-
-    # Apply status filter if provided
-    if status_filter and status_filter != "all":
-        quotes_with_details = [q for q in quotes_with_details
-                               if q.get("workflow_status") == status_filter]
-
-    # Separate quotes by review status
-    pending_quotes = [q for q in quotes_with_details
-                      if q.get("needs_review")]
-    awaiting_approval_quotes = [q for q in quotes_with_details
-                                 if q.get("pending_approval")]
-    approved_quotes = [q for q in quotes_with_details
-                       if q.get("is_approved") or q.get("sent_to_client")]
-
-    # Count stats
-    all_count = len(quotes_with_details)
-    pending_count = len(pending_quotes)
-    awaiting_count = len(awaiting_approval_quotes)
-    approved_count = len(approved_quotes)
-
-    # Build the table rows
-    def quote_row(q, show_work_button=True):
-        customer_name = "—"
-        if q.get("customers"):
-            customer_name = q["customers"].get("name", "—")
-
-        workflow_status = q.get("workflow_status") or q.get("status", "draft")
-        deal_type = q.get("deal_type")
-        deal_type_badge = ""
-        if deal_type == "supply":
-            deal_type_badge = Span("Поставка", style="background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
-        elif deal_type == "transit":
-            deal_type_badge = Span("Транзит", style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;")
-
-        return Tr(
-            Td(
-                A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;"),
-                deal_type_badge if deal_type else "",
-            ),
-            Td(customer_name),
-            Td(workflow_status_badge(workflow_status)),
-            Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-            Td(
-                A("Проверить", href=f"/quote-control/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
-                if show_work_button and q.get("needs_review") else
-                A("Просмотр", href=f"/quote-control/{q['id']}", style="font-size: 0.875rem;")
-            )
-        )
-
-    # Status filter options
-    status_options = [
-        ("all", "Все статусы"),
-        ("pending_quote_control", "📋 На проверке"),
-        ("pending_approval", "⏳ Ожидает согласования"),
-        ("approved", "✅ Одобрено"),
-        ("sent_to_client", "📤 Отправлено клиенту"),
-    ]
-
-    # Status filter form
-    filter_form = Form(
-        Label("Фильтр по статусу: ", For="status_filter", style="margin-right: 0.5rem;"),
-        Select(
-            *[Option(label, value=value, selected=(value == (status_filter or "all")))
-              for value, label in status_options],
-            name="status_filter",
-            id="status_filter",
-            onchange="this.form.submit()",
-            style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
-        ),
-        method="get",
-        action="/quote-control",
-        style="margin-bottom: 1rem;"
-    )
-
-    return page_layout("Quote Control Workspace",
-        # Header
-        Div(
-            H1("📋 Контроль КП"),
-            P("Рабочая зона контроллера КП (Жанна)"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Stats
-        Div(
-            Div(
-                Div(str(pending_count), cls="stat-value"),
-                Div("На проверке"),
-                cls="card stat-card",
-                style="border-left: 4px solid #f59e0b;" if pending_count > 0 else ""
-            ),
-            Div(
-                Div(str(awaiting_count), cls="stat-value"),
-                Div("Ожидает согласования"),
-                cls="card stat-card",
-                style="border-left: 4px solid #3b82f6;" if awaiting_count > 0 else ""
-            ),
-            Div(
-                Div(str(approved_count), cls="stat-value"),
-                Div("Одобрено/Отправлено"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(all_count), cls="stat-value"),
-                Div("Всего КП"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
-        ),
-
-        # Status filter
-        Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
-
-        # Show filtered view if filter is active
-        Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if status_filter and status_filter != "all" else None,
-
-        # Default view: Pending review quotes
-        Div(
-            H2("📋 Ожидают проверки"),
-            P("КП требующие проверки контроллера", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        # Awaiting approval quotes
-        Div(
-            H2("⏳ Ожидают согласования"),
-            P("КП отправленные на согласование топ-менеджеру", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
-                ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
-        ) if not status_filter or status_filter == "all" else None,
-
-        # Approved/sent quotes
-        Div(
-            H2("✅ Одобренные"),
-            P("КП одобренные и отправленные клиенту", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in approved_quotes[:10]]
-                ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
-        ) if not status_filter or status_filter == "all" else None,
-
-        session=session
-    )
+    url = "/dashboard?tab=quote-control"
+    if status_filter:
+        url += f"&status_filter={status_filter}"
+    return RedirectResponse(url, status_code=303)
 
 
 # ============================================================================
@@ -10955,265 +11257,13 @@ async def telegram_webhook(request):
 @rt("/spec-control")
 def get(session, status_filter: str = None):
     """
-    Spec Control workspace - shows quotes pending specification and existing specifications
-    for spec_controller role.
-
-    Feature #67: Basic spec control page structure
-    Feature #68: List specifications at pending_review status (included)
-
-    This page shows:
-    1. Quotes awaiting specification creation (workflow_status = pending_spec_control)
-    2. Existing specifications with their review status (draft, pending_review, approved, signed)
+    Redirect to unified dashboard spec-control tab.
+    Old URL preserved for backwards compatibility.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has spec_controller role
-    if not user_has_any_role(session, ["spec_controller", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get quotes awaiting specification creation (pending_spec_control status)
-    quotes_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, currency, created_at, deal_type, current_version_id") \
-        .eq("organization_id", org_id) \
-        .eq("workflow_status", "pending_spec_control") \
-        .order("created_at", desc=True) \
-        .execute()
-
-    pending_quotes = quotes_result.data or []
-
-    # Get all specifications for this organization
-    specs_result = supabase.table("specifications") \
-        .select("id, quote_id, specification_number, proposal_idn, status, sign_date, specification_currency, created_at, updated_at, quotes(idn_quote, customers(name))") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
-
-    all_specs = specs_result.data or []
-
-    # Filter specifications by status if filter is applied
-    if status_filter and status_filter != "all":
-        if status_filter == "pending_quotes":
-            # Show only the pending quotes section (handled separately)
-            filtered_specs = []
-        else:
-            filtered_specs = [s for s in all_specs if s.get("status") == status_filter]
-    else:
-        filtered_specs = all_specs
-
-    # Group specifications by status
-    draft_specs = [s for s in all_specs if s.get("status") == "draft"]
-    pending_review_specs = [s for s in all_specs if s.get("status") == "pending_review"]
-    approved_specs = [s for s in all_specs if s.get("status") == "approved"]
-    signed_specs = [s for s in all_specs if s.get("status") == "signed"]
-
-    # Stats
-    stats = {
-        "pending_quotes": len(pending_quotes),
-        "draft_specs": len(draft_specs),
-        "pending_review": len(pending_review_specs),
-        "approved": len(approved_specs),
-        "signed": len(signed_specs),
-        "total_specs": len(all_specs),
-    }
-
-    # Spec status badge helper
-    def spec_status_badge(status):
-        status_map = {
-            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
-            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
-            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
-            "signed": ("Подписана", "bg-green-200 text-green-800"),
-        }
-        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
-        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
-
-    # Deal type badge helper
-    def deal_type_badge(deal_type):
-        if deal_type == "supply":
-            return Span("Поставка", cls="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800")
-        elif deal_type == "transit":
-            return Span("Транзит", cls="px-2 py-1 rounded text-sm bg-yellow-100 text-yellow-800")
-        return None
-
-    # Quote row for pending quotes section
-    def pending_quote_row(quote):
-        customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
-        return Tr(
-            Td(A(quote.get("idn_quote", "-"), href=f"/quotes/{quote['id']}")),
-            Td(customer_name),
-            Td(deal_type_badge(quote.get("deal_type")) or "-"),
-            Td(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
-            Td(quote.get("created_at", "")[:10] if quote.get("created_at") else "-"),
-            Td(
-                A("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", role="button",
-                  style="background: #28a745; border-color: #28a745; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
-            ),
-        )
-
-    # Spec row for specifications section
-    def spec_row(spec, show_work_button=True):
-        quote = spec.get("quotes", {}) or {}
-        customer = quote.get("customers", {}) or {}
-        quote_idn = quote.get("idn_quote", "-")
-        customer_name = customer.get("name", "Unknown")
-
-        return Tr(
-            Td(spec.get("specification_number", "-") or A(quote_idn, href=f"/quotes/{spec.get('quote_id')}")),
-            Td(customer_name),
-            Td(spec_status_badge(spec.get("status", "draft"))),
-            Td(spec.get("specification_currency", "-")),
-            Td(spec.get("created_at", "")[:10] if spec.get("created_at") else "-"),
-            Td(
-                A("Редактировать", href=f"/spec-control/{spec['id']}", role="button",
-                  style="background: #007bff; border-color: #007bff; font-size: 0.875rem; padding: 0.25rem 0.5rem;") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
-                A("Просмотр", href=f"/spec-control/{spec['id']}", style="color: #666; font-size: 0.875rem;"),
-            ),
-        )
-
-    return page_layout("Контроль спецификаций",
-        H1("Контроль спецификаций"),
-
-        # Stats cards
-        Div(
-            Div(
-                Div(str(stats["pending_quotes"]), cls="stat-value", style="color: #f59e0b;"),
-                Div("Ожидают спецификации", style="font-size: 0.875rem;"),
-                cls="stat-card",
-                style="border-left: 4px solid #f59e0b;" if stats["pending_quotes"] > 0 else ""
-            ),
-            Div(
-                Div(str(stats["pending_review"]), cls="stat-value", style="color: #3b82f6;"),
-                Div("На проверке", style="font-size: 0.875rem;"),
-                cls="stat-card"
-            ),
-            Div(
-                Div(str(stats["approved"]), cls="stat-value", style="color: #22c55e;"),
-                Div("Утверждены", style="font-size: 0.875rem;"),
-                cls="stat-card"
-            ),
-            Div(
-                Div(str(stats["signed"]), cls="stat-value", style="color: #10b981;"),
-                Div("Подписаны", style="font-size: 0.875rem;"),
-                cls="stat-card"
-            ),
-            cls="grid",
-            style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
-        ),
-
-        # Status filter
-        Div(
-            Label("Фильтр: ", For="status_filter"),
-            Select(
-                Option("Все", value="all", selected=not status_filter or status_filter == "all"),
-                Option(f"Ожидают спецификации ({stats['pending_quotes']})", value="pending_quotes", selected=status_filter == "pending_quotes"),
-                Option(f"Черновики ({stats['draft_specs']})", value="draft", selected=status_filter == "draft"),
-                Option(f"На проверке ({stats['pending_review']})", value="pending_review", selected=status_filter == "pending_review"),
-                Option(f"Утверждены ({stats['approved']})", value="approved", selected=status_filter == "approved"),
-                Option(f"Подписаны ({stats['signed']})", value="signed", selected=status_filter == "signed"),
-                id="status_filter",
-                onchange="window.location.href='/spec-control?status_filter=' + this.value"
-            ),
-            style="margin-bottom: 1.5rem;"
-        ),
-
-        # Pending quotes section (quotes waiting for spec creation)
-        Div(
-            H2(f"КП ожидающие спецификации ({stats['pending_quotes']})"),
-            Table(
-                Thead(
-                    Tr(
-                        Th("№ КП"),
-                        Th("Клиент"),
-                        Th("Тип сделки"),
-                        Th("Сумма"),
-                        Th("Дата"),
-                        Th("Действие"),
-                    )
-                ),
-                Tbody(
-                    *[pending_quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
-        ) if not status_filter or status_filter in ["all", "pending_quotes"] else None,
-
-        # Specifications on review section
-        Div(
-            H2(f"Спецификации на проверке ({stats['pending_review']})"),
-            Table(
-                Thead(
-                    Tr(
-                        Th("№ Спецификации"),
-                        Th("Клиент"),
-                        Th("Статус"),
-                        Th("Валюта"),
-                        Th("Дата"),
-                        Th("Действие"),
-                    )
-                ),
-                Tbody(
-                    *[spec_row(s, show_work_button=True) for s in pending_review_specs]
-                ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
-        ) if not status_filter or status_filter in ["all", "pending_review"] else None,
-
-        # Draft specifications section
-        Div(
-            H2(f"Черновики ({stats['draft_specs']})"),
-            Table(
-                Thead(
-                    Tr(
-                        Th("№ Спецификации / КП"),
-                        Th("Клиент"),
-                        Th("Статус"),
-                        Th("Валюта"),
-                        Th("Дата"),
-                        Th("Действие"),
-                    )
-                ),
-                Tbody(
-                    *[spec_row(s, show_work_button=True) for s in draft_specs[:10]]
-                ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
-        ) if not status_filter or status_filter in ["all", "draft"] else None,
-
-        # Approved/Signed specifications section
-        Div(
-            H2(f"Утверждённые и подписанные ({stats['approved'] + stats['signed']})"),
-            Table(
-                Thead(
-                    Tr(
-                        Th("№ Спецификации"),
-                        Th("Клиент"),
-                        Th("Статус"),
-                        Th("Валюта"),
-                        Th("Дата"),
-                        Th("Действие"),
-                    )
-                ),
-                Tbody(
-                    *[spec_row(s, show_work_button=False) for s in (approved_specs + signed_specs)[:10]]
-                ) if (approved_specs + signed_specs) else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
-        ) if not status_filter or status_filter in ["all", "approved", "signed"] else None,
-
-        session=session
-    )
+    url = "/dashboard?tab=spec-control"
+    if status_filter:
+        url += f"&status_filter={status_filter}"
+    return RedirectResponse(url, status_code=303)
 
 
 # ============================================================================
