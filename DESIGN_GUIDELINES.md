@@ -1145,13 +1145,13 @@ table_container(
 
 **Priority 1 (High Traffic):**
 - [x] `/quotes` - Quotes list ✅ DONE (2026-01-22)
-- [ ] `/customers` - Customers list
+- [x] `/customers` - Customers list ✅ DONE (2026-01-22)
 - [ ] `/finance?tab=erps` - ERPS registry (already has custom styling)
-- [ ] `/deals` - Deals list
+- [x] `/deals` - Deals list ✅ DONE (2026-01-22)
 
 **Priority 2 (Medium):**
-- [ ] `/suppliers` - Suppliers list
-- [ ] `/admin?tab=users` - Users management
+- [x] `/suppliers` - Suppliers list ✅ DONE (2026-01-22)
+- [x] `/admin?tab=users` - Users management ✅ DONE (2026-01-22)
 - [ ] Customer detail tabs (КП, Спецификации, Контакты)
 
 **Priority 3 (Low):**
