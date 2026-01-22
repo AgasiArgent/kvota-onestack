@@ -219,7 +219,7 @@ button, [role="button"], .button, a[role="button"] {
 }
 
 /* Primary button (default) - Override ALL button colors including Pico CSS */
-button:not(.secondary):not(.ghost),
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn),
 [role="button"]:not(.secondary):not(.ghost),
 button[type="submit"],
 a[href*="/new"]:not(.sidebar-item) {
@@ -229,7 +229,7 @@ a[href*="/new"]:not(.sidebar-item) {
     border-color: transparent !important;
 }
 
-button:not(.secondary):not(.ghost):hover,
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):hover,
 [role="button"]:not(.secondary):not(.ghost):hover,
 button[type="submit"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover {
@@ -747,11 +747,11 @@ form[method="get"] button {
 
 /* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
 /* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
-button,
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header),
 [role="button"],
 .button,
 button[type="submit"],
-button[type="button"],
+button[type="button"]:not(.sidebar-toggle-btn),
 input[type="submit"],
 input[type="button"],
 a[href*="/new"]:not(.sidebar-item),
@@ -771,11 +771,11 @@ a[href*="/create"]:not(.sidebar-item) {
     cursor: pointer !important;
 }
 
-button:hover,
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):hover,
 [role="button"]:hover,
 .button:hover,
 button[type="submit"]:hover,
-button[type="button"]:hover,
+button[type="button"]:not(.sidebar-toggle-btn):hover,
 input[type="submit"]:hover,
 input[type="button"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover,
