@@ -183,13 +183,18 @@ nav strong {
 
 /* ========== Cards with Hover Effects ========== */
 .card {
+    background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%) !important;
     border-radius: 0.75rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    padding: 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.3);
 }
 
 /* ========== Enhanced Buttons ========== */
