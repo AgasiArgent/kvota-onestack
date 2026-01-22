@@ -1801,14 +1801,28 @@ def page_layout(title, *content, session=None, current_path: str = ""):
             Style(APP_STYLES),
             # HTMX
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
+            # Lucide Icons
+            Script(src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"),
             # Sidebar toggle script
             NotStr(SIDEBAR_JS),
-            # Theme initialization script (runs before body renders to prevent flash)
+            # Theme initialization + Lucide icons initialization
             Script("""
                 (function() {
                     const savedTheme = localStorage.getItem('theme') || 'light';
                     document.documentElement.setAttribute('data-theme', savedTheme);
                 })();
+                // Initialize Lucide icons after DOM loaded
+                document.addEventListener('DOMContentLoaded', function() {
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                });
+                // Also reinitialize after HTMX swaps
+                document.body.addEventListener('htmx:afterSwap', function() {
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                });
             """)
         ),
         Body(
@@ -1819,6 +1833,46 @@ def page_layout(title, *content, session=None, current_path: str = ""):
             )
         ),
         data_theme="light"  # Default theme
+    )
+
+
+# ============================================================================
+# ICON HELPER
+# ============================================================================
+
+def icon(name: str, size: int = 20, cls: str = ""):
+    """
+    Lucide icon helper - renders an icon using data-lucide attribute.
+
+    Args:
+        name: Lucide icon name (e.g., 'layout-dashboard', 'users', 'file-text')
+        size: Icon size in pixels (default 20)
+        cls: Additional CSS classes
+
+    Example:
+        icon('layout-dashboard')  # Dashboard icon
+        icon('users', size=24)    # Users icon, larger
+
+    Common icons mapping (emoji -> Lucide):
+        📊 -> layout-dashboard
+        📋 -> file-text
+        📝 -> plus-circle
+        👥 -> users
+        🛒 -> shopping-cart
+        🏭 -> building-2
+        🚚 -> truck
+        🛃 -> shield-check
+        💰 -> wallet
+        ⚙️ -> settings
+        🔧 -> wrench
+        ✅ -> check-circle
+        📑 -> file-stack
+        🔑 -> key
+    """
+    return I(
+        data_lucide=name,
+        cls=f"lucide-icon {cls}".strip(),
+        style=f"width: {size}px; height: {size}px;"
     )
 
 
@@ -13955,18 +14009,65 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         .erps-table {
             border-collapse: separate;
             border-spacing: 0;
-            font-size: 0.75rem;
-            width: max-content;
-            min-width: 100%;
+            font-size: 0.72rem;
         }
+        /* All columns fixed width */
         .erps-table th, .erps-table td {
-            padding: 0.5rem 0.75rem;
+            padding: 0.3rem 0.4rem;
             border-bottom: 1px solid #e5e7eb;
-            white-space: nowrap;
+            border-right: 1px solid #f0f0f0;
+            text-align: center;
+            width: 75px;
+            min-width: 75px;
+            max-width: 75px;
+            box-sizing: border-box;
         }
+        /* Vertical headers */
         .erps-table th {
             font-weight: 600;
-            background: white;
+            height: 130px;
+            vertical-align: bottom;
+            padding-bottom: 8px;
+            position: relative;
+        }
+        .erps-table th .th-text {
+            writing-mode: vertical-lr;
+            transform: rotate(180deg);
+            display: inline-block;
+            white-space: nowrap;
+            font-size: 0.68rem;
+            letter-spacing: -0.02em;
+            max-height: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Data cells styling */
+        .erps-table td {
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Money columns - right align, bold */
+        .erps-table td.col-money {
+            text-align: right;
+            font-weight: 500;
+        }
+        /* Percent columns */
+        .erps-table td.col-percent {
+            text-align: right;
+        }
+        /* Date columns - smaller font */
+        .erps-table td.col-date {
+            font-size: 0.65rem;
+        }
+        /* Number columns */
+        .erps-table td.col-number {
+            text-align: right;
+        }
+        /* Row hover */
+        .erps-table tbody tr:hover td {
+            background-color: #f0f9ff !important;
         }
         /* Sticky columns: IDN */
         .erps-table th.sticky-idn,
@@ -13975,21 +14076,44 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             left: 0 !important;
             z-index: 20 !important;
             background: #fef3c7 !important;
-            min-width: 80px;
-            max-width: 80px;
+            width: 85px;
+            min-width: 85px;
+            max-width: 85px;
+            text-align: left;
+            font-weight: 600;
             box-shadow: 2px 0 4px -2px rgba(0,0,0,0.15);
+        }
+        .erps-table th.sticky-idn {
+            vertical-align: middle;
+            height: auto;
+            padding: 0.5rem;
+        }
+        .erps-table th.sticky-idn .th-text {
+            writing-mode: horizontal-tb;
+            transform: none;
         }
         /* Sticky columns: Client */
         .erps-table th.sticky-client,
         .erps-table td.sticky-client {
             position: sticky !important;
-            left: 80px !important;
+            left: 85px !important;
             z-index: 20 !important;
             background: #fffbeb !important;
-            min-width: 130px;
-            max-width: 130px;
+            width: 110px;
+            min-width: 110px;
+            max-width: 110px;
+            text-align: left;
             border-right: 2px solid #d97706;
             box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2);
+        }
+        .erps-table th.sticky-client {
+            vertical-align: middle;
+            height: auto;
+            padding: 0.5rem;
+        }
+        .erps-table th.sticky-client .th-text {
+            writing-mode: horizontal-tb;
+            transform: none;
         }
         .erps-table th.sticky-idn,
         .erps-table th.sticky-client {
@@ -14137,16 +14261,23 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         })();
     """)
 
-    # Build table headers
+    # Build table headers with vertical text
     header_cells = [
-        Th("IDN", cls="sticky-idn", style="background: #fef3c7;"),
-        Th("Клиент", cls="sticky-client"),
+        Th(Span("IDN", cls="th-text"), cls="sticky-idn", style="background: #fef3c7;"),
+        Th(Span("Клиент", cls="th-text"), cls="sticky-client"),
     ]
     for col in columns:
         cell_style = f"background: {col['color']};"
-        if col['style']:
-            cell_style += f" {col['style']}"
-        header_cells.append(Th(col['label'], style=cell_style))
+        # Wrap label in span for vertical text
+        header_cells.append(Th(Span(col['label'], cls="th-text"), style=cell_style))
+
+    # Map column types to CSS classes
+    type_to_class = {
+        'money': 'col-money',
+        'percent': 'col-percent',
+        'date': 'col-date',
+        'number': 'col-number',
+    }
 
     # Build table rows
     rows = []
@@ -14159,9 +14290,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             value = spec.get(col['key'])
             formatted = format_value(value, col['type'])
             cell_style = f"background: {col['color']};"
-            if col['style']:
-                cell_style += f" {col['style']}"
-            row_cells.append(Td(formatted, style=cell_style))
+            cell_cls = type_to_class.get(col['type'], '')
+            row_cells.append(Td(formatted, style=cell_style, cls=cell_cls))
         rows.append(Tr(*row_cells))
 
     # Build table
