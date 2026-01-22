@@ -8213,7 +8213,7 @@ def get(quote_id: str, session):
             Div(
                 H1("КП не найдено"),
                 P("КП не существует или у вас нет доступа."),
-                A("Назад к списку", href="/procurement", role="button"),
+                A("Назад к задачам", href="/tasks", role="button"),
                 cls="card"
             ),
             session=session
@@ -8569,7 +8569,7 @@ def get(quote_id: str, session):
                 # Show a disabled "already complete" button when user's items are done
                 Button("✓ Моя оценка завершена", disabled=True,
                        style="background: #6b7280; cursor: default;") if can_edit and my_items_complete else None,
-                A("← Назад к списку", href="/procurement", role="button", cls="secondary",
+                A("← К задачам", href="/tasks", role="button", cls="secondary",
                   style="margin-left: auto;"),
                 style="display: flex; align-items: center; margin-top: 1rem;"
             ),
@@ -9275,7 +9275,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("Quote Not Found"),
             P("The requested quote was not found or you don't have access."),
-            A("← Back to Logistics", href="/logistics"),
+            A("← Back to Tasks", href="/tasks"),
             session=session
         )
 
@@ -9873,7 +9873,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("Quote Not Found"),
             P("The requested quote was not found or you don't have access."),
-            A("← Back to Customs", href="/customs"),
+            A("← Back to Tasks", href="/tasks"),
             session=session
         )
 
@@ -10582,7 +10582,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -10862,9 +10862,17 @@ def get(session, quote_id: str):
         )
 
     return page_layout(f"Проверка КП - {quote.get('idn_quote', '')}",
+        # Back link
+        Div(
+            A("← К задачам", href="/tasks", style="color: #3b82f6; text-decoration: none;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "control", user.get("roles", [])),
+
         # Header
         Div(
-            A("← Вернуться к списку", href="/quote-control", style="color: #3b82f6; text-decoration: none;"),
             H1(icon("file-text", size=28), f" Проверка КП {quote.get('idn_quote', '')}", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #666;"),
             style="margin-bottom: 1rem;"
@@ -11057,7 +11065,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11173,7 +11181,7 @@ def post(session, quote_id: str, comment: str = ""):
         return page_layout("КП не найдено",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11218,7 +11226,7 @@ def post(session, quote_id: str, comment: str = ""):
             H1("✓ КП возвращено на доработку"),
             P(f"КП было успешно возвращено менеджеру по продажам."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
-            A("← Вернуться к списку КП", href="/quote-control", role="button"),
+            A("← К задачам", href="/tasks", role="button"),
             session=session
         )
     else:
@@ -11273,7 +11281,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11436,7 +11444,7 @@ def post(session, quote_id: str, comment: str = ""):
         return page_layout("КП не найдено",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11477,7 +11485,7 @@ def post(session, quote_id: str, comment: str = ""):
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
             *details,
             P("Вы получите уведомление о решении.", style="color: #666;"),
-            A("← Вернуться к списку КП", href="/quote-control", role="button"),
+            A("← К задачам", href="/tasks", role="button"),
             session=session
         )
     else:
@@ -11528,7 +11536,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11691,7 +11699,7 @@ def post(session, quote_id: str, comment: str = ""):
         return page_layout("КП не найдено",
             H1("КП не найдено"),
             P("Запрошенное КП не существует или у вас нет доступа."),
-            A("← Вернуться к списку", href="/quote-control"),
+            A("← К задачам", href="/tasks"),
             session=session
         )
 
@@ -11723,7 +11731,7 @@ def post(session, quote_id: str, comment: str = ""):
             H1("✓ КП одобрено"),
             P(f"КП {idn_quote} было успешно одобрено."),
             P("Теперь менеджер по продажам может отправить его клиенту.", style="color: #666;"),
-            A("← Вернуться к списку КП", href="/quote-control", role="button"),
+            A("← К задачам", href="/tasks", role="button"),
             session=session
         )
     else:
