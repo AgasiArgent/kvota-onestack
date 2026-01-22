@@ -14369,12 +14369,12 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
     # Status badge helper
     def deal_status_badge(status):
         status_map = {
-            "active": ("В работе", "bg-green-200 text-green-800"),
-            "completed": ("Завершена", "bg-blue-200 text-blue-800"),
-            "cancelled": ("Отменена", "bg-red-200 text-red-800"),
+            "active": ("В работе", "status-success"),
+            "completed": ("Завершена", "status-info"),
+            "cancelled": ("Отменена", "status-error"),
         }
-        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
-        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+        label, cls_name = status_map.get(status, (status, "status-neutral"))
+        return Span(label, cls=f"status-badge {cls_name}")
 
     # Deal row helper
     def deal_row(deal):
@@ -14392,45 +14392,51 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         signed_at = deal.get("signed_at", "")[:10] if deal.get("signed_at") else "-"
 
         return Tr(
-            Td(A(deal.get("deal_number", "-"), href=f"/finance/{deal['id']}")),
+            Td(A(deal.get("deal_number", "-"), href=f"/finance/{deal['id']}", style="color: var(--accent); font-weight: 500;")),
             Td(spec.get("specification_number", "-") or spec.get("proposal_idn", "-")),
             Td(customer_name),
-            Td(amount_str, style="text-align: right; font-weight: 500;"),
+            Td(amount_str, cls="col-money"),
             Td(signed_at),
             Td(deal_status_badge(deal.get("status", "active"))),
             Td(
-                A("Подробнее", href=f"/finance/{deal['id']}", role="button",
-                  style="background: #3b82f6; border-color: #3b82f6; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
+                A(icon("eye", size=16), href=f"/finance/{deal['id']}", title="Подробнее", cls="table-action-btn"),
+                cls="col-actions"
             ),
+            cls="clickable-row"
         )
 
     # Build deals table
     def deals_table(deals_list, title, status_color):
         if not deals_list:
             return Div(
-                H3(f"{title} (0)", style=f"color: {status_color};"),
+                H4(f"{title} (0)", style=f"color: {status_color}; margin-bottom: 0.5rem;"),
                 P("Нет сделок", style="color: #666; font-style: italic;"),
-                style="margin-bottom: 2rem;"
+                style="margin-bottom: 1.5rem;"
             )
 
         return Div(
-            H3(f"{title} ({len(deals_list)})", style=f"color: {status_color};"),
-            Table(
-                Thead(
-                    Tr(
-                        Th("№ Сделки"),
-                        Th("№ Спецификации"),
-                        Th("Клиент"),
-                        Th("Сумма", style="text-align: right;"),
-                        Th("Дата подписания"),
-                        Th("Статус"),
-                        Th("Действия"),
-                    )
+            H4(f"{title} ({len(deals_list)})", style=f"color: {status_color}; margin-bottom: 0.75rem;"),
+            Div(
+                Div(
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("№ СДЕЛКИ"),
+                                Th("№ СПЕЦИФИКАЦИИ"),
+                                Th("КЛИЕНТ"),
+                                Th("СУММА", cls="col-money"),
+                                Th("ДАТА"),
+                                Th("СТАТУС"),
+                                Th("", cls="col-actions"),
+                            )
+                        ),
+                        Tbody(*[deal_row(d) for d in deals_list]),
+                        cls="unified-table"
+                    ),
+                    cls="table-responsive"
                 ),
-                Tbody(*[deal_row(d) for d in deals_list]),
-                cls="striped"
-            ),
-            style="margin-bottom: 2rem;"
+                cls="table-container", style="margin: 0; margin-bottom: 1.5rem;"
+            )
         )
 
     # Build filter buttons
