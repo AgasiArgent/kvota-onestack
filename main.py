@@ -16135,23 +16135,24 @@ def get(session, tab: str = "users"):
         # Build users table rows
         user_rows = []
         for u in users_data:
-            # Roles badges
+            # Roles badges - using status-badge style
             role_badges = []
             for i, code in enumerate(u["roles"]):
                 name = u["role_names"][i] if i < len(u["role_names"]) else code
-                color = {
-                    "admin": "#ef4444",
-                    "sales": "#3b82f6",
-                    "procurement": "#10b981",
-                    "logistics": "#f59e0b",
-                    "customs": "#8b5cf6",
-                    "quote_controller": "#ec4899",
-                    "spec_controller": "#06b6d4",
-                    "finance": "#84cc16",
-                    "top_manager": "#f97316"
-                }.get(code, "#6b7280")
+                # Map roles to unified badge colors
+                badge_class = {
+                    "admin": "status-error",
+                    "sales": "status-info",
+                    "procurement": "status-success",
+                    "logistics": "status-warning",
+                    "customs": "status-progress",
+                    "quote_controller": "status-new",
+                    "spec_controller": "status-info",
+                    "finance": "status-success",
+                    "top_manager": "status-warning"
+                }.get(code, "status-neutral")
                 role_badges.append(
-                    Span(name, style=f"background: {color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-right: 4px;")
+                    Span(name, cls=f"status-badge {badge_class}", style="margin-right: 4px;")
                 )
 
             # Telegram status
@@ -16205,18 +16206,25 @@ def get(session, tab: str = "users"):
 
             # Users table
             Div(
-                H3("Пользователи организации"),
-                Table(
-                    Thead(Tr(
-                        Th("ФИО"),
-                        Th("Роли"),
-                        Th("Telegram"),
-                        Th("Дата вступления")
-                    )),
-                    Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="4", style="text-align: center; color: #9ca3af;"))),
-                    cls="striped"
+                Div(
+                    Div(H4("Пользователи организации", style="margin: 0;"), cls="table-header-left"),
+                    cls="table-header"
                 ),
-                cls="card"
+                Div(
+                    Table(
+                        Thead(Tr(
+                            Th("ФИО"),
+                            Th("РОЛИ"),
+                            Th("TELEGRAM"),
+                            Th("ДАТА")
+                        )),
+                        Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="4", style="text-align: center; padding: 2rem; color: #9ca3af;"))),
+                        cls="unified-table"
+                    ),
+                    cls="table-responsive"
+                ),
+                Div(Span(f"Всего: {len(users_data)} пользователей"), cls="table-footer"),
+                cls="table-container", style="margin: 0;"
             ),
 
             # Navigation
