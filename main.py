@@ -2294,7 +2294,7 @@ def get(session):
     """Page shown when user doesn't have required role"""
     return page_layout("Access Denied",
         Div(
-            H1("🚫 Access Denied"),
+            H1(icon("shield-x", size=28), " Access Denied", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("You don't have permission to access this page."),
             P("Contact your administrator if you believe this is an error."),
             Div(
@@ -2452,7 +2452,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(f"⏳ Ожидают согласования ({pending_count})", style="color: #b45309;"),
+                    H2(icon("clock", size=22), f" Ожидают согласования ({pending_count})", style="color: #b45309; display: flex; align-items: center; gap: 0.5rem;"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Запрошено"), Th("Действие"))),
                         Tbody(*approval_rows) if approval_rows else Tbody(Tr(Td("Нет ожидающих", colspan="5", style="text-align: center;")))
@@ -3566,7 +3566,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
         ) if not status_filter or status_filter == "all" else None,
 
         Div(
-            H2("⏳ Ожидают согласования"),
+            H2(icon("clock", size=22), " Ожидают согласования", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("КП отправленные на согласование топ-менеджеру", style="color: #666; margin-bottom: 1rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
@@ -4524,6 +4524,9 @@ def get(quote_id: str, session):
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "overview", user.get("roles", [])),
+
         # Customer info
         Div(
             H3("Customer"),
@@ -4609,7 +4612,7 @@ def get(quote_id: str, session):
 
         # Multi-department approval progress (Bug #8 follow-up)
         Div(
-            H3("📋 Прогресс согласования КП", style="margin-bottom: 1rem;"),
+            H3(icon("file-check", size=20), " Прогресс согласования КП", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
 
             # Progress bar visual with 5 departments
             Div(
@@ -4660,7 +4663,7 @@ def get(quote_id: str, session):
                                 placeholder="Комментарий (необязательно)",
                                 style="width: 100%; margin-bottom: 0.5rem; min-height: 60px;"
                             ),
-                            Button("✅ Одобрить", type="submit", style="background: #16a34a; color: white;"),
+                            Button(icon("check", size=16), " Одобрить", type="submit", style="background: #16a34a; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
                             action=f"/quotes/{quote_id}/approve-department",
                             method="POST"
                         ),
@@ -4700,7 +4703,7 @@ def get(quote_id: str, session):
         Div(
             H3("Workflow"),
             Form(
-                Button("📋 Submit for Quote Control", type="submit",
+                Button(icon("file-text", size=16), " Submit for Quote Control", type="submit",
                        style="background: #ec4899; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
                 P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
@@ -4711,7 +4714,7 @@ def get(quote_id: str, session):
 
         # Workflow Actions (for pending_approval - Top Manager approval)
         Div(
-            H3("⏳ Согласование"),
+            H3(icon("clock", size=20), " Согласование", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Этот КП требует вашего одобрения.", style="margin-bottom: 1rem;"),
             Form(
                 Div(
@@ -4720,10 +4723,10 @@ def get(quote_id: str, session):
                           placeholder="Ваш комментарий...", style="width: 100%; margin-bottom: 1rem;"),
                 ),
                 Div(
-                    Button("✅ Одобрить", type="submit", name="action", value="approve",
-                           style="background: #16a34a; color: white; margin-right: 1rem;"),
-                    Button("❌ Отклонить", type="submit", name="action", value="reject",
-                           style="background: #dc2626; color: white;"),
+                    Button(icon("check", size=16), " Одобрить", type="submit", name="action", value="approve",
+                           style="background: #16a34a; color: white; margin-right: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                    Button(icon("x", size=16), " Отклонить", type="submit", name="action", value="reject",
+                           style="background: #dc2626; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 ),
                 method="post",
                 action=f"/quotes/{quote_id}/manager-decision"
@@ -4757,7 +4760,7 @@ def get(quote_id: str, session):
                     style="display: inline;"
                 ),
                 Form(
-                    Button("✅ Client Accepted - Submit for Spec", type="submit",
+                    Button(icon("check", size=16), " Client Accepted - Submit for Spec", type="submit",
                            style="background: #16a34a; color: white;"),
                     method="post",
                     action=f"/quotes/{quote_id}/submit-spec-control",
@@ -4772,7 +4775,7 @@ def get(quote_id: str, session):
             H3("Workflow"),
             P("Negotiation in progress. When client accepts a version:", style="margin-bottom: 1rem;"),
             Form(
-                Button("✅ Client Accepted Version - Submit for Spec", type="submit",
+                Button(icon("check", size=16), " Client Accepted Version - Submit for Spec", type="submit",
                        style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
                 P("Proceed to specification preparation.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
@@ -7240,7 +7243,7 @@ def get(session):
                 style="background: #f3f4f6; padding: 1rem; border-radius: 8px; margin-top: 1rem;"
             ),
             Form(
-                Button("🔄 Получить новый код", type="submit", name="action", value="new_code",
+                Button(icon("refresh-cw", size=16), " Получить новый код", type="submit", name="action", value="new_code",
                        style="background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;"),
                 method="post",
                 action="/settings/telegram",
@@ -7750,6 +7753,124 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
         )
 
 
+
+
+def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
+    """
+    Create role-based tab navigation for quote detail pages.
+
+    Shows tabs based on user roles:
+    - overview: all users with access to quote
+    - procurement: procurement, admin
+    - logistics: logistics, head_of_logistics, admin
+    - customs: customs, head_of_customs, admin
+    - control: quote_controller, admin
+
+    Args:
+        quote_id: UUID of the quote
+        active_tab: Current active tab (overview, procurement, logistics, customs, control)
+        user_roles: List of user roles
+
+    Returns:
+        Tab navigation component
+    """
+    # Define tabs with role requirements
+    tabs_config = [
+        {
+            "id": "overview",
+            "label": "Обзор",
+            "icon": "📋",
+            "href": f"/quotes/{quote_id}",
+            "roles": None,  # All users with quote access
+        },
+        {
+            "id": "procurement",
+            "label": "Закупки",
+            "icon": "🏭",
+            "href": f"/procurement/{quote_id}",
+            "roles": ["procurement", "admin"],
+        },
+        {
+            "id": "logistics",
+            "label": "Логистика",
+            "icon": "🚚",
+            "href": f"/logistics/{quote_id}",
+            "roles": ["logistics", "head_of_logistics", "admin"],
+        },
+        {
+            "id": "customs",
+            "label": "Таможня",
+            "icon": "🛃",
+            "href": f"/customs/{quote_id}",
+            "roles": ["customs", "head_of_customs", "admin"],
+        },
+        {
+            "id": "control",
+            "label": "Контроль",
+            "icon": "✅",
+            "href": f"/quote-control/{quote_id}",
+            "roles": ["quote_controller", "admin"],
+        },
+    ]
+
+    # Filter tabs based on user roles
+    visible_tabs = []
+    for tab in tabs_config:
+        if tab["roles"] is None:
+            visible_tabs.append(tab)
+        elif any(r in user_roles for r in tab["roles"]):
+            visible_tabs.append(tab)
+
+    # Build tab elements
+    tab_elements = []
+    for tab in visible_tabs:
+        is_active = tab["id"] == active_tab
+
+        # Styling for active vs inactive
+        if is_active:
+            tab_style = """
+                display: flex; align-items: center; gap: 0.5rem;
+                padding: 0.75rem 1.25rem;
+                background: #3b82f6; color: white;
+                border-radius: 8px 8px 0 0;
+                font-weight: 600; font-size: 0.9rem;
+                text-decoration: none;
+                border-bottom: 3px solid #1d4ed8;
+            """
+        else:
+            tab_style = """
+                display: flex; align-items: center; gap: 0.5rem;
+                padding: 0.75rem 1.25rem;
+                background: #f3f4f6; color: #4b5563;
+                border-radius: 8px 8px 0 0;
+                font-size: 0.9rem;
+                text-decoration: none;
+                transition: all 0.2s;
+            """
+
+        tab_elements.append(
+            A(
+                Span(tab["icon"]),
+                Span(tab["label"]),
+                href=tab["href"],
+                style=tab_style,
+                cls="quote-detail-tab" + (" active" if is_active else "")
+            )
+        )
+
+    # Return tabs container with hover style
+    return Div(
+        Style("""
+            .quote-detail-tab:hover:not(.active) {
+                background: #e5e7eb !important;
+                color: #1f2937 !important;
+            }
+        """),
+        Div(
+            *tab_elements,
+            style="display: flex; gap: 0.25rem; border-bottom: 1px solid #e5e7eb; margin-bottom: 1.5rem;"
+        )
+    )
 
 # ============================================================================
 # USER PROFILE PAGE
@@ -9447,7 +9568,7 @@ def get(session, quote_id: str):
         Div(
             Button("💾 Сохранить данные", type="submit", name="action", value="save",
                    style="margin-right: 0.5rem;") if is_editable else None,
-            Button("✅ Завершить логистику", type="submit", name="action", value="complete",
+            Button(icon("check", size=16), " Завершить логистику", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
             Span("✅ Логистика завершена", style="color: #22c55e; font-weight: bold;") if logistics_done else None,
             style="margin-top: 1rem;"
@@ -10114,7 +10235,7 @@ def get(session, quote_id: str):
         Div(
             Button("💾 Сохранить данные", type="submit", name="action", value="save",
                    style="margin-right: 0.5rem;") if is_editable else None,
-            Button("✅ Завершить таможню", type="submit", name="action", value="complete",
+            Button(icon("check", size=16), " Завершить таможню", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
             Span("✅ Таможня завершена", style="color: #22c55e; font-weight: bold;") if customs_done else None,
             style="margin-top: 1rem;"
@@ -12505,7 +12626,7 @@ def get(session, spec_id: str):
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="approved"),
-                    Button("✅ Утверждена", type="submit",
+                    Button(icon("check", size=16), " Утверждена", type="submit",
                            style="background: #3b82f6; border-color: #3b82f6;",
                            disabled=(status == "approved")),
                     action=f"/spec-control/{spec_id}",
@@ -12586,8 +12707,8 @@ def get(session, spec_id: str):
                                         rows="2", style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;"),
                                 style="margin-bottom: 0.5rem;"
                             ),
-                            Button("✅ Одобрить", type="submit",
-                                   style="background: #10b981; border-color: #10b981; margin-right: 0.5rem;"),
+                            Button(icon("check", size=16), " Одобрить", type="submit",
+                                   style="background: #10b981; border-color: #10b981; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                             action=f"/spec-control/{spec_id}",
                             method="POST"
                         ),
