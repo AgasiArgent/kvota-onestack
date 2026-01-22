@@ -100,7 +100,117 @@ app, rt = fast_app(
 
 # Modern, attractive styles with smooth animations and depth
 # Built on top of PicoCSS + DaisyUI + Tailwind for maximum visual appeal
+# Supports light (default) and dark themes via CSS variables
 APP_STYLES = """
+/* ========== Theme Variables ========== */
+/* Light theme (default) - inspired by Behance CRM reference */
+:root {
+    /* Page background */
+    --bg-page: #f5f7fa;
+    --bg-page-alt: #eef1f5;
+
+    /* Sidebar/Nav */
+    --bg-sidebar: #ffffff;
+    --bg-sidebar-hover: #f3f4f6;
+    --bg-sidebar-active: rgba(59, 130, 246, 0.1);
+    --sidebar-border: #e5e7eb;
+    --sidebar-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+    /* Cards */
+    --bg-card: #ffffff;
+    --bg-card-hover: #ffffff;
+    --card-border: #e5e7eb;
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    --card-shadow-hover: 0 12px 24px rgba(59, 130, 246, 0.12);
+
+    /* Text colors */
+    --text-primary: #1f2937;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --text-on-accent: #ffffff;
+
+    /* Accent colors */
+    --accent: #3b82f6;
+    --accent-hover: #2563eb;
+    --accent-light: rgba(59, 130, 246, 0.1);
+    --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+
+    /* Borders */
+    --border-color: #e5e7eb;
+    --border-color-light: #f3f4f6;
+
+    /* Status colors */
+    --status-success: #10b981;
+    --status-warning: #f59e0b;
+    --status-error: #ef4444;
+    --status-info: #3b82f6;
+
+    /* Table */
+    --table-header-bg: #f9fafb;
+    --table-row-hover: rgba(59, 130, 246, 0.06);
+    --table-stripe: rgba(59, 130, 246, 0.02);
+
+    /* Forms */
+    --input-bg: #ffffff;
+    --input-border: #d1d5db;
+    --input-focus-border: #3b82f6;
+    --input-focus-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+    /* Page background */
+    --bg-page: #0f0f1a;
+    --bg-page-alt: #1a1a2e;
+
+    /* Sidebar/Nav */
+    --bg-sidebar: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    --bg-sidebar-hover: rgba(255, 255, 255, 0.1);
+    --bg-sidebar-active: rgba(99, 102, 241, 0.15);
+    --sidebar-border: rgba(255, 255, 255, 0.1);
+    --sidebar-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+    /* Cards */
+    --bg-card: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%);
+    --bg-card-hover: linear-gradient(135deg, #353550 0%, #262638 100%);
+    --card-border: rgba(255, 255, 255, 0.05);
+    --card-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    --card-shadow-hover: 0 20px 40px rgba(99, 102, 241, 0.3);
+
+    /* Text colors */
+    --text-primary: #ffffff;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-on-accent: #ffffff;
+
+    /* Accent colors */
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-light: rgba(99, 102, 241, 0.15);
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+
+    /* Borders */
+    --border-color: rgba(255, 255, 255, 0.1);
+    --border-color-light: rgba(255, 255, 255, 0.05);
+
+    /* Status colors (same) */
+    --status-success: #10b981;
+    --status-warning: #f59e0b;
+    --status-error: #ef4444;
+    --status-info: #3b82f6;
+
+    /* Table */
+    --table-header-bg: rgba(99, 102, 241, 0.1);
+    --table-row-hover: rgba(99, 102, 241, 0.12);
+    --table-stripe: rgba(99, 102, 241, 0.03);
+
+    /* Forms */
+    --input-bg: #1e1e2f;
+    --input-border: rgba(255, 255, 255, 0.15);
+    --input-focus-border: #6366f1;
+    --input-focus-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
 /* ========== Global Enhancements ========== */
 * {
     transition: all 0.2s ease-in-out;
@@ -108,34 +218,39 @@ APP_STYLES = """
 
 body {
     line-height: 1.6;
+    background: var(--bg-page);
+    color: var(--text-primary);
 }
 
 h1 {
     font-size: 1.875rem;
     font-weight: 700;
     margin-bottom: 1rem;
+    color: var(--text-primary);
 }
 
 h2 {
     font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 0.75rem;
+    color: var(--text-primary);
 }
 
 h3 {
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
+    color: var(--text-primary);
 }
 
-/* ========== Navigation Bar with Gradient ========== */
+/* ========== Navigation Bar ========== */
 nav {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    color: white;
+    background: var(--bg-sidebar);
+    color: var(--text-primary);
     padding: 1rem 0;
     margin-bottom: 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    overflow-x: auto; /* Prevent horizontal overflow */
+    box-shadow: var(--sidebar-shadow);
+    overflow-x: auto;
 }
 
 nav .nav-container {
@@ -145,7 +260,7 @@ nav .nav-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-wrap: wrap; /* Allow wrapping on small screens */
+    flex-wrap: wrap;
     gap: 1rem;
 }
 
@@ -154,31 +269,30 @@ nav ul {
     margin: 0;
     padding: 0;
     display: flex;
-    gap: 0.75rem; /* Reduced gap to fit more items */
+    gap: 0.75rem;
     align-items: center;
-    flex-wrap: wrap; /* Allow menu items to wrap */
+    flex-wrap: wrap;
 }
 
 nav a {
-    color: #a0a0ff;
+    color: var(--text-secondary);
     text-decoration: none;
-    padding: 0.5rem 0.75rem; /* Slightly reduced padding */
+    padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
-    white-space: nowrap; /* Prevent text wrapping inside links */
-    font-size: 0.9375rem; /* Slightly smaller for better fit */
+    white-space: nowrap;
+    font-size: 0.9375rem;
 }
 
 nav a:hover {
-    color: white;
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--accent);
+    background: var(--accent-light);
     transform: translateY(-2px);
 }
 
 nav strong {
-    color: white;
-    font-size: 1.1rem; /* Slightly smaller */
+    color: var(--text-primary);
+    font-size: 1.1rem;
     font-weight: 700;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* ========== Cards with Hover Effects ========== */
@@ -186,23 +300,21 @@ nav strong {
 [style*="border-left"],
 .stat-card,
 div[style*="max-width"][style*="margin"] {
-    background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%) !important;
+    background: var(--bg-card) !important;
     border-radius: 0.75rem !important;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3) !important;
+    box-shadow: var(--card-shadow) !important;
     padding: 1.5rem !important;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.05) !important;
-    border-top: none !important;
-    border-left: none !important;
+    border: 1px solid var(--card-border) !important;
 }
 
 .card:hover,
 [style*="border-left"]:hover,
 .stat-card:hover,
 div[style*="max-width"][style*="margin"]:hover {
-    transform: translateY(-8px) scale(1.02) !important;
-    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3) !important;
-    border-color: rgba(99, 102, 241, 0.3) !important;
+    transform: translateY(-4px) !important;
+    box-shadow: var(--card-shadow-hover) !important;
+    border-color: var(--accent) !important;
 }
 
 /* ========== Enhanced Buttons ========== */
@@ -219,32 +331,32 @@ button, [role="button"], .button, a[role="button"] {
 }
 
 /* Primary button (default) - Override ALL button colors including Pico CSS */
-button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn),
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle),
 [role="button"]:not(.secondary):not(.ghost),
 button[type="submit"],
 a[href*="/new"]:not(.sidebar-item) {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
-    color: white !important;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
+    background: var(--accent-gradient) !important;
+    color: var(--text-on-accent) !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25) !important;
     border-color: transparent !important;
 }
 
-button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):hover,
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):hover,
 [role="button"]:not(.secondary):not(.ghost):hover,
 button[type="submit"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35) !important;
+    filter: brightness(1.1);
 }
 
 /* Secondary button */
 button.secondary,
 [role="button"].secondary,
 .button.secondary {
-    background: white;
-    color: #4f46e5;
-    border: 1.5px solid #6366f1;
+    background: var(--bg-card);
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
@@ -253,7 +365,7 @@ button.secondary:hover,
 .button.secondary:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
-    background: #f5f6ff;
+    background: var(--accent-light);
 }
 
 /* Ghost button */
@@ -261,14 +373,14 @@ button.ghost,
 [role="button"].ghost,
 .button.ghost {
     background: transparent;
-    color: #6366f1;
+    color: var(--accent);
     border: none;
 }
 
 button.ghost:hover,
 [role="button"].ghost:hover,
 .button.ghost:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: var(--accent-light);
 }
 
 /* Success button */
@@ -427,7 +539,8 @@ table {
     width: 100%;
     border-radius: 0.5rem;
     overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--card-shadow);
+    background: var(--bg-card);
 }
 
 table tbody tr {
@@ -436,18 +549,17 @@ table tbody tr {
 
 /* Zebra striping - alternating row colors */
 table tbody tr:nth-child(even) {
-    background: rgba(99, 102, 241, 0.03);
+    background: var(--table-stripe);
 }
 
 table tbody tr:hover {
-    background: rgba(99, 102, 241, 0.12) !important;
+    background: var(--table-row-hover) !important;
     cursor: pointer;
-    transform: scale(1.01);
 }
 
 /* Table headers */
 table thead {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    background: var(--table-header-bg);
 }
 
 table thead th {
@@ -456,16 +568,17 @@ table thead th {
     font-size: 0.75rem;
     letter-spacing: 0.075em;
     padding: 1rem 0.75rem;
-    border-bottom: 2px solid rgba(99, 102, 241, 0.2);
-    color: #4338ca;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--accent);
     text-align: left;
 }
 
 /* Table cells */
 table tbody td {
     padding: 0.875rem 0.75rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid var(--border-color-light);
     font-size: 0.9375rem;
+    color: var(--text-primary);
 }
 
 /* First and last columns padding */
@@ -499,7 +612,7 @@ label {
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
     display: block;
-    color: rgba(0, 0, 0, 0.8);
+    color: var(--text-primary);
 }
 
 /* Input fields */
@@ -513,11 +626,12 @@ select,
 textarea {
     width: 100%;
     padding: 0.625rem 0.875rem;
-    border: 1.5px solid rgba(0, 0, 0, 0.15);
+    border: 1.5px solid var(--input-border);
     border-radius: 0.5rem;
     font-size: 0.9375rem;
     transition: all 0.2s ease;
-    background: white;
+    background: var(--input-bg);
+    color: var(--text-primary);
 }
 
 input[type="text"]:hover,
@@ -528,7 +642,7 @@ input[type="date"]:hover,
 input[type="tel"]:hover,
 select:hover,
 textarea:hover {
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: var(--accent);
 }
 
 input[type="text"]:focus,
@@ -540,15 +654,15 @@ input[type="tel"]:focus,
 select:focus,
 textarea:focus {
     outline: none;
-    border-color: rgb(99, 102, 241);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    border-color: var(--input-focus-border);
+    box-shadow: var(--input-focus-shadow);
 }
 
 /* Disabled state */
 input:disabled,
 select:disabled,
 textarea:disabled {
-    background: rgba(0, 0, 0, 0.05);
+    background: var(--bg-page-alt);
     cursor: not-allowed;
     opacity: 0.6;
 }
@@ -622,19 +736,19 @@ textarea {
 
 /* ========== Enhanced Links ========== */
 a {
-    color: #6366f1;
+    color: var(--accent);
     text-decoration: none;
     transition: all 0.2s ease;
     font-weight: 500;
 }
 
 a:hover {
-    color: #4f46e5;
+    color: var(--accent-hover);
     text-decoration: underline;
 }
 
 a:active {
-    color: #4338ca;
+    color: var(--accent-hover);
 }
 
 /* ========== DaisyUI Stats Component Support ========== */
@@ -643,9 +757,9 @@ a:active {
     grid-auto-flow: column;
     gap: 0;
     border-radius: 1rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--card-shadow);
     overflow: hidden;
-    background: white;
+    background: var(--bg-card);
 }
 
 .stat {
@@ -653,7 +767,7 @@ a:active {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    border-right: 1px solid rgba(0, 0, 0, 0.05);
+    border-right: 1px solid var(--border-color-light);
 }
 
 .stat:last-child {
@@ -663,7 +777,7 @@ a:active {
 .stat-title {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #64748b;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -672,11 +786,12 @@ a:active {
     font-size: 2.25rem;
     font-weight: 800;
     line-height: 1.2;
+    color: var(--accent);
 }
 
 .stat-desc {
     font-size: 0.875rem;
-    color: #64748b;
+    color: var(--text-secondary);
     font-weight: 400;
 }
 
@@ -871,11 +986,11 @@ button[style*="#0172AD"] {
 .tab {
     padding: 0.75rem 1.5rem;
     border-radius: 0.5rem 0.5rem 0 0;
-    background: rgba(99, 102, 241, 0.05);
-    color: #94a3b8;
+    background: var(--accent-light);
+    color: var(--text-secondary);
     font-weight: 500;
     font-size: 0.9375rem;
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--border-color);
     border-bottom: none;
     position: relative;
     transition: all 0.3s ease;
@@ -884,17 +999,17 @@ button[style*="#0172AD"] {
 }
 
 .tab:hover {
-    background: rgba(99, 102, 241, 0.08);
-    color: #64748b;
+    background: var(--bg-sidebar-hover);
+    color: var(--text-primary);
 }
 
 .tab-active {
-    background: white !important;
-    color: #4f46e5 !important;
+    background: var(--bg-card) !important;
+    color: var(--accent) !important;
     font-weight: 600;
     transform: translateY(-4px) scale(1.05);
-    box-shadow: 0 -4px 12px rgba(99, 102, 241, 0.15);
-    border-color: rgba(99, 102, 241, 0.2);
+    box-shadow: 0 -4px 12px rgba(59, 130, 246, 0.15);
+    border-color: var(--accent);
     z-index: 10;
 }
 
@@ -905,7 +1020,7 @@ button[style*="#0172AD"] {
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    background: var(--accent-gradient);
     border-radius: 0.5rem 0.5rem 0 0;
 }
 
@@ -938,10 +1053,10 @@ button[style*="#0172AD"] {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%);
+    background: var(--bg-card);
     border-radius: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
@@ -954,19 +1069,19 @@ button[style*="#0172AD"] {
     left: 0;
     right: 0;
     height: 3px;
-    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    background: var(--accent-gradient);
 }
 
 .stat:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3);
-    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-4px);
+    box-shadow: var(--card-shadow-hover);
+    border-color: var(--accent);
 }
 
 .stat-title {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #94a3b8;
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
@@ -975,15 +1090,12 @@ button[style*="#0172AD"] {
     font-size: 2.25rem;
     font-weight: 800;
     line-height: 1.2;
-    background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--accent);
 }
 
 .stat-desc {
     font-size: 0.875rem;
-    color: #94a3b8;
+    color: var(--text-secondary);
     font-weight: 400;
 }
 
@@ -2657,9 +2769,9 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
             onchange="this.form.submit()",
             style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
         ),
+        Hidden(name="tab", value="procurement"),
         method="get",
         action="/dashboard",
-        Hidden(name="tab", value="procurement"),
         style="margin-bottom: 1rem;"
     )
 
@@ -2846,9 +2958,9 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
             onchange="this.form.submit()",
             style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
         ),
+        Hidden(name="tab", value="logistics"),
         method="get",
         action="/dashboard",
-        Hidden(name="tab", value="logistics"),
         style="margin-bottom: 1rem;"
     )
 
@@ -3014,9 +3126,9 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
             onchange="this.form.submit()",
             style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
         ),
+        Hidden(name="tab", value="customs"),
         method="get",
         action="/dashboard",
-        Hidden(name="tab", value="customs"),
         style="margin-bottom: 1rem;"
     )
 
@@ -3176,9 +3288,9 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
             onchange="this.form.submit()",
             style="padding: 0.375rem 0.75rem; border-radius: 4px; border: 1px solid #d1d5db;"
         ),
+        Hidden(name="tab", value="quote-control"),
         method="get",
         action="/dashboard",
-        Hidden(name="tab", value="quote-control"),
         style="margin-bottom: 1rem;"
     )
 
