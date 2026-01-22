@@ -1362,8 +1362,8 @@ button[style*="#0172AD"] {
 }
 
 .theme-toggle:hover {
-    background: var(--accent-light) !important;
-    color: var(--accent) !important;
+    background: var(--border-color) !important;
+    color: var(--text-primary) !important;
     transform: none !important;
     box-shadow: none !important;
 }
@@ -1371,8 +1371,8 @@ button[style*="#0172AD"] {
 /* Theme toggle icons - show/hide based on current theme */
 .theme-icon-moon,
 .theme-icon-sun {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
 }
 
@@ -1548,8 +1548,8 @@ def sidebar(session, current_path: str = ""):
             # Footer with theme toggle
             Div(
                 Button(
-                    icon("moon", size=16, cls="theme-icon-moon"),
-                    icon("sun", size=16, cls="theme-icon-sun"),
+                    icon("moon", size=18, cls="theme-icon-moon"),
+                    icon("sun", size=18, cls="theme-icon-sun"),
                     cls="theme-toggle",
                     onclick="toggleTheme()",
                     type="button",
@@ -1674,8 +1674,8 @@ def sidebar(session, current_path: str = ""):
             ),
             Div(
                 Button(
-                    icon("moon", size=16, cls="theme-icon-moon"),
-                    icon("sun", size=16, cls="theme-icon-sun"),
+                    icon("moon", size=18, cls="theme-icon-moon"),
+                    icon("sun", size=18, cls="theme-icon-sun"),
                     cls="theme-toggle",
                     onclick="toggleTheme()",
                     type="button",
@@ -3206,7 +3206,7 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
         filter_form,
 
         Div(
-            H2("📦 Ожидают логистики"),
+            H2(icon("package", size=22), " Ожидают логистики", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
@@ -3228,7 +3228,7 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2("✅ Завершено"),
+            H2(icon("check-circle", size=22), " Завершено", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
@@ -3396,7 +3396,7 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2("✅ Завершено"),
+            H2(icon("check-circle", size=22), " Завершено", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
