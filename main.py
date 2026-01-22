@@ -182,19 +182,27 @@ nav strong {
 }
 
 /* ========== Cards with Hover Effects ========== */
-.card {
+.card,
+[style*="border-left"],
+.stat-card,
+div[style*="max-width"][style*="margin"] {
     background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%) !important;
-    border-radius: 0.75rem;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
-    padding: 1.5rem;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.75rem !important;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3) !important;
+    padding: 1.5rem !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    border-top: none !important;
+    border-left: none !important;
 }
 
-.card:hover {
-    transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3);
-    border-color: rgba(99, 102, 241, 0.3);
+.card:hover,
+[style*="border-left"]:hover,
+.stat-card:hover,
+div[style*="max-width"][style*="margin"]:hover {
+    transform: translateY(-8px) scale(1.02) !important;
+    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3) !important;
+    border-color: rgba(99, 102, 241, 0.3) !important;
 }
 
 /* ========== Enhanced Buttons ========== */
@@ -673,17 +681,6 @@ a:active {
 }
 
 /* ========== Additional Polish ========== */
-/* Remove/hide border-left on cards (user feedback: looks like strange brackets) */
-.card[style*="border-left"] {
-    border-left: none !important;
-    border-top: 3px solid currentColor;
-    transition: all 0.3s ease;
-}
-
-.card[style*="border-left"]:hover {
-    border-top-width: 4px !important;
-}
-
 /* Better spacing for headings with emojis */
 h2:first-line,
 h3:first-line {
