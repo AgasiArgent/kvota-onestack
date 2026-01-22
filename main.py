@@ -909,6 +909,19 @@ button[style*="#0172AD"] {
     border-radius: 0.5rem 0.5rem 0 0;
 }
 
+/* Remove DaisyUI tab-lifted corner decorations (black corners) */
+.tabs-lifted > .tab::before,
+.tabs-lifted > .tab::after,
+.tabs-lifted > .tab-active::after {
+    display: none !important;
+}
+
+/* Also hide any corner elements from daisyUI tabs-lifted */
+.tabs-lifted::before,
+.tabs-lifted::after {
+    display: none !important;
+}
+
 /* ========== Enhanced Stat Cards with Gradients ========== */
 .stats {
     display: grid;
@@ -1002,59 +1015,62 @@ button[style*="#0172AD"] {
 }
 
 .sidebar-header {
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
-    justify-content: center;
-    min-height: 60px;
+    justify-content: space-between;
+    min-height: 56px;
+    gap: 0.5rem;
 }
 
-/* Toggle button is now the logo area */
-.sidebar-toggle-btn {
+.sidebar-logo {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 0.5rem;
-    transition: all 0.2s;
-    width: 100%;
-}
-
-.sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.sidebar-toggle-icon {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    border-radius: 0.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
+    gap: 0.5rem;
+    text-decoration: none;
     color: white;
-    transition: transform 0.3s ease;
 }
 
-.sidebar.collapsed .sidebar-toggle-icon {
-    transform: rotate(180deg);
-}
-
-.sidebar-toggle-text {
+.sidebar-logo-text {
     font-size: 1.1rem;
     font-weight: 700;
     color: white;
     white-space: nowrap;
 }
 
-.sidebar.collapsed .sidebar-toggle-text {
+.sidebar.collapsed .sidebar-logo-text {
     display: none;
+}
+
+.sidebar-toggle-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: #94a3b8;
+    transition: all 0.2s;
+}
+
+.sidebar-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+.sidebar.collapsed .sidebar-header {
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-toggle-btn {
+    width: 36px;
+    height: 36px;
 }
 
 .sidebar-nav {
@@ -1337,9 +1353,13 @@ def sidebar(session, current_path: str = ""):
         # Not logged in - show minimal sidebar with login
         return Aside(
             Div(
+                A(
+                    Span("Kvota", cls="sidebar-logo-text"),
+                    href="/",
+                    cls="sidebar-logo"
+                ),
                 Button(
                     Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
-                    Span("Kvota", cls="sidebar-toggle-text"),
                     cls="sidebar-toggle-btn",
                     onclick="toggleSidebar()",
                     type="button"
@@ -1379,7 +1399,7 @@ def sidebar(session, current_path: str = ""):
     if is_admin or any(r in roles for r in ["sales", "sales_manager", "quote_controller"]):
         sales_items = [
             {"icon": "📋", "label": "Коммерческие предложения", "href": "/quotes", "roles": ["sales", "sales_manager", "admin", "quote_controller"]},
-            {"icon": "➕", "label": "Новое КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]},
+            {"icon": "📝", "label": "Новое КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]},
             {"icon": "👥", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]},
         ]
     if sales_items:
@@ -1472,11 +1492,15 @@ def sidebar(session, current_path: str = ""):
     initials = email[0].upper() if email else "U"
 
     return Aside(
-        # Header with toggle button (replaces logo link)
+        # Header with logo and separate toggle button
         Div(
+            A(
+                Span("Kvota", cls="sidebar-logo-text"),
+                href="/dashboard",
+                cls="sidebar-logo"
+            ),
             Button(
                 Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
-                Span("Kvota", cls="sidebar-toggle-text"),
                 cls="sidebar-toggle-btn",
                 onclick="toggleSidebar()",
                 type="button"
