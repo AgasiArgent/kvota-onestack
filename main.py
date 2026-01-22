@@ -4917,48 +4917,55 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Products (extended view with all columns)
+        # Products (unified table design)
         Div(
             Div(
-                H3(f"Позиции ({len(items)})", style="margin: 0;"),
                 Div(
-                    (Div(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
-                        style="font-size: 1.1rem; font-weight: 500; color: #059669; margin-right: 1.5rem;") if quote.get('total_amount') else None),
-                    (Div(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
-                        style="font-size: 1.1rem; font-weight: 500; color: #059669;") if quote.get('total_profit_usd') is not None else None),
-                    style="display: flex; align-items: center;"
+                    H4(f"Позиции ({len(items)})", style="margin: 0;"),
+                    cls="table-header-left"
                 ),
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                Div(
+                    (Span(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
+                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_amount') else None),
+                    (Span(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
+                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_profit_usd') is not None else None),
+                    A(icon("plus", size=16), " Добавить", href=f"/quotes/{quote_id}/products", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    cls="table-header-right", style="display: flex; align-items: center;"
+                ),
+                cls="table-header"
             ),
-            Table(
-                Thead(Tr(
-                    Th("№"),
-                    Th("IDN-SKU"),
-                    Th("БРЕНД"),
-                    Th("НАИМЕНОВАНИЕ"),
-                    Th("КОЛ-ВО"),
-                    Th("ЕД.ИЗМ"),
-                    Th("ЦЕНА С НДС"),
-                    Th("СУММА С НДС")
-                )),
-                Tbody(
-                    *[Tr(
-                        Td(str(idx + 1)),
-                        Td(f"{quote.get('idn_quote', '')}-{idx + 1}" if quote.get('idn_quote') else "—"),
-                        Td(item.get("brand", "—")),
-                        Td(item.get("product_name", "—")),
-                        Td(str(item.get("quantity", 0))),
-                        Td(item.get("unit", "шт")),
-                        Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB")) if item.get("base_price_vat") else "—"),
-                        Td(format_money(
-                            (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else None,
-                            quote.get("currency", "RUB")
-                        ) if item.get("base_price_vat") else "—")
-                    ) for idx, item in enumerate(items)]
-                ) if items else Tbody(Tr(Td("Нет товаров", colspan="8", style="text-align: center;")))
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("№"),
+                        Th("IDN-SKU"),
+                        Th("БРЕНД"),
+                        Th("НАИМЕНОВАНИЕ"),
+                        Th("КОЛ-ВО", cls="col-number"),
+                        Th("ЕД."),
+                        Th("ЦЕНА", cls="col-money"),
+                        Th("СУММА", cls="col-money")
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(str(idx + 1)),
+                            Td(f"{quote.get('idn_quote', '')}-{idx + 1}" if quote.get('idn_quote') else "—"),
+                            Td(item.get("brand", "—")),
+                            Td(item.get("product_name", "—")),
+                            Td(str(item.get("quantity", 0)), cls="col-number"),
+                            Td(item.get("unit", "шт")),
+                            Td(format_money(item.get("base_price_vat"), quote.get("currency", "RUB")) if item.get("base_price_vat") else "—", cls="col-money"),
+                            Td(format_money(
+                                (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else None,
+                                quote.get("currency", "RUB")
+                            ) if item.get("base_price_vat") else "—", cls="col-money")
+                        ) for idx, item in enumerate(items)]
+                    ) if items else Tbody(Tr(Td("Нет товаров. Добавьте позиции.", colspan="8", style="text-align: center; padding: 2rem; color: #666;")))
+                ),
+                cls="table-responsive"
             ),
-            A("+ Добавить товары", href=f"/quotes/{quote_id}/products") if not items else None,
-            cls="card"
+            Div(Span(f"Всего: {len(items)} позиций"), cls="table-footer"),
+            cls="table-container", style="margin: 0;"
         ),
 
         # Totals
