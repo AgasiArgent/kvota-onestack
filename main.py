@@ -635,14 +635,15 @@ a:active {
 }
 
 /* ========== Additional Polish ========== */
-/* Enhanced card borders */
+/* Remove/hide border-left on cards (user feedback: looks like strange brackets) */
 .card[style*="border-left"] {
-    border-left-width: 5px !important;
+    border-left: none !important;
+    border-top: 3px solid currentColor;
     transition: all 0.3s ease;
 }
 
 .card[style*="border-left"]:hover {
-    border-left-width: 6px !important;
+    border-top-width: 4px !important;
 }
 
 /* Better spacing for headings with emojis */
