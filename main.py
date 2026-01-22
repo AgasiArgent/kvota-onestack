@@ -18314,34 +18314,31 @@ def get(session, q: str = "", country: str = "", status: str = ""):
     supplier_rows = []
     for s in suppliers:
         status_text = "Активен" if s.is_active else "Неактивен"
-        status_badge_type = "success" if s.is_active else "error"
+        status_class = "status-success" if s.is_active else "status-neutral"
 
         supplier_rows.append(
             Tr(
                 Td(
-                    Strong(s.supplier_code),
-                    style="font-family: monospace; color: #4a4aff;"
+                    A(Strong(s.supplier_code), href=f"/suppliers/{s.id}", style="font-family: monospace; color: var(--accent);")
                 ),
                 Td(s.name),
                 Td(f"{s.country or '—'}, {s.city or '—'}" if s.country else "—"),
                 Td(s.inn or "—"),
                 Td(s.contact_person or "—"),
                 Td(s.contact_email or "—"),
-                Td(badge(status_text, type=status_badge_type)),
+                Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A(icon("edit", size=14), href=f"/suppliers/{s.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A(icon("eye", size=14), href=f"/suppliers/{s.id}", title="Просмотр"),
-                )
+                    A(icon("eye", size=16), href=f"/suppliers/{s.id}", title="Просмотр", cls="table-action-btn"),
+                    A(icon("edit", size=16), href=f"/suppliers/{s.id}/edit", title="Редактировать", cls="table-action-btn"),
+                    cls="col-actions"
+                ),
+                cls="clickable-row"
             )
         )
 
     return page_layout("Поставщики",
         # Header
-        Div(
-            H1(icon("package", size=28), " Поставщики", style="display: flex; align-items: center; gap: 0.5rem;"),
-            A("+ Добавить поставщика", href="/suppliers/new", role="button"),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
+        H1(icon("package", size=28), " Поставщики", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         # Stats cards
         Div(
@@ -18363,48 +18360,61 @@ def get(session, q: str = "", country: str = "", status: str = ""):
             cls="stats-grid"
         ),
 
-        # Filters
+        # Unified Table Container
         Div(
-            Form(
+            # Table header with filters
+            Div(
                 Div(
-                    Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
-                    Select(*country_options, name="country", style="flex: 1;"),
-                    Select(*status_options, name="status", style="flex: 1;"),
-                    Button(icon("search", size=16), " Поиск", type="submit"),
-                    A("Сбросить", href="/suppliers", role="button", cls="secondary"),
-                    style="display: flex; gap: 0.5rem; align-items: center;"
+                    Form(
+                        Input(name="q", value=q, placeholder="Поиск по названию или коду...", cls="table-search"),
+                        Select(*country_options, name="country", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
+                        Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
+                        Button(icon("search", size=14), " Поиск", type="submit", style="padding: 0.5rem 1rem;"),
+                        method="get",
+                        action="/suppliers",
+                        style="display: flex; gap: 0.5rem; align-items: center;"
+                    ),
+                    cls="table-header-left"
                 ),
-                method="get",
-                action="/suppliers"
+                Div(
+                    A(icon("plus", size=16), " Добавить", href="/suppliers/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    cls="table-header-right"
+                ),
+                cls="table-header"
             ),
-            cls="card", style="margin-bottom: 1rem;"
-        ),
-
-        # Table
-        Table(
-            Thead(
-                Tr(
-                    Th("Код"),
-                    Th("Название"),
-                    Th("Локация"),
-                    Th("ИНН"),
-                    Th("Контакт"),
-                    Th("Email"),
-                    Th("Статус"),
-                    Th("Действия")
-                )
+            # Table
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("КОД"),
+                            Th("НАЗВАНИЕ"),
+                            Th("ЛОКАЦИЯ"),
+                            Th("ИНН"),
+                            Th("КОНТАКТ"),
+                            Th("EMAIL"),
+                            Th("СТАТУС"),
+                            Th("", cls="col-actions")
+                        )
+                    ),
+                    Tbody(*supplier_rows) if supplier_rows else Tbody(
+                        Tr(Td(
+                            "Поставщики не найдены. ",
+                            A("Добавить первого поставщика", href="/suppliers/new"),
+                            colspan="8", style="text-align: center; padding: 2rem;"
+                        ))
+                    ),
+                    cls="unified-table"
+                ),
+                cls="table-responsive"
             ),
-            Tbody(*supplier_rows) if supplier_rows else Tbody(
-                Tr(Td(
-                    "Поставщики не найдены. ",
-                    A("Добавить первого поставщика", href="/suppliers/new"),
-                    colspan="8", style="text-align: center; padding: 2rem;"
-                ))
-            )
+            # Table footer
+            Div(
+                Span(f"Всего: {len(suppliers)} поставщиков"),
+                cls="table-footer"
+            ),
+            cls="table-container"
         ),
-
-        # Results count
-        P(f"Показано записей: {len(suppliers)}", style="color: #666; margin-top: 0.5rem;"),
 
         session=session
     )
