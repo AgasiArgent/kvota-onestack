@@ -973,6 +973,241 @@ button[style*="#0172AD"] {
     color: #94a3b8;
     font-weight: 400;
 }
+
+/* ========== Sidebar Navigation ========== */
+.app-layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 100;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.sidebar.collapsed {
+    width: 70px;
+    min-width: 70px;
+}
+
+.sidebar-header {
+    padding: 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-logo {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.sidebar-logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.sidebar.collapsed .sidebar-logo-text {
+    display: none;
+}
+
+.sidebar-toggle {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #94a3b8;
+    width: 32px;
+    height: 32px;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    transform: rotate(180deg);
+}
+
+.sidebar-nav {
+    flex: 1;
+    padding: 1rem 0;
+}
+
+.sidebar-section {
+    margin-bottom: 0.5rem;
+}
+
+.sidebar-section-title {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.sidebar.collapsed .sidebar-section-title {
+    display: none;
+}
+
+.sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    color: #94a3b8;
+    text-decoration: none;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+}
+
+.sidebar-item:hover {
+    background: rgba(99, 102, 241, 0.1);
+    color: white;
+    border-left-color: rgba(99, 102, 241, 0.5);
+}
+
+.sidebar-item.active {
+    background: rgba(99, 102, 241, 0.15);
+    color: white;
+    border-left-color: #6366f1;
+}
+
+.sidebar-item-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .sidebar-item-text {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-item {
+    justify-content: center;
+    padding: 0.75rem;
+}
+
+/* Dropdown/Expandable section */
+.sidebar-dropdown {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.3s ease;
+}
+
+.sidebar-dropdown.open {
+    max-height: 500px;
+}
+
+.sidebar-dropdown-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.sidebar-dropdown-toggle::after {
+    content: '▼';
+    font-size: 0.6rem;
+    transition: transform 0.2s;
+}
+
+.sidebar-dropdown-toggle.open::after {
+    transform: rotate(180deg);
+}
+
+.sidebar.collapsed .sidebar-dropdown-toggle::after {
+    display: none;
+}
+
+.sidebar-dropdown .sidebar-item {
+    padding-left: 3rem;
+}
+
+.sidebar.collapsed .sidebar-dropdown .sidebar-item {
+    padding-left: 0.75rem;
+}
+
+/* User section at bottom */
+.sidebar-footer {
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.875rem;
+}
+
+.sidebar-user-avatar {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 600;
+}
+
+.sidebar.collapsed .sidebar-user-info {
+    display: none;
+}
+
+/* Main content area */
+.main-content {
+    flex: 1;
+    margin-left: 260px;
+    transition: margin-left 0.3s ease;
+    min-height: 100vh;
+}
+
+.sidebar.collapsed + .main-content,
+.main-content.sidebar-collapsed {
+    margin-left: 70px;
+}
+
+/* Remove old nav styles when sidebar is used */
+.app-layout nav {
+    display: none;
+}
 """
 
 # ============================================================================
@@ -1051,8 +1286,203 @@ def nav_bar(session):
     )
 
 
-def page_layout(title, *content, session=None):
-    """Standard page layout wrapper"""
+def sidebar(session, current_path: str = ""):
+    """
+    Collapsible sidebar navigation with role-based menu items.
+
+    Args:
+        session: User session with roles
+        current_path: Current URL path to highlight active item
+    """
+    user = session.get("user")
+
+    if not user:
+        # Not logged in - show minimal sidebar with login
+        return Aside(
+            Div(
+                A(
+                    Div("K", cls="sidebar-logo-icon"),
+                    Span("Kvota", cls="sidebar-logo-text"),
+                    href="/login",
+                    cls="sidebar-logo"
+                ),
+                cls="sidebar-header"
+            ),
+            Nav(
+                Div(
+                    A(
+                        Span("🔑", cls="sidebar-item-icon"),
+                        Span("Войти", cls="sidebar-item-text"),
+                        href="/login",
+                        cls="sidebar-item"
+                    ),
+                    cls="sidebar-section"
+                ),
+                cls="sidebar-nav"
+            ),
+            cls="sidebar",
+            id="sidebar"
+        )
+
+    roles = user.get("roles", [])
+    is_admin = "admin" in roles
+
+    # Define menu structure with role requirements
+    menu_sections = []
+
+    # === MAIN SECTION ===
+    main_items = [
+        {"icon": "📊", "label": "Dashboard", "href": "/dashboard", "roles": None},  # All users
+    ]
+    menu_sections.append({"title": "Главное", "items": main_items})
+
+    # === SALES SECTION (for sales roles or admin) ===
+    sales_items = []
+    if is_admin or any(r in roles for r in ["sales", "sales_manager", "quote_controller"]):
+        sales_items = [
+            {"icon": "📋", "label": "Коммерческие предложения", "href": "/quotes", "roles": ["sales", "sales_manager", "admin", "quote_controller"]},
+            {"icon": "➕", "label": "Новое КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]},
+            {"icon": "👥", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]},
+        ]
+    if sales_items:
+        menu_sections.append({"title": "Продажи", "items": sales_items})
+
+    # === OPERATIONS SECTION (role-based workspaces) ===
+    operations_items = []
+
+    if is_admin or "procurement" in roles:
+        operations_items.append({"icon": "🛒", "label": "Закупки", "href": "/procurement", "roles": ["procurement", "admin"]})
+        operations_items.append({"icon": "🏭", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
+
+    if is_admin or "logistics" in roles:
+        operations_items.append({"icon": "🚚", "label": "Логистика", "href": "/logistics", "roles": ["logistics", "admin"]})
+
+    if is_admin or "customs" in roles:
+        operations_items.append({"icon": "🛃", "label": "Таможня", "href": "/customs", "roles": ["customs", "admin"]})
+
+    if operations_items:
+        menu_sections.append({"title": "Операции", "items": operations_items})
+
+    # === CONTROL SECTION ===
+    control_items = []
+
+    if is_admin or "quote_controller" in roles:
+        control_items.append({"icon": "✅", "label": "Контроль КП", "href": "/quote-control", "roles": ["quote_controller", "admin"]})
+
+    if is_admin or "spec_controller" in roles:
+        control_items.append({"icon": "📑", "label": "Спецификации", "href": "/spec-control", "roles": ["spec_controller", "admin"]})
+
+    if is_admin or "finance" in roles:
+        control_items.append({"icon": "💰", "label": "Финансы", "href": "/finance", "roles": ["finance", "admin"]})
+
+    if control_items:
+        menu_sections.append({"title": "Контроль", "items": control_items})
+
+    # === ADMIN SECTION ===
+    if is_admin:
+        admin_items = [
+            {"icon": "⚙️", "label": "Админ", "href": "/admin", "roles": ["admin"]},
+            {"icon": "🔧", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
+        ]
+        menu_sections.append({"title": "Администрирование", "items": admin_items})
+
+    # Build sidebar sections
+    nav_sections = []
+    for section in menu_sections:
+        section_items = []
+        for item in section["items"]:
+            # Check if user has required role
+            if item["roles"] is None or is_admin or any(r in roles for r in item["roles"]):
+                is_active = current_path == item["href"] or (item["href"] != "/" and current_path.startswith(item["href"]))
+                section_items.append(
+                    A(
+                        Span(item["icon"], cls="sidebar-item-icon"),
+                        Span(item["label"], cls="sidebar-item-text"),
+                        href=item["href"],
+                        cls=f"sidebar-item {'active' if is_active else ''}"
+                    )
+                )
+
+        if section_items:
+            nav_sections.append(
+                Div(
+                    Div(section["title"], cls="sidebar-section-title"),
+                    *section_items,
+                    cls="sidebar-section"
+                )
+            )
+
+    # User info
+    email = user.get("email", "User")
+    initials = email[0].upper() if email else "U"
+
+    return Aside(
+        # Header with logo and toggle
+        Div(
+            A(
+                Div("K", cls="sidebar-logo-icon"),
+                Span("Kvota", cls="sidebar-logo-text"),
+                href="/dashboard",
+                cls="sidebar-logo"
+            ),
+            Button(
+                "◀",
+                cls="sidebar-toggle",
+                onclick="toggleSidebar()"
+            ),
+            cls="sidebar-header"
+        ),
+        # Navigation sections
+        Nav(*nav_sections, cls="sidebar-nav"),
+        # Footer with user info
+        Div(
+            A(
+                Div(initials, cls="sidebar-user-avatar"),
+                Div(
+                    Div(email, style="font-weight: 500; color: #e2e8f0;"),
+                    Div("Выйти", style="font-size: 0.75rem; color: #94a3b8;"),
+                    cls="sidebar-user-info"
+                ),
+                href="/logout",
+                cls="sidebar-user"
+            ),
+            cls="sidebar-footer"
+        ),
+        cls="sidebar",
+        id="sidebar"
+    )
+
+
+# JavaScript for sidebar toggle
+SIDEBAR_JS = """
+<script>
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.querySelector('.main-content');
+    sidebar.classList.toggle('collapsed');
+    if (mainContent) {
+        mainContent.classList.toggle('sidebar-collapsed');
+    }
+    // Save state to localStorage
+    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+}
+
+// Restore sidebar state on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+    if (isCollapsed) {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.querySelector('.main-content');
+        if (sidebar) sidebar.classList.add('collapsed');
+        if (mainContent) mainContent.classList.add('sidebar-collapsed');
+    }
+});
+</script>
+"""
+
+
+def page_layout(title, *content, session=None, current_path: str = ""):
+    """Standard page layout wrapper with sidebar navigation"""
     return Html(
         Head(
             Title(f"{title} - Kvota"),
@@ -1066,11 +1496,16 @@ def page_layout(title, *content, session=None):
             # Custom styles (nav, badges, app-specific overrides)
             Style(APP_STYLES),
             # HTMX
-            Script(src="https://unpkg.com/htmx.org@1.9.10")
+            Script(src="https://unpkg.com/htmx.org@1.9.10"),
+            # Sidebar toggle script
+            NotStr(SIDEBAR_JS)
         ),
         Body(
-            nav_bar(session or {}),
-            Main(Div(*content, cls="container"))
+            Div(
+                sidebar(session or {}, current_path),
+                Main(Div(*content, cls="container"), cls="main-content"),
+                cls="app-layout"
+            )
         )
     )
 
