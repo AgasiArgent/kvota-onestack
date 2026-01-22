@@ -4366,29 +4366,108 @@ def get(session):
 
     quotes = result.data or []
 
-    return page_layout("Quotes",
-        Div(
-            H1("Quotes"),
-            A("+ New Quote", href="/quotes/new", role="button"),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
+    # Map workflow status to unified badge class
+    def get_status_class(status):
+        status_map = {
+            "draft": "neutral",
+            "sent": "info",
+            "approved": "success",
+            "rejected": "error",
+            "in_progress": "progress",
+            "completed": "success",
+            "cancelled": "error"
+        }
+        return status_map.get(status, "neutral")
 
-        Table(
-            Thead(Tr(Th("Quote #"), Th("Customer"), Th("Status"), Th("Total"), Th("Profit"), Th("Created"), Th("Actions"))),
-            Tbody(
-                *[Tr(
-                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(status_badge(q.get("workflow_status", "draft"))),
-                    Td(format_money(q.get("total_amount"))),
-                    Td(format_money(q.get("total_profit_usd")), style="color: #059669; font-weight: 500;"),
-                    Td(q.get("created_at", "")[:10]),
-                    Td(
-                        A("View", href=f"/quotes/{q['id']}", style="margin-right: 0.5rem;"),
-                        A("Edit", href=f"/quotes/{q['id']}/edit")
-                    )
-                ) for q in quotes]
-            ) if quotes else Tbody(Tr(Td("No quotes yet. Create your first quote!", colspan="7", style="text-align: center;")))
+    # Format status label
+    def get_status_label(status):
+        labels = {
+            "draft": "Черновик",
+            "sent": "Отправлено",
+            "approved": "Согласовано",
+            "rejected": "Отклонено",
+            "in_progress": "В работе",
+            "completed": "Завершено",
+            "cancelled": "Отменено"
+        }
+        return labels.get(status, status.capitalize() if status else "—")
+
+    return page_layout("Quotes",
+        H1(icon("file-text", size=28), " Коммерческие предложения", style="display: flex; align-items: center; gap: 0.5rem;"),
+
+        # Unified table container
+        Div(
+            # Table header with search and actions
+            Div(
+                Div(
+                    Input(
+                        type="text",
+                        placeholder="Поиск по номеру или клиенту...",
+                        cls="table-search",
+                        id="quotes-search"
+                    ),
+                    cls="table-header-left"
+                ),
+                Div(
+                    A(icon("plus", size=16), " Новый КП", href="/quotes/new", cls="btn-primary",
+                      style="display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem; background: var(--accent); color: white; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.875rem;"),
+                    cls="table-header-right"
+                ),
+                cls="table-header"
+            ),
+
+            # Table content
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("№ КП"),
+                        Th("Клиент"),
+                        Th("Статус"),
+                        Th("Сумма", cls="col-money"),
+                        Th("Профит", cls="col-money"),
+                        Th("Дата"),
+                        Th("", cls="col-actions")
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}",
+                                style="color: var(--accent); text-decoration: none; font-weight: 500;")),
+                            Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                            Td(Span(get_status_label(q.get("workflow_status", "draft")),
+                                   cls=f"status-badge status-{get_status_class(q.get('workflow_status', 'draft'))}")),
+                            Td(format_money(q.get("total_amount")), cls="col-money"),
+                            Td(format_money(q.get("total_profit_usd")), cls="col-money",
+                               style="color: #059669; font-weight: 500;"),
+                            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                            Td(
+                                A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
+                                A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
+                                cls="col-actions"
+                            ),
+                            cls="clickable-row",
+                            onclick=f"window.location='/quotes/{q['id']}'"
+                        ) for q in quotes]
+                    ) if quotes else Tbody(Tr(Td(
+                        Div(
+                            Div("📋", cls="table-empty-icon"),
+                            Div("Нет коммерческих предложений", cls="table-empty-text"),
+                            A("+ Создать первое КП", href="/quotes/new", style="margin-top: 1rem; display: inline-block;"),
+                            cls="table-empty"
+                        ),
+                        colspan="7"
+                    ))),
+                    cls="unified-table"
+                ),
+                cls="table-responsive"
+            ),
+
+            # Table footer with count
+            Div(
+                Span(f"Всего: {len(quotes)} КП"),
+                cls="table-footer"
+            ) if quotes else None,
+
+            cls="table-container"
         ),
         session=session
     )
@@ -6428,7 +6507,7 @@ def get(quote_id: str, session):
         seller_company_section = Div(
             Label("Компания-продавец",
                 Div(
-                    "⚠️ Не выбрана",
+                    "Не выбрана",
                     style="padding: 0.5rem; background: #fff3cd; border-radius: 4px; color: #856404;"
                 ),
                 Small(
@@ -8002,7 +8081,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
             # Toggle button
             Div(
                 Button(
-                    f"📋 История переходов ({len(history)})",
+                    icon("history", size=16), f" История переходов ({len(history)})",
                     type="button",
                     cls="secondary",
                     style="font-size: 0.875rem; padding: 0.5rem 1rem;",
@@ -8026,7 +8105,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
     else:
         # Always visible version
         return Div(
-            H4("📋 История переходов", style="margin: 0 0 0.75rem;"),
+            H4(icon("history", size=18), " История переходов", style="margin: 0 0 0.75rem; display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 *history_items,
                 style="padding: 0.75rem; background: #fafafa; border-radius: 8px; border: 1px solid #e5e7eb;"
@@ -8062,35 +8141,35 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
         {
             "id": "overview",
             "label": "Обзор",
-            "icon": "📋",
+            "icon": "file-text",
             "href": f"/quotes/{quote_id}",
             "roles": None,  # All users with quote access
         },
         {
             "id": "procurement",
             "label": "Закупки",
-            "icon": "🏭",
+            "icon": "shopping-cart",
             "href": f"/procurement/{quote_id}",
             "roles": ["procurement", "admin"],
         },
         {
             "id": "logistics",
             "label": "Логистика",
-            "icon": "🚚",
+            "icon": "truck",
             "href": f"/logistics/{quote_id}",
             "roles": ["logistics", "head_of_logistics", "admin"],
         },
         {
             "id": "customs",
             "label": "Таможня",
-            "icon": "🛃",
+            "icon": "shield-check",
             "href": f"/customs/{quote_id}",
             "roles": ["customs", "head_of_customs", "admin"],
         },
         {
             "id": "control",
             "label": "Контроль",
-            "icon": "✅",
+            "icon": "check-circle",
             "href": f"/quote-control/{quote_id}",
             "roles": ["quote_controller", "admin"],
         },
@@ -8133,7 +8212,7 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
 
         tab_elements.append(
             A(
-                Span(tab["icon"]),
+                icon(tab["icon"], size=18),
                 Span(tab["label"]),
                 href=tab["href"],
                 style=tab_style,
@@ -8250,7 +8329,7 @@ def get(session):
             Div(H3("О себе"),
                 Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
                 cls="card"),
-            Div(Button("💾 Сохранить изменения", type="submit", cls="primary"),
+            Div(Button(icon("save", size=16), " Сохранить изменения", type="submit", cls="primary"),
                 A("← Назад", href="/dashboard", role="button", cls="secondary"),
                 cls="form-actions"),
             method="post", action="/profile"),
@@ -8288,12 +8367,12 @@ def post(session, full_name: str, phone: str = "", date_of_birth: str = "",
 
     if success:
         return page_layout("Профиль сохранен",
-            Div(Div("✅ Профиль успешно обновлен!", cls="alert alert-success"),
+            Div(Div("Профиль успешно обновлен!", cls="alert alert-success"),
                 Script("setTimeout(() => window.location.href = '/profile', 1500);")),
             session=session)
     else:
         return page_layout("Ошибка",
-            Div(Div("❌ Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
+            Div(Div("Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
                 A("← Назад к профилю", href="/profile", role="button")),
             session=session)
 
@@ -8386,7 +8465,7 @@ def get(session, user_id: str):
             Div(H3("О себе"),
                 Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
                 cls="card"),
-            Div(Button("💾 Сохранить изменения", type="submit", cls="primary"),
+            Div(Button(icon("save", size=16), " Сохранить изменения", type="submit", cls="primary"),
                 A("← К списку пользователей", href="/admin?tab=users", role="button", cls="secondary"),
                 cls="form-actions"),
             method="post", action=f"/profile/{user_id}"),
@@ -8430,12 +8509,12 @@ def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: 
 
     if success:
         return page_layout("Профиль сохранен",
-            Div(Div("✅ Профиль успешно обновлен!", cls="alert alert-success"),
+            Div(Div("Профиль успешно обновлен!", cls="alert alert-success"),
                 Script(f"setTimeout(() => window.location.href = '/profile/{user_id}', 1500);")),
             session=session)
     else:
         return page_layout("Ошибка",
-            Div(Div("❌ Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
+            Div(Div("Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
                 A("← Назад к профилю", href=f"/profile/{user_id}", role="button")),
             session=session)
 
@@ -8616,7 +8695,7 @@ def get(quote_id: str, session):
 
         # Status badge
         status_style = "background: #dcfce7; color: #166534;" if is_completed else "background: #fef3c7; color: #92400e;"
-        status_text = "✓ Оценено" if is_completed else "⏳ Ожидает"
+        status_text = "Оценено" if is_completed else "Ожидает"
 
         return Div(
             # Item header with status
@@ -8792,7 +8871,7 @@ def get(quote_id: str, session):
             ),
             # Show success when all MY items are complete
             Div(
-                P("✅ Вы завершили оценку своих позиций!", style="color: #166534; margin: 0.5rem 0 0;"),
+                P(icon("check-circle", size=16), " Вы завершили оценку своих позиций!", style="color: #166534; margin: 0.5rem 0 0; display: flex; align-items: center; gap: 0.5rem;"),
                 style="padding: 0.5rem; background: #dcfce7; border-radius: 0.5rem; margin-top: 0.75rem;"
             ) if my_items_complete else None,
             cls="card"
@@ -8810,8 +8889,8 @@ def get(quote_id: str, session):
             ),
             # Show status message
             Div(
-                P("✅ Все закупки оценены! КП перешло на следующий этап.", style="color: #166534; margin: 0;") if all_procurement_complete and workflow_status != "pending_procurement" else
-                P("⏳ Ожидается оценка от других менеджеров по закупкам.", style="color: #92400e; margin: 0;") if my_items_complete and not all_procurement_complete else None,
+                P(icon("check-circle", size=16), " Все закупки оценены! КП перешло на следующий этап.", style="color: #166534; margin: 0; display: flex; align-items: center; gap: 0.5rem;") if all_procurement_complete and workflow_status != "pending_procurement" else
+                P(icon("clock", size=16), " Ожидается оценка от других менеджеров по закупкам.", style="color: #92400e; margin: 0; display: flex; align-items: center; gap: 0.5rem;") if my_items_complete and not all_procurement_complete else None,
                 style=f"padding: 0.5rem; background: {'#dcfce7' if all_procurement_complete and workflow_status != 'pending_procurement' else '#fef3c7'}; border-radius: 0.5rem; margin-top: 0.5rem;"
             ) if (my_items_complete and not all_procurement_complete) or (all_procurement_complete and workflow_status != "pending_procurement") else None,
             cls="card",
@@ -8820,7 +8899,7 @@ def get(quote_id: str, session):
 
         # Warning if not in correct status
         Div(
-            P(f"⚠️ КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}». "
+            P(icon("alert-triangle", size=16), f" КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}». "
               "Редактирование недоступно.", style="color: #b45309; margin: 0;"),
             cls="card",
             style="background: #fffbeb;"
@@ -9155,7 +9234,7 @@ def get(quote_id: str, session):
 
         invoice_cards.append(
             Div(
-                H3(f"📦 Инвойс #{idx}: {supplier_name}", style="margin: 0 0 0.5rem;"),
+                H3(icon("package", size=20), f" Инвойс #{idx}: {supplier_name}", style="margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
                 P(f"Компания-покупатель: {buyer_name}", style="color: #666; font-size: 0.875rem; margin: 0 0 1rem;"),
 
                 # Items list
@@ -9236,7 +9315,7 @@ def get(quote_id: str, session):
             hidden_invoice_count,
 
             Div(
-                Button("💾 Сохранить инвойсы", type="submit", name="action", value="save",
+                Button(icon("save", size=16), " Сохранить инвойсы", type="submit", name="action", value="save",
                        style="margin-right: 1rem;"),
                 Button("✓ Завершить оценку", type="submit", name="action", value="complete",
                        style="margin-right: 1rem; background: #16a34a;"),
@@ -9662,7 +9741,7 @@ def get(session, quote_id: str):
 
         # Invoice completion indicator
         has_logistics = invoice_logistics_total > 0 or days
-        status_icon = "✅" if has_logistics else "⏳"
+        status_icon_elem = icon("check-circle", size=16) if has_logistics else icon("clock", size=16)
         status_color = "#22c55e" if has_logistics else "#f59e0b"
 
         # Weight/volume from procurement
@@ -9677,10 +9756,10 @@ def get(session, quote_id: str):
             # Invoice header
             Div(
                 Div(
-                    Span(f"{status_icon} ", style=f"color: {status_color};"),
-                    Strong(f"📄 {invoice_number}"),
+                    Span(status_icon_elem, style=f"color: {status_color}; margin-right: 0.25rem;"),
+                    Strong(icon("file-text", size=16), f" {invoice_number}"),
                     Span(f" — {inv_currency}", style="color: #666; margin-left: 0.5rem;"),
-                    style="flex: 1;"
+                    style="flex: 1; display: flex; align-items: center;"
                 ),
                 Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
@@ -9690,7 +9769,7 @@ def get(session, quote_id: str):
             Div(
                 # Route: From → To
                 Div(
-                    Span("🗺️ Маршрут: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem;"),
+                    Span(icon("map-pin", size=14), " Маршрут: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                     Span(
                         (invoice.get("pickup_location", {}).get("city", "—") + ", " + invoice.get("pickup_location", {}).get("country", "—")) if invoice.get("pickup_location") else
                         (invoice.get("supplier", {}).get("country", "—")) if invoice.get("supplier") else "—",
@@ -9702,9 +9781,9 @@ def get(session, quote_id: str):
                 ),
                 # Delivery method
                 Div(
-                    Span("🚚 Доставка: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem;"),
+                    Span(icon("truck", size=14), " Доставка: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                     Span(
-                        {"air": "Авиа ✈️", "auto": "Авто 🚛", "sea": "Море 🚢", "multimodal": "Мультимодально 🚚✈️🚢"}.get(
+                        {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мультимодально"}.get(
                             quote.get("delivery_method", ""), "Не указан"
                         ),
                         style="color: #d97706; font-weight: 600;"
@@ -9716,7 +9795,7 @@ def get(session, quote_id: str):
 
             # Invoice info badges - WEIGHT/VOLUME CRITICAL FOR LOGISTICS
             Div(
-                Span(f"📦 Позиций: {total_items_in_invoice}", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600;"),
+                Span(icon("package", size=14), f" Позиций: {total_items_in_invoice}", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 Span(f"⚖️ Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; color: #059669;") if weight > 0 else Span("⚖️ Вес не указан", style="margin-right: 1rem; font-size: 0.875rem; color: #dc2626;"),
                 Span(f"📐 Объём: {volume} м³", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; color: #059669;") if volume > 0 else None,
                 style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem;"
@@ -9835,7 +9914,7 @@ def get(session, quote_id: str):
 
     # Build the invoice-level logistics form
     invoice_logistics_section = Div(
-        H3("📄 Логистика по инвойсам (v4.0)", style="margin-bottom: 1rem;"),
+        H3(icon("file-text", size=20), " Логистика по инвойсам (v4.0)", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
         P("Введите стоимость доставки для каждого инвойса. Вес/объём заполнен закупками.",
           style="color: #666; margin-bottom: 1rem;"),
         *[logistics_invoice_card(invoice, idx) for idx, invoice in enumerate(invoices_with_items)],
@@ -9852,7 +9931,7 @@ def get(session, quote_id: str):
 
         # Action buttons
         Div(
-            Button("💾 Сохранить данные", type="submit", name="action", value="save",
+            Button(icon("save", size=16), " Сохранить данные", type="submit", name="action", value="save",
                    style="margin-right: 0.5rem;") if is_editable else None,
             Button(icon("check", size=16), " Завершить логистику", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
@@ -9866,14 +9945,14 @@ def get(session, quote_id: str):
 
     # Status banner
     status_banner = Div(
-        P(f"⚠️ Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование логистики недоступно.",
-          style="margin: 0;"),
+        P(icon("alert-triangle", size=16), f" Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование логистики недоступно.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
     ) if not is_editable and not logistics_done else None
 
     success_banner = Div(
-        P(f"✅ Логистика по данному КП завершена.",
-          style="margin: 0;"),
+        P(icon("check-circle", size=16), " Логистика по данному КП завершена.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
     ) if logistics_done else None
 
@@ -9907,7 +9986,7 @@ def get(session, quote_id: str):
 
         # Quote summary with v4.0 invoice-based stats
         Div(
-            H3("📋 Сводка по КП"),
+            H3(icon("file-text", size=20), " Сводка по КП", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Div(str(total_invoices), cls="stat-value"),
@@ -10277,7 +10356,7 @@ def get(session, quote_id: str):
 
         # Item completion indicator
         has_customs = hs_code and duty_percent is not None
-        status_icon = "✅" if has_customs else "⏳"
+        status_icon_elem = icon("check-circle", size=16) if has_customs else icon("clock", size=16)
         status_color = "#22c55e" if has_customs else "#f59e0b"
 
         # Weight/volume reference
@@ -10288,10 +10367,10 @@ def get(session, quote_id: str):
             # Item header
             Div(
                 Div(
-                    Span(f"{status_icon} ", style=f"color: {status_color};"),
+                    Span(status_icon_elem, style=f"color: {status_color}; margin-right: 0.25rem;"),
                     Strong(item.get("brand", "—")),
                     Span(f" — {(item.get('product_name') or '—')[:50]}", style="color: #666;"),
-                    style="flex: 1;"
+                    style="flex: 1; display: flex; align-items: center;"
                 ),
                 Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
@@ -10299,22 +10378,22 @@ def get(session, quote_id: str):
 
             # Item info badges
             Div(
-                Span(f"📦 Кол-во: {item.get('quantity', 0)}", style="margin-right: 1rem; font-size: 0.875rem;"),
-                Span(f"⚖️ Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem;") if weight else None,
-                Span(f"🌍 {item.get('supplier_country', '—')}", style="margin-right: 1rem; font-size: 0.875rem;"),
+                Span(icon("package", size=14), f" Кол-во: {item.get('quantity', 0)}", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                Span(icon("scale", size=14), f" Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;") if weight else None,
+                Span(icon("globe", size=14), f" {item.get('supplier_country', '—')}", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 # Purchase value for duty calculation reference
-                Span(f"💰 Закуп: {format_money(purchase_price * quantity, currency)}",
-                     style="margin-right: 1rem; font-size: 0.875rem; color: #059669;",
+                Span(icon("wallet", size=14), f" Закуп: {format_money(purchase_price * quantity, currency)}",
+                     style="margin-right: 1rem; font-size: 0.875rem; color: #059669; display: inline-flex; align-items: center; gap: 0.25rem;",
                      title="Стоимость закупки для расчёта пошлины") if purchase_price else None,
                 # Pickup location badge (v3.0)
                 Span(
-                    f"📍 {pickup_info['label'] if pickup_info else '—'}",
+                    icon("map-pin", size=14), f" {pickup_info['label'] if pickup_info else '—'}",
                     style="font-size: 0.875rem; color: #cc6600;",
                     title=f"Точка отгрузки: {pickup_info['city']}, {pickup_info['country']}" if pickup_info else "Точка отгрузки не указана"
                 ) if pickup_info or item.get("pickup_location_id") else None,
                 # Supplier badge (v3.0)
                 Span(
-                    f"🏭 {supplier_info['label'][:30] if supplier_info else '—'}",
+                    icon("building-2", size=14), f" {supplier_info['label'][:30] if supplier_info else '—'}",
                     style="font-size: 0.875rem; color: #3b82f6; margin-left: 0.5rem;",
                     title=f"Поставщик: {supplier_info['label']}" if supplier_info else "Поставщик не указан"
                 ) if supplier_info or item.get("supplier_id") else None,
@@ -10323,7 +10402,7 @@ def get(session, quote_id: str):
 
             # Customs data inputs (v3.0 - item level)
             Div(
-                H4("🛃 Таможенные данные", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151;"),
+                H4(icon("shield-check", size=18), " Таможенные данные", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;"),
                 Div(
                     # HS Code (ТН ВЭД)
                     Div(
@@ -10377,7 +10456,7 @@ def get(session, quote_id: str):
 
     # Build the item-level customs section
     item_customs_section = Div(
-        H3("📦 Таможня по позициям (v3.0)", style="margin-bottom: 1rem;"),
+        H3(icon("package", size=20), " Таможня по позициям (v3.0)", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
         P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Дополнительные расходы включают СВХ, сертификацию, брокерские услуги.",
           style="color: #666; margin-bottom: 1rem;"),
         *[customs_item_card(item, idx) for idx, item in enumerate(items)],
@@ -10388,7 +10467,7 @@ def get(session, quote_id: str):
 
     # Quote-level costs section (customs/brokerage expenses)
     quote_level_costs_section = Div(
-        H3("💰 Общие расходы на КП", style="margin-bottom: 0.75rem;"),
+        H3(icon("wallet", size=20), " Общие расходы на КП", style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;"),
         P("Укажите общие расходы на всю квоту в валюте КП (" + currency + "). Эти суммы будут распределены пропорционально стоимости товаров.",
           style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
         Div(
@@ -10498,7 +10577,7 @@ def get(session, quote_id: str):
 
     # Quote-level notes section
     quote_level_section = Div(
-        H3("📝 Примечания"),
+        H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
         Div(
             Label("Примечания таможенника",
                 Textarea(
@@ -10527,7 +10606,7 @@ def get(session, quote_id: str):
 
         # Action buttons
         Div(
-            Button("💾 Сохранить данные", type="submit", name="action", value="save",
+            Button(icon("save", size=16), " Сохранить данные", type="submit", name="action", value="save",
                    style="margin-right: 0.5rem;") if is_editable else None,
             Button(icon("check", size=16), " Завершить таможню", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
@@ -10541,14 +10620,14 @@ def get(session, quote_id: str):
 
     # Status banner
     status_banner = Div(
-        P(f"⚠️ Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование таможни недоступно.",
-          style="margin: 0;"),
+        P(icon("alert-triangle", size=16), f" Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование таможни недоступно.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
     ) if not is_editable and not customs_done else None
 
     success_banner = Div(
-        P(f"✅ Таможня по данному КП завершена.",
-          style="margin: 0;"),
+        P(icon("check-circle", size=16), " Таможня по данному КП завершена.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
     ) if customs_done else None
 
@@ -10585,7 +10664,7 @@ def get(session, quote_id: str):
 
         # Quote summary with customs stats (v3.0)
         Div(
-            H3("📋 Сводка по КП"),
+            H3(icon("file-text", size=20), " Сводка по КП", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Div(str(total_items), cls="stat-value"),
@@ -10624,7 +10703,7 @@ def get(session, quote_id: str):
 
         # Instructions
         Div(
-            H3("📝 Инструкция"),
+            H3(icon("info", size=20), " Инструкция", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Для каждой позиции укажите код ТН ВЭД и процент пошлины. Пошлина рассчитывается от закупочной стоимости.", style="margin-bottom: 0;"),
             cls="card",
             style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
@@ -11297,7 +11376,7 @@ def get(session, quote_id: str):
 
         # Link to quote details
         Div(
-            A("📄 Открыть КП в редакторе", href=f"/quotes/{quote_id}", role="button",
+            A(icon("file-text", size=16), " Открыть КП в редакторе", href=f"/quotes/{quote_id}", role="button",
               style="background: #6b7280; border-color: #6b7280;"),
             style="margin-top: 1rem; text-align: center;"
         ),
@@ -13421,7 +13500,7 @@ def get(session, spec_id: str):
                        style="background: #28a745; border-color: #28a745; margin-left: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;",
                        disabled=not is_editable) if is_editable and status == "pending_review" else None,
                 # Feature #70: PDF Preview button
-                A("📄 Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf",
+                A(icon("file-text", size=16), " Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf",
                   target="_blank", role="button",
                   style="background: #17a2b8; border-color: #17a2b8; margin-left: 1rem; text-decoration: none;"),
                 A("← Назад к спецификациям", href="/spec-control", role="button",
@@ -20791,7 +20870,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     # Latest Quotes section
                     Div(
                         Div(
-                            H3("📄 Последние КП", style="margin: 0; color: #e2e8f0;"),
+                            H3(icon("file-text", size=20), " Последние КП", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
                             A("Посмотреть все →", href=f"/customers/{customer_id}?tab=quotes", style="font-size: 0.875rem;"),
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
                         ),
@@ -20989,7 +21068,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Td(Span(status_text, cls=f"status-badge {status_class}")),
                     Td(contract.get("notes", "—")[:100]),
                     Td(
-                        A("📄", href=f"/contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
+                        A(icon("file-text", size=16), href=f"/contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
                     )
                 )
             )
@@ -22393,7 +22472,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
     return page_layout(page_title,
         # Header
         Div(
-            H1(f"📄 {page_title}"),
+            H1(icon("file-text", size=28), f" {page_title}", style="display: flex; align-items: center; gap: 0.5rem;"),
             A("+ Добавить договор", href="/customer-contracts/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -22518,7 +22597,7 @@ def get(contract_id: str, session):
     return page_layout(f"Договор: {contract.contract_number}",
         # Header with actions
         Div(
-            H1(f"📄 {contract.contract_number}"),
+            H1(icon("file-text", size=28), f" {contract.contract_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 A("✏️ Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
                 A("← К списку", href="/customer-contracts", role="button", cls="secondary"),
@@ -22566,7 +22645,7 @@ def get(contract_id: str, session):
 
         # Notes card (if has notes)
         Div(
-            H3("📝 Примечания"),
+            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(contract.notes or "Нет примечаний"),
             cls="card"
         ) if contract.notes else "",
@@ -22928,7 +23007,7 @@ def get(location_id: str, session):
 
         # Notes card (if has notes)
         Div(
-            H3("📝 Примечания"),
+            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(location.notes or "Нет примечаний"),
             cls="card"
         ) if location.notes else "",
@@ -23786,7 +23865,7 @@ def get(invoice_id: str, session):
 
         # Notes
         Div(
-            H3("📝 Примечания"),
+            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(invoice.notes or "Нет примечаний"),
             cls="card", style="margin-bottom: 1rem;"
         ) if invoice.notes else "",
