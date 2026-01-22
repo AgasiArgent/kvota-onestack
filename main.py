@@ -85,6 +85,9 @@ from calculation_models import (
     OfferSaleType, Incoterms, DMFeeType
 )
 
+# Import currency service for multi-currency logistics
+from services.currency_service import convert_to_usd
+
 # ============================================================================
 # APP SETUP
 # ============================================================================
@@ -6701,27 +6704,43 @@ def get(quote_id: str, session):
     saved_vars = vars_result.data[0]["variables"] if vars_result.data else {}
 
     # ==========================================================================
-    # AGGREGATE LOGISTICS FROM INVOICES
+    # AGGREGATE LOGISTICS FROM INVOICES (with multi-currency support)
     # Logistics costs are entered per-invoice by logistics department
-    # Sum them up and use as defaults for calculation (saved_vars override if present)
+    # Each segment may have different currency - convert all to USD before summing
     # ==========================================================================
     invoices_result = supabase.table("invoices") \
-        .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer") \
+        .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
+                "logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
         .eq("quote_id", quote_id) \
         .execute()
 
     invoices_logistics = invoices_result.data or []
 
-    # Sum logistics costs from all invoices
-    total_logistics_supplier_hub = sum(
-        float(inv.get("logistics_supplier_to_hub") or 0) for inv in invoices_logistics
-    )
-    total_logistics_hub_customs = sum(
-        float(inv.get("logistics_hub_to_customs") or 0) for inv in invoices_logistics
-    )
-    total_logistics_customs_client = sum(
-        float(inv.get("logistics_customs_to_customer") or 0) for inv in invoices_logistics
-    )
+    # Sum logistics costs from all invoices, converting each to USD
+    total_logistics_supplier_hub = Decimal(0)
+    total_logistics_hub_customs = Decimal(0)
+    total_logistics_customs_client = Decimal(0)
+
+    for inv in invoices_logistics:
+        # Supplier → Hub
+        s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
+        s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
+        total_logistics_supplier_hub += convert_to_usd(s2h_amount, s2h_currency)
+
+        # Hub → Customs
+        h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
+        h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
+        total_logistics_hub_customs += convert_to_usd(h2c_amount, h2c_currency)
+
+        # Customs → Customer
+        c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
+        c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
+        total_logistics_customs_client += convert_to_usd(c2c_amount, c2c_currency)
+
+    # Convert to float for downstream compatibility
+    total_logistics_supplier_hub = float(total_logistics_supplier_hub)
+    total_logistics_hub_customs = float(total_logistics_hub_customs)
+    total_logistics_customs_client = float(total_logistics_customs_client)
 
     # Use aggregated values from invoices as defaults
     # Override saved_vars if: aggregated > 0 AND (saved is missing or saved is 0)
@@ -9993,7 +10012,11 @@ def get(session, quote_id: str):
         h2c = invoice.get("logistics_hub_to_customs") or 0
         c2c = invoice.get("logistics_customs_to_customer") or 0
         days = invoice.get("logistics_total_days") or ""
-        invoice_logistics_total = float(s2h) + float(h2c) + float(c2c)
+        # Currency values for each segment (default: USD)
+        s2h_currency = invoice.get("logistics_supplier_to_hub_currency") or "USD"
+        h2c_currency = invoice.get("logistics_hub_to_customs_currency") or "USD"
+        c2c_currency = invoice.get("logistics_customs_to_customer_currency") or "USD"
+        invoice_logistics_total = float(s2h) + float(h2c) + float(c2c)  # Note: mixed currencies, for display only
 
         # Invoice completion indicator
         has_logistics = invoice_logistics_total > 0 or days
@@ -10070,13 +10093,14 @@ def get(session, quote_id: str):
                 )
             ),
 
-            # Logistics cost inputs (v4.0 - invoice level)
+            # Logistics cost inputs (v4.0 - invoice level with multi-currency support)
             Div(
                 H4(icon("truck", size=18), " Стоимость логистики по сегментам", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;"),
                 Div(
                     # Supplier → Hub
                     Div(
-                        Label("Поставщик → Хаб",
+                        Label("Поставщик → Хаб", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                        Div(
                             Input(
                                 name=f"logistics_supplier_to_hub_{invoice_id}",
                                 type="number",
@@ -10084,15 +10108,26 @@ def get(session, quote_id: str):
                                 min="0",
                                 step="0.01",
                                 disabled=not is_editable,
-                                style="width: 100%;"
+                                style="flex: 1; min-width: 0;"
                             ),
-                            style="display: block; font-size: 0.875rem;"
+                            Select(
+                                Option("USD", value="USD", selected=s2h_currency == "USD"),
+                                Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
+                                name=f"logistics_supplier_to_hub_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 70px; flex-shrink: 0;"
+                            ),
+                            style="display: flex; gap: 0.25rem;"
                         ),
-                        style="flex: 1;"
+                        style="flex: 1; min-width: 120px;"
                     ),
                     # Hub → Customs
                     Div(
-                        Label("Хаб → Таможня",
+                        Label("Хаб → Таможня", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                        Div(
                             Input(
                                 name=f"logistics_hub_to_customs_{invoice_id}",
                                 type="number",
@@ -10100,15 +10135,26 @@ def get(session, quote_id: str):
                                 min="0",
                                 step="0.01",
                                 disabled=not is_editable,
-                                style="width: 100%;"
+                                style="flex: 1; min-width: 0;"
                             ),
-                            style="display: block; font-size: 0.875rem;"
+                            Select(
+                                Option("USD", value="USD", selected=h2c_currency == "USD"),
+                                Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
+                                name=f"logistics_hub_to_customs_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 70px; flex-shrink: 0;"
+                            ),
+                            style="display: flex; gap: 0.25rem;"
                         ),
-                        style="flex: 1;"
+                        style="flex: 1; min-width: 120px;"
                     ),
                     # Customs → Customer
                     Div(
-                        Label("Таможня → Клиент",
+                        Label("Таможня → Клиент", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                        Div(
                             Input(
                                 name=f"logistics_customs_to_customer_{invoice_id}",
                                 type="number",
@@ -10116,29 +10162,37 @@ def get(session, quote_id: str):
                                 min="0",
                                 step="0.01",
                                 disabled=not is_editable,
-                                style="width: 100%;"
+                                style="flex: 1; min-width: 0;"
                             ),
-                            style="display: block; font-size: 0.875rem;"
+                            Select(
+                                Option("USD", value="USD", selected=c2c_currency == "USD"),
+                                Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
+                                name=f"logistics_customs_to_customer_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 70px; flex-shrink: 0;"
+                            ),
+                            style="display: flex; gap: 0.25rem;"
                         ),
-                        style="flex: 1;"
+                        style="flex: 1; min-width: 120px;"
                     ),
                     # Total days
                     Div(
-                        Label("Дней",
-                            Input(
-                                name=f"logistics_total_days_{invoice_id}",
-                                type="number",
-                                value=str(days) if days else "",
-                                min="1",
-                                max="365",
-                                disabled=not is_editable,
-                                style="width: 100%;"
-                            ),
-                            style="display: block; font-size: 0.875rem;"
+                        Label("Дней", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                        Input(
+                            name=f"logistics_total_days_{invoice_id}",
+                            type="number",
+                            value=str(days) if days else "",
+                            min="1",
+                            max="365",
+                            disabled=not is_editable,
+                            style="width: 100%;"
                         ),
-                        style="flex: 0 0 80px;"
+                        style="flex: 0 0 70px;"
                     ),
-                    style="display: flex; gap: 0.75rem;"
+                    style="display: flex; gap: 0.75rem; flex-wrap: wrap;"
                 ),
                 # Comments field
                 Div(
@@ -10390,6 +10444,10 @@ async def post(session, quote_id: str, request):
         c2c = form_data.get(f"logistics_customs_to_customer_{invoice_id}")
         days = form_data.get(f"logistics_total_days_{invoice_id}")
         notes = form_data.get(f"logistics_notes_{invoice_id}")
+        # Currency values for each segment
+        s2h_currency = form_data.get(f"logistics_supplier_to_hub_currency_{invoice_id}")
+        h2c_currency = form_data.get(f"logistics_hub_to_customs_currency_{invoice_id}")
+        c2c_currency = form_data.get(f"logistics_customs_to_customer_currency_{invoice_id}")
 
         # Build update data
         update_data = {}
@@ -10405,6 +10463,13 @@ async def post(session, quote_id: str, request):
             update_data["logistics_total_days"] = days_val if days_val and days_val > 0 else None
         if notes is not None:
             update_data["logistics_notes"] = notes
+        # Save currency values
+        if s2h_currency:
+            update_data["logistics_supplier_to_hub_currency"] = s2h_currency
+        if h2c_currency:
+            update_data["logistics_hub_to_customs_currency"] = h2c_currency
+        if c2c_currency:
+            update_data["logistics_customs_to_customer_currency"] = c2c_currency
 
         # Update invoice if we have data
         if update_data:
