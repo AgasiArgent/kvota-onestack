@@ -1204,8 +1204,8 @@ button[style*="#0172AD"] {
     margin-left: 70px;
 }
 
-/* Remove old nav styles when sidebar is used */
-.app-layout nav {
+/* Remove old nav styles when sidebar is used (except sidebar-nav) */
+.app-layout nav:not(.sidebar-nav) {
     display: none;
 }
 """
