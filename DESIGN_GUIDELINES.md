@@ -513,95 +513,152 @@ These can be done in future sessions if needed:
 
 ---
 
-### Phase 3: Icons & Polish ⏳ TODO
+### Phase 3: Lucide Icons ✅ COMPLETED (2026-01-22)
 
-**Goal:** Replace emoji icons with professional SVG icons and add subtle animations
+**Goal:** Replace all emoji icons with professional Lucide SVG icons
 
-**What to Add:**
+**Status:** ✅ Deployed to production | 🟢 Live at https://kvotaflow.ru
 
-1. **Heroicons Integration**
+---
 
-   ```python
-   # Create icon helper function
-   def icon(name, size="w-5 h-5"):
-       """
-       Heroicons SVG icon helper
-       Common icons: pencil, trash, check, x-mark, plus, chevron-down
-       """
-       icons = {
-           "pencil": '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"/></svg>',
-           "trash": '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>',
-           "check": '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>',
-           "x-mark": '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>',
-           "plus": '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>'
-       }
-       svg = icons.get(name, icons["check"])
-       return NotStr(f'<svg class="{size}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">{svg}</svg>')
-   ```
+#### Библиотека: Lucide Icons
 
-2. **Replace Emoji Icons**
-   - ✏️ → `icon("pencil")`
-   - ✓ → `icon("check")`
-   - ✕ → `icon("x-mark")`
-   - 🗑️ → `icon("trash")`
-   - ➕ → `icon("plus")`
+- **CDN:** `https://unpkg.com/lucide@latest`
+- **Документация:** https://lucide.dev
+- **Поиск иконок:** https://lucide.dev/icons
 
-3. **Add Subtle Animations**
+---
 
-   ```css
-   /* Add to APP_STYLES */
-   /* Smooth transitions */
-   button,
-   a,
-   .badge,
-   .tab {
-     transition: all 0.2s ease;
-   }
+#### Принципы подбора иконок
 
-   /* Hover effects */
-   button:hover {
-     transform: translateY(-1px);
-     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-   }
-   .card:hover {
-     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-   }
+**1. НИКОГДА не используем emoji**
+- Emoji рендерятся по-разному на разных ОС/браузерах
+- Emoji нельзя стилизовать (цвет, размер точный)
+- Lucide иконки — единый визуальный язык
 
-   /* Loading states */
-   .htmx-request {
-     opacity: 0.6;
-     cursor: wait;
-   }
+**2. Стиль иконок:**
+- Outline (контурные), не filled (заливка)
+- Stroke width: 1.5-2px
+- Минималистичный, современный стиль
+- Наследуют цвет текста (`stroke: currentColor`)
 
-   /* Fade-in animations */
-   @keyframes fadeIn {
-     from {
-       opacity: 0;
-       transform: translateY(10px);
-     }
-     to {
-       opacity: 1;
-       transform: translateY(0);
-     }
-   }
-   .animate-in {
-     animation: fadeIn 0.3s ease;
-   }
-   ```
+**3. Как выбрать иконку для новой функции:**
+1. Открой https://lucide.dev/icons
+2. Введи английское слово (action/noun): "edit", "user", "file"
+3. Выбери самую простую и узнаваемую
+4. Проверь, что она не конфликтует с уже используемыми
+5. Добавь в эту документацию
 
-4. **Enhanced Inline Editing** (from current design guide)
-   - Add icon buttons with hover states
-   - Smooth transitions when switching edit/view mode
-   - Loading indicators during HTMX requests
+**4. Семантика важнее буквальности:**
+- "Поставщик" → `package` (товар), не `factory`
+- "Закупки" → `shopping-cart`, не `money`
+- "Локация" → `map-pin`, не `building`
 
-**Estimated Effort:** 1-2 hours
-**Impact:** Polished, professional feel with smooth interactions
+**5. Консистентность:**
+- Одна иконка = одно значение во всём приложении
+- Не используй `edit` для одного и `pencil` для другого
 
-**Files to Modify:**
+---
 
-- `main.py` - Add icon helper function, enhanced CSS
-- All forms - Replace emoji with icon() helper
-- Inline editing components - Add transitions and hover effects
+#### Размеры иконок
+
+| Контекст | Размер |
+|----------|--------|
+| Inline в тексте | 14px |
+| Кнопки | 16px |
+| Заголовки H3 | 20px |
+| Заголовки H1/H2 | 28px |
+
+---
+
+#### Helper функция (Python)
+
+```python
+def icon(name: str, size: int = 20, cls: str = ""):
+    """Lucide icon helper - renders an icon using data-lucide attribute."""
+    return I(data_lucide=name, cls=f"lucide-icon {cls}".strip(),
+             style=f"width: {size}px; height: {size}px;")
+```
+
+**Использование:**
+```python
+# В кнопке
+Button(icon("save", size=16), " Сохранить", type="submit")
+
+# В заголовке
+H1(icon("file-text", size=28), " КП", style="display: flex; align-items: center; gap: 0.5rem;")
+
+# В ссылке действия
+A(icon("edit", size=14), href=f"/item/{id}/edit", title="Редактировать")
+```
+
+---
+
+#### Каталог используемых иконок
+
+**Навигация (Sidebar):**
+| Функция | Lucide Icon |
+|---------|-------------|
+| Dashboard | `layout-dashboard` |
+| Quotes | `file-text` |
+| New Quote | `plus-circle` |
+| Customers | `users` |
+| Procurement | `shopping-cart` |
+| Suppliers | `package` |
+| Logistics | `truck` |
+| Customs | `shield-check` |
+| Finance | `wallet` |
+| Settings | `settings` |
+| Admin | `wrench` |
+| Logout | `log-out` |
+
+**Действия (Actions):**
+| Действие | Lucide Icon | Размер |
+|----------|-------------|--------|
+| Редактировать | `edit` | 14-16px |
+| Просмотр | `eye` | 14px |
+| Удалить | `trash-2` | 14px |
+| Сохранить | `save` | 16px |
+| Поиск | `search` | 16px |
+| Добавить | `plus` | 16px |
+| Обновить | `refresh-cw` | 16px |
+
+**Статусы:**
+| Статус | Lucide Icon | Цвет |
+|--------|-------------|------|
+| Успех/Одобрено | `check-circle` | #16a34a |
+| Ошибка/Отклонено | `x-circle` | #dc3545 |
+| Ожидание | `clock` | #f59e0b |
+| Предупреждение | `alert-triangle` | #dc3545 |
+| Галочка (inline) | `check` | inherit |
+
+**Информационные сообщения:**
+| Тип | Lucide Icon |
+|-----|-------------|
+| Информация | `info` |
+| Подсказка | `lightbulb` |
+| Закрепление | `pin` |
+
+**Сущности (Entities):**
+| Сущность | Lucide Icon |
+|----------|-------------|
+| Компания | `building-2` |
+| Локация | `map-pin` |
+| Поставщик/Товар | `package` |
+| Платёж | `credit-card` |
+| Договор/Документ | `file-text` |
+| Информация | `clipboard-list` |
+| Классификация | `tag` |
+| Статистика | `bar-chart-3` |
+| Подписант | `pen-tool` |
+| Примечания | `message-square` |
+
+---
+
+#### Commits
+- `5b8cad9` - Replace remaining emoji with Lucide SVG icons
+- `b50e0b0` - Update tests to expect Lucide icons instead of emoji
+- `30113c3` - Document complete Lucide icon usage
 
 ---
 
@@ -1176,9 +1233,9 @@ table_container(
 
 **Phase 1 (✅ DONE):** PicoCSS foundation - instant visual upgrade
 **Phase 2 (✅ DONE):** DaisyUI components - tabs, badges, advanced UI
-**Phase 3 (⏳ TODO):** Icons & animations - polish and professional feel
+**Phase 3 (✅ DONE):** Lucide Icons - all emoji replaced with SVG icons
 **Phase 4 (✅ DONE):** Searchable dropdowns - datalist pattern
-**Phase 5 (✅ MOSTLY DONE):** Unified table design - 8 tables migrated (quotes, customers, deals, suppliers, admin, customer tabs, quote items)
+**Phase 5 (✅ MOSTLY DONE):** Unified table design - 8 tables migrated
 
-**Total Effort:** ~10-12 hours for all phases
+**Total Effort:** ~12-14 hours for all phases
 **Result:** Modern, professional, production-ready UI

@@ -3326,8 +3326,8 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in pending_quotes]
-                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3350,8 +3350,8 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in quotes_with_details]
-                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3374,8 +3374,8 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q, show_work_button=False) for q in other_quotes]
-                        ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3533,8 +3533,8 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in pending_quotes]
-                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3556,8 +3556,8 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in quotes_with_details]
-                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3579,8 +3579,8 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q, show_work_button=False) for q in completed_quotes]
-                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3737,8 +3737,8 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in pending_quotes]
-                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3760,8 +3760,8 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in quotes_with_details]
-                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3783,8 +3783,8 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q, show_work_button=False) for q in completed_quotes]
-                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3941,8 +3941,8 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in quotes_with_details]
-                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3965,8 +3965,8 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q) for q in pending_quotes]
-                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -3989,8 +3989,8 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
-                        ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4012,8 +4012,8 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
                         Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
                         Tbody(
                             *[quote_row(q, show_work_button=False) for q in approved_quotes]
-                        ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
-                    , cls="unified-table"),
+                        ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;"))),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4178,7 +4178,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                         Tbody(
                             *[pending_quote_row(q) for q in pending_quotes]
                         ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
-                    , cls="unified-table"),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4201,7 +4201,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                         Tbody(
                             *[spec_row(s) for s in pending_review_specs]
                         ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
-                    , cls="unified-table"),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4224,7 +4224,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                         Tbody(
                             *[spec_row(s) for s in draft_specs]
                         ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
-                    , cls="unified-table"),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4247,7 +4247,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                         Tbody(
                             *[spec_row(s, show_work_button=False) for s in approved_specs]
                         ) if approved_specs else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
-                    , cls="unified-table"),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -4270,7 +4270,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                         Tbody(
                             *[spec_row(s, show_work_button=False) for s in signed_specs]
                         ) if signed_specs else Tbody(Tr(Td("Нет подписанных спецификаций", colspan="6", style="text-align: center; color: #666;"))),
-                    , cls="unified-table"),
+                    cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
@@ -11095,6 +11095,172 @@ async def post(session, quote_id: str, request):
 
 
 # ============================================================================
+# QUOTE CONTROL - CALCULATION COLUMNS DEFINITION
+# ============================================================================
+
+# All available calculation columns with their metadata
+CALC_COLUMNS = {
+    # Purchase group
+    "N16": {"name": "Цена закупки/ед", "group": "Закупка", "format": "money"},
+    "P16": {"name": "После скидки", "group": "Закупка", "format": "money"},
+    "R16": {"name": "Цена/ед в вал. КП", "group": "Закупка", "format": "money"},
+    "S16": {"name": "Сумма закупки", "group": "Закупка", "format": "money"},
+    # Logistics group
+    "T16": {"name": "Логистика 1", "group": "Логистика", "format": "money"},
+    "U16": {"name": "Логистика 2", "group": "Логистика", "format": "money"},
+    "V16": {"name": "Логистика всего", "group": "Логистика", "format": "money"},
+    # Customs group
+    "Y16": {"name": "Пошлина", "group": "Таможня", "format": "money"},
+    "Z16": {"name": "Акциз", "group": "Таможня", "format": "money"},
+    # COGS group
+    "AA16": {"name": "Себест./ед", "group": "Себестоимость", "format": "money"},
+    "AB16": {"name": "Себестоимость", "group": "Себестоимость", "format": "money"},
+    # Sales group
+    "AD16": {"name": "Цена без фин.", "group": "Продажа", "format": "money"},
+    "AE16": {"name": "Сумма без фин.", "group": "Продажа", "format": "money"},
+    "AF16": {"name": "Прибыль", "group": "Продажа", "format": "money", "highlight": True},
+    "AG16": {"name": "ЛПР", "group": "Продажа", "format": "money"},
+    "AJ16": {"name": "Цена/ед б/НДС", "group": "Продажа", "format": "money"},
+    "AK16": {"name": "Сумма б/НДС", "group": "Продажа", "format": "money"},
+    "AL16": {"name": "Сумма с НДС", "group": "Продажа", "format": "money", "bold": True},
+    # VAT group
+    "AP16": {"name": "НДС к уплате", "group": "НДС", "format": "money"},
+    # Finance group
+    "BA16": {"name": "Финансирование", "group": "Финансы", "format": "money"},
+    "BB16": {"name": "Кредит", "group": "Финансы", "format": "money"},
+}
+
+# Column presets
+CALC_PRESET_BASIC = ["N16", "S16", "V16", "AB16", "AF16", "AK16", "AL16"]
+CALC_PRESET_FULL = ["N16", "P16", "S16", "T16", "U16", "V16", "Y16", "AA16", "AB16", "AD16", "AF16", "AG16", "AJ16", "AK16", "AL16", "AP16", "BA16", "BB16"]
+
+# Mapping from phase_results columns to summary columns
+CALC_SUMMARY_MAP = {
+    "S16": "calc_s16_total_purchase_price",
+    "V16": "calc_v16_total_logistics",
+    "AB16": "calc_ab16_cogs_total",
+    "AF16": "calc_af16_profit_margin",  # Note: this is actually markup %, not total profit
+    "AK16": "calc_ak16_final_price_total",
+    "AL16": "calc_al16_total_with_vat",
+    "Y16": "calc_y16_customs_duty",
+    "AP16": "calc_ap16_net_vat_payable",
+    "AG16": "calc_ag16_dm_fee",
+}
+
+
+def get_user_calc_columns(user_id: str, supabase) -> list:
+    """Get user's custom column selection from user_settings."""
+    try:
+        result = supabase.table("user_settings") \
+            .select("setting_value") \
+            .eq("user_id", user_id) \
+            .eq("setting_key", "quote_control_columns") \
+            .execute()
+        if result.data:
+            return result.data[0].get("setting_value", {}).get("columns", CALC_PRESET_BASIC)
+    except Exception:
+        pass
+    return CALC_PRESET_BASIC
+
+
+def save_user_calc_columns(user_id: str, columns: list, supabase) -> bool:
+    """Save user's custom column selection to user_settings."""
+    try:
+        # Upsert the setting
+        supabase.table("user_settings").upsert({
+            "user_id": user_id,
+            "setting_key": "quote_control_columns",
+            "setting_value": {"columns": columns, "preset": "custom"},
+            "updated_at": "now()"
+        }, on_conflict="user_id,setting_key").execute()
+        return True
+    except Exception:
+        return False
+
+
+def build_calc_table(items_data: list, summary_data: dict, columns: list, currency: str = "RUB"):
+    """
+    Build calculation details table with selected columns.
+
+    Args:
+        items_data: List of dicts with item info and phase_results
+        summary_data: Dict with aggregated totals from quote_calculation_summaries
+        columns: List of column codes to display (e.g., ["N16", "S16", "V16"])
+        currency: Currency code for display
+
+    Returns:
+        FastHTML Table element
+    """
+    # Build header row
+    header_cells = [
+        Th("Товар", style="text-align: left; white-space: nowrap; position: sticky; left: 0; background: white; z-index: 1;"),
+        Th("Кол-во", style="text-align: right; white-space: nowrap;"),
+    ]
+    for col in columns:
+        col_info = CALC_COLUMNS.get(col, {"name": col, "group": ""})
+        header_cells.append(
+            Th(col_info["name"],
+               style="text-align: right; white-space: nowrap;",
+               title=f"{col} - {col_info.get('group', '')}")
+        )
+    header_cells.append(Th("Маржа %", style="text-align: right; white-space: nowrap;"))
+
+    # Build data rows
+    data_rows = []
+    for item in items_data:
+        phase = item.get("phase_results", {})
+        row_cells = [
+            Td(
+                (item.get("product_name") or "—")[:35],
+                style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; position: sticky; left: 0; background: white;",
+                title=item.get("product_name", "")
+            ),
+            Td(str(item.get("quantity", "—")), style="text-align: right;"),
+        ]
+
+        for col in columns:
+            col_info = CALC_COLUMNS.get(col, {})
+            value = float(phase.get(col, 0) or 0)
+            style = "text-align: right;"
+            if col_info.get("highlight"):
+                style += " color: #22c55e;"
+            if col_info.get("bold"):
+                style += " font-weight: 500;"
+            row_cells.append(Td(format_money(value), style=style))
+
+        # Margin % calculation
+        cogs = float(phase.get("AB16", 0) or 0)
+        profit = float(phase.get("AF16", 0) or 0)
+        margin_pct = (profit / cogs * 100) if cogs > 0 else 0
+        row_cells.append(Td(f"{margin_pct:.1f}%", style="text-align: right; color: #22c55e;"))
+
+        data_rows.append(Tr(*row_cells))
+
+    # Build footer row with totals
+    footer_cells = [
+        Td(Strong("ИТОГО"), style="position: sticky; left: 0; background: #f9fafb;"),
+        Td("", style="background: #f9fafb;"),
+    ]
+    for col in columns:
+        summary_col = CALC_SUMMARY_MAP.get(col)
+        if summary_col and summary_data:
+            value = float(summary_data.get(summary_col, 0) or 0)
+            footer_cells.append(Td(Strong(format_money(value)), style="text-align: right; background: #f9fafb;"))
+        else:
+            footer_cells.append(Td("—", style="text-align: right; background: #f9fafb;"))
+    # Average margin
+    avg_margin = float(summary_data.get("calc_af16_profit_margin", 0) or 0) if summary_data else 0
+    footer_cells.append(Td(Strong(f"{avg_margin:.1f}%"), style="text-align: right; color: #22c55e; background: #f9fafb;"))
+
+    return Table(
+        Thead(Tr(*header_cells)),
+        Tbody(*data_rows),
+        Tfoot(Tr(*footer_cells)),
+        style="width: 100%; font-size: 0.875rem; border-collapse: collapse;"
+    )
+
+
+# ============================================================================
 # QUOTE CONTROL WORKSPACE (Features #46-51)
 # ============================================================================
 
@@ -11186,26 +11352,74 @@ def get(session, quote_id: str):
         .execute()
     summary = summary_result.data[0] if summary_result.data else {}
 
-    # Get detailed calculation results from quote_versions
-    version_result = supabase.table("quote_versions") \
-        .select("input_variables") \
+    # Get detailed calculation results from quote_calculation_results (all phases)
+    calc_results_query = supabase.table("quote_calculation_results") \
+        .select("quote_item_id, phase_results") \
         .eq("quote_id", quote_id) \
-        .order("version", desc=True) \
-        .limit(1) \
         .execute()
 
-    calc_results = []
-    calc_totals = {}
-    if version_result.data:
-        input_vars = version_result.data[0].get("input_variables", {})
-        calc_results = input_vars.get("results", [])
-        calc_totals = input_vars.get("totals", {})
-        # Also get variables from version if not from quote_calculation_variables
-        if not calc_vars:
-            calc_vars = input_vars.get("variables", {})
+    # Get aggregated totals from quote_calculation_summaries
+    calc_summary_result = supabase.table("quote_calculation_summaries") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    calc_summary = calc_summary_result.data[0] if calc_summary_result.data else {}
 
-    # Create items lookup for product names
+    # Build items data with phase_results joined
     items_by_id = {item["id"]: item for item in items}
+    calc_items_data = []
+    if calc_results_query.data:
+        for cr in calc_results_query.data:
+            item_id = cr.get("quote_item_id")
+            item = items_by_id.get(item_id, {})
+            calc_items_data.append({
+                "id": item_id,
+                "product_name": item.get("product_name", "—"),
+                "quantity": item.get("quantity", 0),
+                "phase_results": cr.get("phase_results", {})
+            })
+
+    # Fallback to quote_versions if no calculation results
+    if not calc_items_data:
+        version_result = supabase.table("quote_versions") \
+            .select("input_variables") \
+            .eq("quote_id", quote_id) \
+            .order("version", desc=True) \
+            .limit(1) \
+            .execute()
+        if version_result.data:
+            input_vars = version_result.data[0].get("input_variables", {})
+            for r in input_vars.get("results", []):
+                item_id = r.get("item_id")
+                item = items_by_id.get(item_id, {})
+                calc_items_data.append({
+                    "id": item_id,
+                    "product_name": item.get("product_name", "—"),
+                    "quantity": item.get("quantity", 0),
+                    "phase_results": r  # Results are already phase data
+                })
+            # Also get variables from version if not from quote_calculation_variables
+            if not calc_vars:
+                calc_vars = input_vars.get("variables", {})
+
+    # Get user's column preferences
+    user_calc_preset = "basic"  # Default
+    user_calc_columns = CALC_PRESET_BASIC
+    try:
+        user_settings_result = supabase.table("user_settings") \
+            .select("setting_value") \
+            .eq("user_id", user_id) \
+            .eq("setting_key", "quote_control_columns") \
+            .execute()
+        if user_settings_result.data:
+            setting = user_settings_result.data[0].get("setting_value", {})
+            user_calc_preset = setting.get("preset", "basic")
+            if user_calc_preset == "full":
+                user_calc_columns = CALC_PRESET_FULL
+            elif user_calc_preset == "custom":
+                user_calc_columns = setting.get("columns", CALC_PRESET_BASIC)
+    except Exception:
+        pass
 
     # Determine if editing is allowed
     can_edit = workflow_status == "pending_quote_control"
