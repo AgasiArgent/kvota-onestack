@@ -13789,6 +13789,9 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             active_groups = [g for g, enabled in visible_groups.items() if enabled]
         except:
             active_groups = list(ERPS_COLUMN_GROUPS.keys())
+    elif view == 'compact':
+        # Compact view iterates ALL groups but filters to specific columns
+        active_groups = list(ERPS_COLUMN_GROUPS.keys())
     elif view in ERPS_VIEWS:
         active_groups = ERPS_VIEWS[view]
     else:
