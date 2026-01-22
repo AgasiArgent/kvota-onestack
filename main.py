@@ -13334,14 +13334,22 @@ def post(session, spec_id: str):
 # ============================================================================
 
 @rt("/finance")
-def get(session, tab: str = "workspace", status_filter: str = None):
+def get(session, tab: str = "workspace", status_filter: str = None, view: str = "full", groups: str = None):
     """
     Finance page with tabs: Workspace, ERPS, Calendar
 
     Tabs:
     - workspace: Shows active deals and plan-fact management
-    - erps: Единый реестр подписанных спецификаций
+    - erps: Единый реестр подписанных спецификаций (with configurable views)
     - calendar: Календарь платежей
+
+    ERPS Views:
+    - full: All 30 columns
+    - compact: Key columns only (8)
+    - finance: Spec + Finance + Management blocks
+    - logistics: Key + Logistics + Delivery periods
+    - procurement: Key + Procurement + Auto-calculated payments
+    - custom: User-selected column groups
     """
     redirect = require_login(session)
     if redirect:
@@ -13401,7 +13409,7 @@ def get(session, tab: str = "workspace", status_filter: str = None):
 
     # Render selected tab
     if tab == "erps":
-        content = finance_erps_tab(session, user, org_id)
+        content = finance_erps_tab(session, user, org_id, view=view, custom_groups=groups)
     elif tab == "calendar":
         content = finance_calendar_tab(session, user, org_id)
     else:
@@ -13623,8 +13631,96 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
     )
 
 
-def finance_erps_tab(session, user, org_id):
-    """ERPS tab - Единый реестр подписанных спецификаций"""
+# ERPS Column definitions by group
+ERPS_COLUMN_GROUPS = {
+    'spec': {
+        'label': 'Спецификация',
+        'color': '#fef3c7',
+        'columns': [
+            # IDN and Client are sticky - always visible, handled separately
+            ('sign_date', 'Дата подписания', 'date', None),
+            ('deal_type', 'Тип сделки', 'text', None),
+            ('payment_terms', 'Условия оплаты', 'text', None),
+            ('advance_percent', 'Аванс %', 'percent', None),
+            ('payment_deferral_days', 'Отсрочка, дни', 'text', None),
+            ('spec_sum_usd', 'Сумма спец. USD', 'money', 'text-align: right; font-weight: 500;'),
+            ('spec_profit_usd', 'Профит USD', 'money', 'text-align: right; color: #059669; font-weight: 500;'),
+            ('delivery_deadline', 'Крайний срок поставки', 'date', None),
+            ('advance_payment_deadline', 'Крайний срок оплаты аванса', 'date', None),
+        ]
+    },
+    'auto': {
+        'label': 'Авто-расчетные',
+        'color': '#e9d5ff',
+        'columns': [
+            ('days_until_advance', 'Остаток дней до аванса', 'number', 'text-align: right;'),
+            ('planned_advance_usd', 'Планируемая сумма аванса USD', 'money', 'text-align: right;'),
+            ('total_paid_usd', 'Всего оплачено USD', 'money', 'text-align: right;'),
+            ('remaining_payment_usd', 'Остаток к оплате USD', 'money', 'text-align: right; color: #dc2626;'),
+            ('remaining_payment_percent', 'Остаток %', 'percent', 'text-align: right;'),
+            ('delivery_period_calendar_days', 'Срок поставки, к.д.', 'number', 'text-align: right;'),
+            ('delivery_period_working_days', 'Срок поставки, р.д.', 'number', 'text-align: right;'),
+        ]
+    },
+    'finance': {
+        'label': 'Финансы',
+        'color': '#fecdd3',
+        'columns': [
+            ('advance_payment_date', 'Дата оплаты аванса', 'date', None),
+            ('last_payment_date', 'Дата последней оплаты', 'date', None),
+            ('comment', 'Комментарий', 'text', 'max-width: 200px; overflow: hidden; text-overflow: ellipsis;'),
+        ]
+    },
+    'procurement': {
+        'label': 'Закупки',
+        'color': '#bfdbfe',
+        'columns': [
+            ('supplier_payment_date', 'Дата оплаты поставщику', 'date', None),
+            ('total_spent_usd', 'Всего потрачено USD', 'money', 'text-align: right;'),
+        ]
+    },
+    'logistics': {
+        'label': 'Логистика',
+        'color': '#ddd6fe',
+        'columns': [
+            ('planned_delivery_date', 'Планируемая дата доставки', 'date', None),
+            ('actual_delivery_date', 'Фактическая дата доставки', 'date', None),
+            ('planned_dovoz_date', 'Планируемая дата довоза', 'date', None),
+        ]
+    },
+    'management': {
+        'label': 'Руководство',
+        'color': '#fecdd3',
+        'columns': [
+            ('priority_tag', 'Тег приоритетности', 'priority', None),
+            ('actual_profit_usd', 'Фактический профит USD', 'money', 'text-align: right; color: #059669; font-weight: 500;'),
+        ]
+    },
+    'system': {
+        'label': 'Системные',
+        'color': '#e5e7eb',
+        'columns': [
+            ('created_at', 'Дата создания', 'date', None),
+            ('updated_at', 'Дата изменения', 'date', None),
+        ]
+    },
+}
+
+# Predefined views with groups to show
+ERPS_VIEWS = {
+    'full': ['spec', 'auto', 'finance', 'procurement', 'logistics', 'management', 'system'],
+    'compact': ['spec'],  # Will be further filtered to key columns only
+    'finance': ['spec', 'finance', 'management'],
+    'logistics': ['spec', 'auto', 'logistics'],
+    'procurement': ['spec', 'auto', 'procurement'],
+}
+
+# Compact view shows only these specific columns from spec group
+ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'priority_tag']
+
+
+def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: str = None):
+    """ERPS tab - Единый реестр подписанных спецификаций with configurable views"""
     supabase = get_supabase()
 
     # Fetch data from erps_registry view
@@ -13635,130 +13731,327 @@ def finance_erps_tab(session, user, org_id):
         print(f"Error fetching ERPS data: {e}")
         specs = []
 
-    # Helper to format money
+    # Helper formatters
     def fmt_money(value):
         if value is None:
             return "-"
         return f"${value:,.2f}"
 
-    # Helper to format date
     def fmt_date(value):
         if not value:
             return "-"
-        # Extract date part if it's a datetime string
         return str(value)[:10] if isinstance(value, str) else str(value)
 
-    # Helper to format percent
     def fmt_percent(value):
         if value is None:
             return "-"
         return f"{value:.1f}%"
 
-    # Helper to format priority tag
     def fmt_priority(value):
         if not value:
             return "-"
-        labels = {
-            'important': 'Важно',
-            'normal': 'Обычно',
-            'problem': 'Проблема'
-        }
+        labels = {'important': 'Важно', 'normal': 'Обычно', 'problem': 'Проблема'}
         return labels.get(value, value)
 
-    # Build table with all columns from erps_registry VIEW
-    table = Table(
-        Thead(
-            Tr(
-                # Блок "Спецификация"
-                Th("IDN", style="background: #fef3c7;"),
-                Th("Клиент"),
-                Th("Дата подписания"),
-                Th("Тип сделки"),
-                Th("Условия оплаты"),
-                Th("Аванс %"),
-                Th("Отсрочка, дни"),
-                Th("Сумма спец. USD", style="background: #fef3c7;"),
-                Th("Профит USD", style="background: #fef3c7;"),
-                Th("Крайний срок поставки"),
-                Th("Крайний срок оплаты аванса"),
-                # Блок "Авто" (расчетные)
-                Th("Остаток дней до аванса", style="background: #e9d5ff;"),
-                Th("Планируемая сумма аванса USD", style="background: #e9d5ff;"),
-                Th("Всего оплачено USD", style="background: #e9d5ff;"),
-                Th("Остаток к оплате USD", style="background: #e9d5ff;"),
-                Th("Остаток %", style="background: #e9d5ff;"),
-                Th("Срок поставки, к.д.", style="background: #e9d5ff;"),
-                Th("Срок поставки, р.д.", style="background: #e9d5ff;"),
-                # Блок "Финансы"
-                Th("Дата оплаты аванса", style="background: #fecdd3;"),
-                Th("Дата последней оплаты", style="background: #fecdd3;"),
-                Th("Комментарий", style="background: #fecdd3;"),
-                # Блок "Закупки"
-                Th("Дата оплаты поставщику", style="background: #bfdbfe;"),
-                Th("Всего потрачено USD", style="background: #bfdbfe;"),
-                # Блок "Логистика"
-                Th("Планируемая дата доставки", style="background: #ddd6fe;"),
-                Th("Фактическая дата доставки", style="background: #ddd6fe;"),
-                Th("Планируемая дата довоза", style="background: #ddd6fe;"),
-                # Блок "Финансы/Руководство"
-                Th("Тег приоритетности", style="background: #fecdd3;"),
-                Th("Фактический профит USD", style="background: #fef3c7;"),
-                # Блок "Авто" (системные)
-                Th("Дата создания", style="background: #e5e7eb;"),
-                Th("Дата изменения", style="background: #e5e7eb;"),
-            )
-        ),
-        Tbody(
-            *[Tr(
-                # Блок "Спецификация"
-                Td(spec.get('idn', '-'), style="background: #fef3c7;"),
-                Td(spec.get('client_name', '-')),
-                Td(fmt_date(spec.get('sign_date'))),
-                Td(spec.get('deal_type', '-')),
-                Td(spec.get('payment_terms', '-')),
-                Td(fmt_percent(spec.get('advance_percent'))),
-                Td(str(spec.get('payment_deferral_days', '-'))),
-                Td(fmt_money(spec.get('spec_sum_usd')), style="text-align: right; font-weight: 500; background: #fef3c7;"),
-                Td(fmt_money(spec.get('spec_profit_usd')), style="text-align: right; color: #059669; font-weight: 500; background: #fef3c7;"),
-                Td(fmt_date(spec.get('delivery_deadline'))),
-                Td(fmt_date(spec.get('advance_payment_deadline'))),
-                # Блок "Авто"
-                Td(str(spec.get('days_until_advance', '-')), style="text-align: right; background: #e9d5ff;"),
-                Td(fmt_money(spec.get('planned_advance_usd')), style="text-align: right; background: #e9d5ff;"),
-                Td(fmt_money(spec.get('total_paid_usd')), style="text-align: right; background: #e9d5ff;"),
-                Td(fmt_money(spec.get('remaining_payment_usd')), style="text-align: right; color: #dc2626; background: #e9d5ff;"),
-                Td(fmt_percent(spec.get('remaining_payment_percent')), style="text-align: right; background: #e9d5ff;"),
-                Td(str(spec.get('delivery_period_calendar_days', '-')), style="text-align: right; background: #e9d5ff;"),
-                Td(str(spec.get('delivery_period_working_days', '-')), style="text-align: right; background: #e9d5ff;"),
-                # Блок "Финансы"
-                Td(fmt_date(spec.get('advance_payment_date')), style="background: #fecdd3;"),
-                Td(fmt_date(spec.get('last_payment_date')), style="background: #fecdd3;"),
-                Td(spec.get('comment', '-'), style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; background: #fecdd3;"),
-                # Блок "Закупки"
-                Td(fmt_date(spec.get('supplier_payment_date')), style="background: #bfdbfe;"),
-                Td(fmt_money(spec.get('total_spent_usd')), style="text-align: right; background: #bfdbfe;"),
-                # Блок "Логистика"
-                Td(fmt_date(spec.get('planned_delivery_date')), style="background: #ddd6fe;"),
-                Td(fmt_date(spec.get('actual_delivery_date')), style="background: #ddd6fe;"),
-                Td(fmt_date(spec.get('planned_dovoz_date')), style="background: #ddd6fe;"),
-                # Блок "Финансы/Руководство"
-                Td(fmt_priority(spec.get('priority_tag')), style="background: #fecdd3;"),
-                Td(fmt_money(spec.get('actual_profit_usd')), style="text-align: right; color: #059669; font-weight: 500; background: #fef3c7;"),
-                # Блок "Авто"
-                Td(fmt_date(spec.get('created_at')), style="background: #e5e7eb;"),
-                Td(fmt_date(spec.get('updated_at')), style="background: #e5e7eb;"),
-            ) for spec in specs]
-        ) if specs else Tbody(
-            Tr(Td("Нет данных", colspan="30", style="text-align: center; padding: 2rem; color: #666;"))
-        ),
-        cls="striped",
-        style="width: 100%; overflow-x: auto; font-size: 0.75rem;"
-    )
+    def format_value(value, fmt_type):
+        if fmt_type == 'money':
+            return fmt_money(value)
+        elif fmt_type == 'date':
+            return fmt_date(value)
+        elif fmt_type == 'percent':
+            return fmt_percent(value)
+        elif fmt_type == 'priority':
+            return fmt_priority(value)
+        elif fmt_type == 'number':
+            return str(value) if value is not None else '-'
+        else:
+            return str(value) if value else '-'
 
+    # Determine which groups to show
+    if view == 'custom' and custom_groups:
+        import json
+        try:
+            visible_groups = json.loads(custom_groups)
+            active_groups = [g for g, enabled in visible_groups.items() if enabled]
+        except:
+            active_groups = list(ERPS_COLUMN_GROUPS.keys())
+    elif view in ERPS_VIEWS:
+        active_groups = ERPS_VIEWS[view]
+    else:
+        active_groups = ERPS_VIEWS['full']
+
+    # Build column list based on view
+    columns = []
+    for group_key in active_groups:
+        if group_key not in ERPS_COLUMN_GROUPS:
+            continue
+        group = ERPS_COLUMN_GROUPS[group_key]
+        group_color = group['color']
+        for col_key, col_label, col_type, col_style in group['columns']:
+            # For compact view, only show specific columns
+            if view == 'compact' and col_key not in ERPS_COMPACT_COLUMNS:
+                continue
+            columns.append({
+                'key': col_key,
+                'label': col_label,
+                'type': col_type,
+                'style': col_style,
+                'color': group_color,
+                'group': group_key
+            })
+
+    # CSS for sticky columns and view selector
+    erps_css = """
+        .erps-table-container {
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        .erps-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.75rem;
+            width: max-content;
+            min-width: 100%;
+        }
+        .erps-table th, .erps-table td {
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+        }
+        .erps-table th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: white;
+        }
+        /* Sticky columns: IDN */
+        .erps-table th.sticky-idn,
+        .erps-table td.sticky-idn {
+            position: sticky;
+            left: 0;
+            z-index: 10;
+            background: #fef3c7 !important;
+            min-width: 100px;
+        }
+        /* Sticky columns: Client */
+        .erps-table th.sticky-client,
+        .erps-table td.sticky-client {
+            position: sticky;
+            left: 100px;
+            z-index: 10;
+            background: #fff9e6 !important;
+            min-width: 150px;
+            border-right: 2px solid #d97706;
+        }
+        .erps-table th.sticky-idn,
+        .erps-table th.sticky-client {
+            z-index: 15;
+        }
+        /* View selector styles */
+        .view-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .view-btn {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            text-decoration: none;
+            color: #374151;
+            font-size: 0.875rem;
+            background: white;
+            transition: all 0.15s;
+        }
+        .view-btn:hover {
+            background: #f3f4f6;
+            border-color: #9ca3af;
+        }
+        .view-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        .group-toggles {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .group-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .group-toggle input {
+            margin: 0;
+        }
+    """
+
+    # View selector buttons
+    view_labels = [
+        ('full', 'Полный'),
+        ('compact', 'Компактный'),
+        ('finance', 'Финансы'),
+        ('logistics', 'Логистика'),
+        ('procurement', 'Закупки'),
+        ('custom', 'Кастомный'),
+    ]
+
+    view_buttons = [
+        A(label,
+          href=f"/finance?tab=erps&view={key}",
+          cls="view-btn" + (" active" if view == key else ""))
+        for key, label in view_labels
+    ]
+
+    # Group toggles for custom view (shown only when custom is selected)
+    group_toggles = None
+    if view == 'custom':
+        # Parse current custom groups or default to all enabled
+        import json
+        try:
+            current_groups = json.loads(custom_groups) if custom_groups else {}
+        except:
+            current_groups = {}
+
+        # Default all groups to enabled if not specified
+        for gk in ERPS_COLUMN_GROUPS.keys():
+            if gk not in current_groups:
+                current_groups[gk] = True
+
+        toggle_items = []
+        for group_key, group_data in ERPS_COLUMN_GROUPS.items():
+            is_checked = current_groups.get(group_key, True)
+            toggle_items.append(
+                Label(
+                    Input(
+                        type="checkbox",
+                        checked=is_checked,
+                        data_group=group_key,
+                        cls="group-checkbox"
+                    ),
+                    f" {group_data['label']}",
+                    cls="group-toggle",
+                    style=f"background: {group_data['color']};"
+                )
+            )
+
+        group_toggles = Div(
+            Span("Показать блоки:", style="font-weight: 500; margin-right: 0.5rem;"),
+            *toggle_items,
+            cls="group-toggles",
+            id="group-toggles"
+        )
+
+    # JavaScript for custom view toggling
+    custom_js = Script("""
+        document.addEventListener('DOMContentLoaded', function() {
+            // Handle group checkbox changes
+            document.querySelectorAll('.group-checkbox').forEach(function(checkbox) {
+                checkbox.addEventListener('change', function() {
+                    updateCustomView();
+                });
+            });
+        });
+
+        function updateCustomView() {
+            const groups = {};
+            document.querySelectorAll('.group-checkbox').forEach(function(checkbox) {
+                groups[checkbox.dataset.group] = checkbox.checked;
+            });
+            // Save to localStorage
+            localStorage.setItem('erps_custom_groups', JSON.stringify(groups));
+            // Reload with new groups
+            window.location.href = '/finance?tab=erps&view=custom&groups=' + encodeURIComponent(JSON.stringify(groups));
+        }
+
+        // On page load, check if we should apply saved custom groups
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const view = urlParams.get('view');
+            if (view === 'custom' && !urlParams.has('groups')) {
+                const savedGroups = localStorage.getItem('erps_custom_groups');
+                if (savedGroups) {
+                    window.location.href = '/finance?tab=erps&view=custom&groups=' + encodeURIComponent(savedGroups);
+                }
+            }
+        })();
+    """)
+
+    # Build table headers
+    header_cells = [
+        Th("IDN", cls="sticky-idn", style="background: #fef3c7;"),
+        Th("Клиент", cls="sticky-client"),
+    ]
+    for col in columns:
+        cell_style = f"background: {col['color']};"
+        if col['style']:
+            cell_style += f" {col['style']}"
+        header_cells.append(Th(col['label'], style=cell_style))
+
+    # Build table rows
+    rows = []
+    for spec in specs:
+        row_cells = [
+            Td(spec.get('idn', '-'), cls="sticky-idn"),
+            Td(spec.get('client_name', '-'), cls="sticky-client"),
+        ]
+        for col in columns:
+            value = spec.get(col['key'])
+            formatted = format_value(value, col['type'])
+            cell_style = f"background: {col['color']};"
+            if col['style']:
+                cell_style += f" {col['style']}"
+            row_cells.append(Td(formatted, style=cell_style))
+        rows.append(Tr(*row_cells))
+
+    # Build table
+    if specs:
+        table = Table(
+            Thead(Tr(*header_cells)),
+            Tbody(*rows),
+            cls="erps-table"
+        )
+    else:
+        colspan = 2 + len(columns)
+        table = Table(
+            Thead(Tr(*header_cells)),
+            Tbody(Tr(Td("Нет данных", colspan=str(colspan), style="text-align: center; padding: 2rem; color: #666;"))),
+            cls="erps-table"
+        )
+
+    # Build complete UI
     return Div(
-        H2("Единый реестр подписанных спецификаций (ERPS)", style="margin-bottom: 1.5rem;"),
-        P(f"Всего спецификаций: {len(specs)}", style="margin-bottom: 1rem; color: #666;"),
-        Div(table, style="overflow-x: auto;")
+        Style(erps_css),
+        custom_js,
+        H2("Единый реестр подписанных спецификаций (ERPS)", style="margin-bottom: 1rem;"),
+
+        # View selector
+        Div(
+            Span("Вид:", style="font-weight: 500; margin-right: 0.5rem;"),
+            *view_buttons,
+            cls="view-selector"
+        ),
+
+        # Group toggles (only for custom view)
+        group_toggles if group_toggles else "",
+
+        # Stats
+        P(f"Всего спецификаций: {len(specs)} | Колонок: {2 + len(columns)}", style="margin-bottom: 1rem; color: #666; font-size: 0.875rem;"),
+
+        # Table
+        Div(table, cls="erps-table-container")
     )
 
 
