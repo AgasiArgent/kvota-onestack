@@ -11757,18 +11757,18 @@ def get(session, quote_id: str, preset: str = None):
             H3(icon("calculator", size=20), " Детали расчёта по позициям", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Промежуточные значения расчёта для каждой позиции", style="color: #666; margin-bottom: 1rem;"),
 
-            # Preset selector
+            # Preset selector (links include #calc-table anchor to preserve scroll position)
             Div(
                 Span("Показать:", style="margin-right: 0.5rem; font-weight: 500;"),
                 A(
                     "Базовый",
-                    href=f"/quote-control/{quote_id}?preset=basic",
+                    href=f"/quote-control/{quote_id}?preset=basic#calc-table",
                     cls="btn btn-sm" + (" btn-primary" if user_calc_preset == "basic" else ""),
                     style="margin-right: 0.25rem;"
                 ),
                 A(
                     "Полный",
-                    href=f"/quote-control/{quote_id}?preset=full",
+                    href=f"/quote-control/{quote_id}?preset=full#calc-table",
                     cls="btn btn-sm" + (" btn-primary" if user_calc_preset == "full" else ""),
                     style="margin-right: 0.25rem;"
                 ),
@@ -11824,6 +11824,7 @@ def get(session, quote_id: str, preset: str = None):
                 style="margin-top: 0.5rem;"
             ),
 
+            id="calc-table",
             cls="card",
             style="margin-top: 1rem;"
         ) if calc_items_data or calc_summary else None,
@@ -12079,7 +12080,7 @@ def post(session, quote_id: str, columns: list = None):
     except Exception as e:
         print(f"Error saving user settings: {e}")
 
-    return RedirectResponse(f"/quote-control/{quote_id}?preset=custom", status_code=303)
+    return RedirectResponse(f"/quote-control/{quote_id}?preset=custom#calc-table", status_code=303)
 
 
 @rt("/quote-control/{quote_id}/columns/preset/{preset_name}")
@@ -12121,7 +12122,7 @@ def get(session, quote_id: str, preset_name: str):
     except Exception as e:
         print(f"Error saving user settings: {e}")
 
-    return RedirectResponse(f"/quote-control/{quote_id}?preset={preset_name}", status_code=303)
+    return RedirectResponse(f"/quote-control/{quote_id}?preset={preset_name}#calc-table", status_code=303)
 
 
 # ============================================================================
