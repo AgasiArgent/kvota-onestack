@@ -108,10 +108,12 @@ def create_quote_version(
 
     version = result.data[0] if result.data else None
 
-    # Update quote with current version info (if columns exist)
+    # Update quote with current version info
     if version:
         try:
             supabase.table("quotes").update({
+                "current_version_id": version["id"],
+                "delivery_terms": variables.get("offer_incoterms", ""),
                 "updated_at": datetime.now().isoformat()
             }).eq("id", quote_id).execute()
         except Exception:
