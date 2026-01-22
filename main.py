@@ -859,6 +859,120 @@ button[style*="#0172AD"] {
         gap: 0.5rem;
     }
 }
+
+/* ========== Enhanced Tabs with "Folder Tab" Effect ========== */
+.tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0;
+    padding-left: 0.5rem;
+}
+
+.tab {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    background: rgba(99, 102, 241, 0.05);
+    color: #94a3b8;
+    font-weight: 500;
+    font-size: 0.9375rem;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-bottom: none;
+    position: relative;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    margin-bottom: -1px;
+}
+
+.tab:hover {
+    background: rgba(99, 102, 241, 0.08);
+    color: #64748b;
+}
+
+.tab-active {
+    background: white !important;
+    color: #4f46e5 !important;
+    font-weight: 600;
+    transform: translateY(-4px) scale(1.05);
+    box-shadow: 0 -4px 12px rgba(99, 102, 241, 0.15);
+    border-color: rgba(99, 102, 241, 0.2);
+    z-index: 10;
+}
+
+.tab-active::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+/* ========== Enhanced Stat Cards with Gradients ========== */
+.stats {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 1rem;
+    border-radius: 1rem;
+    box-shadow: none;
+    overflow: visible;
+    background: transparent;
+}
+
+.stat {
+    padding: 1.75rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.stat::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+}
+
+.stat:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.stat-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-value {
+    font-size: 2.25rem;
+    font-weight: 800;
+    line-height: 1.2;
+    background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.stat-desc {
+    font-size: 0.875rem;
+    color: #94a3b8;
+    font-weight: 400;
+}
 """
 
 # ============================================================================
@@ -18529,11 +18643,17 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
     # Build tab content based on selected tab
     if tab == "general":
-        from services.customer_service import get_customer_statistics
+        from services.customer_service import get_customer_statistics, get_customer_quotes, get_customer_specifications
         from datetime import datetime
 
         # Get statistics
         stats = get_customer_statistics(customer_id)
+
+        # Get latest quotes and specifications (for summary)
+        all_quotes = get_customer_quotes(customer_id)
+        all_specs = get_customer_specifications(customer_id)
+        latest_quotes = all_quotes[:3] if all_quotes else []
+        latest_specs = all_specs[:3] if all_specs else []
 
         # Format dates
         created_at = ""
@@ -18544,63 +18664,66 @@ def get(customer_id: str, session, request, tab: str = "general"):
         if customer.updated_at:
             updated_at = customer.updated_at.strftime("%d.%m.%Y %H:%M")
 
-        tab_content = Div(
-            # Main info section
-            Div(
-                H3("Основная информация", style="margin-bottom: 1rem;"),
-                Div(
-                    Div(
-                        Div(Strong("Название компании"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        _render_field_display(customer_id, "name", customer.name),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("ИНН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        _render_field_display(customer_id, "inn", customer.inn or ""),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("КПП"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        _render_field_display(customer_id, "kpp", customer.kpp or ""),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("ОГРН"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("Основной менеджер"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div("Не назначен", style="padding: 0.5rem 0.75rem; color: #999;"),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("Дата добавления"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(created_at or "—", style="padding: 0.5rem 0.75rem;"),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("Дата обновления"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(updated_at or "—", style="padding: 0.5rem 0.75rem;"),
-                        cls="info-item"
-                    ),
-                    Div(
-                        Div(Strong("Статус"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                        Div(
-                            Span("✅ Активен" if customer.is_active else "❌ Неактивен",
-                                 cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
-                            style="padding: 0.5rem 0.75rem;"
-                        ),
-                        cls="info-item"
-                    ),
-                    cls="info-grid",
-                    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem;"
-                ),
-            ),
+        # Helper to render workflow status badge
+        def render_status_badge(status):
+            status_map = {
+                'draft': ('Черновик', 'status-draft'),
+                'sent': ('Отправлено', 'status-sent'),
+                'approved': ('Одобрено', 'status-approved'),
+                'rejected': ('Отклонено', 'status-rejected'),
+                'in_progress': ('В работе', 'status-progress'),
+                'pending': ('На рассмотрении', 'status-pending'),
+            }
+            label, cls = status_map.get(status, (status or '—', 'status-draft'))
+            return Span(label, cls=f"status-badge {cls}", style="font-size: 0.75rem; padding: 0.25rem 0.5rem;")
 
-            # Statistics section (DaisyUI stats)
+        # Build latest quotes rows
+        quotes_rows = []
+        for q in latest_quotes:
+            q_date = ""
+            if q.get("created_at"):
+                try:
+                    q_date = datetime.fromisoformat(q["created_at"].replace("Z", "+00:00")).strftime("%d.%m.%Y")
+                except:
+                    q_date = "—"
+            quotes_rows.append(
+                Tr(
+                    Td(A(q.get("idn") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500;")),
+                    Td(f"{q.get('total_sum', 0):,.0f} ₽", style="text-align: right;"),
+                    Td(f"{q.get('total_profit', 0):,.0f} ₽", style="text-align: right; color: #10b981;"),
+                    Td(q_date),
+                    Td(render_status_badge(q.get("workflow_status"))),
+                )
+            )
+
+        # Build latest specs rows
+        specs_rows = []
+        for s in latest_specs:
+            s_date = ""
+            if s.get("sign_date"):
+                try:
+                    s_date = datetime.fromisoformat(s["sign_date"].replace("Z", "+00:00")).strftime("%d.%m.%Y")
+                except:
+                    s_date = "—"
+            elif s.get("created_at"):
+                try:
+                    s_date = datetime.fromisoformat(s["created_at"].replace("Z", "+00:00")).strftime("%d.%m.%Y")
+                except:
+                    s_date = "—"
+            spec_idn = s.get("idn") or (s.get("quotes", {}) or {}).get("idn") or f"#{s['id'][:8]}"
+            specs_rows.append(
+                Tr(
+                    Td(A(spec_idn, href=f"/specifications/{s['id']}", style="font-weight: 500;")),
+                    Td(f"{s.get('total_sum', 0):,.0f} ₽", style="text-align: right;"),
+                    Td(f"{s.get('total_profit', 0):,.0f} ₽", style="text-align: right; color: #10b981;"),
+                    Td(s_date),
+                    Td(render_status_badge(s.get("status"))),
+                )
+            )
+
+        tab_content = Div(
+            # Statistics cards at the top
             Div(
-                H3("Статистика по клиенту", style="margin: 2rem 0 1rem 0;"),
                 Div(
                     stat_card(
                         value=str(stats["quotes_count"]),
@@ -18622,9 +18745,155 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         label="Сумма спецификаций",
                         description="общая сумма сделок"
                     ),
-                    cls="stats stats-vertical lg:stats-horizontal shadow",
-                    style="background: var(--card-background-color);"
+                    cls="stats",
+                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
                 ),
+                style="margin-bottom: 2rem;"
+            ),
+
+            # Two-column layout
+            Div(
+                # LEFT COLUMN: Main info + Addresses
+                Div(
+                    # Main info section
+                    Div(
+                        H3("📋 Основная информация", style="margin-bottom: 1rem; color: #e2e8f0;"),
+                        Div(
+                            # Company name
+                            Div(
+                                Div("Название компании", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                Div(customer.name or "—", style="font-weight: 600; font-size: 1.1rem;"),
+                                style="margin-bottom: 1rem;"
+                            ),
+                            # INN, KPP, OGRN in a row
+                            Div(
+                                Div(
+                                    Div("ИНН", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div(customer.inn or "—"),
+                                ),
+                                Div(
+                                    Div("КПП", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div(customer.kpp or "—"),
+                                ),
+                                Div(
+                                    Div("ОГРН", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div(customer.ogrn or "—"),
+                                ),
+                                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;"
+                            ),
+                            # Manager and Status
+                            Div(
+                                Div(
+                                    Div("Менеджер", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div("Не назначен", style="color: #64748b;"),
+                                ),
+                                Div(
+                                    Div("Статус", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Span("✅ Активен" if customer.is_active else "❌ Неактивен",
+                                         cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
+                                ),
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                            ),
+                            # Dates
+                            Div(
+                                Div(
+                                    Div("Дата добавления", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div(created_at or "—", style="color: #94a3b8;"),
+                                ),
+                                Div(
+                                    Div("Дата обновления", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                    Div(updated_at or "—", style="color: #94a3b8;"),
+                                ),
+                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
+                            ),
+                            style="padding: 1rem;"
+                        ),
+                        cls="card",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; margin-bottom: 1rem;"
+                    ),
+
+                    # Addresses section
+                    Div(
+                        H3("📍 Адреса", style="margin-bottom: 1rem; color: #e2e8f0;"),
+                        Div(
+                            Div(
+                                Div("Юридический адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                Div(customer.legal_address or "Не указан", style="color: #e2e8f0;" if customer.legal_address else "color: #64748b;"),
+                                style="margin-bottom: 1rem;"
+                            ),
+                            Div(
+                                Div("Фактический адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                Div(customer.actual_address or "Не указан", style="color: #e2e8f0;" if customer.actual_address else "color: #64748b;"),
+                                style="margin-bottom: 1rem;"
+                            ) if customer.actual_address != customer.legal_address else None,
+                            Div(
+                                Div("Почтовый адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
+                                Div(customer.postal_address or "Совпадает с фактическим", style="color: #e2e8f0;" if customer.postal_address and customer.postal_address != customer.actual_address else "color: #64748b; font-style: italic;"),
+                            ) if customer.postal_address and customer.postal_address != customer.actual_address else None,
+                            style="padding: 1rem;"
+                        ),
+                        cls="card",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem;"
+                    ),
+                    style="flex: 1;"
+                ),
+
+                # RIGHT COLUMN: Recent Quotes + Recent Specs
+                Div(
+                    # Latest Quotes section
+                    Div(
+                        Div(
+                            H3("📄 Последние КП", style="margin: 0; color: #e2e8f0;"),
+                            A("Посмотреть все →", href=f"/customers/{customer_id}?tab=quotes", style="font-size: 0.875rem;"),
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                        ),
+                        Table(
+                            Thead(
+                                Tr(
+                                    Th("№", style="font-size: 0.75rem;"),
+                                    Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
+                                    Th("Профит", style="font-size: 0.75rem; text-align: right;"),
+                                    Th("Дата", style="font-size: 0.75rem;"),
+                                    Th("Статус", style="font-size: 0.75rem;"),
+                                )
+                            ),
+                            Tbody(*quotes_rows) if quotes_rows else Tbody(
+                                Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                            ),
+                            style="font-size: 0.875rem;"
+                        ),
+                        cls="card",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem;"
+                    ),
+
+                    # Latest Specifications section
+                    Div(
+                        Div(
+                            H3("📑 Последние спецификации", style="margin: 0; color: #e2e8f0;"),
+                            A("Посмотреть все →", href=f"/customers/{customer_id}?tab=specifications", style="font-size: 0.875rem;"),
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                        ),
+                        Table(
+                            Thead(
+                                Tr(
+                                    Th("№", style="font-size: 0.75rem;"),
+                                    Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
+                                    Th("Профит", style="font-size: 0.75rem; text-align: right;"),
+                                    Th("Дата", style="font-size: 0.75rem;"),
+                                    Th("Статус", style="font-size: 0.75rem;"),
+                                )
+                            ),
+                            Tbody(*specs_rows) if specs_rows else Tbody(
+                                Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                            ),
+                            style="font-size: 0.875rem;"
+                        ),
+                        cls="card",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem;"
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 1.5rem;"
             )
         )
 
