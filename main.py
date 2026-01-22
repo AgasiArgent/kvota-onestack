@@ -981,8 +981,8 @@ button[style*="#0172AD"] {
 }
 
 .sidebar {
-    width: 260px;
-    min-width: 260px;
+    width: 240px;
+    min-width: 240px;
     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
     display: flex;
     flex-direction: column;
@@ -997,93 +997,126 @@ button[style*="#0172AD"] {
 }
 
 .sidebar.collapsed {
-    width: 70px;
-    min-width: 70px;
+    width: 60px;
+    min-width: 60px;
 }
 
 .sidebar-header {
-    padding: 1.25rem;
+    padding: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    min-height: 60px;
 }
 
-.sidebar-logo {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: white;
-    text-decoration: none;
+/* Toggle button is now the logo area */
+.sidebar-toggle-btn {
     display: flex;
     align-items: center;
     gap: 0.75rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+    width: 100%;
 }
 
-.sidebar-logo-icon {
+.sidebar-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-toggle-icon {
     width: 36px;
     height: 36px;
+    min-width: 36px;
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     border-radius: 0.5rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.25rem;
-}
-
-.sidebar.collapsed .sidebar-logo-text {
-    display: none;
-}
-
-.sidebar-toggle {
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    color: #94a3b8;
-    width: 32px;
-    height: 32px;
-    border-radius: 0.375rem;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-}
-
-.sidebar-toggle:hover {
-    background: rgba(255, 255, 255, 0.15);
+    font-size: 1rem;
     color: white;
+    transition: transform 0.3s ease;
 }
 
-.sidebar.collapsed .sidebar-toggle {
+.sidebar.collapsed .sidebar-toggle-icon {
     transform: rotate(180deg);
+}
+
+.sidebar-toggle-text {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+}
+
+.sidebar.collapsed .sidebar-toggle-text {
+    display: none;
 }
 
 .sidebar-nav {
     flex: 1;
-    padding: 1rem 0;
+    padding: 0.5rem 0;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .sidebar-section {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
-.sidebar-section-title {
-    padding: 0.5rem 1.25rem;
+/* Clickable section header (accordion toggle) */
+.sidebar-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
     font-size: 0.7rem;
     font-weight: 600;
     color: #64748b;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
 }
 
-.sidebar.collapsed .sidebar-section-title {
+.sidebar-section-header:hover {
+    color: #94a3b8;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.sidebar-section-arrow {
+    font-size: 0.5rem;
+    transition: transform 0.2s ease;
+}
+
+.sidebar-section.collapsed .sidebar-section-arrow {
+    transform: rotate(-90deg);
+}
+
+.sidebar-section-items {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    max-height: 500px;
+}
+
+.sidebar-section.collapsed .sidebar-section-items {
+    max-height: 0;
+}
+
+.sidebar.collapsed .sidebar-section-header {
     display: none;
 }
 
 .sidebar-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 1.25rem;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
     color: #94a3b8;
     text-decoration: none;
     transition: all 0.2s;
@@ -1106,10 +1139,19 @@ button[style*="#0172AD"] {
 .sidebar-item-icon {
     width: 20px;
     height: 20px;
+    min-width: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    font-size: 0.95rem;
+}
+
+.sidebar-item-text {
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .sidebar.collapsed .sidebar-item-text {
@@ -1118,66 +1160,37 @@ button[style*="#0172AD"] {
 
 .sidebar.collapsed .sidebar-item {
     justify-content: center;
-    padding: 0.75rem;
-}
-
-/* Dropdown/Expandable section */
-.sidebar-dropdown {
-    overflow: hidden;
-    max-height: 0;
-    transition: max-height 0.3s ease;
-}
-
-.sidebar-dropdown.open {
-    max-height: 500px;
-}
-
-.sidebar-dropdown-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-}
-
-.sidebar-dropdown-toggle::after {
-    content: '▼';
-    font-size: 0.6rem;
-    transition: transform 0.2s;
-}
-
-.sidebar-dropdown-toggle.open::after {
-    transform: rotate(180deg);
-}
-
-.sidebar.collapsed .sidebar-dropdown-toggle::after {
-    display: none;
-}
-
-.sidebar-dropdown .sidebar-item {
-    padding-left: 3rem;
-}
-
-.sidebar.collapsed .sidebar-dropdown .sidebar-item {
-    padding-left: 0.75rem;
+    padding: 0.6rem;
+    border-left: none;
 }
 
 /* User section at bottom */
 .sidebar-footer {
-    padding: 1rem 1.25rem;
+    padding: 0.75rem 1rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    margin-top: auto;
 }
 
 .sidebar-user {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
     color: #94a3b8;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
+    text-decoration: none;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+}
+
+.sidebar-user:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .sidebar-user-avatar {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     border-radius: 50%;
     display: flex;
@@ -1185,23 +1198,47 @@ button[style*="#0172AD"] {
     justify-content: center;
     color: white;
     font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.sidebar-user-info {
+    overflow: hidden;
+}
+
+.sidebar-user-email {
+    font-weight: 500;
+    color: #e2e8f0;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+}
+
+.sidebar-user-logout {
+    font-size: 0.7rem;
+    color: #94a3b8;
 }
 
 .sidebar.collapsed .sidebar-user-info {
     display: none;
 }
 
+.sidebar.collapsed .sidebar-user {
+    justify-content: center;
+}
+
 /* Main content area */
 .main-content {
     flex: 1;
-    margin-left: 260px;
+    margin-left: 240px;
     transition: margin-left 0.3s ease;
     min-height: 100vh;
 }
 
 .sidebar.collapsed + .main-content,
 .main-content.sidebar-collapsed {
-    margin-left: 70px;
+    margin-left: 60px;
 }
 
 /* Remove old nav styles when sidebar is used (except sidebar-nav) */
@@ -1300,11 +1337,12 @@ def sidebar(session, current_path: str = ""):
         # Not logged in - show minimal sidebar with login
         return Aside(
             Div(
-                A(
-                    Div("K", cls="sidebar-logo-icon"),
-                    Span("Kvota", cls="sidebar-logo-text"),
-                    href="/login",
-                    cls="sidebar-logo"
+                Button(
+                    Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
+                    Span("Kvota", cls="sidebar-toggle-text"),
+                    cls="sidebar-toggle-btn",
+                    onclick="toggleSidebar()",
+                    type="button"
                 ),
                 cls="sidebar-header"
             ),
@@ -1386,14 +1424,18 @@ def sidebar(session, current_path: str = ""):
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
 
-    # Build sidebar sections
+    # Build sidebar sections with collapsible headers
     nav_sections = []
-    for section in menu_sections:
+    for idx, section in enumerate(menu_sections):
         section_items = []
+        has_active = False
+
         for item in section["items"]:
             # Check if user has required role
             if item["roles"] is None or is_admin or any(r in roles for r in item["roles"]):
                 is_active = current_path == item["href"] or (item["href"] != "/" and current_path.startswith(item["href"]))
+                if is_active:
+                    has_active = True
                 section_items.append(
                     A(
                         Span(item["icon"], cls="sidebar-item-icon"),
@@ -1404,11 +1446,24 @@ def sidebar(session, current_path: str = ""):
                 )
 
         if section_items:
+            section_id = f"section-{idx}"
             nav_sections.append(
                 Div(
-                    Div(section["title"], cls="sidebar-section-title"),
-                    *section_items,
-                    cls="sidebar-section"
+                    # Clickable section header
+                    Div(
+                        Span(section["title"]),
+                        Span("▼", cls="sidebar-section-arrow"),
+                        cls="sidebar-section-header",
+                        onclick=f"toggleSection('{section_id}')"
+                    ),
+                    # Collapsible items container
+                    Div(
+                        *section_items,
+                        cls="sidebar-section-items",
+                        id=section_id
+                    ),
+                    cls="sidebar-section",
+                    data_has_active="true" if has_active else "false"
                 )
             )
 
@@ -1417,18 +1472,14 @@ def sidebar(session, current_path: str = ""):
     initials = email[0].upper() if email else "U"
 
     return Aside(
-        # Header with logo and toggle
+        # Header with toggle button (replaces logo link)
         Div(
-            A(
-                Div("K", cls="sidebar-logo-icon"),
-                Span("Kvota", cls="sidebar-logo-text"),
-                href="/dashboard",
-                cls="sidebar-logo"
-            ),
             Button(
-                "◀",
-                cls="sidebar-toggle",
-                onclick="toggleSidebar()"
+                Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
+                Span("Kvota", cls="sidebar-toggle-text"),
+                cls="sidebar-toggle-btn",
+                onclick="toggleSidebar()",
+                type="button"
             ),
             cls="sidebar-header"
         ),
@@ -1439,8 +1490,8 @@ def sidebar(session, current_path: str = ""):
             A(
                 Div(initials, cls="sidebar-user-avatar"),
                 Div(
-                    Div(email, style="font-weight: 500; color: #e2e8f0;"),
-                    Div("Выйти", style="font-size: 0.75rem; color: #94a3b8;"),
+                    Div(email, cls="sidebar-user-email"),
+                    Div("Выйти", cls="sidebar-user-logout"),
                     cls="sidebar-user-info"
                 ),
                 href="/logout",
@@ -1453,28 +1504,77 @@ def sidebar(session, current_path: str = ""):
     )
 
 
-# JavaScript for sidebar toggle
+# JavaScript for sidebar toggle and section accordion
 SIDEBAR_JS = """
 <script>
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const mainContent = document.querySelector('.main-content');
+    const toggleIcon = document.getElementById('toggle-icon');
+
     sidebar.classList.toggle('collapsed');
     if (mainContent) {
         mainContent.classList.toggle('sidebar-collapsed');
     }
+
+    // Update toggle icon
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    if (toggleIcon) {
+        toggleIcon.textContent = isCollapsed ? '▶' : '☰';
+    }
+
     // Save state to localStorage
-    localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+    localStorage.setItem('sidebarCollapsed', isCollapsed);
 }
 
-// Restore sidebar state on page load
+function toggleSection(sectionId) {
+    const sidebar = document.getElementById('sidebar');
+    // Don't toggle sections when sidebar is collapsed
+    if (sidebar.classList.contains('collapsed')) return;
+
+    const section = document.getElementById(sectionId);
+    if (section) {
+        const parent = section.closest('.sidebar-section');
+        parent.classList.toggle('collapsed');
+
+        // Save section states
+        saveSectionStates();
+    }
+}
+
+function saveSectionStates() {
+    const sections = document.querySelectorAll('.sidebar-section');
+    const states = {};
+    sections.forEach((section, idx) => {
+        states[idx] = section.classList.contains('collapsed');
+    });
+    localStorage.setItem('sidebarSections', JSON.stringify(states));
+}
+
+// Restore sidebar and section states on page load
 document.addEventListener('DOMContentLoaded', function() {
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.querySelector('.main-content');
+    const toggleIcon = document.getElementById('toggle-icon');
+
+    // Restore sidebar collapsed state
     const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
     if (isCollapsed) {
-        const sidebar = document.getElementById('sidebar');
-        const mainContent = document.querySelector('.main-content');
         if (sidebar) sidebar.classList.add('collapsed');
         if (mainContent) mainContent.classList.add('sidebar-collapsed');
+        if (toggleIcon) toggleIcon.textContent = '▶';
+    }
+
+    // Restore section states (collapse sections without active items by default)
+    const savedStates = localStorage.getItem('sidebarSections');
+    if (savedStates) {
+        const states = JSON.parse(savedStates);
+        const sections = document.querySelectorAll('.sidebar-section');
+        sections.forEach((section, idx) => {
+            if (states[idx]) {
+                section.classList.add('collapsed');
+            }
+        });
     }
 });
 </script>
