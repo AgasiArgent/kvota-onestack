@@ -675,11 +675,499 @@ Script("""
 
 ---
 
+---
+
+## Phase 5: Unified Table Design System (2026-01-22)
+
+**Reference:** [Livento CRM Dashboard](https://www.behance.net/gallery/239045803/CRM-Dashboard-UI-UX-Branding-Case-Study)
+
+**Problem:** Tables throughout the application have inconsistent styling:
+- Different border styles
+- Inconsistent header backgrounds
+- Mixed status badge colors
+- Various padding/spacing
+- No unified hover states
+
+### Design Principles
+
+1. **Clean & Minimal** - White backgrounds, subtle borders
+2. **Consistent Spacing** - Same padding across all tables
+3. **Clear Hierarchy** - Headers distinct from data rows
+4. **Status Badges** - Unified color palette for statuses
+5. **Action Alignment** - Actions always on the right
+6. **Responsive** - Tables scroll horizontally on mobile
+
+### Unified Table CSS
+
+```css
+/* ========== Unified Table Styles ========== */
+
+/* Table Container - adds shadow and rounded corners */
+.table-container {
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Table Header Bar - search, filters, actions */
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.table-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.table-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Search Input in Table Header */
+.table-search {
+    min-width: 250px;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    background: var(--bg-primary);
+}
+
+.table-search:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Base Table Styles */
+.unified-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+/* Table Header */
+.unified-table thead {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.unified-table th {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* Right-align numeric columns */
+.unified-table th.col-number,
+.unified-table td.col-number,
+.unified-table th.col-money,
+.unified-table td.col-money {
+    text-align: right;
+}
+
+/* Center-align action columns */
+.unified-table th.col-actions,
+.unified-table td.col-actions {
+    text-align: center;
+    width: 100px;
+}
+
+/* Table Body */
+.unified-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.15s;
+}
+
+.unified-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.unified-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.unified-table td {
+    padding: 0.875rem 1rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+/* Clickable row */
+.unified-table tbody tr.clickable-row {
+    cursor: pointer;
+}
+
+.unified-table tbody tr.clickable-row:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* Status Badges - Unified Color Palette */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Success - green */
+.status-success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+/* Warning - yellow/orange */
+.status-warning {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+/* Error/Danger - red */
+.status-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Info - blue */
+.status-info {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* Neutral - gray */
+.status-neutral {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+/* New/Primary - blue accent */
+.status-new {
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+/* In Progress - purple */
+.status-progress {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+/* Table Footer - pagination */
+.table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    background: #f8fafc;
+    font-size: 0.875rem;
+}
+
+.table-pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.table-pagination button {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-card);
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.table-pagination button:hover:not(:disabled) {
+    background: #f3f4f6;
+}
+
+.table-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.table-pagination .current-page {
+    padding: 0.375rem 0.75rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* Empty State */
+.table-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.table-empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+}
+
+.table-empty-text {
+    font-size: 0.9375rem;
+}
+
+/* Action Buttons */
+.table-action-btn {
+    padding: 0.375rem;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.table-action-btn:hover {
+    background: #f3f4f6;
+    color: var(--text-primary);
+}
+
+.table-action-btn.danger:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Responsive Table Wrapper */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    .table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .table-search {
+        min-width: 100%;
+    }
+
+    .unified-table th,
+    .unified-table td {
+        padding: 0.625rem 0.75rem;
+    }
+}
+```
+
+### Python Helper Functions
+
+```python
+def unified_table(headers, rows, id=None, cls="", empty_message="Нет данных"):
+    """
+    Creates a unified table with consistent styling.
+
+    Args:
+        headers: List of tuples (label, class) e.g. [("Название", ""), ("Сумма", "col-money")]
+        rows: List of Tr elements
+        id: Optional table ID
+        cls: Additional CSS classes
+        empty_message: Message when no rows
+
+    Example:
+        unified_table(
+            headers=[
+                ("IDN", ""),
+                ("Клиент", ""),
+                ("Сумма", "col-money"),
+                ("Статус", ""),
+                ("", "col-actions")
+            ],
+            rows=[
+                Tr(
+                    Td("Q-001"),
+                    Td("ООО Рога и Копыта"),
+                    Td("$50,000", cls="col-money"),
+                    Td(status_badge("Активен", "success")),
+                    Td(A(icon("eye"), href="/view"), cls="col-actions")
+                )
+            ]
+        )
+    """
+    if not rows:
+        return Div(
+            Div("📋", cls="table-empty-icon"),
+            Div(empty_message, cls="table-empty-text"),
+            cls="table-empty"
+        )
+
+    return Table(
+        Thead(Tr(*[Th(label, cls=col_cls) for label, col_cls in headers])),
+        Tbody(*rows),
+        id=id,
+        cls=f"unified-table {cls}"
+    )
+
+def table_container(*children, header_left=None, header_right=None, footer=None):
+    """
+    Wraps table in styled container with optional header and footer.
+
+    Example:
+        table_container(
+            header_left=Input(placeholder="Поиск...", cls="table-search"),
+            header_right=A("+ Добавить", cls="btn btn-primary", href="/new"),
+            unified_table(...),
+            footer=table_pagination(current=1, total=5)
+        )
+    """
+    parts = []
+
+    if header_left or header_right:
+        parts.append(Div(
+            Div(header_left or "", cls="table-header-left"),
+            Div(header_right or "", cls="table-header-right"),
+            cls="table-header"
+        ))
+
+    parts.append(Div(*[c for c in children if c], cls="table-responsive"))
+
+    if footer:
+        parts.append(Div(footer, cls="table-footer"))
+
+    return Div(*parts, cls="table-container")
+
+def status_badge(text, status="neutral"):
+    """
+    Creates a status badge with unified colors.
+
+    status: success, warning, error, info, neutral, new, progress
+    """
+    return Span(text, cls=f"status-badge status-{status}")
+```
+
+### Status Badge Color Guide
+
+| Status | CSS Class | Use Case | Color |
+|--------|-----------|----------|-------|
+| Success | `status-success` | Активен, Оплачено, Завершено | Green |
+| Warning | `status-warning` | Ожидает, На проверке | Yellow |
+| Error | `status-error` | Отменено, Просрочено | Red |
+| Info | `status-info` | В работе, Информация | Blue |
+| Neutral | `status-neutral` | Черновик, Неактивен | Gray |
+| New | `status-new` | Новый, Новая заявка | Light Blue |
+| Progress | `status-progress` | В процессе, Согласование | Purple |
+
+### Example Implementation
+
+```python
+# Quotes List with Unified Table Style
+table_container(
+    header_left=Div(
+        Input(type="text", placeholder="Поиск по номеру или клиенту...",
+              cls="table-search", hx_get="/quotes/search", hx_trigger="keyup changed delay:300ms"),
+        Select(
+            Option("Все статусы", value=""),
+            Option("Активные", value="active"),
+            Option("Черновики", value="draft"),
+            cls="table-filter"
+        ),
+        cls="table-header-left"
+    ),
+    header_right=A(
+        icon("plus"), " Новый КП",
+        href="/quotes/new", cls="btn btn-primary"
+    ),
+    unified_table(
+        headers=[
+            ("IDN", ""),
+            ("Клиент", ""),
+            ("Дата", ""),
+            ("Сумма", "col-money"),
+            ("Профит", "col-money"),
+            ("Статус", ""),
+            ("", "col-actions")
+        ],
+        rows=[
+            Tr(
+                Td(A("Q-202601-0014", href=f"/quotes/{q.id}")),
+                Td(q.customer_name),
+                Td(q.created_at.strftime("%d.%m.%Y")),
+                Td(f"${q.total:,.0f}", cls="col-money"),
+                Td(f"${q.profit:,.0f}", cls="col-money"),
+                Td(status_badge(q.status_label, q.status_type)),
+                Td(
+                    A(icon("eye"), href=f"/quotes/{q.id}", cls="table-action-btn"),
+                    A(icon("pencil"), href=f"/quotes/{q.id}/edit", cls="table-action-btn"),
+                    cls="col-actions"
+                ),
+                cls="clickable-row",
+                onclick=f"window.location='/quotes/{q.id}'"
+            )
+            for q in quotes
+        ],
+        empty_message="Нет котировок"
+    ),
+    footer=Div(
+        Span(f"Показано {len(quotes)} из {total_count}"),
+        table_pagination(current_page, total_pages)
+    )
+)
+```
+
+### Tables to Migrate
+
+**Priority 1 (High Traffic):**
+- [ ] `/quotes` - Quotes list
+- [ ] `/customers` - Customers list
+- [ ] `/finance?tab=erps` - ERPS registry (already has custom styling)
+- [ ] `/deals` - Deals list
+
+**Priority 2 (Medium):**
+- [ ] `/suppliers` - Suppliers list
+- [ ] `/admin?tab=users` - Users management
+- [ ] Customer detail tabs (КП, Спецификации, Контакты)
+
+**Priority 3 (Low):**
+- [ ] Quote detail - Items table
+- [ ] Procurement workspace tables
+- [ ] Report tables
+
+### Migration Strategy
+
+1. Add unified table CSS to APP_STYLES
+2. Create helper functions (`unified_table`, `table_container`, `status_badge`)
+3. Migrate one table at a time, starting with `/quotes`
+4. Test each migration before proceeding
+5. Remove old table-specific CSS as tables are migrated
+
+**Estimated Effort:** 4-6 hours for all tables
+**Result:** Consistent, professional table UI across entire application
+
+---
+
 ## Summary
 
 **Phase 1 (✅ DONE):** PicoCSS foundation - instant visual upgrade
-**Phase 2 (⏳ TODO):** DaisyUI components - tabs, badges, advanced UI
+**Phase 2 (✅ DONE):** DaisyUI components - tabs, badges, advanced UI
 **Phase 3 (⏳ TODO):** Icons & animations - polish and professional feel
+**Phase 4 (✅ DONE):** Searchable dropdowns - datalist pattern
+**Phase 5 (📋 PLANNED):** Unified table design - consistent table styling
 
-**Total Effort:** ~4-6 hours for all phases
+**Total Effort:** ~10-12 hours for all phases
 **Result:** Modern, professional, production-ready UI

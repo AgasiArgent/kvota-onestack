@@ -588,6 +588,284 @@ table thead th:last-child,
 table tbody td:last-child {
     padding-right: 1.25rem;
 }
+/* ========== Unified Table Design System (Livento CRM Style) ========== */
+/* Reference: https://www.behance.net/gallery/239045803/CRM-Dashboard-UI-UX-Branding-Case-Study */
+
+/* Table Container - adds shadow and rounded corners */
+.table-container {
+    background: var(--bg-card);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Table Header Bar - search, filters, actions */
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-card);
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.table-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.table-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Search Input in Table Header */
+.table-search {
+    min-width: 250px;
+    padding: 0.5rem 1rem !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 8px !important;
+    font-size: 0.875rem;
+    background: var(--bg-primary) !important;
+    margin: 0 !important;
+}
+
+.table-search:focus {
+    outline: none;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Unified Table Base Styles */
+.unified-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    box-shadow: none;
+}
+
+/* Unified Table Header */
+.unified-table thead {
+    background: #f8fafc;
+    border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .unified-table thead {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.unified-table th {
+    padding: 0.875rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    border-bottom: none;
+}
+
+/* Right-align numeric columns */
+.unified-table th.col-number,
+.unified-table td.col-number,
+.unified-table th.col-money,
+.unified-table td.col-money {
+    text-align: right;
+}
+
+/* Center-align action columns */
+.unified-table th.col-actions,
+.unified-table td.col-actions {
+    text-align: center;
+    width: 100px;
+}
+
+/* Unified Table Body */
+.unified-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.15s;
+}
+
+.unified-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.unified-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+[data-theme="dark"] .unified-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.unified-table td {
+    padding: 0.875rem 1rem;
+    color: var(--text-primary);
+    vertical-align: middle;
+    border-bottom: none;
+}
+
+/* Clickable row */
+.unified-table tbody tr.clickable-row {
+    cursor: pointer;
+}
+
+.unified-table tbody tr.clickable-row:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* Status Badges - Unified Color Palette */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.status-success { background: #dcfce7; color: #166534; }
+.status-warning { background: #fef3c7; color: #92400e; }
+.status-error { background: #fee2e2; color: #991b1b; }
+.status-info { background: #dbeafe; color: #1e40af; }
+.status-neutral { background: #f3f4f6; color: #4b5563; }
+.status-new { background: #eff6ff; color: #2563eb; }
+.status-progress { background: #f3e8ff; color: #7c3aed; }
+
+[data-theme="dark"] .status-success { background: rgba(22, 163, 74, 0.2); color: #86efac; }
+[data-theme="dark"] .status-warning { background: rgba(217, 119, 6, 0.2); color: #fcd34d; }
+[data-theme="dark"] .status-error { background: rgba(220, 38, 38, 0.2); color: #fca5a5; }
+[data-theme="dark"] .status-info { background: rgba(37, 99, 235, 0.2); color: #93c5fd; }
+[data-theme="dark"] .status-neutral { background: rgba(107, 114, 128, 0.2); color: #d1d5db; }
+[data-theme="dark"] .status-new { background: rgba(37, 99, 235, 0.15); color: #93c5fd; }
+[data-theme="dark"] .status-progress { background: rgba(124, 58, 237, 0.2); color: #c4b5fd; }
+
+/* Table Footer - pagination */
+.table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.875rem 1.25rem;
+    border-top: 1px solid var(--border-color);
+    background: #f8fafc;
+    font-size: 0.875rem;
+}
+
+[data-theme="dark"] .table-footer {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.table-pagination {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.table-pagination button {
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-card);
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.table-pagination button:hover:not(:disabled) {
+    background: #f3f4f6;
+}
+
+.table-pagination button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.table-pagination .current-page {
+    padding: 0.375rem 0.75rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* Empty State */
+.table-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.table-empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+}
+
+.table-empty-text {
+    font-size: 0.9375rem;
+}
+
+/* Action Buttons */
+.table-action-btn {
+    padding: 0.375rem;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.table-action-btn:hover {
+    background: #f3f4f6;
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .table-action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.table-action-btn.danger:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+[data-theme="dark"] .table-action-btn.danger:hover {
+    background: rgba(220, 38, 38, 0.2);
+    color: #fca5a5;
+}
+
+/* Responsive Table Wrapper */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+    .table-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .table-search {
+        min-width: 100%;
+    }
+
+    .unified-table th,
+    .unified-table td {
+        padding: 0.625rem 0.75rem;
+    }
+}
+
 
 /* ========== Forms with Enhanced Styling ========== */
 .form-row {
@@ -2789,7 +3067,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     return [
         # Header with roles
         Div(
-            H1(f"👋 Добро пожаловать!"),
+            H1("Добро пожаловать!"),
             P(
                 Strong("Организация: "), user.get('org_name', 'Неизвестно'), " | ",
                 Strong("Ваши роли: "), *role_badges
@@ -2823,7 +3101,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
 
         # If no tasks, show helpful message
         Div(
-            P("✅ Нет активных задач! Все под контролем.", style="color: #059669; font-size: 1.1rem;"),
+            P(icon("check-circle", size=18), " Нет активных задач! Все под контролем.", style="color: #059669; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;"),
             cls="card", style="text-align: center; background: #ecfdf5;"
         ) if not task_sections else "",
 
@@ -3036,7 +3314,7 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
 
         # Pending quotes section
         Div(
-            H2("🔶 Ожидают оценки"),
+            H2(icon("alert-circle", size=22), " Ожидают оценки", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(f"Найдено: {pending_count} КП", style="color: #666; margin-bottom: 1rem;") if status_filter == "all" or not status_filter else "",
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
@@ -3690,7 +3968,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
         )
 
     return [
-        H1("📑 Контроль спецификаций"),
+        H1(icon("files", size=28), " Контроль спецификаций", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         Div(
             Div(
@@ -4622,9 +4900,9 @@ def get(quote_id: str, session):
                 *[Div(
                     Div(dept_name, style="font-weight: 600; font-size: 0.75rem; margin-bottom: 0.25rem;"),
                     Div(
-                        "✅" if approval_status.get(dept, {}).get('approved') else
-                        "⏳" if approval_status.get(dept, {}).get('can_approve') else "🚫",
-                        style="font-size: 1.5rem;"
+                        icon("check-circle", size=28) if approval_status.get(dept, {}).get('approved') else
+                        icon("clock", size=28) if approval_status.get(dept, {}).get('can_approve') else icon("x-circle", size=28),
+                        style="color: #10b981;" if approval_status.get(dept, {}).get('approved') else ("color: #f59e0b;" if approval_status.get(dept, {}).get('can_approve') else "color: #9ca3af;")
                     ),
                     style="flex: 1; text-align: center; padding: 0.5rem; border-right: 2px solid #e5e7eb;" if dept != 'control' else "flex: 1; text-align: center; padding: 0.5rem;"
                 ) for dept, dept_name in [('procurement', 'Закупки'), ('logistics', 'Логистика'), ('customs', 'Таможня'), ('sales', 'Продажи'), ('control', 'Контроль')]],
@@ -4637,8 +4915,10 @@ def get(quote_id: str, session):
                     # Header with status
                     Div(
                         Span(
-                            f"{'✅' if dept_status.get('approved') else '⏳' if dept_status.get('can_approve') else '🚫'} {QUOTE_DEPARTMENT_NAMES[dept]}",
-                            style="font-weight: 600; font-size: 1.1rem;"
+                            icon("check-circle", size=18) if dept_status.get('approved') else
+                            icon("clock", size=18) if dept_status.get('can_approve') else icon("x-circle", size=18),
+                            f" {QUOTE_DEPARTMENT_NAMES[dept]}",
+                            style=f"font-weight: 600; font-size: 1.1rem; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#9ca3af')}; display: inline-flex; align-items: center; gap: 0.25rem;"
                         ),
                         Span(
                             " - Одобрено" if dept_status.get('approved') else
@@ -4741,7 +5021,7 @@ def get(quote_id: str, session):
         Div(
             H3("Workflow"),
             Form(
-                Button("📧 Send to Client", type="submit",
+                Button(icon("send", size=16), " Send to Client", type="submit",
                        style="background: #0891b2; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
                 P("Send approved quote to the client.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
@@ -4756,7 +5036,7 @@ def get(quote_id: str, session):
             P("Client has received the quote. What's next?", style="margin-bottom: 1rem;"),
             Div(
                 Form(
-                    Button("🤝 Start Negotiation", type="submit",
+                    Button(icon("handshake", size=16), " Start Negotiation", type="submit",
                            style="background: #14b8a6; color: white; margin-right: 1rem;"),
                     method="post",
                     action=f"/quotes/{quote_id}/start-negotiation",
@@ -5233,7 +5513,7 @@ function validateProductForm(event) {
 
     // Show errors if any
     if (errors.length > 0) {
-        errorDiv.textContent = '❌ Пожалуйста, заполните обязательные поля: ' + errors.join(', ');
+        errorDiv.textContent = 'Пожалуйста, заполните обязательные поля: ' + errors.join(', ');
         errorDiv.style.display = 'block';
         event.preventDefault();
         return false;
@@ -5279,13 +5559,13 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
         supplier_code = supplier_info.supplier_code if hasattr(supplier_info, 'supplier_code') else supplier_info.get('supplier_code', '')
         supplier_display = supplier_code or supplier_name[:20]
         product_content.append(
-            Span(f" 📦 {supplier_display}", style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem;",
+            Span(icon("package", size=14), f" {supplier_display}", style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.15rem;",
                  title=f"Поставщик: {supplier_name}")
         )
     elif item.get("supplier_id"):
         # Supplier ID exists but info not passed - show placeholder
         product_content.append(
-            Span(" 📦", style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem;",
+            Span(icon("package", size=14), style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center;",
                  title="Поставщик назначен")
         )
 
@@ -5295,13 +5575,13 @@ def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=Non
         buyer_code = buyer_company_info.company_code if hasattr(buyer_company_info, 'company_code') else buyer_company_info.get('company_code', '')
         buyer_display = buyer_code or buyer_name[:20]
         product_content.append(
-            Span(f" 🏢 {buyer_display}", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem;",
+            Span(icon("building-2", size=14), f" {buyer_display}", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.15rem;",
                  title=f"Покупатель: {buyer_name}")
         )
     elif item.get("buyer_company_id"):
         # Buyer company ID exists but info not passed - show placeholder
         product_content.append(
-            Span(" 🏢", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem;",
+            Span(icon("building-2", size=14), style="color: #008800; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center;",
                  title="Компания-покупатель назначена")
         )
 
@@ -7091,7 +7371,7 @@ def get(session):
 
         # Telegram settings link
         Div(
-            H3("📱 Telegram"),
+            H3(icon("message-circle", size=20), " Telegram", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Привяжите Telegram для получения уведомлений о задачах и согласованиях.",
               style="color: #666; margin-bottom: 1rem;"),
             A("Настройки Telegram →", href="/settings/telegram",
@@ -7202,10 +7482,10 @@ def get(session):
                 ),
                 style="width: 100%; margin: 1rem 0;"
             ),
-            P("🔔 Вы будете получать уведомления о задачах и согласованиях в Telegram.",
-              style="color: #166534; background: #dcfce7; padding: 0.75rem; border-radius: 8px; margin-top: 1rem;"),
+            P(icon("bell", size=16), " Вы будете получать уведомления о задачах и согласованиях в Telegram.",
+              style="color: #166534; background: #dcfce7; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
             Form(
-                Button("🔓 Отвязать Telegram", type="submit", name="action", value="unlink",
+                Button(icon("unlink", size=16), " Отвязать Telegram", type="submit", name="action", value="unlink",
                        style="background: #dc2626; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;"),
                 P("Внимание: после отвязки вы перестанете получать уведомления.",
                   style="color: #666; font-size: 0.875rem; margin-top: 0.5rem;"),
@@ -7236,7 +7516,7 @@ def get(session):
                 style="margin: 1rem 0;"
             ),
             Div(
-                H4("📱 Как привязать:", style="margin-bottom: 0.5rem;"),
+                H4(icon("smartphone", size=18), " Как привязать:", style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
                 Ol(
                     Li("Откройте Telegram и найдите бота"),
                     Li("Отправьте боту команду /start"),
@@ -7259,21 +7539,21 @@ def get(session):
         # Not linked, show button to get code
         status_card = Div(
             Div(
-                Span("📱", style="font-size: 2rem;"),
+                Span(icon("smartphone", size=32), style="color: #3b82f6;"),
                 H3("Telegram не привязан", style="margin: 0.5rem 0;"),
                 cls="text-center"
             ),
             P("Привяжите Telegram-аккаунт, чтобы получать уведомления о:",
               style="margin: 1rem 0;"),
             Ul(
-                Li("🔔 Новых задачах на проверку"),
-                Li("✅ Согласованиях коммерческих предложений"),
-                Li("📋 Изменениях статуса заявок"),
-                Li("⚠️ Возвратах на доработку"),
+                Li(icon("bell", size=16), " Новых задачах на проверку", style="display: flex; align-items: center; gap: 0.5rem;"),
+                Li(icon("check-circle", size=16), " Согласованиях коммерческих предложений", style="display: flex; align-items: center; gap: 0.5rem;"),
+                Li(icon("file-text", size=16), " Изменениях статуса заявок", style="display: flex; align-items: center; gap: 0.5rem;"),
+                Li(icon("alert-triangle", size=16), " Возвратах на доработку", style="display: flex; align-items: center; gap: 0.5rem;"),
                 style="list-style: none; padding: 0; line-height: 1.8;"
             ),
             Form(
-                Button("📲 Получить код привязки", type="submit", name="action", value="new_code",
+                Button(icon("link", size=16), " Получить код привязки", type="submit", name="action", value="new_code",
                        style="background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-size: 1rem;"),
                 method="post",
                 action="/settings/telegram",
@@ -7317,7 +7597,7 @@ def post(action: str, session):
             return page_layout("Код создан",
                 Div(
                     Div(
-                        Span("✅", style="font-size: 3rem;"),
+                        Span(icon("check-circle", size=48), style="color: #16a34a;"),
                         H2("Код верификации создан!", style="margin: 1rem 0;"),
                         cls="text-center"
                     ),
@@ -7329,7 +7609,7 @@ def post(action: str, session):
                     P("Код действителен 30 минут.",
                       style="color: #666; text-align: center;"),
                     Div(
-                        H4("📱 Следующие шаги:", style="margin-bottom: 0.5rem;"),
+                        H4(icon("smartphone", size=18), " Следующие шаги:", style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
                         Ol(
                             Li("Откройте Telegram"),
                             Li("Найдите нашего бота"),
@@ -7352,7 +7632,7 @@ def post(action: str, session):
             if status.is_verified:
                 return page_layout("Уже привязан",
                     Div(
-                        Span("ℹ️", style="font-size: 2rem;"),
+                        Span(icon("info", size=32), style="color: #3b82f6;"),
                         H2("Telegram уже привязан", style="margin: 0.5rem 0;"),
                         P("Ваш аккаунт уже связан с Telegram. Если хотите привязать другой аккаунт, сначала отвяжите текущий.",
                           style="color: #666;"),
@@ -7366,7 +7646,7 @@ def post(action: str, session):
             else:
                 return page_layout("Ошибка",
                     Div(
-                        Div("❌ Не удалось создать код верификации. Попробуйте позже.",
+                        Div(icon("x-circle", size=18), " Не удалось создать код верификации. Попробуйте позже.",
                             cls="alert alert-error"),
                         A("← Назад", href="/settings/telegram",
                           style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
@@ -7396,7 +7676,7 @@ def post(action: str, session):
         else:
             return page_layout("Ошибка",
                 Div(
-                    Div("❌ Не удалось отвязать Telegram. Попробуйте позже.",
+                    Div(icon("x-circle", size=18), " Не удалось отвязать Telegram. Попробуйте позже.",
                         cls="alert alert-error"),
                     A("← Назад", href="/settings/telegram",
                       style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
@@ -7478,12 +7758,12 @@ def workflow_progress_bar(status_str: str):
     # Handle final negative states separately
     if status == WorkflowStatus.REJECTED:
         return Div(
-            Span("❌ Отклонено", style="color: #dc2626; font-weight: 600;"),
+            Span(icon("x-circle", size=18), " Отклонено", style="color: #dc2626; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem;"),
             style="padding: 0.75rem 1rem; background: #fef2f2; border-radius: 8px; border-left: 4px solid #dc2626; margin: 0.5rem 0;"
         )
     if status == WorkflowStatus.CANCELLED:
         return Div(
-            Span("⊘ Отменено", style="color: #57534e; font-weight: 600;"),
+            Span(icon("ban", size=18), " Отменено", style="color: #57534e; font-weight: 600; display: inline-flex; align-items: center; gap: 0.5rem;"),
             style="padding: 0.75rem 1rem; background: #f5f5f4; border-radius: 8px; border-left: 4px solid #78716c; margin: 0.5rem 0;"
         )
 
@@ -7602,7 +7882,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
         if collapsed:
             return Div()  # Don't show anything if no history and collapsed mode
         return Div(
-            H4("📋 История переходов", style="margin: 0 0 0.5rem;"),
+            H4(icon("history", size=18), " История переходов", style="margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
             P("История переходов пуста", style="color: #666; font-size: 0.875rem;"),
             cls="card",
             style="background: #f9fafb;"
@@ -12694,9 +12974,9 @@ def get(session, spec_id: str):
                             style=f"text-align: center; font-size: 0.75rem; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else '#6b7280'};"
                         ),
                         Div(
-                            "✅" if approval_status.get(dept, {}).get('approved') else
-                            ("⏳" if approval_status.get(dept, {}).get('can_approve') else "🚫"),
-                            style="font-size: 1.5rem; margin: 0.5rem 0;"
+                            icon("check-circle", size=28) if approval_status.get(dept, {}).get('approved') else
+                            (icon("clock", size=28) if approval_status.get(dept, {}).get('can_approve') else icon("x-circle", size=28)),
+                            style=f"margin: 0.5rem 0; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else ('#f59e0b' if approval_status.get(dept, {}).get('can_approve') else '#9ca3af')};"
                         ),
                         style=f"flex: 1; padding: 0.5rem; background: {'#d1fae5' if approval_status.get(dept, {}).get('approved') else '#f3f4f6'}; border-radius: 8px; margin: 0 0.25rem;"
                     )
@@ -12711,8 +12991,12 @@ def get(session, spec_id: str):
                 Div(
                     # Department name and status
                     Div(
-                        Span(f"{'✅' if dept_status.get('approved') else ('⏳' if dept_status.get('can_approve') else '🚫')} {DEPARTMENT_NAMES.get(dept, dept)}",
-                             style=f"font-weight: 600; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#6b7280')};"),
+                        Span(
+                            icon("check-circle", size=18) if dept_status.get('approved') else
+                            (icon("clock", size=18) if dept_status.get('can_approve') else icon("x-circle", size=18)),
+                            f" {DEPARTMENT_NAMES.get(dept, dept)}",
+                            style=f"font-weight: 600; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#6b7280')}; display: inline-flex; align-items: center; gap: 0.25rem;"
+                        ),
                         Span(" - Одобрено" if dept_status.get('approved') else
                              (" - Ожидает проверки" if dept_status.get('can_approve') else " - Недоступно"),
                              style="margin-left: 0.5rem; color: #6b7280;"),
@@ -20751,13 +21035,13 @@ def get(customer_id: str, session, request, tab: str = "general"):
             # Status badge
             workflow_status = quote.get("workflow_status", "")
             status_text = {
-                "draft": "📝 Черновик",
-                "pending_procurement": "🔄 Закупка",
-                "approved": "✅ Согласовано",
-                "sent_to_client": "📧 Отправлено",
-                "deal": "🤝 Сделка",
-                "rejected": "❌ Отклонено",
-                "cancelled": "🚫 Отменено"
+                "draft": "Черновик",
+                "pending_procurement": "Закупка",
+                "approved": "Согласовано",
+                "sent_to_client": "Отправлено",
+                "deal": "Сделка",
+                "rejected": "Отклонено",
+                "cancelled": "Отменено"
             }.get(workflow_status, workflow_status)
 
             # Format sum and profit
