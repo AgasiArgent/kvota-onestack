@@ -1,7 +1,7 @@
 # OneStack Project - Development Notes
 
-**Last Updated:** 2026-01-21
-**Current Work:** Procurement Workflow Enhancement
+**Last Updated:** 2026-01-22
+**Current Work:** Hub-and-Spoke Navigation Implementation
 
 ---
 
@@ -190,10 +190,26 @@
 
 ## 🔧 Technical Decisions
 
+### Navigation Architecture
+
+**ВАЖНО:** Перед созданием новых страниц обязательно прочитай:
+→ **`.claude/NAVIGATION_ARCHITECTURE.md`** - принципы построения дерева страниц
+
+**Ключевые принципы:**
+- **Hub-and-Spoke модель:** `/tasks` - единая точка входа для всех задач
+- **Object-oriented URLs:** URL строится от сущности (noun), не от действия
+- **Role-based tabs:** Вместо отдельных workspace страниц используй табы на `/quotes/{id}`
+- **Sidebar structure:** Главное → Реестры → Финансы → Администрирование
+
+**НЕ ДЕЛАЙ:**
+- ❌ Отдельные workspace routes типа `/new-department/{quote_id}`
+- ❌ Глубокую вложенность URL
+- ❌ Дублирование данных в разных местах
+
 ### Database Schema
 - **Schema:** Always use `kvota` prefix, never `public`
 - **Role column:** Use `r.slug` not `r.code` in RLS policies
-- **Migrations:** Sequential numbering (latest: 120)
+- **Migrations:** Sequential numbering (latest: 122)
 - **Automated Migrations:** Use `scripts/apply-migrations.sh` via SSH
 
 ### Code Organization
