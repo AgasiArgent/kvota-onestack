@@ -1577,6 +1577,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Tab switching - update active class
+function switchTab(clickedTab) {
+    // Find all tabs in the same tablist
+    const tablist = clickedTab.closest('[role="tablist"]');
+    if (tablist) {
+        const tabs = tablist.querySelectorAll('.tab');
+        tabs.forEach(tab => tab.classList.remove('tab-active'));
+        clickedTab.classList.add('tab-active');
+    }
+}
 </script>
 """
 
@@ -1637,7 +1648,9 @@ def tab_nav(tabs: list, active_tab: str = None, target_id: str = "tab-content"):
                 cls=f"tab tab-lifted {'tab-active' if tab['id'] == active_tab else ''}",
                 hx_get=tab.get("url") if tab.get("url") and tab.get("url") != "#" else None,
                 hx_target=f"#{target_id}" if tab.get("url") and tab.get("url") != "#" else None,
-                hx_swap="innerHTML"
+                hx_swap="innerHTML scroll:false",
+                hx_push_url="true" if tab.get("url") and tab.get("url") != "#" else None,
+                onclick="switchTab(this)"
             )
             for tab in tabs
         ],
