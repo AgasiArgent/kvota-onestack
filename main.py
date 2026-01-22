@@ -490,44 +490,28 @@ button.btn-sm,
 .stat-card {
     text-align: center;
     padding: 2rem 1.5rem;
-    background: linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(248,250,252,0.95) 100%);
+    background: var(--bg-card) !important;
     border-radius: 1rem;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.1);
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+    box-shadow: var(--card-shadow);
+    border: 1px solid var(--card-border);
 }
 
 .stat-card:hover {
-    transform: translateY(-6px);
-    box-shadow: 0 16px 32px rgba(99, 102, 241, 0.2);
-    border-color: rgba(99, 102, 241, 0.3);
+    transform: translateY(-4px);
+    box-shadow: var(--card-shadow-hover);
 }
 
 .stat-value {
     font-size: 2.5rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--accent);
     margin: 0;
 }
 
 .stat-label {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #64748b;
+    color: var(--text-secondary);
     margin-top: 0.5rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
