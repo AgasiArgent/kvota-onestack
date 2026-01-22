@@ -135,6 +135,7 @@ nav {
     padding: 1rem 0;
     margin-bottom: 0;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    overflow-x: auto; /* Prevent horizontal overflow */
 }
 
 nav .nav-container {
@@ -144,6 +145,8 @@ nav .nav-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap; /* Allow wrapping on small screens */
+    gap: 1rem;
 }
 
 nav ul {
@@ -151,15 +154,18 @@ nav ul {
     margin: 0;
     padding: 0;
     display: flex;
-    gap: 1.5rem;
+    gap: 0.75rem; /* Reduced gap to fit more items */
     align-items: center;
+    flex-wrap: wrap; /* Allow menu items to wrap */
 }
 
 nav a {
     color: #a0a0ff;
     text-decoration: none;
-    padding: 0.5rem 1rem;
+    padding: 0.5rem 0.75rem; /* Slightly reduced padding */
     border-radius: 0.375rem;
+    white-space: nowrap; /* Prevent text wrapping inside links */
+    font-size: 0.9375rem; /* Slightly smaller for better fit */
 }
 
 nav a:hover {
@@ -170,7 +176,7 @@ nav a:hover {
 
 nav strong {
     color: white;
-    font-size: 1.2rem;
+    font-size: 1.1rem; /* Slightly smaller */
     font-weight: 700;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
@@ -401,36 +407,58 @@ button.btn-sm,
 table {
     border-collapse: collapse;
     width: 100%;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 table tbody tr {
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease;
 }
 
 /* Zebra striping - alternating row colors */
 table tbody tr:nth-child(even) {
-    background: rgba(0, 0, 0, 0.02);
+    background: rgba(99, 102, 241, 0.03);
 }
 
 table tbody tr:hover {
-    background: rgba(99, 102, 241, 0.08) !important;
+    background: rgba(99, 102, 241, 0.12) !important;
     cursor: pointer;
+    transform: scale(1.01);
 }
 
 /* Table headers */
+table thead {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
 table thead th {
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
     font-size: 0.75rem;
-    letter-spacing: 0.05em;
-    padding: 0.75rem;
-    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+    letter-spacing: 0.075em;
+    padding: 1rem 0.75rem;
+    border-bottom: 2px solid rgba(99, 102, 241, 0.2);
+    color: #4338ca;
+    text-align: left;
 }
 
 /* Table cells */
 table tbody td {
-    padding: 0.75rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 0.875rem 0.75rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    font-size: 0.9375rem;
+}
+
+/* First and last columns padding */
+table thead th:first-child,
+table tbody td:first-child {
+    padding-left: 1.25rem;
+}
+
+table thead th:last-child,
+table tbody td:last-child {
+    padding-right: 1.25rem;
 }
 
 /* ========== Forms with Enhanced Styling ========== */
@@ -655,6 +683,111 @@ h3:first-line {
 /* Smooth scrolling */
 html {
     scroll-behavior: smooth;
+}
+
+/* ========== Form Layout Improvements ========== */
+/* Align form fields properly */
+form {
+    max-width: 100%;
+}
+
+/* Grid layout for form fields */
+form .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Stack labels and inputs vertically */
+form .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Consistent form field widths */
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form input[type="number"],
+form input[type="date"],
+form input[type="tel"],
+form select,
+form textarea {
+    width: 100%;
+}
+
+/* Search field containers (fix alignment issues) */
+.search-container,
+form[method="get"] {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.search-container input,
+form[method="get"] input {
+    flex: 1;
+    min-width: 250px;
+}
+
+.search-container button,
+form[method="get"] button {
+    flex-shrink: 0;
+}
+
+/* ========== Button Style Overrides ========== */
+/* Override any old blue button styles */
+button[style*="background"],
+[role="button"][style*="background"],
+.button[style*="background"],
+a[style*="background"] {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    color: white !important;
+    border: none !important;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
+}
+
+button[style*="background"]:hover,
+[role="button"][style*="background"]:hover,
+.button[style*="background"]:hover,
+a[style*="background"]:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
+}
+
+/* Fix small buttons */
+button[style*="font-size: 0.875rem"],
+[role="button"][style*="font-size: 0.875rem"],
+a[style*="font-size: 0.875rem"] {
+    padding: 0.4rem 0.875rem !important;
+    font-size: 0.875rem !important;
+}
+
+/* Ensure all buttons have consistent styling */
+.button,
+button:not([class]),
+[role="button"]:not([class]) {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: white;
+    padding: 0.625rem 1.25rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    border: none;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.button:hover,
+button:not([class]):hover,
+[role="button"]:not([class]):hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
+    transform: translateY(-2px);
 }
 
 /* Selection styling */
