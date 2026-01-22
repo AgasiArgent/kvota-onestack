@@ -6700,6 +6700,37 @@ def get(quote_id: str, session):
 
     saved_vars = vars_result.data[0]["variables"] if vars_result.data else {}
 
+    # ==========================================================================
+    # AGGREGATE LOGISTICS FROM INVOICES
+    # Logistics costs are entered per-invoice by logistics department
+    # Sum them up and use as defaults for calculation (saved_vars override if present)
+    # ==========================================================================
+    invoices_result = supabase.table("invoices") \
+        .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    invoices_logistics = invoices_result.data or []
+
+    # Sum logistics costs from all invoices
+    total_logistics_supplier_hub = sum(
+        float(inv.get("logistics_supplier_to_hub") or 0) for inv in invoices_logistics
+    )
+    total_logistics_hub_customs = sum(
+        float(inv.get("logistics_hub_to_customs") or 0) for inv in invoices_logistics
+    )
+    total_logistics_customs_client = sum(
+        float(inv.get("logistics_customs_to_customer") or 0) for inv in invoices_logistics
+    )
+
+    # Use aggregated values as defaults (saved_vars takes precedence if manually overridden)
+    if "logistics_supplier_hub" not in saved_vars and total_logistics_supplier_hub > 0:
+        saved_vars["logistics_supplier_hub"] = total_logistics_supplier_hub
+    if "logistics_hub_customs" not in saved_vars and total_logistics_hub_customs > 0:
+        saved_vars["logistics_hub_customs"] = total_logistics_hub_customs
+    if "logistics_customs_client" not in saved_vars and total_logistics_customs_client > 0:
+        saved_vars["logistics_customs_client"] = total_logistics_customs_client
+
     # Default values (with saved values taking precedence)
     def get_var(key, default):
         return saved_vars.get(key, default)
