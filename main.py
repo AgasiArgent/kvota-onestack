@@ -11281,7 +11281,7 @@ def get(session, status_filter: str = None):
 # ============================================================================
 
 @rt("/quote-control/{quote_id}")
-def get(session, quote_id: str):
+def get(session, quote_id: str, preset: str = None):
     """
     Quote Control detail view - shows checklist for reviewing a specific quote.
 
@@ -11298,6 +11298,9 @@ def get(session, quote_id: str):
     8. Минимальные наценки
     9. Вознаграждения ЛПРа
     10. % курсовой разницы
+
+    Query params:
+        preset: 'basic', 'full', or 'custom' - which column preset to display
     """
     redirect = require_login(session)
     if redirect:
@@ -11402,9 +11405,12 @@ def get(session, quote_id: str):
             if not calc_vars:
                 calc_vars = input_vars.get("variables", {})
 
-    # Get user's column preferences
+    # Get user's column preferences (URL param overrides saved setting)
     user_calc_preset = "basic"  # Default
     user_calc_columns = CALC_PRESET_BASIC
+    user_custom_columns = None  # Saved custom columns if any
+
+    # First load saved settings
     try:
         user_settings_result = supabase.table("user_settings") \
             .select("setting_value") \
@@ -11413,13 +11419,23 @@ def get(session, quote_id: str):
             .execute()
         if user_settings_result.data:
             setting = user_settings_result.data[0].get("setting_value", {})
-            user_calc_preset = setting.get("preset", "basic")
-            if user_calc_preset == "full":
-                user_calc_columns = CALC_PRESET_FULL
-            elif user_calc_preset == "custom":
-                user_calc_columns = setting.get("columns", CALC_PRESET_BASIC)
+            user_custom_columns = setting.get("columns", CALC_PRESET_BASIC)
+            if not preset:  # Only use saved preset if no URL param
+                user_calc_preset = setting.get("preset", "basic")
     except Exception:
         pass
+
+    # URL param overrides saved setting
+    if preset in ("basic", "full", "custom"):
+        user_calc_preset = preset
+
+    # Set columns based on active preset
+    if user_calc_preset == "full":
+        user_calc_columns = CALC_PRESET_FULL
+    elif user_calc_preset == "custom" and user_custom_columns:
+        user_calc_columns = user_custom_columns
+    else:
+        user_calc_columns = CALC_PRESET_BASIC
 
     # Determine if editing is allowed
     can_edit = workflow_status == "pending_quote_control"
@@ -11736,100 +11752,73 @@ def get(session, quote_id: str):
             cls="card"
         ),
 
-        # Detailed Calculation Results Table
+        # Detailed Calculation Results Table with Preset Selector
         Div(
             H3(icon("calculator", size=20), " Детали расчёта по позициям", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Промежуточные значения расчёта для каждой позиции", style="color: #666; margin-bottom: 1rem;"),
 
-            # Totals summary
+            # Preset selector
+            Div(
+                Span("Показать:", style="margin-right: 0.5rem; font-weight: 500;"),
+                A(
+                    "Базовый",
+                    href=f"/quote-control/{quote_id}?preset=basic",
+                    cls="btn btn-sm" + (" btn-primary" if user_calc_preset == "basic" else ""),
+                    style="margin-right: 0.25rem;"
+                ),
+                A(
+                    "Полный",
+                    href=f"/quote-control/{quote_id}?preset=full",
+                    cls="btn btn-sm" + (" btn-primary" if user_calc_preset == "full" else ""),
+                    style="margin-right: 0.25rem;"
+                ),
+                A(
+                    "Настроить...",
+                    href=f"/quote-control/{quote_id}/columns",
+                    cls="btn btn-sm" + (" btn-primary" if user_calc_preset == "custom" else ""),
+                ),
+                style="display: flex; align-items: center; margin-bottom: 1rem;"
+            ),
+
+            # Summary totals from calc_summary
             Div(
                 Div(
                     Strong("Итого закупка: "),
-                    f"{format_money(calc_totals.get('total_purchase', 0))} {currency}",
+                    f"{format_money(float(calc_summary.get('calc_s16_total_purchase_price', 0) or 0))} {currency}",
                     style="margin-right: 2rem;"
                 ),
                 Div(
                     Strong("Себестоимость: "),
-                    f"{format_money(calc_totals.get('total_cogs', 0))} {currency}",
+                    f"{format_money(float(calc_summary.get('calc_ab16_cogs_total', 0) or 0))} {currency}",
                     style="margin-right: 2rem;"
                 ),
                 Div(
                     Strong("Логистика: "),
-                    f"{format_money(calc_totals.get('total_logistics', 0))} {currency}",
+                    f"{format_money(float(calc_summary.get('calc_v16_total_logistics', 0) or 0))} {currency}",
                     style="margin-right: 2rem;"
                 ),
                 Div(
-                    Strong("Прибыль: "),
-                    f"{format_money(calc_totals.get('total_profit', 0))} {currency}",
-                    style="margin-right: 2rem; color: #22c55e;"
-                ),
-                Div(
-                    Strong("Маржа: "),
-                    f"{calc_totals.get('avg_margin', 0):.1f}%",
-                    style="color: #22c55e;"
+                    Strong("Продажа с НДС: "),
+                    f"{format_money(float(calc_summary.get('calc_al16_total_with_vat', 0) or 0))} {currency}",
+                    style="margin-right: 2rem; color: #22c55e; font-weight: 500;"
                 ),
                 style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem; background: #f0fdf4; border-radius: 8px; margin-bottom: 1rem;"
-            ) if calc_totals else None,
+            ) if calc_summary else None,
 
-            # Per-item calculation table
+            # Per-item calculation table using build_calc_table
             Div(
-                Table(
-                    Thead(
-                        Tr(
-                            Th("Товар", style="text-align: left; white-space: nowrap;"),
-                            Th("Кол-во", style="text-align: right; white-space: nowrap;"),
-                            Th("Цена/ед", style="text-align: right; white-space: nowrap;", title="N16 - Закупочная цена за единицу"),
-                            Th("Закупка", style="text-align: right; white-space: nowrap;", title="S16 - Сумма закупки"),
-                            Th("Логистика", style="text-align: right; white-space: nowrap;", title="V16 - Логистика всего"),
-                            Th("Себест.", style="text-align: right; white-space: nowrap;", title="AB16 - Себестоимость"),
-                            Th("Прибыль", style="text-align: right; white-space: nowrap;", title="AF16 - Прибыль"),
-                            Th("Продажа б/НДС", style="text-align: right; white-space: nowrap;", title="AK16 - Цена продажи без НДС"),
-                            Th("Продажа с НДС", style="text-align: right; white-space: nowrap;", title="AL16 - Цена продажи с НДС"),
-                            Th("Маржа %", style="text-align: right; white-space: nowrap;"),
-                        )
+                build_calc_table(calc_items_data, calc_summary, user_calc_columns, currency) if calc_items_data else
+                    Div(
+                        P("Нет данных расчёта. Выполните расчёт КП.", style="text-align: center; color: #666; padding: 2rem;")
                     ),
-                    Tbody(
-                        *[
-                            Tr(
-                                Td(
-                                    items_by_id.get(r.get("item_id"), {}).get("product_name", "—")[:30],
-                                    style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;",
-                                    title=items_by_id.get(r.get("item_id"), {}).get("product_name", "")
-                                ),
-                                Td(
-                                    str(items_by_id.get(r.get("item_id"), {}).get("quantity", "—")),
-                                    style="text-align: right;"
-                                ),
-                                Td(format_money(float(r.get("N16", 0))), style="text-align: right;"),
-                                Td(format_money(float(r.get("S16", 0))), style="text-align: right;"),
-                                Td(format_money(float(r.get("V16", 0))), style="text-align: right;"),
-                                Td(format_money(float(r.get("AB16", 0))), style="text-align: right;"),
-                                Td(format_money(float(r.get("AF16", 0))), style="text-align: right; color: #22c55e;"),
-                                Td(format_money(float(r.get("AK16", 0))), style="text-align: right;"),
-                                Td(format_money(float(r.get("AL16", 0))), style="text-align: right; font-weight: 500;"),
-                                Td(
-                                    f"{(float(r.get('AF16', 0)) / float(r.get('AB16', 1)) * 100):.1f}%" if float(r.get("AB16", 0)) > 0 else "—",
-                                    style="text-align: right; color: #22c55e;"
-                                ),
-                            )
-                            for r in calc_results
-                        ] if calc_results else [
-                            Tr(
-                                Td("Нет данных расчёта. Выполните расчёт КП.", colspan="10", style="text-align: center; color: #666; padding: 2rem;")
-                            )
-                        ]
-                    ),
-                    style="width: 100%; font-size: 0.875rem;"
-                ),
                 style="overflow-x: auto;"
             ),
 
-            # Column legend
+            # Column legend for current preset
             Div(
                 P(
-                    Strong("Легенда колонок: "),
-                    "N16=Цена закупки/ед, S16=Сумма закупки, V16=Логистика, AB16=Себестоимость, ",
-                    "AF16=Прибыль, AK16=Продажа б/НДС, AL16=Продажа с НДС",
+                    Strong("Отображаемые колонки: "),
+                    ", ".join([CALC_COLUMNS.get(col, {}).get("name", col) for col in user_calc_columns]),
                     style="font-size: 0.75rem; color: #666;"
                 ),
                 style="margin-top: 0.5rem;"
@@ -11837,7 +11826,7 @@ def get(session, quote_id: str):
 
             cls="card",
             style="margin-top: 1rem;"
-        ) if calc_results or calc_totals else None,
+        ) if calc_items_data or calc_summary else None,
 
         # Invoice verification detail (v3.0 Feature UI-022)
         Div(
@@ -11941,6 +11930,198 @@ def get(session, quote_id: str):
 
         session=session
     )
+
+
+# ============================================================================
+# QUOTE CONTROL - CUSTOM COLUMN SELECTOR
+# ============================================================================
+
+@rt("/quote-control/{quote_id}/columns")
+def get(session, quote_id: str):
+    """Custom column selector page for quote control calculations."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get current user settings
+    current_columns = CALC_PRESET_BASIC
+    try:
+        result = supabase.table("user_settings") \
+            .select("setting_value") \
+            .eq("user_id", user_id) \
+            .eq("setting_key", "quote_control_columns") \
+            .execute()
+        if result.data:
+            current_columns = result.data[0].get("setting_value", {}).get("columns", CALC_PRESET_BASIC)
+    except Exception:
+        pass
+
+    # Group columns by category
+    column_groups = {}
+    for col_code, col_info in CALC_COLUMNS.items():
+        group = col_info.get("group", "Прочее")
+        if group not in column_groups:
+            column_groups[group] = []
+        column_groups[group].append((col_code, col_info))
+
+    # Build checkboxes grouped by category
+    checkbox_groups = []
+    for group_name, cols in column_groups.items():
+        checkboxes = [
+            Label(
+                Input(
+                    type="checkbox",
+                    name="columns",
+                    value=col_code,
+                    checked=col_code in current_columns,
+                    style="margin-right: 0.5rem;"
+                ),
+                col_info["name"],
+                Span(f" ({col_code})", style="color: #666; font-size: 0.75rem;"),
+                style="display: flex; align-items: center; margin-bottom: 0.5rem;"
+            )
+            for col_code, col_info in cols
+        ]
+        checkbox_groups.append(
+            Div(
+                H4(group_name, style="margin-bottom: 0.5rem; color: #374151;"),
+                *checkboxes,
+                style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 1rem;"
+            )
+        )
+
+    return page_layout(
+        "Настройка колонок расчёта",
+
+        H1(icon("settings", size=28), " Настройка колонок", style="display: flex; align-items: center; gap: 0.5rem;"),
+        P("Выберите колонки для отображения в таблице расчётов", style="color: #666; margin-bottom: 1rem;"),
+
+        # Quick preset buttons
+        Div(
+            A("Базовый набор", href=f"/quote-control/{quote_id}/columns/preset/basic",
+              cls="btn btn-sm", style="margin-right: 0.5rem;"),
+            A("Полный набор", href=f"/quote-control/{quote_id}/columns/preset/full",
+              cls="btn btn-sm"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        Form(
+            *checkbox_groups,
+
+            Div(
+                Button("Сохранить настройки", type="submit", cls="btn btn-primary",
+                       style="margin-right: 0.5rem;"),
+                A("Отмена", href=f"/quote-control/{quote_id}", cls="btn"),
+                style="margin-top: 1rem;"
+            ),
+            action=f"/quote-control/{quote_id}/columns",
+            method="post"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quote-control/{quote_id}/columns")
+def post(session, quote_id: str, columns: list = None):
+    """Save custom column selection."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Handle single column (not list) case from form submission
+    if columns is None:
+        columns = []
+    elif isinstance(columns, str):
+        columns = [columns]
+
+    # Validate columns
+    valid_columns = [c for c in columns if c in CALC_COLUMNS]
+    if not valid_columns:
+        valid_columns = CALC_PRESET_BASIC
+
+    # Save to user_settings using upsert
+    try:
+        # First try to update
+        update_result = supabase.table("user_settings") \
+            .update({
+                "setting_value": {"columns": valid_columns, "preset": "custom"},
+                "updated_at": datetime.now().isoformat()
+            }) \
+            .eq("user_id", user_id) \
+            .eq("setting_key", "quote_control_columns") \
+            .execute()
+
+        # If no rows updated, insert new
+        if not update_result.data:
+            supabase.table("user_settings").insert({
+                "user_id": user_id,
+                "setting_key": "quote_control_columns",
+                "setting_value": {"columns": valid_columns, "preset": "custom"}
+            }).execute()
+    except Exception as e:
+        print(f"Error saving user settings: {e}")
+
+    return RedirectResponse(f"/quote-control/{quote_id}?preset=custom", status_code=303)
+
+
+@rt("/quote-control/{quote_id}/columns/preset/{preset_name}")
+def get(session, quote_id: str, preset_name: str):
+    """Quick preset selection - sets preset and redirects."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    if preset_name not in ("basic", "full"):
+        preset_name = "basic"
+
+    # Save preset to user settings
+    columns = CALC_PRESET_FULL if preset_name == "full" else CALC_PRESET_BASIC
+    try:
+        update_result = supabase.table("user_settings") \
+            .update({
+                "setting_value": {"columns": columns, "preset": preset_name},
+                "updated_at": datetime.now().isoformat()
+            }) \
+            .eq("user_id", user_id) \
+            .eq("setting_key", "quote_control_columns") \
+            .execute()
+
+        if not update_result.data:
+            supabase.table("user_settings").insert({
+                "user_id": user_id,
+                "setting_key": "quote_control_columns",
+                "setting_value": {"columns": columns, "preset": preset_name}
+            }).execute()
+    except Exception as e:
+        print(f"Error saving user settings: {e}")
+
+    return RedirectResponse(f"/quote-control/{quote_id}?preset={preset_name}", status_code=303)
 
 
 # ============================================================================
