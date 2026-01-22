@@ -3316,40 +3316,74 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
 
         # Pending quotes section
         Div(
-            H2(icon("alert-circle", size=22), " Ожидают оценки", style="display: flex; align-items: center; gap: 0.5rem;"),
-            P(f"Найдено: {pending_count} КП", style="color: #666; margin-bottom: 1rem;") if status_filter == "all" or not status_filter else "",
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("alert-circle", size=20), " Ожидают оценки", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in pending_quotes]
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на оценке", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {pending_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if not status_filter or status_filter == "all" else None,
 
         # Filtered view
         Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(f"КП: {dict(status_options).get(status_filter, status_filter)}", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in quotes_with_details]
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(quotes_with_details)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if status_filter and status_filter != "all" else None,
 
         # Other quotes
         Div(
-            H2(icon("file-text", size=22), " Остальные КП", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Прогресс"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in other_quotes]
-                ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("file-text", size=20), " Остальные КП", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ПРОГРЕСС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q, show_work_button=False) for q in other_quotes]
+                        ) if other_quotes else Tbody(Tr(Td("Нет других КП", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(other_quotes)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if (not status_filter or status_filter == "all") and other_quotes else None,
     ]
 
@@ -15209,39 +15243,47 @@ def finance_calendar_tab(session, user, org_id):
         Thead(
             Tr(
                 Th("IDN"),
-                Th("№ платежа"),
-                Th("Срок дней"),
-                Th("Вариант расчета"),
-                Th("Ожидаемая дата"),
-                Th("Фактическая дата"),
-                Th("Сумма"),
-                Th("Назначение"),
-                Th("Комментарий"),
+                Th("№ ПЛАТЕЖА"),
+                Th("СРОК ДНЕЙ", cls="col-number"),
+                Th("ВАРИАНТ РАСЧЕТА"),
+                Th("ОЖИДАЕМАЯ ДАТА"),
+                Th("ФАКТИЧЕСКАЯ ДАТА"),
+                Th("СУММА", cls="col-money"),
+                Th("НАЗНАЧЕНИЕ"),
+                Th("КОММЕНТАРИЙ"),
             )
         ),
         Tbody(
             *[Tr(
                 Td(p.get('specifications', {}).get('specification_number', '-') if p.get('specifications') else '-'),
                 Td(str(p.get('payment_number', '-'))),
-                Td(str(p.get('days_term', '-'))),
+                Td(str(p.get('days_term', '-')), cls="col-number"),
                 Td(variant_map.get(p.get('calculation_variant', ''), p.get('calculation_variant', '-'))),
                 Td(fmt_date(p.get('expected_payment_date'))),
                 Td(fmt_date(p.get('actual_payment_date'))),
-                Td(fmt_money(p.get('payment_amount'), p.get('payment_currency', 'USD')), style="text-align: right;"),
+                Td(fmt_money(p.get('payment_amount'), p.get('payment_currency', 'USD')), cls="col-money"),
                 Td(purpose_map.get(p.get('payment_purpose', ''), p.get('payment_purpose', '-'))),
                 Td(p.get('comment', '-'), style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
             ) for p in payments]
         ) if payments else Tbody(
             Tr(Td("Нет данных", colspan="9", style="text-align: center; padding: 2rem; color: #666;"))
         ),
-        cls="striped",
-        style="width: 100%; font-size: 0.875rem;"
+        cls="unified-table"
     )
 
     return Div(
-        H2("Календарь платежей", style="margin-bottom: 1.5rem;"),
-        P(f"Всего записей: {len(payments)}", style="margin-bottom: 1rem; color: #666;"),
-        Div(table, style="overflow-x: auto;")
+        Div(
+            Div(
+                H3("Календарь платежей", style="margin: 0;"),
+                cls="table-header"
+            ),
+            Div(table, cls="table-responsive"),
+            Div(
+                Span(f"Всего записей: {len(payments)}"),
+                cls="table-footer"
+            ),
+            cls="table-container"
+        )
     )
 
 
