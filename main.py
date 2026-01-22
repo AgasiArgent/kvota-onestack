@@ -1103,12 +1103,13 @@ button[style*="#0172AD"] {
 .app-layout {
     display: flex;
     min-height: 100vh;
+    background: var(--bg-page);
 }
 
 .sidebar {
     width: 240px;
     min-width: 240px;
-    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+    background: var(--bg-sidebar);
     display: flex;
     flex-direction: column;
     transition: all 0.3s ease;
@@ -1119,6 +1120,8 @@ button[style*="#0172AD"] {
     z-index: 100;
     overflow-y: auto;
     overflow-x: hidden;
+    border-right: 1px solid var(--sidebar-border);
+    box-shadow: var(--sidebar-shadow);
 }
 
 .sidebar.collapsed {
@@ -1128,7 +1131,7 @@ button[style*="#0172AD"] {
 
 .sidebar-header {
     padding: 0.75rem 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--sidebar-border);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1141,13 +1144,13 @@ button[style*="#0172AD"] {
     align-items: center;
     gap: 0.5rem;
     text-decoration: none;
-    color: white;
+    color: var(--text-primary);
 }
 
 .sidebar-logo-text {
     font-size: 1.1rem;
     font-weight: 700;
-    color: white;
+    color: var(--accent);
     white-space: nowrap;
 }
 
@@ -1159,15 +1162,15 @@ button[style*="#0172AD"] {
     width: 32px;
     height: 32px;
     min-width: 32px;
-    background: rgba(255, 255, 255, 0.1) !important;
-    border: none !important;
+    background: var(--bg-sidebar-hover) !important;
+    border: 1px solid var(--border-color) !important;
     border-radius: 0.375rem !important;
     cursor: pointer;
     display: flex !important;
     align-items: center;
     justify-content: center;
     font-size: 0.9rem;
-    color: #94a3b8 !important;
+    color: var(--text-secondary) !important;
     transition: all 0.2s;
     padding: 0 !important;
     box-shadow: none !important;
@@ -1175,8 +1178,8 @@ button[style*="#0172AD"] {
 }
 
 .sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
-    color: white !important;
+    background: var(--accent-light) !important;
+    color: var(--accent) !important;
     transform: none !important;
     box-shadow: none !important;
 }
@@ -1209,7 +1212,7 @@ button[style*="#0172AD"] {
     padding: 0.5rem 1rem;
     font-size: 0.7rem;
     font-weight: 600;
-    color: #64748b;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     cursor: pointer;
@@ -1218,8 +1221,8 @@ button[style*="#0172AD"] {
 }
 
 .sidebar-section-header:hover {
-    color: #94a3b8;
-    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+    background: var(--bg-sidebar-hover);
 }
 
 .sidebar-section-arrow {
@@ -1250,7 +1253,7 @@ button[style*="#0172AD"] {
     align-items: center;
     gap: 0.6rem;
     padding: 0.6rem 1rem;
-    color: #94a3b8;
+    color: var(--text-secondary);
     text-decoration: none;
     transition: all 0.2s;
     border-left: 3px solid transparent;
@@ -1258,15 +1261,16 @@ button[style*="#0172AD"] {
 }
 
 .sidebar-item:hover {
-    background: rgba(99, 102, 241, 0.1);
-    color: white;
-    border-left-color: rgba(99, 102, 241, 0.5);
+    background: var(--bg-sidebar-hover);
+    color: var(--text-primary);
+    border-left-color: var(--accent);
 }
 
 .sidebar-item.active {
-    background: rgba(99, 102, 241, 0.15);
-    color: white;
-    border-left-color: #6366f1;
+    background: var(--bg-sidebar-active);
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
 }
 
 .sidebar-item-icon {
@@ -1300,7 +1304,7 @@ button[style*="#0172AD"] {
 /* User section at bottom */
 .sidebar-footer {
     padding: 0.75rem 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--sidebar-border);
     margin-top: auto;
 }
 
@@ -1308,7 +1312,7 @@ button[style*="#0172AD"] {
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    color: #94a3b8;
+    color: var(--text-secondary);
     font-size: 0.8rem;
     text-decoration: none;
     padding: 0.5rem;
@@ -1317,19 +1321,19 @@ button[style*="#0172AD"] {
 }
 
 .sidebar-user:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-sidebar-hover);
 }
 
 .sidebar-user-avatar {
     width: 32px;
     height: 32px;
     min-width: 32px;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: var(--accent-gradient);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--text-on-accent);
     font-weight: 600;
     font-size: 0.85rem;
 }
@@ -1340,7 +1344,7 @@ button[style*="#0172AD"] {
 
 .sidebar-user-email {
     font-weight: 500;
-    color: #e2e8f0;
+    color: var(--text-primary);
     font-size: 0.8rem;
     white-space: nowrap;
     overflow: hidden;
@@ -1350,7 +1354,34 @@ button[style*="#0172AD"] {
 
 .sidebar-user-logout {
     font-size: 0.7rem;
-    color: #94a3b8;
+    color: var(--text-muted);
+}
+
+/* ========== Theme Toggle ========== */
+.theme-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem !important;
+    margin-bottom: 0.5rem;
+    background: var(--bg-sidebar-hover) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 0.5rem !important;
+    color: var(--text-secondary) !important;
+    font-size: 0.8rem !important;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.theme-toggle:hover {
+    background: var(--accent-light) !important;
+    color: var(--accent) !important;
+}
+
+.theme-toggle-icon {
+    font-size: 1rem;
 }
 
 .sidebar.collapsed .sidebar-user-info {
@@ -1495,6 +1526,17 @@ def sidebar(session, current_path: str = ""):
                 ),
                 cls="sidebar-nav"
             ),
+            # Footer with theme toggle
+            Div(
+                Button(
+                    Span("🌙", id="theme-toggle-icon"),
+                    Span("Тёмная тема", id="theme-toggle-text"),
+                    cls="theme-toggle",
+                    onclick="toggleTheme()",
+                    type="button"
+                ),
+                cls="sidebar-footer"
+            ),
             cls="sidebar",
             id="sidebar"
         )
@@ -1626,8 +1668,16 @@ def sidebar(session, current_path: str = ""):
         ),
         # Navigation sections
         Nav(*nav_sections, cls="sidebar-nav"),
-        # Footer with user info
+        # Footer with theme toggle and user info
         Div(
+            # Theme toggle button
+            Button(
+                Span("🌙", id="theme-toggle-icon"),
+                Span("Тёмная тема", id="theme-toggle-text"),
+                cls="theme-toggle",
+                onclick="toggleTheme()",
+                type="button"
+            ),
             A(
                 Div(initials, cls="sidebar-user-avatar"),
                 Div(
@@ -1739,12 +1789,43 @@ function switchTab(clickedTab) {
         clickedTab.classList.add('tab-active');
     }
 }
+
+// Theme toggle functionality
+function toggleTheme() {
+    const html = document.documentElement;
+    const currentTheme = html.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+
+    // Update toggle button icon
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const icon = document.getElementById('theme-toggle-icon');
+    if (icon) {
+        icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+    const text = document.getElementById('theme-toggle-text');
+    if (text) {
+        text.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+    }
+}
+
+// Initialize theme on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+});
 </script>
 """
 
 
 def page_layout(title, *content, session=None, current_path: str = ""):
-    """Standard page layout wrapper with sidebar navigation"""
+    """Standard page layout wrapper with sidebar navigation and theme support"""
     return Html(
         Head(
             Title(f"{title} - Kvota"),
@@ -1760,7 +1841,14 @@ def page_layout(title, *content, session=None, current_path: str = ""):
             # HTMX
             Script(src="https://unpkg.com/htmx.org@1.9.10"),
             # Sidebar toggle script
-            NotStr(SIDEBAR_JS)
+            NotStr(SIDEBAR_JS),
+            # Theme initialization script (runs before body renders to prevent flash)
+            Script("""
+                (function() {
+                    const savedTheme = localStorage.getItem('theme') || 'light';
+                    document.documentElement.setAttribute('data-theme', savedTheme);
+                })();
+            """)
         ),
         Body(
             Div(
@@ -1768,7 +1856,8 @@ def page_layout(title, *content, session=None, current_path: str = ""):
                 Main(Div(*content, cls="container"), cls="main-content"),
                 cls="app-layout"
             )
-        )
+        ),
+        data_theme="light"  # Default theme
     )
 
 
