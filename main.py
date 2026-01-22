@@ -1254,7 +1254,19 @@ button[style*="#0172AD"] {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 0.95rem;
+}
+
+/* Lucide icons inherit current color */
+.lucide-icon,
+.lucide-icon svg {
+    stroke: currentColor;
+    fill: none;
+}
+
+.sidebar-item-icon svg {
+    stroke: currentColor;
+    width: 20px;
+    height: 20px;
 }
 
 .sidebar-item-text {
@@ -1522,14 +1534,14 @@ def sidebar(session, current_path: str = ""):
 
     # === MAIN SECTION ===
     main_items = [
-        {"icon": "📥", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
+        {"icon": "inbox", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
-        main_items.append({"icon": "➕", "label": "Новый КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]})
+        main_items.append({"icon": "plus-circle", "label": "Новый КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]})
     # Add "Обзор" (analytics) for admin/top_manager
     if is_admin or "top_manager" in roles:
-        main_items.append({"icon": "📊", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
+        main_items.append({"icon": "bar-chart-3", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
 
     menu_sections.append({"title": "Главное", "items": main_items})
 
@@ -1538,16 +1550,16 @@ def sidebar(session, current_path: str = ""):
 
     # Customers - for sales roles
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
-        registries_items.append({"icon": "👥", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
+        registries_items.append({"icon": "users", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
 
     # Suppliers - for procurement
     if is_admin or "procurement" in roles:
-        registries_items.append({"icon": "🏭", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
+        registries_items.append({"icon": "building-2", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
     # Company registries - for admin
     if is_admin:
-        registries_items.append({"icon": "🏢", "label": "Юрлица-продажи", "href": "/admin?tab=seller-companies", "roles": ["admin"]})
-        registries_items.append({"icon": "🏬", "label": "Юрлица-закупки", "href": "/admin?tab=buyer-companies", "roles": ["admin"]})
+        registries_items.append({"icon": "building", "label": "Юрлица-продажи", "href": "/admin?tab=seller-companies", "roles": ["admin"]})
+        registries_items.append({"icon": "store", "label": "Юрлица-закупки", "href": "/admin?tab=buyer-companies", "roles": ["admin"]})
 
     if registries_items:
         menu_sections.append({"title": "Реестры", "items": registries_items})
@@ -1555,8 +1567,8 @@ def sidebar(session, current_path: str = ""):
     # === ADMIN SECTION ===
     if is_admin:
         admin_items = [
-            {"icon": "👤", "label": "Пользователи", "href": "/admin?tab=users", "roles": ["admin"]},
-            {"icon": "🔧", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
+            {"icon": "user", "label": "Пользователи", "href": "/admin?tab=users", "roles": ["admin"]},
+            {"icon": "settings", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
 
@@ -1574,7 +1586,7 @@ def sidebar(session, current_path: str = ""):
                     has_active = True
                 section_items.append(
                     A(
-                        Span(item["icon"], cls="sidebar-item-icon"),
+                        icon(item["icon"], size=20, cls="sidebar-item-icon"),
                         Span(item["label"], cls="sidebar-item-text"),
                         href=item["href"],
                         cls=f"sidebar-item {'active' if is_active else ''}"
