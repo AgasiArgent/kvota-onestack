@@ -1152,10 +1152,10 @@ table_container(
 **Priority 2 (Medium):**
 - [x] `/suppliers` - Suppliers list ✅ DONE (2026-01-22)
 - [x] `/admin?tab=users` - Users management ✅ DONE (2026-01-22)
-- [ ] Customer detail tabs (КП, Спецификации, Контакты)
+- [x] Customer detail tabs (КП, Спецификации, Контакты) ✅ DONE (2026-01-22)
 
 **Priority 3 (Low):**
-- [ ] Quote detail - Items table
+- [x] Quote detail - Items table ✅ DONE (2026-01-22)
 - [ ] Procurement workspace tables
 - [ ] Report tables
 
@@ -1178,7 +1178,7 @@ table_container(
 **Phase 2 (✅ DONE):** DaisyUI components - tabs, badges, advanced UI
 **Phase 3 (⏳ TODO):** Icons & animations - polish and professional feel
 **Phase 4 (✅ DONE):** Searchable dropdowns - datalist pattern
-**Phase 5 (🟡 IN PROGRESS):** Unified table design - consistent table styling (quotes done)
+**Phase 5 (✅ MOSTLY DONE):** Unified table design - 8 tables migrated (quotes, customers, deals, suppliers, admin, customer tabs, quote items)
 
 **Total Effort:** ~10-12 hours for all phases
 **Result:** Modern, professional, production-ready UI
