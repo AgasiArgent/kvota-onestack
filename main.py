@@ -7047,6 +7047,7 @@ def post(
         total_no_vat = sum(safe_decimal(r.sales_price_total_no_vat) for r in results)
         total_with_vat = sum(safe_decimal(r.sales_price_total_with_vat) for r in results)
         total_vat = sum(safe_decimal(r.vat_net_payable) for r in results)
+        total_customs = sum(safe_decimal(r.customs_fee) for r in results)
 
         avg_margin = (total_profit / total_cogs * 100) if total_cogs else Decimal("0")
 
@@ -7141,6 +7142,7 @@ def post(
             "quote_id": quote_id,
             "calc_s16_total_purchase_price": float(total_purchase),
             "calc_v16_total_logistics": float(total_logistics),
+            "calc_y16_customs_duty": float(total_customs),
             "calc_total_brokerage": float(total_brokerage),
             "calc_ae16_sale_price_total": float(total_no_vat),
             "calc_al16_total_with_vat": float(total_with_vat),
