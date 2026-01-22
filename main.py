@@ -18753,7 +18753,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
             # Two-column layout
             Div(
-                # LEFT COLUMN: Main info + Addresses
+                # LEFT COLUMN: Main info
                 Div(
                     # Main info section
                     Div(
@@ -18806,30 +18806,6 @@ def get(customer_id: str, session, request, tab: str = "general"):
                                 ),
                                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
                             ),
-                            style="padding: 1rem;"
-                        ),
-                        cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; margin-bottom: 1rem;"
-                    ),
-
-                    # Addresses section
-                    Div(
-                        H3("📍 Адреса", style="margin-bottom: 1rem; color: #e2e8f0;"),
-                        Div(
-                            Div(
-                                Div("Юридический адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                Div(customer.legal_address or "Не указан", style="color: #e2e8f0;" if customer.legal_address else "color: #64748b;"),
-                                style="margin-bottom: 1rem;"
-                            ),
-                            Div(
-                                Div("Фактический адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                Div(customer.actual_address or "Не указан", style="color: #e2e8f0;" if customer.actual_address else "color: #64748b;"),
-                                style="margin-bottom: 1rem;"
-                            ) if customer.actual_address != customer.legal_address else None,
-                            Div(
-                                Div("Почтовый адрес", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                Div(customer.postal_address or "Совпадает с фактическим", style="color: #e2e8f0;" if customer.postal_address and customer.postal_address != customer.actual_address else "color: #64748b; font-style: italic;"),
-                            ) if customer.postal_address and customer.postal_address != customer.actual_address else None,
                             style="padding: 1rem;"
                         ),
                         cls="card",
