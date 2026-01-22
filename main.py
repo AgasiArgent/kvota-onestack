@@ -216,30 +216,40 @@ APP_STYLES = """
     transition: all 0.2s ease-in-out;
 }
 
+html, body {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
 body {
     line-height: 1.6;
     background: var(--bg-page);
     color: var(--text-primary);
+    font-size: 14px;
 }
 
 h1 {
-    font-size: 1.875rem;
+    font-size: 2rem;
     font-weight: 700;
-    margin-bottom: 1rem;
+    line-height: 1.2;
+    margin-bottom: 1.5rem;
     color: var(--text-primary);
+    letter-spacing: -0.02em;
 }
 
 h2 {
     font-size: 1.5rem;
     font-weight: 600;
-    margin-bottom: 0.75rem;
+    line-height: 1.3;
+    margin-bottom: 1rem;
     color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
 h3 {
-    font-size: 1.25rem;
+    font-size: 1.125rem;
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    line-height: 1.4;
+    margin-bottom: 0.75rem;
     color: var(--text-primary);
 }
 
@@ -1796,6 +1806,10 @@ def page_layout(title, *content, session=None, current_path: str = ""):
             Title(f"{title} - Kvota"),
             Meta(charset="utf-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1"),
+            # Google Fonts - Manrope (modern, clean font)
+            Link(rel="preconnect", href="https://fonts.googleapis.com"),
+            Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
+            Link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"),
             # PicoCSS - Modern, semantic CSS framework
             Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"),
             # DaisyUI + TailwindCSS - Component library
