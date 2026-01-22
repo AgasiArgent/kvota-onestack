@@ -6426,7 +6426,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
             'customs_code': item.get('customs_code', '0000000000'),
             'supplier_country': item.get('supplier_country', variables.get('supplier_country', 'Турция')),
             'currency_of_base_price': item.get('purchase_currency') or item.get('currency_of_base_price', variables.get('currency_of_base_price', 'USD')),
-            'import_tariff': item.get('import_tariff'),
+            'import_tariff': item.get('customs_duty') or item.get('import_tariff'),  # customs_duty is saved by customs workspace
             'markup': item.get('markup'),
             'supplier_discount': item.get('supplier_discount'),
         }
