@@ -10971,6 +10971,27 @@ def get(session, quote_id: str):
         .execute()
     summary = summary_result.data[0] if summary_result.data else {}
 
+    # Get detailed calculation results from quote_versions
+    version_result = supabase.table("quote_versions") \
+        .select("input_variables") \
+        .eq("quote_id", quote_id) \
+        .order("version", desc=True) \
+        .limit(1) \
+        .execute()
+
+    calc_results = []
+    calc_totals = {}
+    if version_result.data:
+        input_vars = version_result.data[0].get("input_variables", {})
+        calc_results = input_vars.get("results", [])
+        calc_totals = input_vars.get("totals", {})
+        # Also get variables from version if not from quote_calculation_variables
+        if not calc_vars:
+            calc_vars = input_vars.get("variables", {})
+
+    # Create items lookup for product names
+    items_by_id = {item["id"]: item for item in items}
+
     # Determine if editing is allowed
     can_edit = workflow_status == "pending_quote_control"
 
@@ -11209,7 +11230,7 @@ def get(session, quote_id: str):
         )
     else:
         status_banner = Div(
-            f"Статус: {workflow_status_badge(workflow_status)}",
+            "Статус: ", workflow_status_badge(workflow_status),
             style="margin-bottom: 1rem;"
         )
 
@@ -11285,6 +11306,109 @@ def get(session, quote_id: str):
             *checklist_items,
             cls="card"
         ),
+
+        # Detailed Calculation Results Table
+        Div(
+            H3(icon("calculator", size=20), " Детали расчёта по позициям", style="display: flex; align-items: center; gap: 0.5rem;"),
+            P("Промежуточные значения расчёта для каждой позиции", style="color: #666; margin-bottom: 1rem;"),
+
+            # Totals summary
+            Div(
+                Div(
+                    Strong("Итого закупка: "),
+                    f"{format_money(calc_totals.get('total_purchase', 0))} {currency}",
+                    style="margin-right: 2rem;"
+                ),
+                Div(
+                    Strong("Себестоимость: "),
+                    f"{format_money(calc_totals.get('total_cogs', 0))} {currency}",
+                    style="margin-right: 2rem;"
+                ),
+                Div(
+                    Strong("Логистика: "),
+                    f"{format_money(calc_totals.get('total_logistics', 0))} {currency}",
+                    style="margin-right: 2rem;"
+                ),
+                Div(
+                    Strong("Прибыль: "),
+                    f"{format_money(calc_totals.get('total_profit', 0))} {currency}",
+                    style="margin-right: 2rem; color: #22c55e;"
+                ),
+                Div(
+                    Strong("Маржа: "),
+                    f"{calc_totals.get('avg_margin', 0):.1f}%",
+                    style="color: #22c55e;"
+                ),
+                style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem; background: #f0fdf4; border-radius: 8px; margin-bottom: 1rem;"
+            ) if calc_totals else None,
+
+            # Per-item calculation table
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Товар", style="text-align: left; white-space: nowrap;"),
+                            Th("Кол-во", style="text-align: right; white-space: nowrap;"),
+                            Th("Цена/ед", style="text-align: right; white-space: nowrap;", title="N16 - Закупочная цена за единицу"),
+                            Th("Закупка", style="text-align: right; white-space: nowrap;", title="S16 - Сумма закупки"),
+                            Th("Логистика", style="text-align: right; white-space: nowrap;", title="V16 - Логистика всего"),
+                            Th("Себест.", style="text-align: right; white-space: nowrap;", title="AB16 - Себестоимость"),
+                            Th("Прибыль", style="text-align: right; white-space: nowrap;", title="AF16 - Прибыль"),
+                            Th("Продажа б/НДС", style="text-align: right; white-space: nowrap;", title="AK16 - Цена продажи без НДС"),
+                            Th("Продажа с НДС", style="text-align: right; white-space: nowrap;", title="AL16 - Цена продажи с НДС"),
+                            Th("Маржа %", style="text-align: right; white-space: nowrap;"),
+                        )
+                    ),
+                    Tbody(
+                        *[
+                            Tr(
+                                Td(
+                                    items_by_id.get(r.get("item_id"), {}).get("product_name", "—")[:30],
+                                    style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;",
+                                    title=items_by_id.get(r.get("item_id"), {}).get("product_name", "")
+                                ),
+                                Td(
+                                    str(items_by_id.get(r.get("item_id"), {}).get("quantity", "—")),
+                                    style="text-align: right;"
+                                ),
+                                Td(format_money(float(r.get("N16", 0))), style="text-align: right;"),
+                                Td(format_money(float(r.get("S16", 0))), style="text-align: right;"),
+                                Td(format_money(float(r.get("V16", 0))), style="text-align: right;"),
+                                Td(format_money(float(r.get("AB16", 0))), style="text-align: right;"),
+                                Td(format_money(float(r.get("AF16", 0))), style="text-align: right; color: #22c55e;"),
+                                Td(format_money(float(r.get("AK16", 0))), style="text-align: right;"),
+                                Td(format_money(float(r.get("AL16", 0))), style="text-align: right; font-weight: 500;"),
+                                Td(
+                                    f"{(float(r.get('AF16', 0)) / float(r.get('AB16', 1)) * 100):.1f}%" if float(r.get("AB16", 0)) > 0 else "—",
+                                    style="text-align: right; color: #22c55e;"
+                                ),
+                            )
+                            for r in calc_results
+                        ] if calc_results else [
+                            Tr(
+                                Td("Нет данных расчёта. Выполните расчёт КП.", colspan="10", style="text-align: center; color: #666; padding: 2rem;")
+                            )
+                        ]
+                    ),
+                    style="width: 100%; font-size: 0.875rem;"
+                ),
+                style="overflow-x: auto;"
+            ),
+
+            # Column legend
+            Div(
+                P(
+                    Strong("Легенда колонок: "),
+                    "N16=Цена закупки/ед, S16=Сумма закупки, V16=Логистика, AB16=Себестоимость, ",
+                    "AF16=Прибыль, AK16=Продажа б/НДС, AL16=Продажа с НДС",
+                    style="font-size: 0.75rem; color: #666;"
+                ),
+                style="margin-top: 0.5rem;"
+            ),
+
+            cls="card",
+            style="margin-top: 1rem;"
+        ) if calc_results or calc_totals else None,
 
         # Invoice verification detail (v3.0 Feature UI-022)
         Div(
