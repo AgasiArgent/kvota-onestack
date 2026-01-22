@@ -1342,34 +1342,37 @@ button[style*="#0172AD"] {
     color: var(--text-muted);
 }
 
-/* ========== Theme Toggle ========== */
+/* ========== Theme Toggle (icon-only in header) ========== */
 .theme-toggle {
-    width: 100%;
-    display: flex;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    display: flex !important;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem !important;
-    margin-bottom: 0.5rem;
+    padding: 0 !important;
     background: var(--bg-sidebar-hover) !important;
     border: 1px solid var(--border-color) !important;
-    border-radius: 0.5rem !important;
+    border-radius: 0.375rem !important;
     color: var(--text-secondary) !important;
-    font-size: 0.8rem !important;
     cursor: pointer;
     transition: all 0.2s;
+    box-shadow: none !important;
+    transform: none !important;
 }
 
 .theme-toggle:hover {
     background: var(--accent-light) !important;
     color: var(--accent) !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 /* Theme toggle icons - show/hide based on current theme */
 .theme-icon-moon,
 .theme-icon-sun {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
 }
 
@@ -1385,6 +1388,19 @@ button[style*="#0172AD"] {
 
 [data-theme="dark"] .theme-icon-sun {
     display: inline-flex;
+}
+
+/* Header buttons container */
+.sidebar-header-buttons {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+/* When collapsed, stack buttons vertically */
+.sidebar.collapsed .sidebar-header-buttons {
+    flex-direction: column;
+    gap: 0.3rem;
 }
 
 .sidebar.collapsed .sidebar-user-info {
@@ -1532,14 +1548,15 @@ def sidebar(session, current_path: str = ""):
             # Footer with theme toggle
             Div(
                 Button(
-                    icon("moon", size=18, cls="theme-icon-moon"),
-                    icon("sun", size=18, cls="theme-icon-sun"),
-                    Span("Тёмная тема", id="theme-toggle-text"),
+                    icon("moon", size=16, cls="theme-icon-moon"),
+                    icon("sun", size=16, cls="theme-icon-sun"),
                     cls="theme-toggle",
                     onclick="toggleTheme()",
-                    type="button"
+                    type="button",
+                    title="Переключить тему"
                 ),
-                cls="sidebar-footer"
+                cls="sidebar-footer",
+                style="padding: 0.5rem; display: flex; justify-content: center;"
             ),
             cls="sidebar",
             id="sidebar"
@@ -1646,27 +1663,30 @@ def sidebar(session, current_path: str = ""):
                 href="/dashboard",
                 cls="sidebar-logo"
             ),
-            Button(
-                Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
-                cls="sidebar-toggle-btn",
-                onclick="toggleSidebar()",
-                type="button"
+            Div(
+                Button(
+                    icon("moon", size=16, cls="theme-icon-moon"),
+                    icon("sun", size=16, cls="theme-icon-sun"),
+                    cls="theme-toggle",
+                    onclick="toggleTheme()",
+                    type="button",
+                    title="Переключить тему"
+                ),
+                Button(
+                    Div("☰", cls="sidebar-toggle-icon", id="toggle-icon"),
+                    cls="sidebar-toggle-btn",
+                    onclick="toggleSidebar()",
+                    type="button",
+                    title="Свернуть панель"
+                ),
+                cls="sidebar-header-buttons"
             ),
             cls="sidebar-header"
         ),
         # Navigation sections
         Nav(*nav_sections, cls="sidebar-nav"),
-        # Footer with theme toggle and user info
+        # Footer with user info
         Div(
-            # Theme toggle button
-            Button(
-                icon("moon", size=18, cls="theme-icon-moon"),
-                icon("sun", size=18, cls="theme-icon-sun"),
-                Span("Тёмная тема", id="theme-toggle-text"),
-                cls="theme-toggle",
-                onclick="toggleTheme()",
-                type="button"
-            ),
             A(
                 Div(initials, cls="sidebar-user-avatar"),
                 Div(
@@ -1795,9 +1815,9 @@ function toggleTheme() {
 function updateThemeIcon(theme) {
     // Icons are toggled via CSS based on data-theme attribute
     // Only update the text label
-    const text = document.getElementById('theme-toggle-text');
+    // Theme toggle is now icon-only, no text to update
     if (text) {
-        text.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+        // Icon changes are handled by CSS based on data-theme attribute
     }
 }
 
@@ -1915,33 +1935,75 @@ def tab_nav(tabs: list, active_tab: str = None, target_id: str = "tab-content"):
     DaisyUI tab navigation with HTMX integration
 
     Args:
-        tabs: List of dicts with {'id': str, 'label': str, 'url': str}
+        tabs: List of dicts with {'id': str, 'label': str, 'url': str, 'icon': str (optional)}
         active_tab: ID of the currently active tab
         target_id: HTMX target element ID for tab content
 
     Example:
         tab_nav([
-            {'id': 'general', 'label': 'Общая информация', 'url': '/customers/123/tab/general'},
-            {'id': 'addresses', 'label': 'Адреса', 'url': '/customers/123/tab/addresses'}
+            {'id': 'general', 'label': 'Общая информация', 'url': '/customers/123/tab/general', 'icon': 'info'},
+            {'id': 'addresses', 'label': 'Адреса', 'url': '/customers/123/tab/addresses', 'icon': 'map-pin'}
         ], active_tab='general')
     """
+    def render_tab(tab):
+        tab_icon = tab.get("icon")
+        content = [icon(tab_icon, size=16, cls="tab-icon"), Span(tab["label"])] if tab_icon else [tab["label"]]
+        return A(
+            *content,
+            href=tab.get("url", "#"),
+            cls=f"tab tab-lifted {'tab-active' if tab['id'] == active_tab else ''}",
+            style="display: inline-flex; align-items: center; gap: 0.375rem;" if tab_icon else None,
+            hx_get=tab.get("url") if tab.get("url") and tab.get("url") != "#" else None,
+            hx_target=f"#{target_id}" if tab.get("url") and tab.get("url") != "#" else None,
+            hx_swap="innerHTML scroll:false",
+            hx_push_url="true" if tab.get("url") and tab.get("url") != "#" else None,
+            onclick="switchTab(this)"
+        )
+
     return Div(
-        *[
-            A(
-                tab["label"],
-                href=tab.get("url", "#"),
-                cls=f"tab tab-lifted {'tab-active' if tab['id'] == active_tab else ''}",
-                hx_get=tab.get("url") if tab.get("url") and tab.get("url") != "#" else None,
-                hx_target=f"#{target_id}" if tab.get("url") and tab.get("url") != "#" else None,
-                hx_swap="innerHTML scroll:false",
-                hx_push_url="true" if tab.get("url") and tab.get("url") != "#" else None,
-                onclick="switchTab(this)"
-            )
-            for tab in tabs
-        ],
+        *[render_tab(tab) for tab in tabs],
         role="tablist",
         cls="tabs tabs-lifted"
     )
+
+
+def page_heading(text: str, icon_name: str = None, level: int = 1, **kwargs):
+    """
+    Page heading with optional Lucide icon.
+
+    Args:
+        text: Heading text
+        icon_name: Lucide icon name (e.g., 'inbox', 'users', 'truck')
+        level: Heading level (1=H1, 2=H2, 3=H3)
+        **kwargs: Additional attributes (style, cls, etc.)
+
+    Example:
+        page_heading("Мои задачи", icon_name="inbox")
+        page_heading("Закупки", icon_name="shopping-cart", level=2)
+    """
+    # Choose heading tag based on level
+    heading_tags = {1: H1, 2: H2, 3: H3, 4: H4}
+    HeadingTag = heading_tags.get(level, H1)
+
+    # Icon sizes based on heading level
+    icon_sizes = {1: 28, 2: 24, 3: 20, 4: 18}
+    icon_size = icon_sizes.get(level, 24)
+
+    # Build content
+    if icon_name:
+        # Merge styles
+        style = kwargs.pop('style', '') or ''
+        default_style = "display: flex; align-items: center; gap: 0.5rem;"
+        combined_style = f"{default_style} {style}".strip()
+
+        return HeadingTag(
+            icon(icon_name, size=icon_size, cls="heading-icon"),
+            Span(text),
+            style=combined_style,
+            **kwargs
+        )
+    else:
+        return HeadingTag(text, **kwargs)
 
 
 def badge(text: str, type: str = "neutral", size: str = "md"):
@@ -2244,43 +2306,50 @@ def get(session):
 DASHBOARD_TABS = [
     {
         "id": "overview",
-        "label": "📊 Обзор",
+        "icon": "bar-chart-3",
+        "label": "Обзор",
         "roles": ["admin", "top_manager"],  # Only admin/top_manager see overview
         "priority": 0,
     },
     {
         "id": "procurement",
-        "label": "🛒 Закупки",
+        "icon": "shopping-cart",
+        "label": "Закупки",
         "roles": ["procurement", "admin"],
         "priority": 1,
     },
     {
         "id": "logistics",
-        "label": "🚚 Логистика",
+        "icon": "truck",
+        "label": "Логистика",
         "roles": ["logistics", "head_of_logistics", "admin"],
         "priority": 2,
     },
     {
         "id": "customs",
-        "label": "🛃 Таможня",
+        "icon": "shield-check",
+        "label": "Таможня",
         "roles": ["customs", "head_of_customs", "admin"],
         "priority": 3,
     },
     {
         "id": "quote-control",
-        "label": "✅ Контроль КП",
+        "icon": "check-circle",
+        "label": "Контроль КП",
         "roles": ["quote_controller", "admin"],
         "priority": 4,
     },
     {
         "id": "spec-control",
-        "label": "📑 Спецификации",
+        "icon": "file-text",
+        "label": "Спецификации",
         "roles": ["spec_controller", "admin"],
         "priority": 5,
     },
     {
         "id": "finance",
-        "label": "💰 Финансы",
+        "icon": "wallet",
+        "label": "Финансы",
         "roles": ["finance", "top_manager", "admin"],
         "priority": 6,
     },
@@ -2412,7 +2481,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(f"📦 Закупки: ожидают оценки ({proc_count})", style="color: #92400e;"),
+                    H2(icon("package", size=22), f" Закупки: ожидают оценки ({proc_count})", style="color: #92400e; display: flex; align-items: center; gap: 0.5rem;"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
                         Tbody(*proc_rows)
@@ -2449,7 +2518,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(f"🚚 Логистика: ожидают данных ({log_count})", style="color: #1e40af;"),
+                    H2(icon("truck", size=22), f" Логистика: ожидают данных ({log_count})", style="color: #1e40af; display: flex; align-items: center; gap: 0.5rem;"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
                         Tbody(*log_rows)
@@ -3740,10 +3809,11 @@ def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
         is_active = tab["id"] == active_tab
         tab_links.append(
             A(
-                tab["label"],
+                icon(tab.get("icon", "circle"), size=16, cls="tab-icon"),
+                Span(tab["label"]),
                 href=f"/dashboard?tab={tab['id']}",
                 cls=f"tab tab-lifted {'tab-active' if is_active else ''}",
-                style="font-size: 0.9rem;"
+                style="font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.375rem;"
             )
         )
 
