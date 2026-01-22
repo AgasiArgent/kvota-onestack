@@ -596,7 +596,6 @@ table tbody td:last-child {
     background: var(--bg-card);
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    overflow: hidden;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     margin: 1.5rem;  /* Fixed spacing from edges */
     margin-top: 1rem;
@@ -12636,7 +12635,7 @@ def get(session, quote_id: str):
                                 Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
                                 style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
                             ),
-                            Small("✓ Подписант определён из контактов клиента", style="color: #16a34a; display: block; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
                         ) if signatory_info else Div(
                             P(icon("alert-triangle", size=14), " Подписант не указан в контактах клиента", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
                             A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
@@ -13028,7 +13027,7 @@ def get(session, spec_id: str):
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="signed"),
-                    Button("✍️ Подписана", type="submit",
+                    Button(icon("pen-tool", size=16), " Подписана", type="submit",
                            style="background: #22c55e; border-color: #22c55e;",
                            disabled=(status == "signed")),
                     action=f"/spec-control/{spec_id}",
@@ -13385,7 +13384,7 @@ def get(session, spec_id: str):
                                 f" от {linked_contract.get('contract_date', '')[:10] if linked_contract.get('contract_date') else '-'}",
                                 style="margin: 0; padding: 0.5rem; background: #eff6ff; border-radius: 4px; border-left: 3px solid #3b82f6;"
                             ),
-                            Small("✓ Спецификация привязана к договору", style="color: #1d4ed8; display: block; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12), " Спецификация привязана к договору", style="color: #1d4ed8; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
                             Input(type="hidden", name="contract_id", value=contract_id or ""),
                         ) if linked_contract.get("contract_number") else Select(
                             Option("-- Без привязки к договору --", value="", selected=not contract_id),
@@ -13414,7 +13413,7 @@ def get(session, spec_id: str):
                                 Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
                                 style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
                             ),
-                            Small("✓ Подписант определён из контактов клиента", style="color: #16a34a; display: block; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
                         ) if signatory_info else Div(
                             P(icon("alert-triangle", size=14), " Подписант не указан в контактах клиента", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
                             A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
@@ -13431,11 +13430,11 @@ def get(session, spec_id: str):
 
             # Feature #71: Section 7 - Signed Scan Upload (visible when status is approved or signed)
             Div(
-                H3("✍️ Подписанный скан"),
+                H3(icon("pen-tool", size=20), " Подписанный скан", style="display: flex; align-items: center; gap: 0.5rem;"),
                 # Show current scan if exists
                 Div(
                     P(
-                        "✅ Скан загружен: ",
+                        icon("check-circle", size=14), " Скан загружен: ",
                         A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
                           href=spec.get("signed_scan_url", "#"),
                           target="_blank",
@@ -13467,7 +13466,7 @@ def get(session, spec_id: str):
                 Div(
                     Hr(style="margin: 1rem 0;"),
                     P(
-                        "📋 Скан загружен. Подтвердите подпись для создания сделки.",
+                        icon("file-text", size=14), " Скан загружен. Подтвердите подпись для создания сделки.",
                         style="margin-bottom: 0.75rem; color: #155724; font-weight: 500;"
                     ),
                     Form(
@@ -13482,7 +13481,7 @@ def get(session, spec_id: str):
                 Div(
                     Hr(style="margin: 1rem 0;"),
                     P(
-                        "✅ Спецификация подписана. Сделка создана.",
+                        icon("check-circle", size=14), " Спецификация подписана. Сделка создана.",
                         style="margin-bottom: 0; color: #155724; font-weight: 500;"
                     ),
                     style="margin-top: 1rem;"
@@ -15270,7 +15269,7 @@ def get(session, deal_id: str):
 
         # Payment status
         if actual_amount is not None:
-            payment_status = Span("✓ Оплачено", style="color: #10b981; font-weight: 500;")
+            payment_status = Span(icon("check", size=14), " Оплачено", style="color: #10b981; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;")
         else:
             payment_status = Span("○ Ожидает", style="color: #f59e0b;")
 
@@ -15317,7 +15316,7 @@ def get(session, deal_id: str):
         plan_fact_table = Div(
             P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic; margin-bottom: 1rem;"),
             Div(
-                A("🔄 Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
+                A(icon("refresh-cw", size=16), " Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
                   style="background: #3b82f6; margin-right: 0.5rem;"),
                 A("+ Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", role="button",
                   style="background: #10b981;"),
@@ -15403,7 +15402,7 @@ def get(session, deal_id: str):
                 Div(
                     A("+ Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
                       style="background: #10b981; font-size: 0.875rem; margin-right: 0.5rem;"),
-                    A("🔄 Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
+                    A(icon("refresh-cw", size=16), " Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
                       style="background: #6b7280; font-size: 0.875rem;"),
                 ) if plan_fact_items else "",
                 style="display: flex; align-items: center; margin-bottom: 1rem;"
@@ -15556,7 +15555,7 @@ def get(session, deal_id: str):
         # Action buttons
         Div(
             Form(
-                Button("✓ Сгенерировать платежи", type="submit", style="background: #10b981; margin-right: 1rem;") if preview_rows else "",
+                Button(icon("check", size=16), " Сгенерировать платежи", type="submit", style="background: #10b981; margin-right: 1rem;") if preview_rows else "",
                 A("Отмена", href=f"/finance/{deal_id}", role="button", style="background: #6b7280;"),
                 method="POST",
                 action=f"/finance/{deal_id}/generate-plan-fact",
@@ -15726,7 +15725,7 @@ def get(session, deal_id: str, item_id: str):
 
     # Status indicator
     is_paid = actual_amount is not None
-    status_label = "✓ Оплачено" if is_paid else "○ Ожидает оплаты"
+    status_label = "Оплачено" if is_paid else "Ожидает оплаты"
     status_color = "#10b981" if is_paid else "#f59e0b"
 
     # Category badge
@@ -16246,9 +16245,9 @@ def get(session, tab: str = "users"):
                     Td(company.get("country", "—")),
                     Td(status_badge),
                     Td(
-                        A("✏️", href=f"/seller-companies/{company['id']}/edit", title="Редактировать",
+                        A(icon("edit", size=14), href=f"/seller-companies/{company['id']}/edit", title="Редактировать",
                           style="margin-right: 0.5rem;"),
-                        A("👁️", href=f"/seller-companies/{company['id']}", title="Просмотр")
+                        A(icon("eye", size=14), href=f"/seller-companies/{company['id']}", title="Просмотр")
                     )
                 )
             )
@@ -16307,9 +16306,9 @@ def get(session, tab: str = "users"):
                     Td(company.get("country", "—")),
                     Td(status_badge),
                     Td(
-                        A("✏️", href=f"/buyer-companies/{company['id']}/edit", title="Редактировать",
+                        A(icon("edit", size=14), href=f"/buyer-companies/{company['id']}/edit", title="Редактировать",
                           style="margin-right: 0.5rem;"),
-                        A("👁️", href=f"/buyer-companies/{company['id']}", title="Просмотр")
+                        A(icon("eye", size=14), href=f"/buyer-companies/{company['id']}", title="Просмотр")
                     )
                 )
             )
@@ -18324,8 +18323,8 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                 Td(s.contact_email or "—"),
                 Td(badge(status_text, type=status_badge_type)),
                 Td(
-                    A("✏️", href=f"/suppliers/{s.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/suppliers/{s.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/suppliers/{s.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/suppliers/{s.id}", title="Просмотр"),
                 )
             )
         )
@@ -18533,7 +18532,7 @@ def get(supplier_id: str, session):
         Div(
             H1(f"📦 {supplier.name}"),
             Div(
-                A("✏️ Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
+                A(icon("edit", size=16), " Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
                 A("← К списку", href="/suppliers", role="button", cls="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
@@ -18632,7 +18631,7 @@ def _supplier_form(supplier=None, error=None, session=None):
         # Error alert
         Div(error, cls="alert alert-error") if error else "",
 
-        H1(f"{'✏️' if is_edit else '➕'} {title}"),
+        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         Div(
             Form(
@@ -18770,7 +18769,7 @@ def _supplier_form(supplier=None, error=None, session=None):
 
                 # Form actions
                 Div(
-                    Button("💾 Сохранить", type="submit"),
+                    Button(icon("save", size=16), " Сохранить", type="submit"),
                     A("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -19018,8 +19017,8 @@ def get(session, q: str = "", status: str = ""):
                 Td(c.general_director_name or "—"),
                 Td(badge(status_text, type=status_badge_type)),
                 Td(
-                    A("✏️", href=f"/buyer-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/buyer-companies/{c.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/buyer-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/buyer-companies/{c.id}", title="Просмотр"),
                 )
             )
         )
@@ -19262,7 +19261,7 @@ def get(company_id: str, session):
         Div(
             H1(f"🏢 {company.name}"),
             Div(
-                A("✏️ Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
+                A(icon("edit", size=16), " Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
                 A("← К списку", href="/buyer-companies", role="button", cls="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
@@ -19346,7 +19345,7 @@ def _buyer_company_form(company=None, error=None, session=None):
         # Error alert
         Div(error, cls="alert alert-error") if error else "",
 
-        H1(f"{'✏️' if is_edit else '➕'} {title}"),
+        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         # Info alert
         Div(
@@ -19485,7 +19484,7 @@ def _buyer_company_form(company=None, error=None, session=None):
 
                 # Form actions
                 Div(
-                    Button("💾 Сохранить", type="submit"),
+                    Button(icon("save", size=16), " Сохранить", type="submit"),
                     A("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -19768,8 +19767,8 @@ def get(session, q: str = "", status: str = ""):
                 Td(c.general_director_name or "—"),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A("✏️", href=f"/seller-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/seller-companies/{c.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/seller-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/seller-companies/{c.id}", title="Просмотр"),
                 )
             )
         )
@@ -20005,7 +20004,7 @@ def get(company_id: str, session):
             Div(
                 H1(icon("building-2", size=28), f" {company.supplier_code} - {company.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
                 Div(
-                    A("✏️ Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
+                    A(icon("edit", size=16), " Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
                     " ",
                     A("← К списку", href="/seller-companies", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem;"
@@ -20253,7 +20252,7 @@ def _seller_company_form(
 
                 # Form actions
                 Div(
-                    Button("💾 Сохранить", type="submit"),
+                    Button(icon("save", size=16), " Сохранить", type="submit"),
                     A("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -20533,7 +20532,7 @@ def get(session, q: str = "", status: str = ""):
             for contact in contacts[:3]:  # Show up to 3 contacts
                 badges = []
                 if contact.is_signatory:
-                    badges.append(Span("✍️ подписант", cls="badge badge-primary", style="font-size: 0.7em; margin-left: 0.3rem;"))
+                    badges.append(Span(icon("pen-tool", size=10), " подписант", cls="badge badge-primary", style="font-size: 0.7em; margin-left: 0.3rem; display: inline-flex; align-items: center; gap: 0.15rem;"))
                 if contact.is_primary:
                     badges.append(Span("★ основной", cls="badge badge-info", style="font-size: 0.7em; margin-left: 0.3rem;"))
 
@@ -20566,8 +20565,8 @@ def get(session, q: str = "", status: str = ""):
                 Td(c.general_director_name or "—"),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A("✏️", href=f"/customers/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/customers/{c.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/customers/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/customers/{c.id}", title="Просмотр"),
                 )
             )
         )
@@ -20585,7 +20584,7 @@ def get(session, q: str = "", status: str = ""):
             "ℹ️ Клиенты — это внешние компании, которые покупают у нас товары. ",
             "Каждое КП (quote) привязывается к одному клиенту. ",
             "У клиента могут быть несколько контактов (ЛПР). Контакт с флагом ",
-            Span("✍️ подписант", style="font-weight: bold;"),
+            Span(icon("pen-tool", size=14), " подписант", style="font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;"),
             " используется для генерации спецификации (PDF).",
             cls="alert alert-info"
         ),
@@ -20981,7 +20980,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
         for contact in customer.contacts:
             badges = []
             if contact.is_signatory:
-                badges.append(Span("✍️ Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem;"))
+                badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
             if contact.is_primary:
                 badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
 
@@ -20997,15 +20996,15 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     ),
                     Td(contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes or "—"),
                     Td(
-                        A("✏️", href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
+                        A(icon("edit", size=14), href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
                     )
                 )
             )
 
         tab_content = Div(
             Div(
-                "💡 Отметьте одного контакта как ",
-                Span("✍️ Подписант", style="font-weight: bold;"),
+                icon("lightbulb", size=16), " Отметьте одного контакта как ",
+                Span(icon("pen-tool", size=14), " Подписант", style="font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 " — его имя будет использоваться в спецификациях (PDF). ",
                 "Контакт ",
                 Span("★ Основной", style="font-weight: bold;"),
@@ -21184,7 +21183,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 "draft": "Черновик",
                 "pending_review": "🔄 На проверке",
                 "approved": "✅ Согласовано",
-                "signed": "✍️ Подписано"
+                "signed": "Подписано"
             }.get(status, status)
 
             # Get quote IDN if available
@@ -21667,7 +21666,7 @@ def get(session, customer_id: str):
                     ),
                     Label(
                         Input(type="checkbox", name="is_signatory", value="true"),
-                        " ✍️ Подписант (имя будет в спецификациях PDF)",
+                        icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
                         style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     cls="form-row"
@@ -21764,7 +21763,7 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
                         ),
                         Label(
                             Input(type="checkbox", name="is_signatory", value="true", checked=is_signatory=="true"),
-                            " ✍️ Подписант (имя будет в спецификациях PDF)",
+                            icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
                             style="display: flex; align-items: center; gap: 0.5rem;"
                         ),
                         cls="form-row"
@@ -23155,7 +23154,7 @@ def _location_form(location=None, error=None, session=None):
 
                 # Submit buttons
                 Div(
-                    Button("💾 Сохранить", type="submit"),
+                    Button(icon("save", size=16), " Сохранить", type="submit"),
                     " ",
                     A("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
@@ -24083,7 +24082,7 @@ def _invoice_payment_form(invoice, payment=None, error=None, session=None):
 
                 # Buttons
                 Div(
-                    Button("💾 Сохранить", type="submit"),
+                    Button(icon("save", size=16), " Сохранить", type="submit"),
                     A("Отмена", href=f"/supplier-invoices/{invoice.id}", role="button", cls="secondary"),
                     style="display: flex; gap: 1rem; margin-top: 1.5rem;"
                 ),
