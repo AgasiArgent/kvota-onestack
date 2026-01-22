@@ -6723,12 +6723,18 @@ def get(quote_id: str, session):
         float(inv.get("logistics_customs_to_customer") or 0) for inv in invoices_logistics
     )
 
-    # Use aggregated values as defaults (saved_vars takes precedence if manually overridden)
-    if "logistics_supplier_hub" not in saved_vars and total_logistics_supplier_hub > 0:
+    # Use aggregated values from invoices as defaults
+    # Override saved_vars if: aggregated > 0 AND (saved is missing or saved is 0)
+    # This ensures invoice-level logistics data flows to calculation
+    saved_supplier_hub = float(saved_vars.get("logistics_supplier_hub", 0) or 0)
+    saved_hub_customs = float(saved_vars.get("logistics_hub_customs", 0) or 0)
+    saved_customs_client = float(saved_vars.get("logistics_customs_client", 0) or 0)
+
+    if total_logistics_supplier_hub > 0 and saved_supplier_hub == 0:
         saved_vars["logistics_supplier_hub"] = total_logistics_supplier_hub
-    if "logistics_hub_customs" not in saved_vars and total_logistics_hub_customs > 0:
+    if total_logistics_hub_customs > 0 and saved_hub_customs == 0:
         saved_vars["logistics_hub_customs"] = total_logistics_hub_customs
-    if "logistics_customs_client" not in saved_vars and total_logistics_customs_client > 0:
+    if total_logistics_customs_client > 0 and saved_customs_client == 0:
         saved_vars["logistics_customs_client"] = total_logistics_customs_client
 
     # Default values (with saved values taking precedence)
