@@ -1522,11 +1522,14 @@ def sidebar(session, current_path: str = ""):
 
     # === MAIN SECTION ===
     main_items = [
-        {"icon": "📊", "label": "Дашборд", "href": "/dashboard", "roles": None},  # All users
+        {"icon": "📥", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
         main_items.append({"icon": "➕", "label": "Новый КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]})
+    # Add "Обзор" (analytics) for admin/top_manager
+    if is_admin or "top_manager" in roles:
+        main_items.append({"icon": "📊", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
 
     menu_sections.append({"title": "Главное", "items": main_items})
 
@@ -2038,7 +2041,7 @@ def status_badge(status):
 @rt("/")
 def get(session):
     if session.get("user"):
-        return RedirectResponse("/dashboard", status_code=303)
+        return RedirectResponse("/tasks", status_code=303)  # New primary entry point
     return RedirectResponse("/login", status_code=303)
 
 
@@ -3665,6 +3668,152 @@ def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
         role="tablist",
         cls="tabs tabs-lifted",
         style="margin-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb;"
+    )
+
+
+# ============================================================================
+# TASKS - Unified Task Inbox (Hub)
+# ============================================================================
+
+def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
+    """Count total pending tasks for user across all roles."""
+    total = 0
+
+    # Approvals for top_manager/admin
+    if 'top_manager' in roles or 'admin' in roles:
+        total += count_pending_approvals(user_id)
+
+    # Procurement tasks
+    if 'procurement' in roles:
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_procurement").execute()
+        total += result.count or 0
+
+    # Logistics tasks
+    if 'logistics' in roles:
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_logistics").execute()
+        total += result.count or 0
+
+    # Customs tasks
+    if 'customs' in roles:
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_customs").execute()
+        total += result.count or 0
+
+    # Quote controller tasks
+    if 'quote_controller' in roles or 'admin' in roles:
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_quote_control").execute()
+        total += result.count or 0
+
+    # Spec controller tasks
+    if 'spec_controller' in roles or 'admin' in roles:
+        spec_counts = count_specifications_by_status(org_id)
+        total += spec_counts.get('pending_review', 0) + spec_counts.get('draft', 0)
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_spec_control").execute()
+        total += result.count or 0
+
+    # Finance tasks
+    if 'finance' in roles or 'admin' in roles:
+        deal_counts = count_deals_by_status(org_id)
+        total += deal_counts.get('active', 0)
+
+    # Sales tasks
+    if 'sales' in roles:
+        result = supabase.table("quotes").select("id", count="exact") \
+            .eq("organization_id", org_id).eq("workflow_status", "pending_sales_review").execute()
+        total += result.count or 0
+
+    return total
+
+
+@rt("/tasks")
+def get(session):
+    """
+    Unified Task Inbox - shows all pending tasks for the user.
+    This is the main entry point instead of dashboard tabs.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+    supabase = get_supabase()
+
+    # Get user roles
+    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
+
+    # Count total tasks
+    total_tasks = _count_user_tasks(user_id, org_id, roles, supabase)
+
+    # Get task sections for all roles
+    task_sections = _get_role_tasks_sections(user_id, org_id, roles, supabase)
+
+    # Role badges
+    role_names = {
+        'sales': ('Продажи', '#f97316'),
+        'procurement': ('Закупки', '#fbbf24'),
+        'logistics': ('Логистика', '#3b82f6'),
+        'customs': ('Таможня', '#8b5cf6'),
+        'quote_controller': ('Контроль КП', '#ec4899'),
+        'spec_controller': ('Спецификации', '#6366f1'),
+        'finance': ('Финансы', '#10b981'),
+        'top_manager': ('Топ-менеджер', '#f59e0b'),
+        'admin': ('Админ', '#ef4444'),
+    }
+
+    role_badges = [
+        Span(role_names.get(r, (r, '#6b7280'))[0],
+             style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; background: {role_names.get(r, (r, '#6b7280'))[1]}20; color: {role_names.get(r, (r, '#6b7280'))[1]}; border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}40;")
+        for r in roles
+    ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
+
+    # Build content
+    content = [
+        # Header
+        Div(
+            H1(f"📥 Мои задачи", style="margin-bottom: 0.5rem;"),
+            P(
+                Strong("Ваши роли: "), *role_badges,
+                style="color: #6b7280; margin-bottom: 1rem;"
+            ),
+            # Task count badge
+            Div(
+                Span(
+                    f"{total_tasks} " + ("задач" if total_tasks == 0 or total_tasks >= 5 else "задачи" if total_tasks >= 2 else "задача"),
+                    style=f"display: inline-block; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 1rem; font-weight: 600; background: {'#fee2e2' if total_tasks > 0 else '#d1fae5'}; color: {'#dc2626' if total_tasks > 0 else '#059669'};"
+                ),
+                style="margin-bottom: 1.5rem;"
+            ),
+            style="margin-bottom: 1rem;"
+        ),
+    ]
+
+    # Add task sections or empty state
+    if task_sections:
+        content.extend(task_sections)
+    else:
+        content.append(
+            Div(
+                Div(
+                    Span("✅", style="font-size: 3rem; display: block; margin-bottom: 1rem;"),
+                    H3("Отлично! Нет задач.", style="margin-bottom: 0.5rem; color: #059669;"),
+                    P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="color: #6b7280;"),
+                    style="text-align: center; padding: 3rem;"
+                ),
+                cls="card",
+                style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0;"
+            )
+        )
+
+    return page_layout("Мои задачи",
+        *content,
+        session=session,
+        current_path="/tasks"
     )
 
 
