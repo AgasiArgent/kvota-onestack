@@ -13125,8 +13125,8 @@ def get(session, spec_id: str):
                 Button("📤 Отправить на проверку", type="submit", name="action", value="submit_review",
                        style="background: #007bff; border-color: #007bff; margin-left: 1rem;",
                        disabled=not is_editable) if is_editable and status == "draft" else None,
-                Button("✅ Утвердить", type="submit", name="action", value="approve",
-                       style="background: #28a745; border-color: #28a745; margin-left: 1rem;",
+                Button(icon("check", size=16), " Утвердить", type="submit", name="action", value="approve",
+                       style="background: #28a745; border-color: #28a745; margin-left: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;",
                        disabled=not is_editable) if is_editable and status == "pending_review" else None,
                 # Feature #70: PDF Preview button
                 A("📄 Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf",
