@@ -3523,36 +3523,72 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
         filter_form,
 
         Div(
-            H2(icon("package", size=22), " Ожидают логистики", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("package", size=20), " Ожидают логистики", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in pending_quotes]
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на логистике", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {pending_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if not status_filter or status_filter == "all" else None,
 
         Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(f"КП: {dict(status_options).get(status_filter, status_filter)}", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in quotes_with_details]
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(quotes_with_details)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2(icon("check-circle", size=22), " Завершено", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in completed_quotes]
-                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("check-circle", size=20), " Завершено", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q, show_work_button=False) for q in completed_quotes]
+                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(completed_quotes)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if (not status_filter or status_filter == "all") and completed_quotes else None,
     ]
 
@@ -3691,36 +3727,72 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
         filter_form,
 
         Div(
-            H2(icon("shield-check", size=22), " Ожидают таможни", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("shield-check", size=20), " Ожидают таможни", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in pending_quotes]
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на таможне", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {pending_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if not status_filter or status_filter == "all" else None,
 
         Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(f"КП: {dict(status_options).get(status_filter, status_filter)}", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in quotes_with_details]
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(quotes_with_details)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2(icon("check-circle", size=22), " Завершено", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in completed_quotes]
-                ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("check-circle", size=20), " Завершено", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ЭТАПЫ"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q, show_work_button=False) for q in completed_quotes]
+                        ) if completed_quotes else Tbody(Tr(Td("Нет завершённых КП", colspan="7", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(completed_quotes)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if (not status_filter or status_filter == "all") and completed_quotes else None,
     ]
 
@@ -3859,50 +3931,97 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
         Div(filter_form, cls="card") if not status_filter or status_filter == "all" else filter_form,
 
         Div(
-            H2(f"КП: {dict(status_options).get(status_filter, status_filter)}"),
-            P(f"Найдено: {len(quotes_with_details)} КП", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in quotes_with_details]
-                ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(f"КП: {dict(status_options).get(status_filter, status_filter)}", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in quotes_with_details]
+                        ) if quotes_with_details else Tbody(Tr(Td("Нет КП с этим статусом", colspan="6", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {len(quotes_with_details)}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2(icon("file-text", size=22), " Ожидают проверки", style="display: flex; align-items: center; gap: 0.5rem;"),
-            P("КП требующие проверки контроллера", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("file-text", size=20), " Ожидают проверки", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    Span("КП требующие проверки контроллера", style="color: #666; font-size: 0.875rem; font-weight: normal;"),
+                    cls="table-header", style="flex-direction: column; align-items: flex-start; gap: 0.25rem;"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q) for q in pending_quotes]
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП на проверке", colspan="6", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {pending_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if not status_filter or status_filter == "all" else None,
 
         Div(
-            H2(icon("clock", size=22), " Ожидают согласования", style="display: flex; align-items: center; gap: 0.5rem;"),
-            P("КП отправленные на согласование топ-менеджеру", style="color: #666; margin-bottom: 1rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
-                ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("clock", size=20), " Ожидают согласования", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    Span("КП отправленные на согласование топ-менеджеру", style="color: #666; font-size: 0.875rem; font-weight: normal;"),
+                    cls="table-header", style="flex-direction: column; align-items: flex-start; gap: 0.25rem;"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q, show_work_button=False) for q in awaiting_approval_quotes]
+                        ) if awaiting_approval_quotes else Tbody(Tr(Td("Нет КП на согласовании", colspan="6", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {awaiting_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if (not status_filter or status_filter == "all") and awaiting_approval_quotes else None,
 
         Div(
-            H2(icon("check-circle", size=22), " Одобренные КП", style="display: flex; align-items: center; gap: 0.5rem;"),
-            Table(
-                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
-                Tbody(
-                    *[quote_row(q, show_work_button=False) for q in approved_quotes]
-                ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
-            ),
-            cls="card"
+            Div(
+                Div(
+                    H3(icon("check-circle", size=20), " Одобренные КП", style="display: flex; align-items: center; gap: 0.5rem; margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("КП #"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("СУММА", cls="col-money"), Th("СОЗДАН"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[quote_row(q, show_work_button=False) for q in approved_quotes]
+                        ) if approved_quotes else Tbody(Tr(Td("Нет одобренных КП", colspan="6", style="text-align: center; color: #666;")))
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {approved_count}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0;"
+            )
         ) if (not status_filter or status_filter == "all") and approved_quotes else None,
     ]
 
@@ -4048,63 +4167,118 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
         ),
 
         Div(
-            H2(f"КП ожидающие спецификации ({stats['pending_quotes']})"),
-            Table(
-                Thead(Tr(Th("№ КП"), Th("Клиент"), Th("Тип сделки"), Th("Сумма"), Th("Дата"), Th("Действие"))),
-                Tbody(
-                    *[pending_quote_row(q) for q in pending_quotes]
-                ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
+            Div(
+                Div(
+                    H3(f"КП ожидающие спецификации", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("№ КП"), Th("КЛИЕНТ"), Th("ТИП СДЕЛКИ"), Th("СУММА", cls="col-money"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[pending_quote_row(q) for q in pending_quotes]
+                        ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {stats['pending_quotes']}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
+            )
         ) if not status_filter or status_filter in ["all", "pending_quotes"] else None,
 
         Div(
-            H2(f"Спецификации на проверке ({stats['pending_review']})"),
-            Table(
-                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
-                Tbody(
-                    *[spec_row(s) for s in pending_review_specs]
-                ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
+            Div(
+                Div(
+                    H3(f"Спецификации на проверке", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[spec_row(s) for s in pending_review_specs]
+                        ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="6", style="text-align: center; color: #666;"))),
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {stats['pending_review']}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
+            )
         ) if not status_filter or status_filter in ["all", "pending_review"] else None,
 
         Div(
-            H2(f"Черновики ({stats['draft_specs']})"),
-            Table(
-                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
-                Tbody(
-                    *[spec_row(s) for s in draft_specs]
-                ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
+            Div(
+                Div(
+                    H3(f"Черновики", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[spec_row(s) for s in draft_specs]
+                        ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="6", style="text-align: center; color: #666;"))),
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {stats['draft_specs']}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
+            )
         ) if status_filter == "draft" else None,
 
         Div(
-            H2(f"Утверждённые спецификации ({stats['approved']})"),
-            Table(
-                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
-                Tbody(
-                    *[spec_row(s, show_work_button=False) for s in approved_specs]
-                ) if approved_specs else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
+            Div(
+                Div(
+                    H3(f"Утверждённые спецификации", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[spec_row(s, show_work_button=False) for s in approved_specs]
+                        ) if approved_specs else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="6", style="text-align: center; color: #666;"))),
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {stats['approved']}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
+            )
         ) if status_filter == "approved" else None,
 
         Div(
-            H2(f"Подписанные спецификации ({stats['signed']})"),
-            Table(
-                Thead(Tr(Th("№ Спецификации"), Th("Клиент"), Th("Статус"), Th("Валюта"), Th("Дата"), Th("Действие"))),
-                Tbody(
-                    *[spec_row(s, show_work_button=False) for s in signed_specs]
-                ) if signed_specs else Tbody(Tr(Td("Нет подписанных спецификаций", colspan="6", style="text-align: center; color: #666;"))),
-            ),
-            cls="card",
-            style="margin-bottom: 2rem;"
+            Div(
+                Div(
+                    H3(f"Подписанные спецификации", style="margin: 0;"),
+                    cls="table-header"
+                ),
+                Div(
+                    Table(
+                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Tbody(
+                            *[spec_row(s, show_work_button=False) for s in signed_specs]
+                        ) if signed_specs else Tbody(Tr(Td("Нет подписанных спецификаций", colspan="6", style="text-align: center; color: #666;"))),
+                    , cls="unified-table"),
+                    cls="table-responsive"
+                ),
+                Div(
+                    Span(f"Записей: {stats['signed']}"),
+                    cls="table-footer"
+                ),
+                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
+            )
         ) if status_filter == "signed" or (not status_filter or status_filter == "all") and signed_specs else None,
     ]
 
