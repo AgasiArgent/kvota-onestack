@@ -330,13 +330,16 @@ div[style*="max-width"][style*="margin"]:hover {
 /* ========== Enhanced Buttons ========== */
 button, [role="button"], .button, a[role="button"] {
     padding: 0.625rem 1.25rem;
-    border-radius: 0.5rem;
+    border-radius: 8px;
     font-weight: 500;
-    font-size: 0.9375rem;
+    font-size: 0.875rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
     border: none;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     text-decoration: none;
 }
 
@@ -345,9 +348,9 @@ button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle),
 [role="button"]:not(.secondary):not(.ghost),
 button[type="submit"],
 a[href*="/new"]:not(.sidebar-item) {
-    background: var(--accent-gradient) !important;
+    background: var(--accent) !important;
     color: var(--text-on-accent) !important;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25) !important;
+    box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2) !important;
     border-color: transparent !important;
 }
 
@@ -355,9 +358,9 @@ button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):h
 [role="button"]:not(.secondary):not(.ghost):hover,
 button[type="submit"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35) !important;
-    filter: brightness(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+    background: var(--accent-hover) !important;
 }
 
 /* Secondary button */
