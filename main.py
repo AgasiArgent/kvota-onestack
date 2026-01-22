@@ -1533,56 +1533,37 @@ def sidebar(session, current_path: str = ""):
 
     # === MAIN SECTION ===
     main_items = [
-        {"icon": "📊", "label": "Dashboard", "href": "/dashboard", "roles": None},  # All users
+        {"icon": "📊", "label": "Дашборд", "href": "/dashboard", "roles": None},  # All users
     ]
+    # Add "Новый КП" button for sales/admin
+    if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
+        main_items.append({"icon": "➕", "label": "Новый КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]})
+
     menu_sections.append({"title": "Главное", "items": main_items})
 
-    # === SALES SECTION (for sales roles or admin) ===
-    sales_items = []
-    if is_admin or any(r in roles for r in ["sales", "sales_manager", "quote_controller"]):
-        sales_items = [
-            {"icon": "📋", "label": "Коммерческие предложения", "href": "/quotes", "roles": ["sales", "sales_manager", "admin", "quote_controller"]},
-            {"icon": "📝", "label": "Новое КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]},
-            {"icon": "👥", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]},
-        ]
-    if sales_items:
-        menu_sections.append({"title": "Продажи", "items": sales_items})
+    # === REGISTRIES SECTION (reference data) ===
+    registries_items = []
 
-    # === OPERATIONS SECTION (role-based workspaces - now point to dashboard tabs) ===
-    operations_items = []
+    # Customers - for sales roles
+    if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
+        registries_items.append({"icon": "👥", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
 
+    # Suppliers - for procurement
     if is_admin or "procurement" in roles:
-        operations_items.append({"icon": "🛒", "label": "Закупки", "href": "/dashboard?tab=procurement", "roles": ["procurement", "admin"]})
-        operations_items.append({"icon": "🏭", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
+        registries_items.append({"icon": "🏭", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
-    if is_admin or any(r in roles for r in ["logistics", "head_of_logistics"]):
-        operations_items.append({"icon": "🚚", "label": "Логистика", "href": "/dashboard?tab=logistics", "roles": ["logistics", "head_of_logistics", "admin"]})
+    # Company registries - for admin
+    if is_admin:
+        registries_items.append({"icon": "🏢", "label": "Юрлица-продажи", "href": "/admin?tab=seller-companies", "roles": ["admin"]})
+        registries_items.append({"icon": "🏬", "label": "Юрлица-закупки", "href": "/admin?tab=buyer-companies", "roles": ["admin"]})
 
-    if is_admin or any(r in roles for r in ["customs", "head_of_customs"]):
-        operations_items.append({"icon": "🛃", "label": "Таможня", "href": "/dashboard?tab=customs", "roles": ["customs", "head_of_customs", "admin"]})
-
-    if operations_items:
-        menu_sections.append({"title": "Операции", "items": operations_items})
-
-    # === CONTROL SECTION (now point to dashboard tabs except finance) ===
-    control_items = []
-
-    if is_admin or "quote_controller" in roles:
-        control_items.append({"icon": "✅", "label": "Контроль КП", "href": "/dashboard?tab=quote-control", "roles": ["quote_controller", "admin"]})
-
-    if is_admin or "spec_controller" in roles:
-        control_items.append({"icon": "📑", "label": "Спецификации", "href": "/dashboard?tab=spec-control", "roles": ["spec_controller", "admin"]})
-
-    if is_admin or any(r in roles for r in ["finance", "top_manager"]):
-        control_items.append({"icon": "💰", "label": "Финансы", "href": "/finance", "roles": ["finance", "top_manager", "admin"]})
-
-    if control_items:
-        menu_sections.append({"title": "Контроль", "items": control_items})
+    if registries_items:
+        menu_sections.append({"title": "Реестры", "items": registries_items})
 
     # === ADMIN SECTION ===
     if is_admin:
         admin_items = [
-            {"icon": "⚙️", "label": "Админ", "href": "/admin", "roles": ["admin"]},
+            {"icon": "👤", "label": "Пользователи", "href": "/admin?tab=users", "roles": ["admin"]},
             {"icon": "🔧", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
