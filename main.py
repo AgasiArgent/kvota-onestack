@@ -1047,21 +1047,26 @@ button[style*="#0172AD"] {
     width: 32px;
     height: 32px;
     min-width: 32px;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    border-radius: 0.375rem;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: none !important;
+    border-radius: 0.375rem !important;
     cursor: pointer;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     font-size: 0.9rem;
-    color: #94a3b8;
+    color: #94a3b8 !important;
     transition: all 0.2s;
+    padding: 0 !important;
+    box-shadow: none !important;
+    transform: none !important;
 }
 
 .sidebar-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 .sidebar.collapsed .sidebar-header {
@@ -1589,13 +1594,23 @@ document.addEventListener('DOMContentLoaded', function() {
         if (toggleIcon) toggleIcon.textContent = '▶';
     }
 
-    // Restore section states (collapse sections without active items by default)
+    // Restore section states - collapse all by default, expand only those with active items
     const savedStates = localStorage.getItem('sidebarSections');
+    const sections = document.querySelectorAll('.sidebar-section');
+
     if (savedStates) {
+        // Restore from saved state
         const states = JSON.parse(savedStates);
-        const sections = document.querySelectorAll('.sidebar-section');
         sections.forEach((section, idx) => {
             if (states[idx]) {
+                section.classList.add('collapsed');
+            }
+        });
+    } else {
+        // First visit: collapse all sections except those with active items
+        sections.forEach(section => {
+            const hasActive = section.getAttribute('data-has-active') === 'true';
+            if (!hasActive) {
                 section.classList.add('collapsed');
             }
         });
@@ -19453,26 +19468,26 @@ def get(customer_id: str, session, request, tab: str = "general"):
             Div(
                 # Legal address with inline editing
                 Div(
-                    Div(Strong("Юридический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(Strong("Юридический адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     _render_field_display(customer_id, "legal_address", customer.legal_address or ""),
                     style="margin-bottom: 1.5rem;"
                 ),
                 # Actual address with inline editing
                 Div(
-                    Div(Strong("Фактический адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(Strong("Фактический адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     _render_field_display(customer_id, "actual_address", customer.actual_address or ""),
                     style="margin-bottom: 1.5rem;"
                 ),
                 # Postal address (only if different from actual)
                 Div(
-                    Div(Strong("Почтовый адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(Strong("Почтовый адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     _render_field_display(customer_id, "postal_address", customer.postal_address or ""),
                     style="margin-bottom: 1.5rem;"
                 ) if show_postal else Div(
-                    Div(Strong("Почтовый адрес"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
+                    Div(Strong("Почтовый адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     Div(
                         "Совпадает с фактическим адресом",
-                        style="color: #999; padding: 0.5rem 0.75rem; font-style: italic;"
+                        style="color: #9ca3af; padding: 0.5rem 0.75rem; font-style: italic;"
                     ),
                     style="margin-bottom: 1.5rem;"
                 ),
@@ -19979,7 +19994,8 @@ def get(customer_id: str, field_name: str, session):
 def _render_field_display(customer_id: str, field_name: str, value: str):
     """Helper function to render field in display mode with modern inline edit."""
     display_value = value if value else "Не указан"
-    display_color = "#999" if not value else "#000"
+    # Use consistent dark gray for filled values, lighter gray for empty
+    display_color = "#6b7280" if not value else "#374151"
 
     # Special formatting for name field
     if field_name == "name":
