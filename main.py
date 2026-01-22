@@ -499,32 +499,32 @@ button.btn-sm,
 
 .stat-card {
     text-align: center;
-    padding: 2rem 1.5rem;
+    padding: 1.5rem;
     background: var(--bg-card) !important;
-    border-radius: 1rem;
+    border-radius: 12px;
     box-shadow: var(--card-shadow);
     border: 1px solid var(--card-border);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .stat-card:hover {
-    transform: translateY(-4px);
+    transform: translateY(-2px);
     box-shadow: var(--card-shadow-hover);
 }
 
 .stat-value {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: var(--accent);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
     margin: 0;
+    line-height: 1.2;
 }
 
 .stat-label {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-secondary);
     margin-top: 0.5rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
 }
 
 /* ========== Tables with Zebra Stripes & Hover ========== */
@@ -776,12 +776,7 @@ a:active {
     letter-spacing: 0.05em;
 }
 
-.stat-value {
-    font-size: 2.25rem;
-    font-weight: 800;
-    line-height: 1.2;
-    color: var(--accent);
-}
+/* Note: .stat-value is defined in main stat-card section above */
 
 .stat-desc {
     font-size: 0.875rem;
@@ -1072,26 +1067,7 @@ button[style*="#0172AD"] {
     border-color: var(--accent);
 }
 
-.stat-title {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.stat-value {
-    font-size: 2.25rem;
-    font-weight: 800;
-    line-height: 1.2;
-    color: var(--accent);
-}
-
-.stat-desc {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    font-weight: 400;
-}
+/* Note: stat-title, stat-value, stat-desc are defined earlier in stat-card section */
 
 /* ========== Sidebar Navigation ========== */
 .app-layout {
@@ -13822,6 +13798,7 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         .erps-table-container {
             overflow-x: auto;
             max-width: 100%;
+            position: relative;
         }
         .erps-table {
             border-collapse: separate;
@@ -13836,33 +13813,35 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             white-space: nowrap;
         }
         .erps-table th {
-            position: sticky;
-            top: 0;
-            z-index: 5;
+            font-weight: 600;
             background: white;
         }
         /* Sticky columns: IDN */
         .erps-table th.sticky-idn,
         .erps-table td.sticky-idn {
-            position: sticky;
-            left: 0;
-            z-index: 10;
+            position: sticky !important;
+            left: 0 !important;
+            z-index: 20 !important;
             background: #fef3c7 !important;
-            min-width: 100px;
+            min-width: 80px;
+            max-width: 80px;
+            box-shadow: 2px 0 4px -2px rgba(0,0,0,0.15);
         }
         /* Sticky columns: Client */
         .erps-table th.sticky-client,
         .erps-table td.sticky-client {
-            position: sticky;
-            left: 100px;
-            z-index: 10;
-            background: #fff9e6 !important;
-            min-width: 150px;
+            position: sticky !important;
+            left: 80px !important;
+            z-index: 20 !important;
+            background: #fffbeb !important;
+            min-width: 130px;
+            max-width: 130px;
             border-right: 2px solid #d97706;
+            box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2);
         }
         .erps-table th.sticky-idn,
         .erps-table th.sticky-client {
-            z-index: 15;
+            z-index: 25 !important;
         }
         /* View selector styles */
         .view-selector {
