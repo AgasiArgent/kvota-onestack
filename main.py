@@ -1365,8 +1365,26 @@ button[style*="#0172AD"] {
     color: var(--accent) !important;
 }
 
-.theme-toggle-icon {
-    font-size: 1rem;
+/* Theme toggle icons - show/hide based on current theme */
+.theme-icon-moon,
+.theme-icon-sun {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+/* Light theme (default): show moon icon, hide sun */
+.theme-icon-sun {
+    display: none;
+}
+
+/* Dark theme: show sun icon, hide moon */
+[data-theme="dark"] .theme-icon-moon {
+    display: none;
+}
+
+[data-theme="dark"] .theme-icon-sun {
+    display: inline-flex;
 }
 
 .sidebar.collapsed .sidebar-user-info {
@@ -1514,7 +1532,8 @@ def sidebar(session, current_path: str = ""):
             # Footer with theme toggle
             Div(
                 Button(
-                    Span("🌙", id="theme-toggle-icon"),
+                    icon("moon", size=18, cls="theme-icon-moon"),
+                    icon("sun", size=18, cls="theme-icon-sun"),
                     Span("Тёмная тема", id="theme-toggle-text"),
                     cls="theme-toggle",
                     onclick="toggleTheme()",
@@ -1641,7 +1660,8 @@ def sidebar(session, current_path: str = ""):
         Div(
             # Theme toggle button
             Button(
-                Span("🌙", id="theme-toggle-icon"),
+                icon("moon", size=18, cls="theme-icon-moon"),
+                icon("sun", size=18, cls="theme-icon-sun"),
                 Span("Тёмная тема", id="theme-toggle-text"),
                 cls="theme-toggle",
                 onclick="toggleTheme()",
@@ -1773,10 +1793,8 @@ function toggleTheme() {
 }
 
 function updateThemeIcon(theme) {
-    const icon = document.getElementById('theme-toggle-icon');
-    if (icon) {
-        icon.textContent = theme === 'dark' ? '☀️' : '🌙';
-    }
+    // Icons are toggled via CSS based on data-theme attribute
+    // Only update the text label
     const text = document.getElementById('theme-toggle-text');
     if (text) {
         text.textContent = theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
