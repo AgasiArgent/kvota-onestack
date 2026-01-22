@@ -205,19 +205,24 @@ button, [role="button"], .button, a[role="button"] {
     text-decoration: none;
 }
 
-/* Primary button (default) */
+/* Primary button (default) - Override ALL button colors including Pico CSS */
 button:not(.secondary):not(.ghost),
-[role="button"]:not(.secondary):not(.ghost) {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+[role="button"]:not(.secondary):not(.ghost),
+button[type="submit"],
+a[href*="/new"] {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
+    border-color: transparent !important;
 }
 
 button:not(.secondary):not(.ghost):hover,
-[role="button"]:not(.secondary):not(.ghost):hover {
+[role="button"]:not(.secondary):not(.ghost):hover,
+button[type="submit"]:hover,
+a[href*="/new"]:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
 }
 
 /* Secondary button */
@@ -738,56 +743,85 @@ form[method="get"] button {
     flex-shrink: 0;
 }
 
-/* ========== Button Style Overrides ========== */
-/* Override any old blue button styles */
-button[style*="background"],
-[role="button"][style*="background"],
-.button[style*="background"],
-a[style*="background"] {
+/* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
+/* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
+button,
+[role="button"],
+.button,
+button[type="submit"],
+button[type="button"],
+input[type="submit"],
+input[type="button"],
+a[href*="/new"],
+a[href*="/create"] {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    background-color: #6366f1 !important;
     color: white !important;
     border: none !important;
+    border-color: transparent !important;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
+    padding: 0.625rem 1.25rem !important;
+    border-radius: 0.5rem !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    text-decoration: none !important;
+    display: inline-block !important;
+    cursor: pointer !important;
 }
 
-button[style*="background"]:hover,
-[role="button"][style*="background"]:hover,
-.button[style*="background"]:hover,
-a[style*="background"]:hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
-}
-
-/* Fix small buttons */
-button[style*="font-size: 0.875rem"],
-[role="button"][style*="font-size: 0.875rem"],
-a[style*="font-size: 0.875rem"] {
-    padding: 0.4rem 0.875rem !important;
-    font-size: 0.875rem !important;
-}
-
-/* Ensure all buttons have consistent styling */
-.button,
-button:not([class]),
-[role="button"]:not([class]) {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
-    padding: 0.625rem 1.25rem;
-    border-radius: 0.5rem;
-    font-weight: 500;
-    border: none;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
-    transition: all 0.2s ease;
-    text-decoration: none;
-    display: inline-block;
-}
-
+button:hover,
+[role="button"]:hover,
 .button:hover,
-button:not([class]):hover,
-[role="button"]:not([class]):hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35);
-    transform: translateY(-2px);
+button[type="submit"]:hover,
+button[type="button"]:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover,
+a[href*="/new"]:hover,
+a[href*="/create"]:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
+    background-color: #4f46e5 !important;
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Exception: Keep secondary, ghost, success, danger variants */
+button.secondary,
+[role="button"].secondary,
+.button.secondary {
+    background: white !important;
+    background-color: white !important;
+    color: #4f46e5 !important;
+    border: 1.5px solid #6366f1 !important;
+}
+
+button.ghost,
+[role="button"].ghost,
+.button.ghost {
+    background: transparent !important;
+    background-color: transparent !important;
+    color: #6366f1 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+button.success,
+[role="button"].success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+    background-color: #10b981 !important;
+}
+
+button.danger,
+[role="button"].danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    background-color: #ef4444 !important;
+}
+
+/* Override old cyan/teal colors specifically */
+button[style*="#0891b2"],
+button[style*="rgb(1, 114, 173)"],
+button[style*="#0172AD"] {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    background-color: #6366f1 !important;
 }
 
 /* Selection styling */
