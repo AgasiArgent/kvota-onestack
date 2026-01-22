@@ -222,7 +222,7 @@ button, [role="button"], .button, a[role="button"] {
 button:not(.secondary):not(.ghost),
 [role="button"]:not(.secondary):not(.ghost),
 button[type="submit"],
-a[href*="/new"] {
+a[href*="/new"]:not(.sidebar-item) {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
     color: white !important;
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
@@ -232,7 +232,7 @@ a[href*="/new"] {
 button:not(.secondary):not(.ghost):hover,
 [role="button"]:not(.secondary):not(.ghost):hover,
 button[type="submit"]:hover,
-a[href*="/new"]:hover {
+a[href*="/new"]:not(.sidebar-item):hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
     background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
@@ -754,8 +754,8 @@ button[type="submit"],
 button[type="button"],
 input[type="submit"],
 input[type="button"],
-a[href*="/new"],
-a[href*="/create"] {
+a[href*="/new"]:not(.sidebar-item),
+a[href*="/create"]:not(.sidebar-item) {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
     background-color: #6366f1 !important;
     color: white !important;
@@ -778,8 +778,8 @@ button[type="submit"]:hover,
 button[type="button"]:hover,
 input[type="submit"]:hover,
 input[type="button"]:hover,
-a[href*="/new"]:hover,
-a[href*="/create"]:hover {
+a[href*="/new"]:not(.sidebar-item):hover,
+a[href*="/create"]:not(.sidebar-item):hover {
     background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
     background-color: #4f46e5 !important;
     box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
