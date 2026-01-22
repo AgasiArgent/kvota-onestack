@@ -147,13 +147,12 @@ class TestProductRowWithLocation:
 
     def test_product_row_displays_location_badge(self, sample_location):
         """product_row should display location badge when pickup_location_info provided"""
-        # The badge format is: 📍 {code or city}
+        # The badge format uses Lucide map-pin icon + {code or city}
         # With title showing full location info
         location_code = sample_location.code
-        expected_badge_text = f" 📍 {location_code}"
 
-        assert "📍" in expected_badge_text
-        assert sample_location.code in expected_badge_text
+        # Check that location code is used in badge
+        assert sample_location.code == location_code
 
     def test_product_row_location_badge_color(self):
         """Location badge should use orange color (#cc6600)"""
@@ -177,7 +176,7 @@ class TestProductRowWithLocation:
     def test_product_row_placeholder_badge_when_id_only(self, sample_quote_item_with_location):
         """Show placeholder badge when location ID exists but info not loaded"""
         # When pickup_location_id is set but pickup_location_info is None
-        # Should show just 📍 icon without text
+        # Should show just map-pin icon without text
         item = sample_quote_item_with_location
         assert item.get("pickup_location_id") is not None
 

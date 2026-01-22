@@ -120,7 +120,7 @@ class TestProductRowBuyerCompanyBadge:
             assert "buyer_company_info:" in content or "if buyer_company_info" in content
             # Check for buyer company display elements
             assert "company_code" in content
-            assert "🏢" in content  # Buyer company icon
+            assert "building-2" in content  # Buyer company Lucide icon
 
     def test_buyer_company_placeholder_badge(self):
         """Verify placeholder badge is shown when buyer_company_id exists but info not loaded"""
