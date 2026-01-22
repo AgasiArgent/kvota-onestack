@@ -11706,7 +11706,7 @@ def get(session, quote_id: str):
 
         # Info banner
         Div(
-            "ℹ КП будет отправлено на согласование топ-менеджеру. После одобрения вы сможете отправить его клиенту.",
+            icon("info", size=16), " КП будет отправлено на согласование топ-менеджеру. После одобрения вы сможете отправить его клиенту.",
             style="background: #dbeafe; color: #1e40af; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
         ),
 
@@ -13007,7 +13007,7 @@ def get(session, spec_id: str):
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="pending_review"),
-                    Button("🔍 На проверке", type="submit",
+                    Button(icon("search", size=16), " На проверке", type="submit",
                            style="background: #f59e0b; border-color: #f59e0b;",
                            disabled=(status == "pending_review")),
                     action=f"/spec-control/{spec_id}",
@@ -16254,7 +16254,7 @@ def get(session, tab: str = "users"):
 
         tab_content = Div(
             Div(
-                "ℹ️ Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
+                icon("info", size=16), " Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
                 "Каждое КП привязывается к одной компании-продавцу.",
                 cls="alert alert-info",
                 style="margin-bottom: 1rem;"
@@ -16315,7 +16315,7 @@ def get(session, tab: str = "users"):
 
         tab_content = Div(
             Div(
-                "💡 Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. ",
+                icon("lightbulb", size=16), " Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. ",
                 "Указываются на уровне позиции КП.",
                 cls="alert alert-info",
                 style="margin-bottom: 1rem;"
@@ -16348,7 +16348,7 @@ def get(session, tab: str = "users"):
         tab_content = Div("Неизвестная вкладка", id="tab-content")
 
     return page_layout("Администрирование",
-        H1("⚙️ Администрирование"),
+        H1(icon("settings", size=28), " Администрирование", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         # Tabs navigation
         tabs_nav,
@@ -17071,7 +17071,7 @@ def post(session, brand: str, user_id: str):
     existing = get_brand_assignment_by_brand(org_id, brand)
     if existing:
         return page_layout("Ошибка",
-            H1("⚠️ Бренд уже назначен"),
+            H1(icon("alert-triangle", size=28), " Бренд уже назначен", style="display: flex; align-items: center; gap: 0.5rem;"),
             P(f"Бренд '{brand}' уже назначен другому менеджеру."),
             P("Используйте функцию редактирования для изменения назначения."),
             A("← Назад к списку", href="/admin/brands", role="button"),
@@ -17101,7 +17101,7 @@ def post(session, brand: str, user_id: str):
         )
     else:
         return page_layout("Ошибка",
-            H1("❌ Ошибка создания"),
+            H1(icon("x-circle", size=28), " Ошибка создания", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Не удалось создать назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -17241,7 +17241,7 @@ def post(assignment_id: str, session, user_id: str, brand: str = None):
         )
     else:
         return page_layout("Ошибка",
-            H1("❌ Ошибка обновления"),
+            H1(icon("x-circle", size=28), " Ошибка обновления", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Не удалось обновить назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -17283,7 +17283,7 @@ def post(assignment_id: str, session):
         )
     else:
         return page_layout("Ошибка",
-            H1("❌ Ошибка удаления"),
+            H1(icon("x-circle", size=28), " Ошибка удаления", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Не удалось удалить назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -18332,7 +18332,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
     return page_layout("Поставщики",
         # Header
         Div(
-            H1("📦 Поставщики"),
+            H1(icon("package", size=28), " Поставщики", style="display: flex; align-items: center; gap: 0.5rem;"),
             A("+ Добавить поставщика", href="/suppliers/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -18364,7 +18364,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                     Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
                     Select(*country_options, name="country", style="flex: 1;"),
                     Select(*status_options, name="status", style="flex: 1;"),
-                    Button("🔍 Поиск", type="submit"),
+                    Button(icon("search", size=16), " Поиск", type="submit"),
                     A("Сбросить", href="/suppliers", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
@@ -18516,7 +18516,7 @@ def get(supplier_id: str, session):
     if not supplier:
         return page_layout("Поставщик не найден",
             Div(
-                H1("❌ Поставщик не найден"),
+                H1(icon("x-circle", size=28), " Поставщик не найден", style="display: flex; align-items: center; gap: 0.5rem;"),
                 P("Запрашиваемый поставщик не существует."),
                 A("← К списку поставщиков", href="/suppliers", role="button"),
                 cls="card"
@@ -18530,7 +18530,7 @@ def get(supplier_id: str, session):
     return page_layout(f"Поставщик: {supplier.name}",
         # Header with actions
         Div(
-            H1(f"📦 {supplier.name}"),
+            H1(icon("package", size=28), f" {supplier.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
                 A("← К списку", href="/suppliers", role="button", cls="secondary"),
@@ -19026,14 +19026,14 @@ def get(session, q: str = "", status: str = ""):
     return page_layout("Компании-покупатели",
         # Header
         Div(
-            H1("🏢 Компании-покупатели (закупки)"),
+            H1(icon("building-2", size=28), " Компании-покупатели (закупки)", style="display: flex; align-items: center; gap: 0.5rem;"),
             A("+ Добавить компанию", href="/buyer-companies/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
         # Info alert explaining what this is
         Div(
-            "💡 Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. "
+            icon("lightbulb", size=16), " Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. "
             "Указываются на уровне позиции КП (quote_item.buyer_company_id).",
             cls="alert alert-info"
         ),
@@ -19064,7 +19064,7 @@ def get(session, q: str = "", status: str = ""):
                 Div(
                     Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
-                    Button("🔍 Поиск", type="submit"),
+                    Button(icon("search", size=16), " Поиск", type="submit"),
                     A("Сбросить", href="/buyer-companies", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
@@ -19245,7 +19245,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div(
-                H1("❌ Компания не найдена"),
+                H1(icon("x-circle", size=28), " Компания не найдена", style="display: flex; align-items: center; gap: 0.5rem;"),
                 P("Запрашиваемая компания-покупатель не существует."),
                 A("← К списку компаний", href="/buyer-companies", role="button"),
                 cls="card"
@@ -19259,7 +19259,7 @@ def get(company_id: str, session):
     return page_layout(f"Компания: {company.name}",
         # Header with actions
         Div(
-            H1(f"🏢 {company.name}"),
+            H1(icon("building-2", size=28), f" {company.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
                 A("← К списку", href="/buyer-companies", role="button", cls="secondary"),
@@ -19349,7 +19349,7 @@ def _buyer_company_form(company=None, error=None, session=None):
 
         # Info alert
         Div(
-            "💡 Компания-покупатель — наше юридическое лицо, через которое мы закупаем товар у поставщиков. "
+            icon("lightbulb", size=16), " Компания-покупатель — наше юридическое лицо, через которое мы закупаем товар у поставщиков. "
             "Привязывается к позиции КП (quote_item).",
             cls="alert alert-info"
         ),
@@ -19783,7 +19783,7 @@ def get(session, q: str = "", status: str = ""):
 
         # Info alert
         Div(
-            "ℹ️ Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
+            icon("info", size=16), " Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
             "Каждое КП (quote) привязывается к одной компании-продавцу. ",
             "Примеры: MBR (МАСТЕР БЭРИНГ), RAR (РадРесурс), CMT (ЦМТО1), GES (GESTUS), TEX (TEXCEL).",
             cls="alert alert-info"
@@ -20108,13 +20108,13 @@ def _seller_company_form(
 
         # Info alert
         Div(
-            "ℹ️ Компания-продавец — это наше юридическое лицо, от имени которого мы продаём товары клиентам. ",
+            icon("info", size=16), " Компания-продавец — это наше юридическое лицо, от имени которого мы продаём товары клиентам. ",
             "Код компании (3 буквы) используется для генерации IDN коммерческого предложения.",
             cls="alert alert-info"
         ),
 
         # Error message
-        Div(f"❌ {error}", cls="alert alert-error") if error else "",
+        Div(icon("x-circle", size=16), f" {error}", cls="alert alert-error") if error else "",
 
         # Form
         Div(
@@ -20162,7 +20162,7 @@ def _seller_company_form(
                 # Legal identifiers
                 H3("Юридические реквизиты", style="margin-top: 1.5rem;"),
                 Div(
-                    "ℹ️ ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.",
+                    icon("info", size=16), " ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.",
                     cls="alert alert-info", style="margin-bottom: 1rem;"
                 ),
                 Div(
@@ -20581,7 +20581,7 @@ def get(session, q: str = "", status: str = ""):
 
         # Info alert
         Div(
-            "ℹ️ Клиенты — это внешние компании, которые покупают у нас товары. ",
+            icon("info", size=16), " Клиенты — это внешние компании, которые покупают у нас товары. ",
             "Каждое КП (quote) привязывается к одному клиенту. ",
             "У клиента могут быть несколько контактов (ЛПР). Контакт с флагом ",
             Span(icon("pen-tool", size=14), " подписант", style="font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;"),
@@ -20810,7 +20810,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 Div(
                     # Main info section
                     Div(
-                        H3("📋 Основная информация", style="margin-bottom: 1rem; color: #e2e8f0;"),
+                        H3(icon("clipboard-list", size=20), " Основная информация", style="margin-bottom: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
                         Div(
                             # Company name
                             Div(
@@ -21181,8 +21181,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
             status = spec.get("status", "")
             status_text = {
                 "draft": "Черновик",
-                "pending_review": "🔄 На проверке",
-                "approved": "✅ Согласовано",
+                "pending_review": "На проверке",
+                "approved": "Согласовано",
                 "signed": "Подписано"
             }.get(status, status)
 
@@ -21255,7 +21255,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
             # Was sold status
             was_sold = item.get("was_sold", False)
-            sold_badge = Span("✅ Продан", cls="status-badge status-approved") if was_sold else Span("—", style="color: #999;")
+            sold_badge = Span(icon("check-circle", size=14), " Продан", cls="status-badge status-approved", style="display: inline-flex; align-items: center; gap: 0.25rem;") if was_sold else Span("—", style="color: #999;")
 
             items_rows.append(
                 Tr(
@@ -21271,7 +21271,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
         tab_content = Div(
             Div(
-                f"📊 Всего уникальных позиций: {len(items)}",
+                icon("bar-chart-3", size=16), f" Всего уникальных позиций: {len(items)}",
                 cls="alert alert-info",
                 style="margin-bottom: 1rem;"
             ),
@@ -21305,7 +21305,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
         Div(
             H1(icon("user", size=28), f" {customer.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
-                A("✏️ Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
+                A(icon("edit", size=16), " Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
                 A("← К списку", href="/customers", role="button", cls="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
@@ -21588,7 +21588,7 @@ def _render_warehouses_list(customer_id: str, warehouses: list):
         warehouse_items.append(
             Li(
                 Span(addr, style="flex: 1;"),
-                Button("🗑️ Удалить",
+                Button(icon("trash-2", size=14), " Удалить",
                       hx_post=f"/customers/{customer_id}/warehouses/delete/{i}",
                       hx_target="#warehouses-list",
                       hx_swap="outerHTML",
@@ -22460,8 +22460,8 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 Td(str(c.next_specification_number - 1 if c.next_specification_number > 1 else 0)),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A("✏️", href=f"/customer-contracts/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/customer-contracts/{c.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/customer-contracts/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/customer-contracts/{c.id}", title="Просмотр"),
                 )
             )
         )
@@ -22481,7 +22481,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
 
         # Info alert
         Div(
-            "ℹ️ Договоры — это рамочные соглашения на поставку с клиентами. ",
+            icon("info", size=16), " Договоры — это рамочные соглашения на поставку с клиентами. ",
             "Каждый договор содержит счётчик для нумерации спецификаций. ",
             "При создании спецификации номер автоматически увеличивается.",
             cls="alert alert-info"
@@ -22601,7 +22601,7 @@ def get(contract_id: str, session):
         Div(
             H1(icon("file-text", size=28), f" {contract.contract_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
-                A("✏️ Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
+                A(icon("edit", size=16), " Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
                 A("← К списку", href="/customer-contracts", role="button", cls="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
@@ -22616,7 +22616,7 @@ def get(contract_id: str, session):
 
         # Main info card
         Div(
-            H3("📋 Основная информация"),
+            H3(icon("clipboard-list", size=20), " Основная информация", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Div(Strong("Номер договора"), style="color: #666; font-size: 0.9em;"),
@@ -22802,8 +22802,8 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
                 Td(loc.address[:50] + "..." if loc.address and len(loc.address) > 50 else (loc.address or "—")),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A("✏️", href=f"/locations/{loc.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A("👁️", href=f"/locations/{loc.id}", title="Просмотр"),
+                    A(icon("edit", size=14), href=f"/locations/{loc.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
+                    A(icon("eye", size=14), href=f"/locations/{loc.id}", title="Просмотр"),
                 )
             )
         )
@@ -22811,14 +22811,14 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
     return page_layout("Справочник локаций",
         # Header
         Div(
-            H1("📍 Справочник локаций"),
+            H1(icon("map-pin", size=28), " Справочник локаций", style="display: flex; align-items: center; gap: 0.5rem;"),
             A("+ Добавить локацию", href="/locations/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
         # Info alert
         Div(
-            "ℹ️ Локации — это точки получения и доставки товаров. ",
+            icon("info", size=16), " Локации — это точки получения и доставки товаров. ",
             "Используются в позициях КП (pickup_location_id). ",
             "Хабы — логистические центры, Таможня — пункты растаможки.",
             cls="alert alert-info"
@@ -22942,9 +22942,9 @@ def get(location_id: str, session):
     return page_layout(f"Локация: {display_name}",
         # Header with actions
         Div(
-            H1(f"📍 {display_name}"),
+            H1(icon("map-pin", size=28), f" {display_name}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
-                A("✏️ Редактировать", href=f"/locations/{location_id}/edit", role="button"),
+                A(icon("edit", size=16), " Редактировать", href=f"/locations/{location_id}/edit", role="button"),
                 A("← К списку", href="/locations", role="button", cls="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
@@ -22961,7 +22961,7 @@ def get(location_id: str, session):
 
         # Main info card
         Div(
-            H3("📋 Основная информация"),
+            H3(icon("clipboard-list", size=20), " Основная информация", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Div(Strong("Код"), style="color: #666; font-size: 0.9em;"),
@@ -22990,16 +22990,16 @@ def get(location_id: str, session):
 
         # Type flags card
         Div(
-            H3("🏷️ Классификация"),
+            H3(icon("tag", size=20), " Классификация", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Div(Strong("Логистический хаб"), style="color: #666; font-size: 0.9em;"),
-                    Div("✅ Да" if location.is_hub else "❌ Нет"),
+                    Div(Span(icon("check-circle", size=14), " Да", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #16a34a;") if location.is_hub else Span(icon("x-circle", size=14), " Нет", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #666;")),
                     cls="info-item"
                 ),
                 Div(
                     Div(Strong("Таможенный пункт"), style="color: #666; font-size: 0.9em;"),
-                    Div("✅ Да" if location.is_customs_point else "❌ Нет"),
+                    Div(Span(icon("check-circle", size=14), " Да", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #16a34a;") if location.is_customs_point else Span(icon("x-circle", size=14), " Нет", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #666;")),
                     cls="info-item"
                 ),
                 cls="info-grid", style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
@@ -23027,20 +23027,20 @@ def _location_form(location=None, error=None, session=None):
     return page_layout(title,
         # Header
         Div(
-            H1(f"📍 {title}"),
+            H1(icon("map-pin", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
             cls="card"
         ),
 
         # Info alert
         Div(
-            "ℹ️ Локация — это точка получения или доставки товаров. ",
+            icon("info", size=16), " Локация — это точка получения или доставки товаров. ",
             "Код (2-5 букв) используется для быстрого поиска. ",
             "Отметьте как хаб или таможенный пункт при необходимости.",
             cls="alert alert-info"
         ),
 
         # Error message
-        Div(f"❌ {error}", cls="alert alert-error") if error else "",
+        Div(icon("x-circle", size=16), f" {error}", cls="alert alert-error") if error else "",
 
         # Form
         Div(
@@ -23551,7 +23551,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
         due_date_str = inv.due_date.strftime("%d.%m.%Y") if inv.due_date else "—"
 
         # Overdue indicator
-        overdue_badge = Span(" ⚠️", title="Просрочено!") if inv.is_overdue else ""
+        overdue_badge = Span(icon("alert-triangle", size=14), title="Просрочено!", style="color: #dc3545; margin-left: 0.25rem;") if inv.is_overdue else ""
 
         invoice_rows.append(
             Tr(
@@ -23570,8 +23570,8 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                 Td(f"{remaining_formatted} {inv.currency}", style="text-align: right; color: #dc3545;" if remaining > 0 else "text-align: right;"),
                 Td(Span(status_text, cls=f"status-badge {status_cls}")),
                 Td(
-                    A("👁️", href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 0.5rem;"),
-                    A("✏️", href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
+                    A(icon("eye", size=14), href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 0.5rem;"),
+                    A(icon("edit", size=14), href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
                 )
             )
         )
@@ -23586,7 +23586,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
 
         # Info alert
         Div(
-            "📌 Реестр инвойсов отслеживает все счета от поставщиков, их статусы оплаты и сроки.",
+            icon("pin", size=16), " Реестр инвойсов отслеживает все счета от поставщиков, их статусы оплаты и сроки.",
             cls="alert alert-info",
             style="margin-bottom: 1rem;"
         ),
@@ -23643,7 +23643,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                     Input(name="q", value=q, placeholder="Поиск по номеру инвойса...", style="flex: 2;"),
                     Select(*supplier_options, name="supplier_id", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
-                    Button("🔍 Поиск", type="submit"),
+                    Button(icon("search", size=16), " Поиск", type="submit"),
                     A("Сбросить", href="/supplier-invoices", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
@@ -23766,7 +23766,7 @@ def get(invoice_id: str, session):
                 )
             )
         items_section = [
-            H3("📦 Позиции инвойса"),
+            H3(icon("package", size=20), " Позиции инвойса", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(
                     Th("Описание"),
@@ -23798,7 +23798,7 @@ def get(invoice_id: str, session):
 
     payments_section = [
         Div(
-            H3("💳 Платежи", style="display: inline;"),
+            H3(icon("credit-card", size=20), " Платежи", style="display: inline-flex; align-items: center; gap: 0.5rem;"),
             A("+ Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline", style="float: right;"),
             style="margin-bottom: 1rem;"
         ),
@@ -23841,7 +23841,7 @@ def get(invoice_id: str, session):
                     Tr(Td(Strong("Номер инвойса:")), Td(invoice.invoice_number)),
                     Tr(Td(Strong("Поставщик:")), Td(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}")),
                     Tr(Td(Strong("Дата инвойса:")), Td(invoice_date_str)),
-                    Tr(Td(Strong("Срок оплаты:")), Td(due_date_str, Span(" ⚠️ Просрочено!", style="color: #dc3545;") if invoice.is_overdue else "")),
+                    Tr(Td(Strong("Срок оплаты:")), Td(due_date_str, Span(icon("alert-triangle", size=14), " Просрочено!", style="color: #dc3545; display: inline-flex; align-items: center; gap: 0.25rem;") if invoice.is_overdue else "")),
                     style="border: none;"
                 ),
                 cls="col"
@@ -23874,8 +23874,8 @@ def get(invoice_id: str, session):
 
         # Actions
         Div(
-            A("✏️ Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", role="button"),
-            A("💳 Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline"),
+            A(icon("edit", size=16), " Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", role="button"),
+            A(icon("credit-card", size=16), " Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline"),
             style="display: flex; gap: 1rem;"
         ),
 
@@ -23956,11 +23956,15 @@ def _invoice_payment_form(invoice, payment=None, error=None, session=None):
         # Error alert
         Div(error, cls="alert alert-error") if error else "",
 
-        H1(f"{'✏️' if is_edit else '💳'} {title}"),
+        Div(
+            icon("edit", size=28) if is_edit else icon("credit-card", size=28),
+            H1(f" {title}", style="display: inline; margin-left: 0.5rem;"),
+            style="display: flex; align-items: center;"
+        ),
 
         # Invoice context card
         Div(
-            H3(f"📋 Инвойс {invoice.invoice_number}"),
+            H3(icon("clipboard-list", size=20), f" Инвойс {invoice.invoice_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Div(
                     Table(
