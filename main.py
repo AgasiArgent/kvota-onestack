@@ -20522,7 +20522,7 @@ def get(session, q: str = "", status: str = ""):
     # Build customer rows with contacts preview
     customer_rows = []
     for c in customers:
-        status_class = "status-approved" if c.is_active else "status-rejected"
+        status_class = "status-success" if c.is_active else "status-neutral"
         status_text = "Активен" if c.is_active else "Неактивен"
 
         # Build contacts preview
@@ -20553,7 +20553,7 @@ def get(session, q: str = "", status: str = ""):
             Tr(
                 Td(
                     Div(
-                        Strong(c.name),
+                        A(Strong(c.name), href=f"/customers/{c.id}", style="color: var(--accent); text-decoration: none;"),
                         Small(f" (ИНН: {c.inn})" if c.inn else "", style="color: #666; margin-left: 0.3rem;")
                     )
                 ),
@@ -20565,19 +20565,16 @@ def get(session, q: str = "", status: str = ""):
                 Td(c.general_director_name or "—"),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A(icon("edit", size=14), href=f"/customers/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A(icon("eye", size=14), href=f"/customers/{c.id}", title="Просмотр"),
+                    A(icon("eye", size=16), href=f"/customers/{c.id}", title="Просмотр", cls="table-action-btn"),
+                    A(icon("edit", size=16), href=f"/customers/{c.id}/edit", title="Редактировать", cls="table-action-btn"),
+                    cls="col-actions"
                 )
             )
         )
 
     return page_layout("Клиенты",
         # Header
-        Div(
-            H1(icon("users", size=28), " Клиенты (покупатели)", style="display: flex; align-items: center; gap: 0.5rem;"),
-            A("+ Добавить клиента", href="/customers/new", role="button"),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
+        H1(icon("users", size=28), " Клиенты", style="display: flex; align-items: center; gap: 0.5rem;"),
 
         # Info alert
         Div(
@@ -20614,45 +20611,53 @@ def get(session, q: str = "", status: str = ""):
             cls="stats-grid"
         ),
 
-        # Filter form
+        # Unified Table with search in header
         Div(
-            Form(
+            # Table header with search and filters
+            Div(
                 Div(
-                    Label(
-                        "Поиск по названию или ИНН:",
-                        Input(type="text", name="q", value=q, placeholder="Например: ООО Ромашка или 7712345678"),
+                    Form(
+                        Input(type="text", name="q", value=q, placeholder="Поиск по названию или ИНН...", cls="table-search"),
+                        Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
+                        Button(icon("search", size=14), " Найти", type="submit", style="padding: 0.5rem 1rem;"),
+                        method="get",
+                        action="/customers",
+                        style="display: flex; gap: 0.75rem; align-items: center;"
                     ),
-                    Label(
-                        "Статус:",
-                        Select(*status_options, name="status"),
+                    cls="table-header-left"
+                ),
+                Div(
+                    A(icon("plus", size=16), " Добавить клиента", href="/customers/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    cls="table-header-right"
+                ),
+                cls="table-header"
+            ),
+            # Table
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("НАЗВАНИЕ"),
+                            Th("АДРЕС"),
+                            Th("КОНТАКТЫ"),
+                            Th("ДИРЕКТОР"),
+                            Th("СТАТУС"),
+                            Th("", cls="col-actions"),
+                        )
                     ),
-                    Button("Найти", type="submit"),
-                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                    Tbody(*customer_rows) if customer_rows else Tbody(
+                        Tr(Td("Клиенты не найдены", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
+                    ),
+                    cls="unified-table"
                 ),
-                method="get",
-                action="/customers"
+                cls="table-responsive"
             ),
-            cls="card"
-        ),
-
-        # Customers table
-        Div(
-            Table(
-                Thead(
-                    Tr(
-                        Th("Название"),
-                        Th("Юридический адрес"),
-                        Th("Контакты (ЛПР)"),
-                        Th("Директор"),
-                        Th("Статус"),
-                        Th("Действия"),
-                    )
-                ),
-                Tbody(*customer_rows) if customer_rows else Tbody(
-                    Tr(Td("Клиенты не найдены", colspan="6", style="text-align: center; color: #666;"))
-                )
+            # Table footer
+            Div(
+                Span(f"Всего: {len(customers)} клиентов"),
+                cls="table-footer"
             ),
-            cls="card"
+            cls="table-container"
         ),
 
         session=session

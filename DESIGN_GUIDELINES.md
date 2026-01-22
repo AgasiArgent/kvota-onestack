@@ -677,9 +677,11 @@ Script("""
 
 ---
 
-## Phase 5: Unified Table Design System (2026-01-22)
+## Phase 5: Unified Table Design System (2026-01-22) ✅ IN PROGRESS
 
 **Reference:** [Livento CRM Dashboard](https://www.behance.net/gallery/239045803/CRM-Dashboard-UI-UX-Branding-Case-Study)
+
+**Status:** 🟡 In Progress | First table migrated: `/quotes`
 
 **Problem:** Tables throughout the application have inconsistent styling:
 - Different border styles
@@ -707,8 +709,17 @@ Script("""
     background: var(--bg-card);
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    overflow: hidden;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    margin: 1.5rem;      /* Fixed spacing from edges */
+    margin-top: 1rem;    /* Less space from top */
+}
+
+/* Base Table Styles */
+.unified-table {
+    width: 100%;
+    min-width: 800px;    /* Minimum width for readability - enables horizontal scroll */
+    border-collapse: collapse;
+    font-size: 0.875rem;
 }
 
 /* Table Header Bar - search, filters, actions */
@@ -1133,7 +1144,7 @@ table_container(
 ### Tables to Migrate
 
 **Priority 1 (High Traffic):**
-- [ ] `/quotes` - Quotes list
+- [x] `/quotes` - Quotes list ✅ DONE (2026-01-22)
 - [ ] `/customers` - Customers list
 - [ ] `/finance?tab=erps` - ERPS registry (already has custom styling)
 - [ ] `/deals` - Deals list
@@ -1167,7 +1178,7 @@ table_container(
 **Phase 2 (✅ DONE):** DaisyUI components - tabs, badges, advanced UI
 **Phase 3 (⏳ TODO):** Icons & animations - polish and professional feel
 **Phase 4 (✅ DONE):** Searchable dropdowns - datalist pattern
-**Phase 5 (📋 PLANNED):** Unified table design - consistent table styling
+**Phase 5 (🟡 IN PROGRESS):** Unified table design - consistent table styling (quotes done)
 
 **Total Effort:** ~10-12 hours for all phases
 **Result:** Modern, professional, production-ready UI
