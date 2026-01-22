@@ -14802,18 +14802,24 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             continue
         group = ERPS_COLUMN_GROUPS[group_key]
         group_color = group['color']
+        group_columns_filtered = []
         for col_key, col_label, col_type, col_style in group['columns']:
             # For compact view, only show specific columns
             if view == 'compact' and col_key not in ERPS_COMPACT_COLUMNS:
                 continue
-            columns.append({
+            group_columns_filtered.append({
                 'key': col_key,
                 'label': col_label,
                 'type': col_type,
                 'style': col_style,
                 'color': group_color,
-                'group': group_key
+                'group': group_key,
+                'is_last_in_group': False
             })
+        # Mark the last column of this group
+        if group_columns_filtered:
+            group_columns_filtered[-1]['is_last_in_group'] = True
+            columns.extend(group_columns_filtered)
 
     # CSS for sticky columns and view selector
     erps_css = """
@@ -14984,6 +14990,11 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         .group-toggle input {
             margin: 0;
         }
+        /* Block dividers - thick border at end of each column group */
+        .erps-table th.block-end,
+        .erps-table td.block-end {
+            border-right: 2px solid #9ca3af !important;
+        }
     """
 
     # View selector buttons
@@ -15084,8 +15095,9 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
     ]
     for col in columns:
         cell_style = f"background: {col['color']};"
+        cell_cls = "block-end" if col.get('is_last_in_group') else ""
         # Wrap label in span for vertical text
-        header_cells.append(Th(Span(col['label'], cls="th-text"), style=cell_style))
+        header_cells.append(Th(Span(col['label'], cls="th-text"), style=cell_style, cls=cell_cls))
 
     # Map column types to CSS classes
     type_to_class = {
@@ -15107,6 +15119,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             formatted = format_value(value, col['type'])
             cell_style = f"background: {col['color']};"
             cell_cls = type_to_class.get(col['type'], '')
+            if col.get('is_last_in_group'):
+                cell_cls = f"{cell_cls} block-end" if cell_cls else "block-end"
             row_cells.append(Td(formatted, style=cell_style, cls=cell_cls))
         rows.append(Tr(*row_cells))
 
