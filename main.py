@@ -2965,13 +2965,13 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
     # Status filter options
     status_options = [
         ("all", "Все статусы"),
-        ("pending_procurement", "🔶 Ожидают оценки"),
-        ("pending_logistics", "📦 На логистике"),
-        ("pending_customs", "🛃 На таможне"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
-        ("pending_quote_control", "✓ На проверке"),
-        ("approved", "✅ Одобрено"),
-        ("deal", "💼 Сделка"),
+        ("pending_procurement", "Ожидают оценки"),
+        ("pending_logistics", "На логистике"),
+        ("pending_customs", "На таможне"),
+        ("pending_sales_review", "У менеджера продаж"),
+        ("pending_quote_control", "На проверке"),
+        ("approved", "Одобрено"),
+        ("deal", "Сделка"),
     ]
 
     filter_form = Form(
@@ -3132,14 +3132,14 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
 
         stages_status = []
         if logistics_done:
-            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
+            stages_status.append(Span(icon("check-circle", size=14), " Логистика", style="color: #22c55e; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
         else:
-            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
+            stages_status.append(Span(icon("clock", size=14), " Логистика", style="color: #f59e0b; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
 
         if customs_done:
-            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
+            stages_status.append(Span(icon("check-circle", size=14), " Таможня", style="color: #22c55e; display: inline-flex; align-items: center; gap: 0.25rem;"))
         else:
-            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
+            stages_status.append(Span(icon("clock", size=14), " Таможня", style="color: #f59e0b; display: inline-flex; align-items: center; gap: 0.25rem;"))
 
         return Tr(
             Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;")),
@@ -3158,9 +3158,9 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
 
     status_options = [
         ("all", "Все статусы"),
-        ("pending_logistics", "📦 На логистике"),
-        ("pending_customs", "🛃 На таможне (параллельно)"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
+        ("pending_logistics", "На логистике"),
+        ("pending_customs", "На таможне (параллельно)"),
+        ("pending_sales_review", "У менеджера продаж"),
     ]
 
     filter_form = Form(
@@ -3300,14 +3300,14 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
 
         stages_status = []
         if logistics_done:
-            stages_status.append(Span("✅ Логистика", style="color: #22c55e; margin-right: 0.5rem;"))
+            stages_status.append(Span(icon("check-circle", size=14), " Логистика", style="color: #22c55e; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
         else:
-            stages_status.append(Span("⏳ Логистика", style="color: #f59e0b; margin-right: 0.5rem;"))
+            stages_status.append(Span(icon("clock", size=14), " Логистика", style="color: #f59e0b; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
 
         if customs_done:
-            stages_status.append(Span("✅ Таможня", style="color: #22c55e;"))
+            stages_status.append(Span(icon("check-circle", size=14), " Таможня", style="color: #22c55e; display: inline-flex; align-items: center; gap: 0.25rem;"))
         else:
-            stages_status.append(Span("⏳ Таможня", style="color: #f59e0b;"))
+            stages_status.append(Span(icon("clock", size=14), " Таможня", style="color: #f59e0b; display: inline-flex; align-items: center; gap: 0.25rem;"))
 
         return Tr(
             Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}", style="font-weight: 500;")),
@@ -3326,9 +3326,9 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
 
     status_options = [
         ("all", "Все статусы"),
-        ("pending_customs", "🛃 На таможне"),
-        ("pending_logistics", "📦 На логистике (параллельно)"),
-        ("pending_sales_review", "👤 У менеджера продаж"),
+        ("pending_customs", "На таможне"),
+        ("pending_logistics", "На логистике (параллельно)"),
+        ("pending_sales_review", "У менеджера продаж"),
     ]
 
     filter_form = Form(
@@ -3487,10 +3487,10 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
 
     status_options = [
         ("all", "Все статусы"),
-        ("pending_quote_control", "📋 На проверке"),
-        ("pending_approval", "⏳ Ожидает согласования"),
-        ("approved", "✅ Одобрено"),
-        ("sent_to_client", "📤 Отправлено клиенту"),
+        ("pending_quote_control", "На проверке"),
+        ("pending_approval", "Ожидает согласования"),
+        ("approved", "Одобрено"),
+        ("sent_to_client", "Отправлено клиенту"),
     ]
 
     filter_form = Form(
@@ -3966,7 +3966,7 @@ def get(session):
         content.append(
             Div(
                 Div(
-                    Span("✅", style="font-size: 3rem; display: block; margin-bottom: 1rem;"),
+                    Span(icon("check-circle", size=48), style="display: block; margin-bottom: 1rem; color: #22c55e;"),
                     H3("Отлично! Нет задач.", style="margin-bottom: 0.5rem; color: #059669;"),
                     P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="color: #6b7280;"),
                     style="text-align: center; padding: 3rem;"
@@ -7180,7 +7180,7 @@ def get(session):
         # Account is linked and verified
         status_card = Div(
             Div(
-                Span("✅", style="font-size: 2rem;"),
+                Span(icon("check-circle", size=32), style="color: #22c55e;"),
                 H3("Telegram привязан", style="margin: 0.5rem 0;"),
                 cls="text-center"
             ),
@@ -7220,7 +7220,7 @@ def get(session):
         # Has pending verification code
         status_card = Div(
             Div(
-                Span("⏳", style="font-size: 2rem;"),
+                Span(icon("clock", size=32), style="color: #f59e0b;"),
                 H3("Ожидание верификации", style="margin: 0.5rem 0;"),
                 cls="text-center"
             ),
@@ -7381,7 +7381,7 @@ def post(action: str, session):
             return page_layout("Telegram отвязан",
                 Div(
                     Div(
-                        Span("✅", style="font-size: 2rem;"),
+                        Span(icon("check-circle", size=32), style="color: #22c55e;"),
                         H2("Telegram успешно отвязан", style="margin: 0.5rem 0;"),
                         P("Вы больше не будете получать уведомления в Telegram. Вы можете привязать аккаунт снова в любое время.",
                           style="color: #666;"),
@@ -9576,7 +9576,7 @@ def get(session, quote_id: str):
                    style="margin-right: 0.5rem;") if is_editable else None,
             Button(icon("check", size=16), " Завершить логистику", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
-            Span("✅ Логистика завершена", style="color: #22c55e; font-weight: bold;") if logistics_done else None,
+            Span(icon("check-circle", size=16), " Логистика завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if logistics_done else None,
             style="margin-top: 1rem;"
         ) if is_editable or logistics_done else None,
 
@@ -10251,7 +10251,7 @@ def get(session, quote_id: str):
                    style="margin-right: 0.5rem;") if is_editable else None,
             Button(icon("check", size=16), " Завершить таможню", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
-            Span("✅ Таможня завершена", style="color: #22c55e; font-weight: bold;") if customs_done else None,
+            Span(icon("check-circle", size=16), " Таможня завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if customs_done else None,
             style="margin-top: 1rem;"
         ) if is_editable or customs_done else None,
 
@@ -15868,7 +15868,7 @@ def get(session, tab: str = "users"):
 
         company_rows = []
         for company in companies_data:
-            status_badge = Span("✅ Активна" if company.get("is_active") else "❌ Неактивна",
+            status_badge = Span("Активна" if company.get("is_active") else "Неактивна",
                               cls=f"status-badge {'status-approved' if company.get('is_active') else 'status-rejected'}")
 
             company_rows.append(
@@ -15929,7 +15929,7 @@ def get(session, tab: str = "users"):
 
         company_rows = []
         for company in companies_data:
-            status_badge = Span("✅ Активна" if company.get("is_active") else "❌ Неактивна",
+            status_badge = Span("Активна" if company.get("is_active") else "Неактивна",
                               cls=f"status-badge {'status-approved' if company.get('is_active') else 'status-rejected'}")
 
             company_rows.append(
@@ -20477,7 +20477,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                                 ),
                                 Div(
                                     Div("Статус", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Span("✅ Активен" if customer.is_active else "❌ Неактивен",
+                                    Span("Активен" if customer.is_active else "Неактивен",
                                          cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
                                 ),
                                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
@@ -20687,9 +20687,9 @@ def get(customer_id: str, session, request, tab: str = "general"):
             # Status badge
             status = contract.get("status", "")
             status_text = {
-                "active": "✅ Активен",
-                "suspended": "⏸️ Приостановлен",
-                "terminated": "❌ Расторгнут"
+                "active": "Активен",
+                "suspended": "Приостановлен",
+                "terminated": "Расторгнут"
             }.get(status, status)
 
             status_class = {
