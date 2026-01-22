@@ -1343,7 +1343,9 @@ button[style*="#0172AD"] {
 }
 
 /* ========== Theme Toggle (icon-only in header) ========== */
-.theme-toggle {
+/* High specificity to override button:not(...) rules */
+.sidebar-header-buttons > button.theme-toggle,
+button.theme-toggle.theme-toggle {
     width: 32px;
     height: 32px;
     min-width: 32px;
@@ -1361,7 +1363,8 @@ button[style*="#0172AD"] {
     transform: none !important;
 }
 
-.theme-toggle:hover {
+.sidebar-header-buttons > button.theme-toggle:hover,
+button.theme-toggle.theme-toggle:hover {
     background: var(--border-color) !important;
     color: var(--text-primary) !important;
     transform: none !important;
@@ -8472,9 +8475,12 @@ def get(quote_id: str, session):
     return page_layout(f"Закупки — {quote.get('idn_quote', 'КП')}",
         # Breadcrumbs
         Div(
-            A("← Назад к списку", href="/procurement"),
+            A("← Назад к задачам", href="/tasks"),
             style="margin-bottom: 1rem;"
         ),
+
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "procurement", user.get("roles", [])),
 
         # Header
         Div(
@@ -9592,9 +9598,17 @@ def get(session, quote_id: str):
     ) if logistics_done else None
 
     return page_layout(f"Logistics - {quote.get('idn_quote', '')}",
+        # Back link
+        Div(
+            A("← К задачам", href="/tasks", style="color: #666; font-size: 0.875rem;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "logistics", user.get("roles", [])),
+
         # Header
         Div(
-            A("← К списку", href="/logistics", style="color: #666; font-size: 0.875rem;"),
             H1(f"Логистика: {quote.get('idn_quote', '')}"),
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
@@ -10262,9 +10276,17 @@ def get(session, quote_id: str):
     progress_percent = int(items_with_hs / total_items * 100) if total_items > 0 else 0
 
     return page_layout(f"Customs - {quote.get('idn_quote', '')}",
+        # Back link
+        Div(
+            A("← К задачам", href="/tasks", style="color: #666; font-size: 0.875rem;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "customs", user.get("roles", [])),
+
         # Header
         Div(
-            A("← К списку", href="/customs", style="color: #666; font-size: 0.875rem;"),
             H1(icon("shield-check", size=28), f" Таможня: {quote.get('idn_quote', '')}", style="display: flex; align-items: center; gap: 0.5rem;"),
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
@@ -13075,8 +13097,8 @@ def get(session, spec_id: str):
                         style="margin-bottom: 0.75rem; color: #155724; font-weight: 500;"
                     ),
                     Form(
-                        Button("✅ Подтвердить подпись и создать сделку", type="submit",
-                               style="background: #28a745; border-color: #28a745; width: 100%;"),
+                        Button(icon("check", size=16), " Подтвердить подпись и создать сделку", type="submit",
+                               style="background: #28a745; border-color: #28a745; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"),
                         action=f"/spec-control/{spec_id}/confirm-signature",
                         method="POST"
                     ),
