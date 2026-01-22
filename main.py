@@ -3374,7 +3374,7 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
         filter_form,
 
         Div(
-            H2("🛃 Ожидают таможни"),
+            H2(icon("shield-check", size=22), " Ожидают таможни", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Этапы"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
@@ -3554,7 +3554,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
         ) if status_filter and status_filter != "all" else None,
 
         Div(
-            H2("📋 Ожидают проверки"),
+            H2(icon("file-text", size=22), " Ожидают проверки", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("КП требующие проверки контроллера", style="color: #666; margin-bottom: 1rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
@@ -3578,7 +3578,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
         ) if (not status_filter or status_filter == "all") and awaiting_approval_quotes else None,
 
         Div(
-            H2("✅ Одобренные КП"),
+            H2(icon("check-circle", size=22), " Одобренные КП", style="display: flex; align-items: center; gap: 0.5rem;"),
             Table(
                 Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Создан"), Th("Действия"))),
                 Tbody(
