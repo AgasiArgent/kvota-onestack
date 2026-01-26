@@ -11661,6 +11661,13 @@ def get(session, quote_id: str, preset: str = None):
     # Determine if editing is allowed
     can_edit = workflow_status == "pending_quote_control"
 
+    # Load organization's calculation settings for fallback values
+    calc_settings_result = supabase.table("calculation_settings") \
+        .select("*") \
+        .eq("organization_id", org_id) \
+        .execute()
+    org_calc_settings = calc_settings_result.data[0] if calc_settings_result.data else {}
+
     # Extract values for checklist verification
     deal_type = quote.get("deal_type") or calc_vars.get("offer_sale_type", "")
     incoterms = calc_vars.get("offer_incoterms", "")
@@ -11668,7 +11675,8 @@ def get(session, quote_id: str, preset: str = None):
     markup = float(calc_vars.get("markup", 0) or 0)
     supplier_advance = float(calc_vars.get("supplier_advance", 0) or 0)
     exchange_rate = float(calc_vars.get("exchange_rate", 1.0) or 1.0)
-    forex_risk = float(calc_vars.get("forex_risk_percent", 0) or 0)
+    # Forex risk: first from quote calculation, then from org settings, default 3%
+    forex_risk = float(calc_vars.get("forex_risk_percent", 0) or org_calc_settings.get("rate_forex_risk", 3) or 0)
     lpr_reward = float(calc_vars.get("lpr_reward", 0) or calc_vars.get("decision_maker_reward", 0) or 0)
 
     # Payment terms
@@ -11802,9 +11810,17 @@ def get(session, quote_id: str, preset: str = None):
         "Стандарт: 30-50% аванс"
     ))
 
-    # 6. Purchase prices
-    total_purchase = sum(float(item.get("purchase_price", 0) or 0) * int(item.get("quantity", 1) or 1) for item in items)
-    vat_rate = float(calc_vars.get("vat_rate", 20) or 20)
+    # 6. Purchase prices - use calculated total from summary, not raw item prices
+    total_purchase = float(calc_summary.get("calc_s16_total_purchase_price", 0) or 0)
+    # Fallback to item prices if summary not available
+    if total_purchase == 0:
+        total_purchase = sum(float(item.get("purchase_price", 0) or 0) * int(item.get("quantity", 1) or 1) for item in items)
+
+    # VAT rate: 22% for 2026+ (Russian government mandate), 20% before
+    from datetime import date
+    current_year = date.today().year
+    vat_rate = 22 if current_year >= 2026 else 20
+
     checklist_items.append(checklist_item(
         "6. Закупочные цены и НДС",
         "Проверить корректность закупочных цен",
@@ -19558,7 +19574,7 @@ def get(supplier_id: str, session):
         # Main info card
         Div(
             Div(
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Table(
                     Tr(Th("Код поставщика:"), Td(
                         Strong(supplier.supplier_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
@@ -19570,7 +19586,7 @@ def get(supplier_id: str, session):
                 style="flex: 1;"
             ),
             Div(
-                H3("Локация"),
+                H3("Локация", cls="card-header"),
                 Table(
                     Tr(Th("Страна:"), Td(supplier.country or "—")),
                     Tr(Th("Город:"), Td(supplier.city or "—")),
@@ -19583,7 +19599,7 @@ def get(supplier_id: str, session):
 
         # Legal info (if Russian supplier)
         Div(
-            H3("Юридические данные"),
+            H3("Юридические данные", cls="card-header"),
             Table(
                 Tr(Th("ИНН:"), Td(supplier.inn or "—")),
                 Tr(Th("КПП:"), Td(supplier.kpp or "—")),
@@ -19593,7 +19609,7 @@ def get(supplier_id: str, session):
 
         # Contact info
         Div(
-            H3("Контактная информация"),
+            H3("Контактная информация", cls="card-header"),
             Table(
                 Tr(Th("Контактное лицо:"), Td(supplier.contact_person or "—")),
                 Tr(Th("Email:"), Td(
@@ -19610,7 +19626,7 @@ def get(supplier_id: str, session):
 
         # Payment terms
         Div(
-            H3("Условия оплаты"),
+            H3("Условия оплаты", cls="card-header"),
             P(supplier.default_payment_terms or "Не указаны"),
             cls="card"
         ) if supplier.default_payment_terms else "",
@@ -19652,7 +19668,7 @@ def _supplier_form(supplier=None, error=None, session=None):
         Div(
             Form(
                 # Main info section
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Div(
                     Label("Код поставщика *",
                         Input(
@@ -19679,7 +19695,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                 ),
 
                 # Location section
-                H3("Локация", style="margin-top: 1.5rem;"),
+                H3("Локация", cls="card-header"),
                 Div(
                     Label("Страна",
                         Input(
@@ -19699,7 +19715,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                 ),
 
                 # Legal info (Russian suppliers)
-                H3("Юридические данные (для российских поставщиков)", style="margin-top: 1.5rem;"),
+                H3("Юридические данные (для российских поставщиков)", cls="card-header"),
                 Div(
                     Label("ИНН",
                         Input(
@@ -19725,7 +19741,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                 ),
 
                 # Contact info section
-                H3("Контактная информация", style="margin-top: 1.5rem;"),
+                H3("Контактная информация", cls="card-header"),
                 Div(
                     Label("Контактное лицо",
                         Input(
@@ -19757,7 +19773,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                 ),
 
                 # Payment terms section
-                H3("Условия работы", style="margin-top: 1.5rem;"),
+                H3("Условия работы", cls="card-header"),
                 Label("Условия оплаты по умолчанию",
                     Textarea(
                         supplier.default_payment_terms if supplier else "",
@@ -19769,7 +19785,7 @@ def _supplier_form(supplier=None, error=None, session=None):
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", style="margin-top: 1.5rem;"),
+                    H3("Статус", cls="card-header"),
                     Label(
                         Input(
                             type="checkbox",
@@ -20287,7 +20303,7 @@ def get(company_id: str, session):
         # Main info card
         Div(
             Div(
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Table(
                     Tr(Th("Код компании:"), Td(
                         Strong(company.company_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
@@ -20300,7 +20316,7 @@ def get(company_id: str, session):
                 style="flex: 1;"
             ),
             Div(
-                H3("Руководство"),
+                H3("Руководство", cls="card-header"),
                 Table(
                     Tr(Th("Должность:"), Td(company.general_director_position or "Генеральный директор")),
                     Tr(Th("ФИО:"), Td(company.general_director_name or "—")),
@@ -20313,7 +20329,7 @@ def get(company_id: str, session):
 
         # Legal info
         Div(
-            H3("Юридические данные"),
+            H3("Юридические данные", cls="card-header"),
             Table(
                 Tr(Th("ИНН:"), Td(company.inn or "—")),
                 Tr(Th("КПП:"), Td(company.kpp or "—")),
@@ -20373,7 +20389,7 @@ def _buyer_company_form(company=None, error=None, session=None):
         Div(
             Form(
                 # Main info section
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Div(
                     Label("Код компании *",
                         Input(
@@ -20411,7 +20427,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                 ),
 
                 # Legal info section (required for Russian legal entity)
-                H3("Юридические данные", style="margin-top: 1.5rem;"),
+                H3("Юридические данные", cls="card-header"),
                 Div(
                     Label("ИНН *",
                         Input(
@@ -20452,7 +20468,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                 ),
 
                 # Registration address
-                H3("Юридический адрес", style="margin-top: 1.5rem;"),
+                H3("Юридический адрес", cls="card-header"),
                 Label("Адрес регистрации",
                     Textarea(
                         company.registration_address if company else "",
@@ -20463,7 +20479,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                 ),
 
                 # Director information
-                H3("Руководство (для документов)", style="margin-top: 1.5rem;"),
+                H3("Руководство (для документов)", cls="card-header"),
                 Div(
                     Label("Должность руководителя",
                         Input(
@@ -20484,7 +20500,7 @@ def _buyer_company_form(company=None, error=None, session=None):
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", style="margin-top: 1.5rem;"),
+                    H3("Статус", cls="card-header"),
                     Label(
                         Input(
                             type="checkbox",
@@ -21032,7 +21048,7 @@ def get(company_id: str, session):
 
         # Company details
         Div(
-            H2("Основная информация"),
+            H2("Основная информация", cls="section-header"),
             Div(
                 Div(
                     Strong("Код компании: "), Span(company.supplier_code, style="font-family: monospace;"),
@@ -21052,7 +21068,7 @@ def get(company_id: str, session):
                 ),
             ),
 
-            H2("Юридические реквизиты", style="margin-top: 1.5rem;"),
+            H2("Юридические реквизиты", cls="section-header"),
             Div(
                 Div(
                     Strong("ИНН: "), Span(company.inn or "—"),
@@ -21072,7 +21088,7 @@ def get(company_id: str, session):
                 ),
             ),
 
-            H2("Руководитель", style="margin-top: 1.5rem;"),
+            H2("Руководитель", cls="section-header"),
             Div(
                 Div(
                     Strong("ФИО директора: "), Span(company.general_director_name or "—"),
@@ -21136,7 +21152,7 @@ def _seller_company_form(
         Div(
             Form(
                 # Basic information
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Div(
                     Label("Код компании *",
                         Input(
@@ -21176,7 +21192,7 @@ def _seller_company_form(
                 ),
 
                 # Legal identifiers
-                H3("Юридические реквизиты", style="margin-top: 1.5rem;"),
+                H3("Юридические реквизиты", cls="card-header"),
                 Div(
                     icon("info", size=16), " ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.",
                     cls="alert alert-info", style="margin-bottom: 1rem;"
@@ -21220,7 +21236,7 @@ def _seller_company_form(
                 ),
 
                 # Registration address
-                H3("Юридический адрес", style="margin-top: 1.5rem;"),
+                H3("Юридический адрес", cls="card-header"),
                 Label("Адрес регистрации",
                     Textarea(
                         company.registration_address if company else "",
@@ -21231,7 +21247,7 @@ def _seller_company_form(
                 ),
 
                 # Director information
-                H3("Руководство (для документов)", style="margin-top: 1.5rem;"),
+                H3("Руководство (для документов)", cls="card-header"),
                 Div(
                     Label("Должность руководителя",
                         Input(
@@ -21252,7 +21268,7 @@ def _seller_company_form(
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", style="margin-top: 1.5rem;"),
+                    H3("Статус", cls="card-header"),
                     Label(
                         Input(
                             type="checkbox",
@@ -24069,7 +24085,7 @@ def _location_form(location=None, error=None, session=None):
         Div(
             Form(
                 # Basic information
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Div(
                     Label("Код (2-5 букв)",
                         Input(
@@ -24162,7 +24178,7 @@ def _location_form(location=None, error=None, session=None):
 
                 # Status (edit only)
                 Div(
-                    H3("Статус", style="margin-top: 1.5rem;"),
+                    H3("Статус", cls="card-header"),
                     Label(
                         Input(
                             type="checkbox",
@@ -24859,7 +24875,7 @@ def get(invoice_id: str, session):
         # Main info card
         Div(
             Div(
-                H3("Основная информация"),
+                H3("Основная информация", cls="card-header"),
                 Table(
                     Tr(Td(Strong("Номер инвойса:")), Td(invoice.invoice_number)),
                     Tr(Td(Strong("Поставщик:")), Td(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}")),
