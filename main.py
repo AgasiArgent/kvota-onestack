@@ -1872,6 +1872,9 @@ def nav_bar(session):
         if "quote_controller" in roles or "admin" in roles:
             nav_items.append(Li(A("Контроль КП", href="/quote-control")))
 
+        if "top_manager" in roles or "admin" in roles:
+            nav_items.append(Li(A("Согласования", href="/approvals")))
+
         if "spec_controller" in roles or "admin" in roles:
             nav_items.append(Li(A("Спецификации", href="/spec-control")))
 
@@ -13801,6 +13804,154 @@ def get(session, quote_id: str, preset_name: str):
         print(f"Error saving user settings: {e}")
 
     return RedirectResponse(f"/quote-control/{quote_id}?preset={preset_name}#calc-table", status_code=303)
+
+
+# ============================================================================
+# TOP MANAGER APPROVALS WORKSPACE
+# ============================================================================
+
+@rt("/approvals")
+def get(session):
+    """
+    Top Manager Approvals Workspace.
+
+    Shows all quotes pending approval with:
+    - Quote details (IDN, customer, amount)
+    - Approval reason from controller
+    - Justification from sales manager
+    - Quick action buttons
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has top_manager role
+    if not user_has_any_role(session, ["top_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get all quotes pending approval for this org
+    quotes_result = supabase.table("quotes") \
+        .select("*, customers(name, inn)") \
+        .eq("organization_id", org_id) \
+        .eq("workflow_status", "pending_approval") \
+        .order("updated_at", desc=True) \
+        .execute()
+
+    pending_quotes = quotes_result.data or []
+
+    # Count stats
+    total_pending = len(pending_quotes)
+    total_amount = sum(float(q.get("total_amount") or 0) for q in pending_quotes)
+
+    # Build quote cards
+    quote_cards = []
+    for q in pending_quotes:
+        quote_id = q.get("id")
+        idn_quote = q.get("idn_quote", f"#{quote_id[:8]}")
+        customer = q.get("customers", {}) or {}
+        customer_name = customer.get("name", "—")
+        amount = q.get("total_amount")
+        currency = q.get("currency", "RUB")
+        approval_reason = q.get("approval_reason", "")
+        approval_justification = q.get("approval_justification", "")
+        updated_at = q.get("updated_at", "")[:10] if q.get("updated_at") else "—"
+
+        quote_cards.append(
+            Div(
+                # Header row
+                Div(
+                    Div(
+                        A(f"📋 {idn_quote}", href=f"/quotes/{quote_id}",
+                          style="font-weight: 600; font-size: 1.1rem; color: #1e40af; text-decoration: none;"),
+                        Span(f" • {customer_name}", style="color: #6b7280;"),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Span(format_money(amount, currency), style="font-weight: 600; font-size: 1.1rem; color: #059669;"),
+                        style="text-align: right;"
+                    ),
+                    style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;"
+                ),
+
+                # Context section
+                Div(
+                    Div(
+                        Span("📋 Причина:", style="font-weight: 500; font-size: 0.875rem;"),
+                        Span(f" {approval_reason[:100]}{'...' if len(approval_reason) > 100 else ''}" if approval_reason else " Не указана",
+                             style="font-size: 0.875rem; color: #666;"),
+                        style="background: #fef3c7; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem;"
+                    ) if approval_reason else None,
+                    Div(
+                        Span("💼 Обоснование:", style="font-weight: 500; font-size: 0.875rem;"),
+                        Span(f" {approval_justification[:100]}{'...' if len(approval_justification) > 100 else ''}" if approval_justification else " Не указано",
+                             style="font-size: 0.875rem; color: #666;"),
+                        style="background: #dbeafe; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.5rem;"
+                    ) if approval_justification else None,
+                    style="margin-bottom: 0.75rem;"
+                ) if approval_reason or approval_justification else None,
+
+                # Actions row
+                Div(
+                    Span(f"Обновлено: {updated_at}", style="color: #9ca3af; font-size: 0.875rem;"),
+                    Div(
+                        A(icon("check", size=14), " Одобрить", href=f"/quotes/{quote_id}",
+                          style="background: #16a34a; color: white; padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; font-size: 0.875rem; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                        A(icon("eye", size=14), " Подробнее", href=f"/quotes/{quote_id}",
+                          style="background: #3b82f6; color: white; padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
+
+                cls="card",
+                style="margin-bottom: 1rem; border-left: 4px solid #f59e0b;"
+            )
+        )
+
+    return page_layout("Согласования",
+        # Header
+        Div(
+            H1(icon("clock", size=28), " Согласования", cls="page-header"),
+            P("Коммерческие предложения, ожидающие вашего решения", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Stats cards
+        Div(
+            Div(
+                Div(str(total_pending), style="font-size: 2rem; font-weight: 700; color: #f59e0b;"),
+                Div("Ожидают решения", style="color: #666; font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 1rem;"
+            ),
+            Div(
+                Div(format_money(total_amount, "RUB"), style="font-size: 1.5rem; font-weight: 700; color: #059669;"),
+                Div("Общая сумма", style="color: #666; font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 1rem;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;"
+        ),
+
+        # Quotes list
+        Div(
+            H2(f"КП на согласовании ({total_pending})", style="margin-bottom: 1rem;"),
+            *quote_cards if quote_cards else [
+                Div(
+                    icon("check-circle", size=48),
+                    H3("Все согласовано!", style="margin: 1rem 0 0.5rem;"),
+                    P("Нет КП, ожидающих вашего решения.", style="color: #666;"),
+                    style="text-align: center; padding: 3rem; color: #16a34a;",
+                    cls="card"
+                )
+            ],
+        ),
+
+        session=session
+    )
 
 
 # ============================================================================
