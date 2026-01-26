@@ -349,6 +349,31 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["top_manager", "admin"],
         requires_comment=True
     ),
+    # Feature: Multi-department return from top_manager (same as quote_controller)
+    StatusTransition(
+        WorkflowStatus.PENDING_APPROVAL,
+        WorkflowStatus.PENDING_SALES_REVIEW,  # Return for revision to sales
+        ["top_manager", "admin"],
+        requires_comment=True
+    ),
+    StatusTransition(
+        WorkflowStatus.PENDING_APPROVAL,
+        WorkflowStatus.PENDING_PROCUREMENT,  # Return for revision to procurement
+        ["top_manager", "admin"],
+        requires_comment=True
+    ),
+    StatusTransition(
+        WorkflowStatus.PENDING_APPROVAL,
+        WorkflowStatus.PENDING_LOGISTICS,  # Return for revision to logistics
+        ["top_manager", "admin"],
+        requires_comment=True
+    ),
+    StatusTransition(
+        WorkflowStatus.PENDING_APPROVAL,
+        WorkflowStatus.PENDING_CUSTOMS,  # Return for revision to customs
+        ["top_manager", "admin"],
+        requires_comment=True
+    ),
 
     # From APPROVED
     StatusTransition(

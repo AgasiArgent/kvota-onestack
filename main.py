@@ -5470,6 +5470,22 @@ def get(quote_id: str, session):
         Div(
             H3(icon("clock", size=20), " Согласование", cls="card-header"),
             P("Этот КП требует вашего одобрения.", style="margin-bottom: 1rem;"),
+
+            # Show approval context (approval_reason from controller, approval_justification from sales)
+            Div(
+                Div(
+                    Span("📋 Причина согласования (от контроллёра):", style="font-weight: 500;"),
+                    P(approval_reason, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap; background: #fef3c7; padding: 0.5rem; border-radius: 4px;"),
+                    style="margin-bottom: 0.75rem;"
+                ) if approval_reason else None,
+                Div(
+                    Span("💼 Обоснование менеджера:", style="font-weight: 500;"),
+                    P(quote.get("approval_justification", ""), style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap; background: #dbeafe; padding: 0.5rem; border-radius: 4px;"),
+                    style="margin-bottom: 1rem;"
+                ) if quote.get("approval_justification") else None,
+                style="margin-bottom: 1rem;"
+            ) if approval_reason or quote.get("approval_justification") else None,
+
             Form(
                 Div(
                     Label("Комментарий (необязательно):", for_="approval_comment"),
@@ -5480,7 +5496,9 @@ def get(quote_id: str, session):
                     Button(icon("check", size=16), " Одобрить", type="submit", name="action", value="approve",
                            style="background: #16a34a; color: white; margin-right: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                     Button(icon("x", size=16), " Отклонить", type="submit", name="action", value="reject",
-                           style="background: #dc2626; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                           style="background: #dc2626; color: white; margin-right: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                    A(icon("arrow-left", size=16), " На доработку", href=f"/quotes/{quote_id}/approval-return",
+                      role="button", style="background: #f59e0b; border-color: #f59e0b; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 ),
                 method="post",
                 action=f"/quotes/{quote_id}/manager-decision"
@@ -6098,6 +6116,215 @@ def post(quote_id: str, session, action: str = "", comment: str = ""):
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
             A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# TOP MANAGER - RETURN FOR REVISION (Feature: multi-department return)
+# ============================================================================
+
+@rt("/quotes/{quote_id}/approval-return")
+def get(session, quote_id: str):
+    """
+    Return for revision form for top manager.
+    Similar to quote controller's return form - can return to any department.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check if user has top_manager role
+    if not user_has_any_role(session, ["top_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if quote is in pending_approval status
+    if workflow_status != "pending_approval":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП не находится в статусе ожидания согласования."),
+            A("← Вернуться к КП", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    idn_quote = quote.get("idn_quote", "")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    return page_layout(f"Возврат на доработку - {idn_quote}",
+        # Header
+        Div(
+            A("← Вернуться к КП", href=f"/quotes/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
+            H1(icon("arrow-left", size=28), f" Возврат КП {idn_quote} на доработку", cls="page-header"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Department selection form
+        Form(
+            Div(
+                H3("Выберите отдел для доработки", style="margin-bottom: 1rem;"),
+                Div(
+                    Input(type="radio", name="department", value="quote_control", id="dept_control", checked=True),
+                    Label(" Контроль КП", for_="dept_control"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Input(type="radio", name="department", value="sales", id="dept_sales"),
+                    Label(" Продажи", for_="dept_sales"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Input(type="radio", name="department", value="procurement", id="dept_procurement"),
+                    Label(" Закупки", for_="dept_procurement"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Input(type="radio", name="department", value="logistics", id="dept_logistics"),
+                    Label(" Логистика", for_="dept_logistics"),
+                    style="margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Input(type="radio", name="department", value="customs", id="dept_customs"),
+                    Label(" Таможня", for_="dept_customs"),
+                    style="margin-bottom: 1rem;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            Div(
+                H3("Комментарий", style="margin-bottom: 0.5rem;"),
+                P("Укажите, что необходимо исправить.", style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    id="comment",
+                    placeholder="Укажите, что необходимо исправить...",
+                    required=True,
+                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button(
+                    icon("arrow-left", size=16), " Вернуть на доработку",
+                    type="submit",
+                    style="background: #f59e0b; border-color: #f59e0b; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                ),
+                A("Отмена", href=f"/quotes/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
+                style="display: flex; align-items: center;"
+            ),
+
+            action=f"/quotes/{quote_id}/approval-return",
+            method="post",
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quotes/{quote_id}/approval-return")
+def post(session, quote_id: str, department: str = "quote_control", comment: str = ""):
+    """
+    Handle return for revision from top manager.
+    Routes to the selected department with revision tracking.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has top_manager role
+    if not user_has_any_role(session, ["top_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Validate comment
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P("Необходимо указать комментарий с описанием необходимых исправлений."),
+            A("← Вернуться к форме", href=f"/quotes/{quote_id}/approval-return"),
+            session=session
+        )
+
+    # Map department to workflow status
+    department_status_map = {
+        "quote_control": WorkflowStatus.PENDING_QUOTE_CONTROL,
+        "sales": WorkflowStatus.PENDING_SALES_REVIEW,
+        "procurement": WorkflowStatus.PENDING_PROCUREMENT,
+        "logistics": WorkflowStatus.PENDING_LOGISTICS,
+        "customs": WorkflowStatus.PENDING_CUSTOMS,
+    }
+
+    department_names = {
+        "quote_control": "Контроль КП",
+        "sales": "Продажи",
+        "procurement": "Закупки",
+        "logistics": "Логистика",
+        "customs": "Таможня",
+    }
+
+    to_status = department_status_map.get(department, WorkflowStatus.PENDING_QUOTE_CONTROL)
+    department_name = department_names.get(department, "Контроль КП")
+
+    user_roles = get_user_roles_from_session(session)
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=to_status,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=f"[Возврат от топ-менеджера] {comment.strip()}"
+    )
+
+    if result.success:
+        # Save revision tracking info
+        supabase = get_supabase()
+        supabase.table("quotes").update({
+            "revision_department": department if department != "quote_control" else None,
+            "revision_comment": comment.strip() if department != "quote_control" else None,
+            "revision_returned_at": datetime.now(timezone.utc).isoformat() if department != "quote_control" else None
+        }).eq("id", quote_id).execute()
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП возвращено на доработку"),
+            P(f"КП отправлено в отдел «{department_name}» для доработки."),
+            P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось вернуть КП: {result.error_message}"),
+            A("← Вернуться к форме", href=f"/quotes/{quote_id}/approval-return"),
             session=session
         )
 
