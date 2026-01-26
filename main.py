@@ -9602,9 +9602,11 @@ def get(quote_id: str, session):
         suppliers = {s["id"]: s["name"] for s in suppliers_result.data or []}
 
     buyer_companies = {}
+    buyer_company_codes = {}
     if buyer_company_ids:
-        buyers_result = supabase.table("buyer_companies").select("id, name").in_("id", buyer_company_ids).execute()
+        buyers_result = supabase.table("buyer_companies").select("id, name, supplier_code").in_("id", buyer_company_ids).execute()
         buyer_companies = {b["id"]: b["name"] for b in buyers_result.data or []}
+        buyer_company_codes = {b["id"]: b.get("supplier_code", "INV") for b in buyers_result.data or []}
 
     # Check if invoices already exist for this quote
     existing_invoices_result = supabase.table("invoices") \
@@ -9637,6 +9639,11 @@ def get(quote_id: str, session):
 
         supplier_name = suppliers.get(supplier_id, "Неизвестный поставщик")
         buyer_name = buyer_companies.get(buyer_company_id, "Неизвестная компания")
+        buyer_code = buyer_company_codes.get(buyer_company_id, "INV")
+
+        # Generate invoice number: {buyer_code}-{NN}-{quote_idn}
+        quote_idn = quote.get("idn_quote", f"Q-{quote_id[:8]}")
+        generated_invoice_number = f"{buyer_code}-{idx:02d}-{quote_idn}"
 
         invoice_cards.append(
             Div(
@@ -9671,13 +9678,14 @@ def get(quote_id: str, session):
                     P("Для сверки с инвойсом поставщика", style="color: #666; font-size: 0.75rem; text-align: right; margin: 0;")
                 ),
 
-                # Invoice input fields (2026-01-26: added currency selector)
+                # Invoice input fields (2026-01-26: added currency selector, auto-generated invoice number)
                 Div(
                     Label("Номер инвойса *",
                         Input(name=f"invoice_number_{idx}", type="text",
-                              value=existing_invoice.get("invoice_number", "") if existing_invoice else "",
-                              placeholder="INV-2024-001",
+                              value=existing_invoice.get("invoice_number", "") if existing_invoice else generated_invoice_number,
+                              placeholder=generated_invoice_number,
                               required=True),
+                        Small(f"Формат: {buyer_code}-НН-номер КП", style="color: #666; display: block; margin-top: 0.25rem;"),
                         style="flex: 1;"
                     ),
                     Label("Валюта инвойса *",
