@@ -11501,7 +11501,7 @@ def build_calc_table(items_data: list, summary_data: dict, columns: list, curren
                 style += " color: #22c55e;"
             if col_info.get("bold"):
                 style += " font-weight: 500;"
-            row_cells.append(Td(format_money(value), style=style))
+            row_cells.append(Td(format_money(value, currency), style=style))
 
         # Margin % calculation
         cogs = float(phase.get("AB16", 0) or 0)
@@ -11520,7 +11520,7 @@ def build_calc_table(items_data: list, summary_data: dict, columns: list, curren
         summary_col = CALC_SUMMARY_MAP.get(col)
         if summary_col and summary_data:
             value = float(summary_data.get(summary_col, 0) or 0)
-            footer_cells.append(Td(Strong(format_money(value)), style="text-align: right; background: #f9fafb;"))
+            footer_cells.append(Td(Strong(format_money(value, currency)), style="text-align: right; background: #f9fafb;"))
         else:
             footer_cells.append(Td("—", style="text-align: right; background: #f9fafb;"))
     # Average margin
@@ -11881,7 +11881,7 @@ def get(session, quote_id: str, preset: str = None):
     checklist_items.append(checklist_item(
         "6. Закупочные цены и НДС",
         "Проверить корректность закупочных цен",
-        f"Итого закупка: {format_money(total_purchase)} | НДС: {vat_rate}%",
+        f"Итого закупка: {format_money(total_purchase, currency)} | НДС: {vat_rate}%",
         "info",
         f"Позиций с ценами: {len([i for i in items if i.get('purchase_price')])}/{len(items)}"
     ))
@@ -11891,9 +11891,9 @@ def get(session, quote_id: str, preset: str = None):
     checklist_items.append(checklist_item(
         "7. Корректность логистики",
         "Стоимость должна быть рассчитана, не 'из головы'",
-        f"Участок 1 (до таможни): {format_money(logistics_first_leg)} | Участок 2 (до клиента): {format_money(logistics_last_leg)}",
+        f"Участок 1 (до таможни): {format_money(logistics_first_leg, currency)} | Участок 2 (до клиента): {format_money(logistics_last_leg, currency)}",
         logistics_status,
-        f"Итого логистика: {format_money(total_logistics)}"
+        f"Итого логистика: {format_money(total_logistics, currency)}"
     ))
 
     # 8. Minimum markup
@@ -12108,22 +12108,22 @@ def get(session, quote_id: str, preset: str = None):
             Div(
                 Div(
                     Strong("Итого закупка: "),
-                    f"{format_money(float(calc_summary.get('calc_s16_total_purchase_price', 0) or 0))} {currency}",
+                    format_money(float(calc_summary.get('calc_s16_total_purchase_price', 0) or 0), currency),
                     style="margin-right: 2rem;"
                 ),
                 Div(
                     Strong("Себестоимость: "),
-                    f"{format_money(float(calc_summary.get('calc_ab16_cogs_total', 0) or 0))} {currency}",
+                    format_money(float(calc_summary.get('calc_ab16_cogs_total', 0) or 0), currency),
                     style="margin-right: 2rem;"
                 ),
                 Div(
                     Strong("Логистика: "),
-                    f"{format_money(float(calc_summary.get('calc_v16_total_logistics', 0) or 0))} {currency}",
+                    format_money(float(calc_summary.get('calc_v16_total_logistics', 0) or 0), currency),
                     style="margin-right: 2rem;"
                 ),
                 Div(
                     Strong("Продажа с НДС: "),
-                    f"{format_money(float(calc_summary.get('calc_al16_total_with_vat', 0) or 0))} {currency}",
+                    format_money(float(calc_summary.get('calc_al16_total_with_vat', 0) or 0), currency),
                     style="margin-right: 2rem; color: #22c55e; font-weight: 500;"
                 ),
                 style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem; background: #f0fdf4; border-radius: 8px; margin-bottom: 1rem;"
@@ -13037,7 +13037,7 @@ def get(session, quote_id: str):
         Div(
             H3("Сводка по КП"),
             Div(
-                Div(Strong("Сумма: "), f"{format_money(total_amount)} {quote_currency}"),
+                Div(Strong("Сумма: "), format_money(total_amount, quote_currency)),
                 Div(Strong("Наценка: "), f"{markup}%"),
                 Div(Strong("Предоплата: "), f"{prepayment}%"),
                 style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;"
