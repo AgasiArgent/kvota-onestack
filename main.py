@@ -5202,6 +5202,11 @@ def get(quote_id: str, session):
     revision_comment = quote.get("revision_comment")
     is_revision = revision_department == "sales" and workflow_status == "pending_sales_review"
 
+    # Check for justification status (Feature: approval justification workflow)
+    needs_justification = quote.get("needs_justification", False)
+    approval_reason = quote.get("approval_reason")
+    is_justification_needed = needs_justification and workflow_status == "pending_sales_review"
+
     # Get approval status for multi-department workflow (Bug #8 follow-up)
     approval_status = get_quote_approval_status(quote_id, user["org_id"]) or {}
 
@@ -5419,9 +5424,31 @@ def get(quote_id: str, session):
             style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
         ) if is_revision else None,
 
-        # Workflow Actions (for pending_sales_review - submit for Quote Control or return after revision)
+        # Justification banner (Feature: approval justification workflow)
+        Div(
+            Div(
+                Span("📝 Требуется обоснование для согласования", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Span("Причина согласования (от контроллёра КП):", style="font-weight: 500;"),
+                P(approval_reason, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
+                style="margin-bottom: 1rem;"
+            ) if approval_reason else None,
+            P("Укажите бизнес-обоснование для согласования этого КП топ-менеджером.", style="margin: 0; font-size: 0.875rem;"),
+            cls="card",
+            style="background: #dbeafe; border: 2px solid #3b82f6; margin-bottom: 1rem;"
+        ) if is_justification_needed else None,
+
+        # Workflow Actions (for pending_sales_review - submit for Quote Control, return after revision, or submit justification)
         Div(
             H3("Workflow"),
+            # Justification flow: Submit justification for approval (Feature: approval justification workflow)
+            Div(
+                A(icon("check", size=16), " Отправить обоснование", href=f"/quotes/{quote_id}/submit-justification",
+                  role="button", style="background: #3b82f6; border-color: #3b82f6; font-size: 1rem; padding: 0.75rem 1.5rem; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                P("Заполнить обоснование и отправить на согласование топ-менеджеру.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+            ) if is_justification_needed else None,
             # Normal flow: Submit for Quote Control
             Form(
                 Button(icon("file-text", size=16), " Submit for Quote Control", type="submit",
@@ -5429,14 +5456,14 @@ def get(quote_id: str, session):
                 P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/submit-quote-control"
-            ) if not is_revision else None,
+            ) if not is_revision and not is_justification_needed else None,
             # Revision flow: Return to Quote Control with comment
             Div(
                 A("✓ Вернуть на проверку", href=f"/quotes/{quote_id}/return-to-control",
                   role="button", style="background: #22c55e; border-color: #22c55e; font-size: 1rem; padding: 0.75rem 1.5rem;"),
                 P("Отправить КП контроллёру после исправлений.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
             ) if is_revision else None,
-            cls="card", style="border-left: 4px solid #ec4899;" if not is_revision else "border-left: 4px solid #22c55e;"
+            cls="card", style="border-left: 4px solid #3b82f6;" if is_justification_needed else ("border-left: 4px solid #ec4899;" if not is_revision else "border-left: 4px solid #22c55e;")
         ) if workflow_status == "pending_sales_review" else None,
 
         # Workflow Actions (for pending_approval - Top Manager approval)
@@ -5763,6 +5790,229 @@ def post(quote_id: str, session, comment: str = ""):
             H1("Ошибка"),
             P(f"Не удалось вернуть КП: {result.error_message}"),
             A("← Назад", href=f"/quotes/{quote_id}/return-to-control"),
+            session=session
+        )
+
+
+# ============================================================================
+# SUBMIT JUSTIFICATION (Feature: approval justification workflow)
+# ============================================================================
+
+@rt("/quotes/{quote_id}/submit-justification")
+def get(session, quote_id: str):
+    """
+    Justification form - sales manager provides business case for approval.
+
+    Feature: Approval justification workflow (Variant B)
+    - Controller specifies why approval is needed (approval_reason)
+    - Sales manager provides business justification (approval_justification)
+    - Then quote goes to top manager with full context
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check if user has sales role
+    if not user_has_any_role(session, ["sales", "sales_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name, inn)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+    needs_justification = quote.get("needs_justification", False)
+    approval_reason = quote.get("approval_reason", "")
+
+    # Check if quote is in correct status and needs justification
+    if workflow_status != "pending_sales_review" or not needs_justification:
+        return page_layout("Обоснование не требуется",
+            H1("Обоснование не требуется"),
+            P("Это КП не требует обоснования для согласования."),
+            A("← Вернуться к КП", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    idn_quote = quote.get("idn_quote", "")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    return page_layout(f"Обоснование - {idn_quote}",
+        # Header
+        Div(
+            A("← Вернуться к КП", href=f"/quotes/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
+            H1(icon("file-text", size=28), f" Обоснование для согласования {idn_quote}", cls="page-header"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Approval reason from controller
+        Div(
+            H3("Причина согласования (от контроллёра КП)"),
+            P(approval_reason, style="font-style: italic; white-space: pre-wrap; background: #f3f4f6; padding: 1rem; border-radius: 6px;"),
+            cls="card",
+            style="margin-bottom: 1rem; background: #fef3c7;"
+        ) if approval_reason else None,
+
+        # Form
+        Form(
+            Div(
+                H3("Ваше обоснование", style="margin-bottom: 0.5rem;"),
+                P("Объясните, почему эта сделка важна для компании и почему предложенные условия обоснованы.",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="justification",
+                    id="justification",
+                    placeholder="Укажите бизнес-обоснование...\n\nНапример:\n- Стратегический клиент с большим потенциалом\n- Первая сделка для входа в новый сегмент\n- Конкурентная ситуация требует гибкости по цене",
+                    required=True,
+                    style="width: 100%; min-height: 200px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+
+            # Action buttons
+            Div(
+                Button(
+                    icon("send", size=16), " Отправить на согласование",
+                    type="submit",
+                    style="background: #3b82f6; border-color: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
+                ),
+                A("Отмена", href=f"/quotes/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
+                style="display: flex; align-items: center;"
+            ),
+
+            action=f"/quotes/{quote_id}/submit-justification",
+            method="post",
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quotes/{quote_id}/submit-justification")
+def post(session, quote_id: str, justification: str = ""):
+    """
+    Handle justification form submission.
+
+    1. Validate justification is provided
+    2. Save approval_justification
+    3. Clear needs_justification flag
+    4. Call request_approval to send to top manager
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Check if user has sales role
+    if not user_has_any_role(session, ["sales", "sales_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Validate justification
+    if not justification or not justification.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка отправки"),
+            P("Необходимо указать обоснование для согласования."),
+            A("← Вернуться к форме", href=f"/quotes/{quote_id}/submit-justification"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    # Get the quote
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status, needs_justification, idn_quote, total_amount, currency, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("Запрошенное КП не существует или у вас нет доступа."),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+    needs_justification = quote.get("needs_justification", False)
+    idn_quote = quote.get("idn_quote", "")
+    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+    total_amount = quote.get("total_amount")
+
+    # Verify quote is in correct status
+    if workflow_status != "pending_sales_review" or not needs_justification:
+        return page_layout("Ошибка",
+            H1("Обоснование не требуется"),
+            P("Это КП не находится в статусе ожидания обоснования."),
+            A("← Вернуться к КП", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    # Save justification and clear flag
+    supabase.table("quotes").update({
+        "approval_justification": justification.strip(),
+        "needs_justification": False
+    }).eq("id", quote_id).execute()
+
+    # Get user's role codes for request_approval
+    user_roles = get_user_roles_from_session(session)
+
+    # Now call request_approval to send to top manager
+    result = request_approval(
+        quote_id=quote_id,
+        requested_by=user_id,
+        reason=f"[С обоснованием менеджера] {justification.strip()[:200]}...",  # Use justification as reason
+        organization_id=org_id,
+        actor_roles=user_roles,
+        quote_idn=idn_quote,
+        customer_name=customer_name,
+        total_amount=float(total_amount) if total_amount else None,
+        send_notifications=True
+    )
+
+    if result.success:
+        details = []
+        if result.approvals_created > 0:
+            details.append(P(f"Создано запросов на согласование: {result.approvals_created}"))
+        if result.notifications_sent > 0:
+            details.append(P(f"Отправлено уведомлений в Telegram: {result.notifications_sent}"))
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП отправлено на согласование", cls="page-header"),
+            P(f"КП {idn_quote} с вашим обоснованием отправлено на согласование топ-менеджеру."),
+            *details,
+            P("Вы получите уведомление о решении.", style="color: #666;"),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка отправки"),
+            P(f"Не удалось отправить КП на согласование: {result.error_message}"),
+            A("← Вернуться к форме", href=f"/quotes/{quote_id}/submit-justification"),
             session=session
         )
 
@@ -13790,48 +14040,52 @@ def post(session, quote_id: str, comment: str = ""):
     quote = quote_result.data[0]
     idn_quote = quote.get("idn_quote", "")
     customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
-    total_amount = quote.get("total_amount")
 
-    # Use the new request_approval function (Feature #65)
-    # This handles:
-    # - Status validation
-    # - Workflow transition
-    # - Creating approval records for top_manager/admin users
-    # - Sending Telegram notifications
-    result = request_approval(
-        quote_id=quote_id,
-        requested_by=user_id,
-        reason=comment.strip(),
-        organization_id=org_id,
-        actor_roles=user_roles,
-        quote_idn=idn_quote,
-        customer_name=customer_name,
-        total_amount=float(total_amount) if total_amount else None,
-        send_notifications=True
-    )
+    # Feature: Justification workflow (Variant B)
+    # Instead of sending directly to pending_approval, we:
+    # 1. Save the controller's approval_reason
+    # 2. Set needs_justification=true
+    # 3. Transition to pending_sales_review so sales manager can provide justification
+    # 4. After sales provides justification, THEN it goes to pending_approval
 
-    if result.success:
-        # Success - show details about what was created
-        details = []
-        if result.approvals_created > 0:
-            details.append(P(f"Создано запросов на согласование: {result.approvals_created}"))
-        if result.notifications_sent > 0:
-            details.append(P(f"Отправлено уведомлений в Telegram: {result.notifications_sent}"))
+    try:
+        # Transition quote to pending_sales_review for justification
+        result = transition_quote(
+            quote_id=quote_id,
+            to_status=WorkflowStatus.PENDING_SALES_REVIEW,
+            actor_id=user_id,
+            actor_roles=user_roles,
+            comment=f"[Запрос согласования] {comment.strip()}"
+        )
+
+        if not result.success:
+            return page_layout("Ошибка",
+                H1("Ошибка отправки"),
+                P(f"Не удалось отправить КП на согласование: {result.error_message}"),
+                A("← Вернуться к форме", href=f"/quote-control/{quote_id}/request-approval"),
+                session=session
+            )
+
+        # Save approval_reason and needs_justification flag
+        supabase.table("quotes").update({
+            "approval_reason": comment.strip(),
+            "needs_justification": True,
+            "approval_justification": None  # Clear any previous justification
+        }).eq("id", quote_id).execute()
 
         return page_layout("Успешно",
-            H1(icon("check", size=28), " КП отправлено на согласование", cls="page-header"),
-            P(f"КП {idn_quote} было успешно отправлено на согласование топ-менеджеру."),
-            P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
-            *details,
-            P("Вы получите уведомление о решении.", style="color: #666;"),
+            H1(icon("check", size=28), " Отправлено менеджеру продаж", cls="page-header"),
+            P(f"КП {idn_quote} отправлено менеджеру продаж для обоснования."),
+            P(f"Причина согласования: {comment.strip()}", style="color: #666; font-style: italic;"),
+            P("После того как менеджер продаж предоставит обоснование, КП будет отправлено на согласование топ-менеджеру.", style="color: #666;"),
             A("← К задачам", href="/tasks", role="button"),
             session=session
         )
-    else:
-        # Show error
+
+    except Exception as e:
         return page_layout("Ошибка",
             H1("Ошибка отправки"),
-            P(f"Не удалось отправить КП на согласование: {result.error_message}"),
+            P(f"Произошла ошибка: {str(e)}"),
             A("← Вернуться к форме", href=f"/quote-control/{quote_id}/request-approval"),
             session=session
         )
