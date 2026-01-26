@@ -1984,6 +1984,9 @@ def sidebar(session, current_path: str = ""):
     # Add "Обзор" (analytics) for admin/top_manager
     if is_admin or "top_manager" in roles:
         main_items.append({"icon": "bar-chart-3", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
+    # Add "Согласования" (approvals workspace) for top_manager/admin
+    if is_admin or "top_manager" in roles:
+        main_items.append({"icon": "clock", "label": "Согласования", "href": "/approvals", "roles": ["admin", "top_manager"]})
 
     menu_sections.append({"title": "Главное", "items": main_items})
 
