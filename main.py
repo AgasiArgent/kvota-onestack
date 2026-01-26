@@ -7689,13 +7689,22 @@ def get(quote_id: str, session):
                     Div(
                         H3("Pricing"),
                         Div(
+                            Label("Валюта КП",
+                                Select(
+                                    Option("RUB", value="RUB", selected=currency == "RUB"),
+                                    Option("USD", value="USD", selected=currency == "USD"),
+                                    Option("EUR", value="EUR", selected=currency == "EUR"),
+                                    Option("CNY", value="CNY", selected=currency == "CNY"),
+                                    name="quote_currency"
+                                ),
+                                Small("Валюта итоговой цены для клиента", style="color: #666; display: block; margin-top: 0.25rem;")
+                            ),
                             Label("Markup %",
                                 Input(name="markup", type="number", value=str(get_var('markup', 15)), min="0", max="100", step="0.1")
                             ),
-                            cls="form-group"
+                            cls="form-row"
                         ),
                         # Hidden fields: other departments' data passed through but not shown
-                        Input(type="hidden", name="quote_currency", value=currency),
                         Input(type="hidden", name="supplier_discount", value=str(get_var('supplier_discount', 0))),
                         Input(type="hidden", name="exchange_rate", value=str(get_var('exchange_rate', 1.0))),
                         Input(type="hidden", name="delivery_time", value=str(get_var('delivery_time', 30))),
@@ -7732,9 +7741,9 @@ def get(quote_id: str, session):
                         cls="card"
                     ),
 
-                    # DM Fee
+                    # DM Fee (LPR reward)
                     Div(
-                        H3("DM Fee"),
+                        H3("DM Fee (LPR)"),
                         Div(
                             Label("Fee Type",
                                 Select(
@@ -7746,8 +7755,17 @@ def get(quote_id: str, session):
                             Label("Fee Value",
                                 Input(name="dm_fee_value", type="number", value=str(get_var('dm_fee_value', 0)), min="0", step="0.01")
                             ),
+                            Label("Валюта (для Fixed)",
+                                Select(
+                                    Option("RUB", value="RUB", selected=get_var('dm_fee_currency', 'RUB') == "RUB"),
+                                    Option("USD", value="USD", selected=get_var('dm_fee_currency', '') == "USD"),
+                                    Option("EUR", value="EUR", selected=get_var('dm_fee_currency', '') == "EUR"),
+                                    name="dm_fee_currency"
+                                )
+                            ),
                             cls="form-row"
                         ),
+                        Small("Для Percentage валюта = валюте КП", style="color: #666; margin-top: 0.25rem; display: block;"),
                         cls="card"
                     ),
 
@@ -7828,6 +7846,7 @@ def post(
     # DM Fee
     dm_fee_type: str = "fixed",
     dm_fee_value: str = "0",
+    dm_fee_currency: str = "RUB",
 ):
     """Execute full 13-phase calculation engine and save results."""
     redirect = require_login(session)
@@ -7949,6 +7968,7 @@ def post(
             # DM Fee
             'dm_fee_type': dm_fee_type,
             'dm_fee_value': safe_decimal(dm_fee_value),
+            'dm_fee_currency': dm_fee_currency,
 
             # Exchange rate
             'exchange_rate': safe_decimal(exchange_rate),
