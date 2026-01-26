@@ -93,21 +93,26 @@ def fetch_cbr_rates(rate_date: Optional[date] = None) -> dict[str, Decimal]:
 
 
 def save_rates_to_db(rate_date: date, rates: dict[str, Decimal]) -> bool:
-    """Save exchange rates to database"""
+    """Save exchange rates to database.
+
+    Table schema: from_currency, to_currency, rate, fetched_at
+    All CBR rates are X -> RUB (e.g., 1 USD = 78.53 RUB)
+    """
     if not rates:
         return False
 
     try:
         supabase = _get_supabase()
+        now = datetime.now().isoformat()
 
         for currency, rate in rates.items():
-            # Upsert (insert or update on conflict)
-            supabase.table("exchange_rates").upsert({
-                "rate_date": rate_date.isoformat(),
-                "currency": currency,
-                "rate_to_rub": float(rate),
-                "fetched_at": datetime.now().isoformat()
-            }, on_conflict="rate_date,currency").execute()
+            # CBR rates are currency -> RUB
+            supabase.table("exchange_rates").insert({
+                "from_currency": currency,
+                "to_currency": "RUB",
+                "rate": float(rate),
+                "fetched_at": now
+            }).execute()
 
         print(f"[currency_service] Saved {len(rates)} rates for {rate_date}")
         return True
@@ -118,18 +123,27 @@ def save_rates_to_db(rate_date: date, rates: dict[str, Decimal]) -> bool:
 
 
 def get_rates_from_db(rate_date: date) -> dict[str, Decimal]:
-    """Get exchange rates from database for specific date"""
+    """Get exchange rates from database for today (latest fetched).
+
+    Returns dict: {currency: rate_to_rub}
+    """
     try:
         supabase = _get_supabase()
 
+        # Get latest rates for each currency -> RUB pair
         result = supabase.table("exchange_rates")\
-            .select("currency, rate_to_rub")\
-            .eq("rate_date", rate_date.isoformat())\
+            .select("from_currency, rate")\
+            .eq("to_currency", "RUB")\
+            .order("fetched_at", desc=True)\
+            .limit(10)\
             .execute()
 
         rates = {}
         for row in result.data:
-            rates[row["currency"]] = Decimal(str(row["rate_to_rub"]))
+            currency = row["from_currency"]
+            # Only take first (latest) rate for each currency
+            if currency not in rates:
+                rates[currency] = Decimal(str(row["rate"]))
 
         return rates
 
