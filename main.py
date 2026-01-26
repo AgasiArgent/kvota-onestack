@@ -6568,15 +6568,11 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         # Calculation: P16 (in USD) / 1.08 = R16 (in EUR)
         if item_currency == quote_currency:
             exchange_rate = Decimal("1.0")
-            print(f"[calc] {item.get('product_name')}: {item_currency}={quote_currency}, exchange_rate=1.0")
         else:
             # convert_amount(1, quote_currency, item_currency) gives how many item_currency = 1 quote_currency
-            converted = convert_amount(Decimal("1"), quote_currency, item_currency)
-            exchange_rate = safe_decimal(converted)
-            print(f"[calc] {item.get('product_name')}: convert(1, {quote_currency}, {item_currency}) = {converted} -> {exchange_rate}")
+            exchange_rate = safe_decimal(convert_amount(Decimal("1"), quote_currency, item_currency))
             if exchange_rate == 0:
                 exchange_rate = Decimal("1.0")  # Fallback if rate not found
-                print(f"[calc] {item.get('product_name')}: FALLBACK to 1.0!")
 
         calc_input = map_variables_to_calculation_input(
             product=product,
