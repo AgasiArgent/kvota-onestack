@@ -32,7 +32,7 @@ from services.database import get_supabase, get_anon_client
 from services.export_data_mapper import fetch_export_data
 from services.specification_export import generate_specification_pdf, generate_spec_pdf_from_spec_id
 from services.invoice_export import generate_invoice_pdf
-from services.validation_export import create_validation_excel
+from services.export_validation_service import create_validation_excel
 from services.procurement_export import create_procurement_excel
 
 # Import version service
@@ -8525,12 +8525,12 @@ def get(quote_id: str, session):
         # Generate Excel
         excel_bytes = create_validation_excel(data)
 
-        # Return as file download
+        # Return as file download (XLSM with macros)
         from starlette.responses import Response
-        filename = f"validation_{data.quote.get('quote_number', quote_id)}.xlsx"
+        filename = f"validation_{data.quote.get('quote_number', quote_id)}.xlsm"
         return Response(
             content=excel_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            media_type="application/vnd.ms-excel.sheet.macroEnabled.12",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
     except ValueError as e:
