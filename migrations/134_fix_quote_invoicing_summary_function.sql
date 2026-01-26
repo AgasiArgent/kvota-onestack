@@ -1,4 +1,4 @@
--- Migration 124: Fix get_quote_invoicing_summary function
+-- Migration 134: Fix get_quote_invoicing_summary function
 -- Problem: Function uses INNER JOIN with products table, but quote_items.product_id is rarely set
 -- Solution: Use LEFT JOIN and fallback to quote_items.product_name
 
