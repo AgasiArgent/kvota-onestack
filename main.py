@@ -9164,28 +9164,14 @@ def get(quote_id: str, session):
                 style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;"
             ),
 
-            # Row 2: Price, Currency, Country, Production time (Simplified 2026-01-21)
+            # Row 2: Price, Country, Production time (2026-01-26: removed currency - set at invoice level)
             Div(
                 Label("Закупочная цена *",
                     Input(name=f"purchase_price_original_{item_id}", type="number", step="0.01", min="0",
                           value=str(purchase_price) if purchase_price else "",
                           placeholder="150.00", required=True if can_edit else False,
                           disabled=not can_edit),
-                    Small("Цена от поставщика", style="display: block; color: #666; margin-top: 0.25rem;"),
-                    style="flex: 1;"
-                ),
-                Label("Валюта *",
-                    Select(
-                        Option("USD", value="USD", selected=purchase_currency == "USD"),
-                        Option("EUR", value="EUR", selected=purchase_currency == "EUR"),
-                        Option("RUB", value="RUB", selected=purchase_currency == "RUB"),
-                        Option("CNY", value="CNY", selected=purchase_currency == "CNY"),
-                        Option("TRY", value="TRY", selected=purchase_currency == "TRY"),
-                        name=f"purchase_currency_{item_id}",
-                        required=True if can_edit else False,
-                        disabled=not can_edit
-                    ),
-                    Small("Валюта поставщика", style="display: block; color: #666; margin-top: 0.25rem;"),
+                    Small("Цена от поставщика (валюта указывается при создании инвойса)", style="display: block; color: #666; margin-top: 0.25rem;"),
                     style="flex: 1;"
                 ),
                 Label("Страна закупки *",
@@ -9211,7 +9197,7 @@ def get(quote_id: str, session):
                           disabled=not can_edit),
                     style="flex: 1;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
             ),
 
             # Hidden field for item ID
@@ -9562,23 +9548,22 @@ def get(quote_id: str, session):
     invoice_groups = defaultdict(list)
 
     for item in my_items:
-        # Skip items without required fields
-        if not all([item.get("supplier_id"), item.get("buyer_company_id"), item.get("purchase_currency")]):
+        # Skip items without required fields (2026-01-26: removed purchase_currency - set at invoice level)
+        if not all([item.get("supplier_id"), item.get("buyer_company_id")]):
             continue
 
-        # Create grouping key
+        # Create grouping key (2026-01-26: group by supplier/buyer/location only, currency selected per invoice)
         key = (
             item.get("supplier_id"),
             item.get("buyer_company_id"),
             item.get("pickup_location_id"),  # Can be None
-            item.get("purchase_currency")
         )
         invoice_groups[key].append(item)
 
     if not invoice_groups:
         return page_layout("Инвойсы",
             H1("Нет товаров для группировки"),
-            P("Товары не заполнены полностью (поставщик, компания-покупатель, валюта)."),
+            P("Товары не заполнены полностью (поставщик, компания-покупатель)."),
             A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button")
         )
 
@@ -9602,18 +9587,22 @@ def get(quote_id: str, session):
         .eq("quote_id", quote_id) \
         .execute()
 
+    # 2026-01-26: Changed to 3-tuple key (currency now editable per invoice)
     existing_invoices = {
-        (inv["supplier_id"], inv["buyer_company_id"], inv["pickup_location_id"], inv["currency"]): inv
+        (inv["supplier_id"], inv["buyer_company_id"], inv["pickup_location_id"]): inv
         for inv in (existing_invoices_result.data or [])
     }
 
-    # Build invoice cards
+    # Build invoice cards (2026-01-26: key is now 3-tuple, currency is selected per invoice)
     invoice_cards = []
     for idx, (key, items) in enumerate(invoice_groups.items(), 1):
-        supplier_id, buyer_company_id, pickup_location_id, currency = key
+        supplier_id, buyer_company_id, pickup_location_id = key
 
         # Get existing invoice if any
         existing_invoice = existing_invoices.get(key)
+
+        # Determine default currency: from existing invoice, or USD as default
+        default_currency = existing_invoice.get("currency", "USD") if existing_invoice else "USD"
 
         # Calculate total sum for this invoice
         total_sum = sum(
@@ -9636,8 +9625,8 @@ def get(quote_id: str, session):
                             Tr(
                                 Th("Товар"),
                                 Th("Количество"),
-                                Th(f"Цена ({currency})"),
-                                Th(f"Сумма ({currency})")
+                                Th("Цена"),
+                                Th("Сумма")
                             )
                         ),
                         Tbody(
@@ -9651,19 +9640,32 @@ def get(quote_id: str, session):
                         style="margin-bottom: 1rem; font-size: 0.875rem;"
                     ),
                     Div(
-                        Strong(f"Общая сумма закупки: {total_sum:.2f} {currency}"),
+                        Strong(f"Общая сумма закупки: {total_sum:.2f}"),
                         style="text-align: right; font-size: 1rem; margin-bottom: 1rem; color: #16a34a;"
                     ),
                     P("Для сверки с инвойсом поставщика", style="color: #666; font-size: 0.75rem; text-align: right; margin: 0;")
                 ),
 
-                # Invoice input fields
+                # Invoice input fields (2026-01-26: added currency selector)
                 Div(
                     Label("Номер инвойса *",
                         Input(name=f"invoice_number_{idx}", type="text",
                               value=existing_invoice.get("invoice_number", "") if existing_invoice else "",
                               placeholder="INV-2024-001",
                               required=True),
+                        style="flex: 1;"
+                    ),
+                    Label("Валюта инвойса *",
+                        Select(
+                            Option("USD", value="USD", selected=default_currency == "USD"),
+                            Option("EUR", value="EUR", selected=default_currency == "EUR"),
+                            Option("RUB", value="RUB", selected=default_currency == "RUB"),
+                            Option("CNY", value="CNY", selected=default_currency == "CNY"),
+                            Option("TRY", value="TRY", selected=default_currency == "TRY"),
+                            name=f"currency_{idx}",
+                            required=True
+                        ),
+                        Small("Валюта закупки", style="color: #666; display: block; margin-top: 0.25rem;"),
                         style="flex: 1;"
                     ),
                     Label("Общий вес, кг *",
@@ -9685,8 +9687,7 @@ def get(quote_id: str, session):
                     Input(type="hidden", name=f"supplier_id_{idx}", value=supplier_id),
                     Input(type="hidden", name=f"buyer_company_id_{idx}", value=buyer_company_id),
                     Input(type="hidden", name=f"pickup_location_id_{idx}", value=pickup_location_id or ""),
-                    Input(type="hidden", name=f"currency_{idx}", value=currency),
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;"
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;"
                 ),
 
                 cls="card",
@@ -9772,19 +9773,18 @@ async def post(quote_id: str, request: Request, session):
     my_items = [item for item in all_items
                 if (item.get("brand") or "").lower() in my_brands_lower]
 
-    # Validate: check currency consistency within each group
+    # Group items by supplier/buyer/location (2026-01-26: currency is now per invoice, not per item)
     from collections import defaultdict
     invoice_groups = defaultdict(list)
 
     for item in my_items:
-        if not all([item.get("supplier_id"), item.get("buyer_company_id"), item.get("purchase_currency")]):
+        if not all([item.get("supplier_id"), item.get("buyer_company_id")]):
             continue
 
         key = (
             item.get("supplier_id"),
             item.get("buyer_company_id"),
             item.get("pickup_location_id"),
-            item.get("purchase_currency")
         )
         invoice_groups[key].append(item)
 
@@ -9804,26 +9804,26 @@ async def post(quote_id: str, request: Request, session):
             continue
         if not total_weight_kg:
             continue
+        if not currency:
+            continue
 
-        # Create grouping key to match items
+        # Create grouping key to match items (2026-01-26: 3-tuple, currency is per invoice)
         key = (
             supplier_id,
             buyer_company_id,
             pickup_location_id if pickup_location_id else None,
-            currency
         )
 
         items_for_invoice = invoice_groups.get(key, [])
         if not items_for_invoice:
             continue
 
-        # Check if invoice already exists
+        # Check if invoice already exists (2026-01-26: don't match by currency, allow currency change)
         existing_invoice_result = supabase.table("invoices") \
             .select("id") \
             .eq("quote_id", quote_id) \
             .eq("supplier_id", supplier_id) \
-            .eq("buyer_company_id", buyer_company_id) \
-            .eq("currency", currency)
+            .eq("buyer_company_id", buyer_company_id)
 
         if pickup_location_id:
             existing_invoice_result = existing_invoice_result.eq("pickup_location_id", pickup_location_id)
@@ -9857,11 +9857,12 @@ async def post(quote_id: str, request: Request, session):
                 .execute()
             invoice_id = invoice_result.data[0]["id"]
 
-        # Link items to this invoice
+        # Link items to this invoice and set their purchase_currency from invoice
+        # (2026-01-26: currency is now set at invoice level, propagated to items)
         item_ids = [item["id"] for item in items_for_invoice]
         if item_ids:
             supabase.table("quote_items") \
-                .update({"invoice_id": invoice_id}) \
+                .update({"invoice_id": invoice_id, "purchase_currency": currency}) \
                 .in_("id", item_ids) \
                 .execute()
 
