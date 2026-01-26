@@ -1444,8 +1444,8 @@ def get_quote_invoicing_summary(quote_id: str) -> QuoteInvoicingSummary:
     try:
         supabase = _get_supabase()
 
-        # Call database function
-        result = supabase.rpc(
+        # Call database function (in kvota schema)
+        result = supabase.schema("kvota").rpc(
             "get_quote_invoicing_summary",
             {"p_quote_id": quote_id}
         ).execute()
