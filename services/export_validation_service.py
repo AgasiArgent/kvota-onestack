@@ -922,6 +922,51 @@ def generate_validation_export(
 # OneStack ADAPTER - Convert ExportData to validation service format
 # =============================================================================
 
+# Mapping for DM fee type (English -> Russian for Excel dropdown)
+DM_FEE_TYPE_MAP = {
+    # English values
+    "fixed": "Фикс",
+    "fix": "Фикс",
+    "фикс": "Фикс",
+    "фикс. сумма": "Фикс",
+    # Percentage values
+    "percent": "комиссия %",
+    "percentage": "комиссия %",
+    "%": "комиссия %",
+    "комиссия": "комиссия %",
+    "комиссия %": "комиссия %",
+    "% от суммы": "комиссия %",
+}
+
+# Mapping for sale type (English -> Russian for Excel dropdown)
+SALE_TYPE_ADAPTER_MAP = {
+    "openbook": "поставка",
+    "supply": "поставка",
+    "transit": "транзит",
+    "fin_transit": "финтранзит",
+    "export": "экспорт",
+    # Russian passthrough
+    "поставка": "поставка",
+    "транзит": "транзит",
+    "финтранзит": "финтранзит",
+    "экспорт": "экспорт",
+}
+
+
+def _map_dm_fee_type(value: str) -> str:
+    """Map DM fee type to Russian value expected by Excel."""
+    if not value:
+        return "Фикс"
+    return DM_FEE_TYPE_MAP.get(str(value).lower(), "Фикс")
+
+
+def _map_sale_type(value: str) -> str:
+    """Map sale type to Russian value expected by Excel."""
+    if not value:
+        return "поставка"
+    return SALE_TYPE_ADAPTER_MAP.get(str(value).lower(), str(value))
+
+
 def create_validation_excel(data) -> bytes:
     """
     Create validation Excel from OneStack ExportData.
@@ -944,7 +989,7 @@ def create_validation_excel(data) -> bytes:
     quote_inputs = {
         # Company and terms
         "seller_company": variables.get("seller_company", ""),
-        "offer_sale_type": variables.get("offer_sale_type", "поставка"),
+        "offer_sale_type": _map_sale_type(variables.get("offer_sale_type", "поставка")),
         "incoterms": variables.get("offer_incoterms", "DDP"),
         "quote_currency": quote.get("currency", "RUB"),
         "delivery_time": variables.get("delivery_time", 30),
@@ -973,8 +1018,8 @@ def create_validation_excel(data) -> bytes:
         "documentation": variables.get("customs_documentation", 0),
         "other_costs": variables.get("brokerage_extra", 0),
 
-        # DM Fee
-        "dm_fee_type": variables.get("dm_fee_type", "Фикс"),
+        # DM Fee - map to Russian values expected by Excel
+        "dm_fee_type": _map_dm_fee_type(variables.get("dm_fee_type", "Фикс")),
         "dm_fee_value": variables.get("dm_fee_value", 0),
 
         # Admin settings
