@@ -7151,6 +7151,58 @@ def post(
         )
 
     try:
+        # ==========================================================================
+        # AGGREGATE LOGISTICS FROM INVOICES (if form values are 0)
+        # This ensures invoice-level logistics data flows to calculation even if
+        # form fields weren't properly populated
+        # ==========================================================================
+        form_logistics_supplier_hub = safe_decimal(logistics_supplier_hub)
+        form_logistics_hub_customs = safe_decimal(logistics_hub_customs)
+        form_logistics_customs_client = safe_decimal(logistics_customs_client)
+
+        # If all form logistics values are 0, aggregate from invoices
+        if form_logistics_supplier_hub == 0 and form_logistics_hub_customs == 0 and form_logistics_customs_client == 0:
+            invoices_result = supabase.table("invoices") \
+                .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
+                        "logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
+                .eq("quote_id", quote_id) \
+                .execute()
+
+            invoices_logistics = invoices_result.data or []
+
+            if invoices_logistics:
+                from services.currency_service import convert_amount
+                total_logistics_supplier_hub = Decimal(0)
+                total_logistics_hub_customs = Decimal(0)
+                total_logistics_customs_client = Decimal(0)
+
+                for inv in invoices_logistics:
+                    # Supplier → Hub - convert to quote currency
+                    s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
+                    s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
+                    if s2h_amount > 0:
+                        total_logistics_supplier_hub += convert_amount(s2h_amount, s2h_currency, currency)
+
+                    # Hub → Customs - convert to quote currency
+                    h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
+                    h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
+                    if h2c_amount > 0:
+                        total_logistics_hub_customs += convert_amount(h2c_amount, h2c_currency, currency)
+
+                    # Customs → Customer - convert to quote currency
+                    c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
+                    c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
+                    if c2c_amount > 0:
+                        total_logistics_customs_client += convert_amount(c2c_amount, c2c_currency, currency)
+
+                # Use aggregated values if any found
+                if total_logistics_supplier_hub > 0:
+                    form_logistics_supplier_hub = total_logistics_supplier_hub
+                if total_logistics_hub_customs > 0:
+                    form_logistics_hub_customs = total_logistics_hub_customs
+                if total_logistics_customs_client > 0:
+                    form_logistics_customs_client = total_logistics_customs_client
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
@@ -7161,10 +7213,10 @@ def post(
             'seller_company': seller_company,
             'offer_sale_type': offer_sale_type,
 
-            # Logistics
-            'logistics_supplier_hub': safe_decimal(logistics_supplier_hub),
-            'logistics_hub_customs': safe_decimal(logistics_hub_customs),
-            'logistics_customs_client': safe_decimal(logistics_customs_client),
+            # Logistics (use aggregated values if form was empty)
+            'logistics_supplier_hub': form_logistics_supplier_hub,
+            'logistics_hub_customs': form_logistics_hub_customs,
+            'logistics_customs_client': form_logistics_customs_client,
 
             # Brokerage
             'brokerage_hub': safe_decimal(brokerage_hub),
