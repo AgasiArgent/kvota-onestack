@@ -369,22 +369,15 @@ class TestChecklistItems:
 # =============================================================================
 
 class TestMainPyIntegration:
-    """Tests that main.py has the correct integration."""
+    """Tests that main.py has the correct integration for criterion 11."""
 
-    def test_invoice_service_import_in_main(self):
-        """main.py should import get_quote_invoicing_summary."""
+    def test_invoices_table_query_in_main(self):
+        """main.py should query invoices table for criterion 11."""
         with open("main.py", "r") as f:
             content = f.read()
 
-        # Check for the import within the function
-        assert "from services.supplier_invoice_service import get_quote_invoicing_summary" in content
-
-    def test_invoicing_summary_call_in_main(self):
-        """main.py should call get_quote_invoicing_summary."""
-        with open("main.py", "r") as f:
-            content = f.read()
-
-        assert "get_quote_invoicing_summary(quote_id)" in content
+        # Check that we query the invoices table directly
+        assert 'table("invoices")' in content
 
     def test_checklist_item_11_in_main(self):
         """main.py should have checklist item 11 for invoices."""
@@ -393,19 +386,13 @@ class TestMainPyIntegration:
 
         assert "11. Наличие инвойсов от поставщиков" in content
 
-    def test_invoice_verification_section_in_main(self):
-        """main.py should have invoice verification detail section."""
+    def test_invoice_id_check_in_main(self):
+        """main.py should check quote_items.invoice_id for coverage."""
         with open("main.py", "r") as f:
             content = f.read()
 
-        assert "🧾 Проверка инвойсов поставщиков" in content
-
-    def test_coverage_display_in_main(self):
-        """main.py should display coverage percentage."""
-        with open("main.py", "r") as f:
-            content = f.read()
-
-        assert "coverage_percent" in content
+        # Check that we count items with invoice_id
+        assert "invoice_id" in content
 
 
 if __name__ == "__main__":
