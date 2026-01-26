@@ -208,6 +208,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["sales", "admin"],
         requires_comment=True
     ),
+    # Return to quote control after revision (Feature: multi-department return)
+    StatusTransition(
+        WorkflowStatus.PENDING_PROCUREMENT,
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        ["procurement", "admin"],
+        requires_comment=True  # Must explain what was fixed
+    ),
 
     # From PENDING_LOGISTICS
     StatusTransition(
@@ -222,6 +229,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["sales", "admin"],
         requires_comment=True
     ),
+    # Return to quote control after revision (Feature: multi-department return)
+    StatusTransition(
+        WorkflowStatus.PENDING_LOGISTICS,
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        ["logistics", "admin"],
+        requires_comment=True  # Must explain what was fixed
+    ),
 
     # From PENDING_CUSTOMS
     StatusTransition(
@@ -235,6 +249,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         WorkflowStatus.CANCELLED,
         ["sales", "admin"],
         requires_comment=True
+    ),
+    # Return to quote control after revision (Feature: multi-department return)
+    StatusTransition(
+        WorkflowStatus.PENDING_CUSTOMS,
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        ["customs", "admin"],
+        requires_comment=True  # Must explain what was fixed
     ),
 
     # From PENDING_SALES_REVIEW
@@ -272,7 +293,26 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     ),
     StatusTransition(
         WorkflowStatus.PENDING_QUOTE_CONTROL,
-        WorkflowStatus.PENDING_SALES_REVIEW,  # Return for revision
+        WorkflowStatus.PENDING_SALES_REVIEW,  # Return for revision to sales
+        ["quote_controller", "admin"],
+        requires_comment=True  # Must explain what needs to be fixed
+    ),
+    # Return for revision to other departments (Feature: multi-department return)
+    StatusTransition(
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        WorkflowStatus.PENDING_PROCUREMENT,  # Return for revision to procurement
+        ["quote_controller", "admin"],
+        requires_comment=True  # Must explain what needs to be fixed
+    ),
+    StatusTransition(
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        WorkflowStatus.PENDING_LOGISTICS,  # Return for revision to logistics
+        ["quote_controller", "admin"],
+        requires_comment=True  # Must explain what needs to be fixed
+    ),
+    StatusTransition(
+        WorkflowStatus.PENDING_QUOTE_CONTROL,
+        WorkflowStatus.PENDING_CUSTOMS,  # Return for revision to customs
         ["quote_controller", "admin"],
         requires_comment=True  # Must explain what needs to be fixed
     ),

@@ -5197,6 +5197,11 @@ def get(quote_id: str, session):
 
     workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
 
+    # Check for revision status (returned from quote control)
+    revision_department = quote.get("revision_department")
+    revision_comment = quote.get("revision_comment")
+    is_revision = revision_department == "sales" and workflow_status == "pending_sales_review"
+
     # Get approval status for multi-department workflow (Bug #8 follow-up)
     approval_status = get_quote_approval_status(quote_id, user["org_id"]) or {}
 
@@ -5398,17 +5403,40 @@ def get(quote_id: str, session):
             cls="card", style="border-left: 4px solid #16a34a;"
         ) if workflow_status == "draft" and items else None,
 
-        # Workflow Actions (for pending_sales_review - submit for Quote Control)
+        # Revision banner for sales (Feature: multi-department return)
+        Div(
+            Div(
+                Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Span("Комментарий контроллёра КП:", style="font-weight: 500;"),
+                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
+                style="margin-bottom: 1rem;"
+            ) if revision_comment else None,
+            P("После внесения исправлений верните КП на проверку.", style="margin: 0; font-size: 0.875rem;"),
+            cls="card",
+            style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
+        ) if is_revision else None,
+
+        # Workflow Actions (for pending_sales_review - submit for Quote Control or return after revision)
         Div(
             H3("Workflow"),
+            # Normal flow: Submit for Quote Control
             Form(
                 Button(icon("file-text", size=16), " Submit for Quote Control", type="submit",
                        style="background: #ec4899; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
                 P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/submit-quote-control"
-            ),
-            cls="card", style="border-left: 4px solid #ec4899;"
+            ) if not is_revision else None,
+            # Revision flow: Return to Quote Control with comment
+            Div(
+                A("✓ Вернуть на проверку", href=f"/quotes/{quote_id}/return-to-control",
+                  role="button", style="background: #22c55e; border-color: #22c55e; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                P("Отправить КП контроллёру после исправлений.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+            ) if is_revision else None,
+            cls="card", style="border-left: 4px solid #ec4899;" if not is_revision else "border-left: 4px solid #22c55e;"
         ) if workflow_status == "pending_sales_review" else None,
 
         # Workflow Actions (for pending_approval - Top Manager approval)
@@ -5565,6 +5593,176 @@ def post(quote_id: str, session):
         return page_layout("Error",
             Div(f"Error submitting quote: {result.error_message}", cls="alert alert-error"),
             A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# SALES - RETURN TO QUOTE CONTROL AFTER REVISION (Feature: multi-department return)
+# ============================================================================
+
+@rt("/quotes/{quote_id}/return-to-control")
+def get(quote_id: str, session):
+    """
+    Form for sales to return a revised quote back to quote control.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["sales", "sales_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data
+    workflow_status = quote.get("workflow_status", "draft")
+    revision_comment = quote.get("revision_comment", "")
+    idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    if workflow_status != "pending_sales_review":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}»."),
+            A("← Назад", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    return page_layout(f"Вернуть на проверку - {idn_quote}",
+        Div(
+            A(f"← Назад к КП {idn_quote}", href=f"/quotes/{quote_id}", style="color: #3b82f6;"),
+            H1("✓ Вернуть КП на проверку"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+        Div(
+            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            P(revision_comment if revision_comment else "— нет комментария —",
+              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
+            style="margin-bottom: 1.5rem;"
+        ) if revision_comment else None,
+        Form(
+            Div(
+                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                P("Опишите, какие исправления были внесены:",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    placeholder="Исправлена наценка...\nОбновлены условия оплаты...\nИзменены данные клиента...",
+                    required=True,
+                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                Button("✓ Вернуть на проверку", type="submit",
+                       style="background: #22c55e; border-color: #22c55e;"),
+                A("Отмена", href=f"/quotes/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280;"),
+                style="display: flex; align-items: center;"
+            ),
+            action=f"/quotes/{quote_id}/return-to-control",
+            method="post",
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/quotes/{quote_id}/return-to-control")
+def post(quote_id: str, session, comment: str = ""):
+    """
+    Handle return to quote control from sales.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["sales", "sales_manager", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P("Необходимо указать комментарий об исправлениях."),
+            A("← Вернуться", href=f"/quotes/{quote_id}/return-to-control"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    current_status = quote_result.data[0].get("workflow_status", "draft")
+
+    if current_status != "pending_sales_review":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}»."),
+            A("← Назад", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    user_roles = get_user_roles_from_session(session)
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_QUOTE_CONTROL,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=f"Исправления от продаж: {comment.strip()}"
+    )
+
+    if result.success:
+        supabase.table("quotes").update({
+            "revision_department": None,
+            "revision_comment": None,
+            "revision_returned_at": None
+        }).eq("id", quote_id).execute()
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП возвращено на проверку"),
+            P("КП отправлено контроллёру КП для повторной проверки."),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось вернуть КП: {result.error_message}"),
+            A("← Назад", href=f"/quotes/{quote_id}/return-to-control"),
             session=session
         )
 
@@ -9134,6 +9332,11 @@ def get(quote_id: str, session):
     customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
     workflow_status = quote.get("workflow_status", "draft")
 
+    # Check for revision status (returned from quote control)
+    revision_department = quote.get("revision_department")
+    revision_comment = quote.get("revision_comment")
+    is_revision = revision_department == "procurement" and workflow_status == "pending_procurement"
+
     # Check if quote is in the right status for editing
     can_edit = workflow_status in ["pending_procurement", "draft"]
 
@@ -9309,6 +9512,22 @@ def get(quote_id: str, session):
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
 
+        # Revision banner - shown when returned from quote control (Feature: multi-department return)
+        Div(
+            Div(
+                Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Span("Комментарий контроллёра КП:", style="font-weight: 500;"),
+                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
+                style="margin-bottom: 1rem;"
+            ) if revision_comment else None,
+            P("После внесения исправлений верните КП на проверку.", style="margin: 0; font-size: 0.875rem;"),
+            cls="card",
+            style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
+        ) if is_revision else None,
+
         # Progress card with export button
         Div(
             Div(
@@ -9383,6 +9602,10 @@ def get(quote_id: str, session):
                 # Show a disabled "already complete" button when user's items are done
                 Button(icon("check", size=16), " Моя оценка завершена", disabled=True,
                        style="background: #6b7280; cursor: default;") if can_edit and my_items_complete else None,
+                # Return to quote control button (for revision workflow)
+                A("✓ Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control",
+                  role="button", style="background: #22c55e; border-color: #22c55e; margin-right: 1rem;"
+                ) if is_revision else None,
                 A("← К задачам", href="/tasks", role="button", cls="secondary",
                   style="margin-left: auto;"),
                 style="display: flex; align-items: center; margin-top: 1rem;"
@@ -9979,6 +10202,184 @@ async def post(quote_id: str, request: Request, session):
     return RedirectResponse(f"/procurement", status_code=303)
 
 
+# ============================================================================
+# PROCUREMENT - RETURN TO QUOTE CONTROL (Feature: multi-department return)
+# ============================================================================
+
+@rt("/procurement/{quote_id}/return-to-control")
+def get(quote_id: str, session):
+    """
+    Form for procurement to return a revised quote back to quote control.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            P("КП не существует или у вас нет доступа."),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data
+    workflow_status = quote.get("workflow_status", "draft")
+    revision_comment = quote.get("revision_comment", "")
+    idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    # Can only return from pending_procurement status
+    if workflow_status != "pending_procurement":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}»."),
+            A("← Назад", href=f"/procurement/{quote_id}"),
+            session=session
+        )
+
+    return page_layout(f"Вернуть на проверку - {idn_quote}",
+        Div(
+            A(f"← Назад к КП {idn_quote}", href=f"/procurement/{quote_id}", style="color: #3b82f6;"),
+            H1("✓ Вернуть КП на проверку"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+
+        # Show original revision comment
+        Div(
+            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            P(revision_comment if revision_comment else "— нет комментария —",
+              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
+            style="margin-bottom: 1.5rem;"
+        ) if revision_comment else None,
+
+        Form(
+            Div(
+                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                P("Опишите, какие исправления были внесены:",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    placeholder="Исправлена цена на позицию X...\nОбновлены данные поставщика...\nИзменены сроки производства...",
+                    required=True,
+                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                Button("✓ Вернуть на проверку", type="submit",
+                       style="background: #22c55e; border-color: #22c55e;"),
+                A("Отмена", href=f"/procurement/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280;"),
+                style="display: flex; align-items: center;"
+            ),
+            action=f"/procurement/{quote_id}/return-to-control",
+            method="post",
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/procurement/{quote_id}/return-to-control")
+def post(quote_id: str, session, comment: str = ""):
+    """
+    Handle return to quote control from procurement.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P("Необходимо указать комментарий об исправлениях."),
+            A("← Вернуться", href=f"/procurement/{quote_id}/return-to-control"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    # Verify quote exists
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    current_status = quote_result.data[0].get("workflow_status", "draft")
+
+    if current_status != "pending_procurement":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}»."),
+            A("← Назад", href=f"/procurement/{quote_id}"),
+            session=session
+        )
+
+    # Perform workflow transition
+    user_roles = get_user_roles_from_session(session)
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_QUOTE_CONTROL,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=f"Исправления от закупок: {comment.strip()}"
+    )
+
+    if result.success:
+        # Clear revision fields after returning
+        supabase.table("quotes").update({
+            "revision_department": None,
+            "revision_comment": None,
+            "revision_returned_at": None
+        }).eq("id", quote_id).execute()
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП возвращено на проверку"),
+            P("КП отправлено контроллёру КП для повторной проверки."),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось вернуть КП: {result.error_message}"),
+            A("← Назад", href=f"/procurement/{quote_id}/return-to-control"),
+            session=session
+        )
+
+
 @rt("/procurement/{quote_id}/export")
 def get(quote_id: str, session):
     """
@@ -10120,6 +10521,11 @@ def get(session, quote_id: str):
     workflow_status = quote.get("workflow_status", "draft")
     customer_name = quote.get("customers", {}).get("name", "Unknown")
     currency = quote.get("currency", "RUB")
+
+    # Check for revision status (returned from quote control)
+    revision_department = quote.get("revision_department")
+    revision_comment = quote.get("revision_comment")
+    is_revision = revision_department == "logistics" and workflow_status == "pending_logistics"
 
     # Check if logistics is editable
     editable_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "draft", "pending_procurement"]
@@ -10513,6 +10919,26 @@ def get(session, quote_id: str):
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
 
+        # Revision banner - shown when returned from quote control (Feature: multi-department return)
+        Div(
+            Div(
+                Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Span("Комментарий контроллёра КП:", style="font-weight: 500;"),
+                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
+                style="margin-bottom: 1rem;"
+            ) if revision_comment else None,
+            Div(
+                P("После внесения исправлений верните КП на проверку.", style="margin: 0 0 0.75rem; font-size: 0.875rem;"),
+                A("✓ Вернуть на проверку", href=f"/logistics/{quote_id}/return-to-control",
+                  role="button", style="background: #22c55e; border-color: #22c55e;"),
+            ),
+            cls="card",
+            style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
+        ) if is_revision else None,
+
         # Status banners
         success_banner,
         status_banner,
@@ -10720,6 +11146,176 @@ async def post(session, quote_id: str, request):
 
 
 # ============================================================================
+# LOGISTICS - RETURN TO QUOTE CONTROL (Feature: multi-department return)
+# ============================================================================
+
+@rt("/logistics/{quote_id}/return-to-control")
+def get(quote_id: str, session):
+    """
+    Form for logistics to return a revised quote back to quote control.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data
+    workflow_status = quote.get("workflow_status", "draft")
+    revision_comment = quote.get("revision_comment", "")
+    idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    if workflow_status != "pending_logistics":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}»."),
+            A("← Назад", href=f"/logistics/{quote_id}"),
+            session=session
+        )
+
+    return page_layout(f"Вернуть на проверку - {idn_quote}",
+        Div(
+            A(f"← Назад к КП {idn_quote}", href=f"/logistics/{quote_id}", style="color: #3b82f6;"),
+            H1("✓ Вернуть КП на проверку"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+        Div(
+            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            P(revision_comment if revision_comment else "— нет комментария —",
+              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
+            style="margin-bottom: 1.5rem;"
+        ) if revision_comment else None,
+        Form(
+            Div(
+                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                P("Опишите, какие исправления были внесены:",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    placeholder="Исправлены расчёты доставки...\nИзменены маршруты...\nОбновлены сроки...",
+                    required=True,
+                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                Button("✓ Вернуть на проверку", type="submit",
+                       style="background: #22c55e; border-color: #22c55e;"),
+                A("Отмена", href=f"/logistics/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280;"),
+                style="display: flex; align-items: center;"
+            ),
+            action=f"/logistics/{quote_id}/return-to-control",
+            method="post",
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/logistics/{quote_id}/return-to-control")
+def post(quote_id: str, session, comment: str = ""):
+    """
+    Handle return to quote control from logistics.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["logistics", "admin", "head_of_logistics"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P("Необходимо указать комментарий об исправлениях."),
+            A("← Вернуться", href=f"/logistics/{quote_id}/return-to-control"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    current_status = quote_result.data[0].get("workflow_status", "draft")
+
+    if current_status != "pending_logistics":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}»."),
+            A("← Назад", href=f"/logistics/{quote_id}"),
+            session=session
+        )
+
+    user_roles = get_user_roles_from_session(session)
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_QUOTE_CONTROL,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=f"Исправления от логистики: {comment.strip()}"
+    )
+
+    if result.success:
+        supabase.table("quotes").update({
+            "revision_department": None,
+            "revision_comment": None,
+            "revision_returned_at": None
+        }).eq("id", quote_id).execute()
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП возвращено на проверку"),
+            P("КП отправлено контроллёру КП для повторной проверки."),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось вернуть КП: {result.error_message}"),
+            A("← Назад", href=f"/logistics/{quote_id}/return-to-control"),
+            session=session
+        )
+
+
+# ============================================================================
 # CUSTOMS WORKSPACE (Feature #42)
 # ============================================================================
 
@@ -10784,6 +11380,11 @@ def get(session, quote_id: str):
     workflow_status = quote.get("workflow_status", "draft")
     customer_name = quote.get("customers", {}).get("name", "Unknown")
     currency = quote.get("currency", "RUB")
+
+    # Check for revision status (returned from quote control)
+    revision_department = quote.get("revision_department")
+    revision_comment = quote.get("revision_comment")
+    is_revision = revision_department == "customs" and workflow_status == "pending_customs"
 
     # Fetch quote items with v3.0 customs and supply chain fields (extra costs at quote level)
     items_result = supabase.table("quote_items") \
@@ -11202,6 +11803,26 @@ def get(session, quote_id: str):
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
 
+        # Revision banner - shown when returned from quote control (Feature: multi-department return)
+        Div(
+            Div(
+                Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Span("Комментарий контроллёра КП:", style="font-weight: 500;"),
+                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
+                style="margin-bottom: 1rem;"
+            ) if revision_comment else None,
+            Div(
+                P("После внесения исправлений верните КП на проверку.", style="margin: 0 0 0.75rem; font-size: 0.875rem;"),
+                A("✓ Вернуть на проверку", href=f"/customs/{quote_id}/return-to-control",
+                  role="button", style="background: #22c55e; border-color: #22c55e;"),
+            ),
+            cls="card",
+            style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
+        ) if is_revision else None,
+
         # Status banners
         success_banner,
         status_banner,
@@ -11419,6 +12040,176 @@ async def post(session, quote_id: str, request):
             print(f"Error completing customs: {result.error_message}")
 
     return RedirectResponse(f"/customs/{quote_id}", status_code=303)
+
+
+# ============================================================================
+# CUSTOMS - RETURN TO QUOTE CONTROL (Feature: multi-department return)
+# ============================================================================
+
+@rt("/customs/{quote_id}/return-to-control")
+def get(quote_id: str, session):
+    """
+    Form for customs to return a revised quote back to quote control.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    quote = quote_result.data
+    workflow_status = quote.get("workflow_status", "draft")
+    revision_comment = quote.get("revision_comment", "")
+    idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
+    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+
+    if workflow_status != "pending_customs":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}»."),
+            A("← Назад", href=f"/customs/{quote_id}"),
+            session=session
+        )
+
+    return page_layout(f"Вернуть на проверку - {idn_quote}",
+        Div(
+            A(f"← Назад к КП {idn_quote}", href=f"/customs/{quote_id}", style="color: #3b82f6;"),
+            H1("✓ Вернуть КП на проверку"),
+            P(f"Клиент: {customer_name}", style="color: #666;"),
+            style="margin-bottom: 1rem;"
+        ),
+        Div(
+            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            P(revision_comment if revision_comment else "— нет комментария —",
+              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
+            style="margin-bottom: 1.5rem;"
+        ) if revision_comment else None,
+        Form(
+            Div(
+                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                P("Опишите, какие исправления были внесены:",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                Textarea(
+                    name="comment",
+                    placeholder="Исправлены HS-коды...\nОбновлены пошлины...\nИзменены таможенные расходы...",
+                    required=True,
+                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                ),
+                style="margin-bottom: 1rem;"
+            ),
+            Div(
+                Button("✓ Вернуть на проверку", type="submit",
+                       style="background: #22c55e; border-color: #22c55e;"),
+                A("Отмена", href=f"/customs/{quote_id}",
+                  style="margin-left: 1rem; color: #6b7280;"),
+                style="display: flex; align-items: center;"
+            ),
+            action=f"/customs/{quote_id}/return-to-control",
+            method="post",
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/customs/{quote_id}/return-to-control")
+def post(quote_id: str, session, comment: str = ""):
+    """
+    Handle return to quote control from customs.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    if not comment or not comment.strip():
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P("Необходимо указать комментарий об исправлениях."),
+            A("← Вернуться", href=f"/customs/{quote_id}/return-to-control"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    quote_result = supabase.table("quotes") \
+        .select("workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            A("← К задачам", href="/tasks"),
+            session=session
+        )
+
+    current_status = quote_result.data[0].get("workflow_status", "draft")
+
+    if current_status != "pending_customs":
+        return page_layout("Возврат невозможен",
+            H1("Возврат невозможен"),
+            P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}»."),
+            A("← Назад", href=f"/customs/{quote_id}"),
+            session=session
+        )
+
+    user_roles = get_user_roles_from_session(session)
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=WorkflowStatus.PENDING_QUOTE_CONTROL,
+        actor_id=user_id,
+        actor_roles=user_roles,
+        comment=f"Исправления от таможни: {comment.strip()}"
+    )
+
+    if result.success:
+        supabase.table("quotes").update({
+            "revision_department": None,
+            "revision_comment": None,
+            "revision_returned_at": None
+        }).eq("id", quote_id).execute()
+
+        return page_layout("Успешно",
+            H1(icon("check", size=28), " КП возвращено на проверку"),
+            P("КП отправлено контроллёру КП для повторной проверки."),
+            A("← К задачам", href="/tasks", role="button"),
+            session=session
+        )
+    else:
+        return page_layout("Ошибка",
+            H1("Ошибка"),
+            P(f"Не удалось вернуть КП: {result.error_message}"),
+            A("← Назад", href=f"/customs/{quote_id}/return-to-control"),
+            session=session
+        )
 
 
 # ============================================================================
@@ -12556,6 +13347,14 @@ def get(session, quote_id: str):
     customer_name = quote.get("customers", {}).get("name", "—")
     idn_quote = quote.get("idn_quote", "")
 
+    # Department options for return
+    department_options = [
+        ("sales", "💼 Менеджер по продажам", "Вернуть для исправления данных о клиенте, наценке, условиях"),
+        ("procurement", "📦 Закупки", "Вернуть для исправления цен, поставщиков, сроков производства"),
+        ("logistics", "🚚 Логистика", "Вернуть для исправления расчёта доставки, маршрутов"),
+        ("customs", "📋 Таможня", "Вернуть для исправления таможенных расчётов, HS-кодов"),
+    ]
+
     return page_layout(f"Возврат на доработку - {idn_quote}",
         # Header
         Div(
@@ -12565,17 +13364,40 @@ def get(session, quote_id: str):
             style="margin-bottom: 1rem;"
         ),
 
-        # Info banner
-        Div(
-            "Внимание: КП будет возвращено менеджеру по продажам для внесения исправлений.",
-            style="background: #fef3c7; color: #92400e; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
-        ),
-
         # Form
         Form(
+            # Department selection
+            Div(
+                H3("Кому вернуть?", style="margin-bottom: 0.75rem;"),
+                P("Выберите отдел, который должен внести исправления:",
+                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                *[
+                    Div(
+                        Label(
+                            Input(
+                                type="radio",
+                                name="department",
+                                value=dept_code,
+                                required=True,
+                                checked=(dept_code == "sales"),
+                                style="margin-right: 0.5rem;"
+                            ),
+                            Span(dept_label, style="font-weight: 500;"),
+                            Br(),
+                            Span(dept_desc, style="color: #666; font-size: 0.875rem; margin-left: 1.5rem;"),
+                            style="cursor: pointer; display: block;"
+                        ),
+                        style="padding: 0.75rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 0.5rem; background: white;"
+                    )
+                    for dept_code, dept_label, dept_desc in department_options
+                ],
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Comment section
             Div(
                 H3("Причина возврата", style="margin-bottom: 0.5rem;"),
-                P("Укажите, что необходимо исправить в КП. Это сообщение увидит менеджер по продажам.",
+                P("Укажите, что необходимо исправить в КП:",
                   style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
                 Textarea(
                     name="comment",
@@ -12585,6 +13407,12 @@ def get(session, quote_id: str):
                     style="width: 100%; min-height: 150px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
                 ),
                 style="margin-bottom: 1rem;"
+            ),
+
+            # Info banner
+            Div(
+                "⚠️ После исправлений выбранный отдел вернёт КП обратно на проверку.",
+                style="background: #fef3c7; color: #92400e; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
             ),
 
             # Action buttons
@@ -12609,12 +13437,13 @@ def get(session, quote_id: str):
 
 
 @rt("/quote-control/{quote_id}/return")
-def post(session, quote_id: str, comment: str = ""):
+def post(session, quote_id: str, comment: str = "", department: str = "sales"):
     """
     Handle the return for revision form submission.
-    Transitions the quote from PENDING_QUOTE_CONTROL to PENDING_SALES_REVIEW.
+    Transitions the quote from PENDING_QUOTE_CONTROL to the selected department's status.
 
     Feature #49: Форма возврата на доработку - POST handler
+    Feature: Multi-department return - can return to sales/procurement/logistics/customs
     """
     redirect = require_login(session)
     if redirect:
@@ -12630,6 +13459,33 @@ def post(session, quote_id: str, comment: str = ""):
 
     # Get user's role codes for the transition
     user_roles = get_user_roles_from_session(session)
+
+    # Map department to target status
+    department_status_map = {
+        "sales": WorkflowStatus.PENDING_SALES_REVIEW,
+        "procurement": WorkflowStatus.PENDING_PROCUREMENT,
+        "logistics": WorkflowStatus.PENDING_LOGISTICS,
+        "customs": WorkflowStatus.PENDING_CUSTOMS,
+    }
+
+    department_names = {
+        "sales": "менеджеру по продажам",
+        "procurement": "в отдел закупок",
+        "logistics": "в отдел логистики",
+        "customs": "в таможенный отдел",
+    }
+
+    # Validate department
+    if department not in department_status_map:
+        return page_layout("Ошибка",
+            H1("Ошибка возврата"),
+            P("Выбран некорректный отдел для возврата."),
+            A("← Вернуться к форме", href=f"/quote-control/{quote_id}/return"),
+            session=session
+        )
+
+    target_status = department_status_map[department]
+    department_name = department_names[department]
 
     # Validate comment is provided
     if not comment or not comment.strip():
@@ -12671,13 +13527,24 @@ def post(session, quote_id: str, comment: str = ""):
     # Perform the workflow transition
     result = transition_quote_status(
         quote_id=quote_id,
-        to_status=WorkflowStatus.PENDING_SALES_REVIEW,
+        to_status=target_status,
         actor_id=user_id,
         actor_roles=user_roles,
         comment=comment.strip()
     )
 
     if result.success:
+        # Save revision tracking info to quote
+        from datetime import datetime, timezone
+        try:
+            supabase.table("quotes").update({
+                "revision_department": department,
+                "revision_comment": comment.strip(),
+                "revision_returned_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", quote_id).execute()
+        except Exception as e:
+            print(f"Warning: Failed to save revision info for quote {quote_id}: {e}")
+
         # Feature #63: Send notification to quote creator about the return
         # Import asyncio locally if not already imported at module level
         import asyncio
@@ -12696,7 +13563,7 @@ def post(session, quote_id: str, comment: str = ""):
         # Redirect to quote control list with success message
         return page_layout("Успешно",
             H1(icon("check", size=28), " КП возвращено на доработку", cls="page-header"),
-            P(f"КП было успешно возвращено менеджеру по продажам."),
+            P(f"КП было успешно возвращено {department_name}."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
             A("← К задачам", href="/tasks", role="button"),
             session=session
