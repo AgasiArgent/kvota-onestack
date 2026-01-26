@@ -11364,7 +11364,7 @@ async def post(session, quote_id: str, request):
 
         if not result.success:
             # Log error but still redirect
-            print(f"Error completing customs: {result.error}")
+            print(f"Error completing customs: {result.error_message}")
 
     return RedirectResponse(f"/customs/{quote_id}", status_code=303)
 
