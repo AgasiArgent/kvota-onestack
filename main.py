@@ -10112,9 +10112,13 @@ def get(session, quote_id: str):
         invoices_with_items.append(invoice_data)
 
     # Calculate summary stats from invoices
+    # Import currency conversion for multi-currency logistics
+    from services.currency_service import convert_amount
+    from decimal import Decimal
+
     total_invoices = len(invoices)
     invoices_with_logistics = 0
-    total_logistics_cost = 0
+    total_logistics_cost = Decimal(0)  # Will be in quote currency
     total_weight = 0
     total_volume = 0
     total_items = 0
@@ -10126,10 +10130,20 @@ def get(session, quote_id: str):
         total_volume += float(inv.get("total_volume_m3") or 0)
 
         # Count logistics completion per invoice
-        s2h = float(inv.get("logistics_supplier_to_hub") or 0)
-        h2c = float(inv.get("logistics_hub_to_customs") or 0)
-        c2c = float(inv.get("logistics_customs_to_customer") or 0)
-        inv_total = s2h + h2c + c2c
+        # Each segment may be in different currency - convert to quote currency before summing
+        s2h = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
+        s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
+        h2c = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
+        h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
+        c2c = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
+        c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
+
+        # Convert each segment to quote currency
+        s2h_converted = convert_amount(s2h, s2h_currency, currency) if s2h > 0 else Decimal(0)
+        h2c_converted = convert_amount(h2c, h2c_currency, currency) if h2c > 0 else Decimal(0)
+        c2c_converted = convert_amount(c2c, c2c_currency, currency) if c2c > 0 else Decimal(0)
+
+        inv_total = s2h_converted + h2c_converted + c2c_converted
         if inv_total > 0 or inv.get("logistics_total_days"):
             invoices_with_logistics += 1
         total_logistics_cost += inv_total
@@ -10138,6 +10152,9 @@ def get(session, quote_id: str):
         for item in inv["items"]:
             if item.get("supplier_country"):
                 unique_countries.add(item["supplier_country"])
+
+    # Convert total to float for display
+    total_logistics_cost = float(total_logistics_cost)
 
     # Build invoice form cards for v4.0 invoice-level logistics
     def logistics_invoice_card(invoice, idx):
@@ -10256,7 +10273,8 @@ def get(session, quote_id: str):
                                 Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
                                 name=f"logistics_supplier_to_hub_currency_{invoice_id}",
                                 disabled=not is_editable,
-                                style="width: 70px; flex-shrink: 0;"
+                                title="Валюта",
+                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
                             ),
                             style="display: flex; gap: 0.25rem;"
                         ),
@@ -10283,7 +10301,8 @@ def get(session, quote_id: str):
                                 Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
                                 name=f"logistics_hub_to_customs_currency_{invoice_id}",
                                 disabled=not is_editable,
-                                style="width: 70px; flex-shrink: 0;"
+                                title="Валюта",
+                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
                             ),
                             style="display: flex; gap: 0.25rem;"
                         ),
@@ -10310,7 +10329,8 @@ def get(session, quote_id: str):
                                 Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
                                 name=f"logistics_customs_to_customer_currency_{invoice_id}",
                                 disabled=not is_editable,
-                                style="width: 70px; flex-shrink: 0;"
+                                title="Валюта",
+                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
                             ),
                             style="display: flex; gap: 0.25rem;"
                         ),
