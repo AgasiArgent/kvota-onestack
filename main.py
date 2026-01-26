@@ -11818,7 +11818,7 @@ def get(session, quote_id: str, preset: str = None):
     checklist_items.append(checklist_item(
         "7. Корректность логистики",
         "Стоимость должна быть рассчитана, не 'из головы'",
-        f"1-я нога (до таможни): {format_money(logistics_first_leg)} | 2-я нога (от таможни): {format_money(logistics_last_leg)}",
+        f"Участок 1 (до таможни): {format_money(logistics_first_leg)} | Участок 2 (до клиента): {format_money(logistics_last_leg)}",
         logistics_status,
         f"Итого логистика: {format_money(total_logistics)}"
     ))
