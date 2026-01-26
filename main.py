@@ -256,6 +256,123 @@ h3 {
     color: var(--text-primary);
 }
 
+/* ========== Unified Header System ========== */
+/*
+ * 3-level hierarchy:
+ * 1. .page-header (H1) - Page title with icon
+ * 2. .section-header (H2) - Section on page
+ * 3. .card-header (H3) - Card/form header
+ */
+
+/* Page Header - Main page title */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--border-color-light);
+}
+
+.page-header svg {
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+/* Section Header - Major section on page */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 2rem 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.section-header svg {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+/* Card Header - Inside cards/forms */
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.card-header svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+/* Card Header with accent color (for dashboard task cards) */
+.card-header--accent {
+    font-size: 1.125rem;
+    font-weight: 600;
+    padding: 0;
+    margin-bottom: 1rem;
+    border-bottom: none;
+}
+
+.card-header--accent svg {
+    width: 24px;
+    height: 24px;
+}
+
+/* Accent color variants */
+.card-header--orange { color: #b45309; }
+.card-header--orange svg { color: #b45309; }
+
+.card-header--amber { color: #92400e; }
+.card-header--amber svg { color: #92400e; }
+
+.card-header--blue { color: #1e40af; }
+.card-header--blue svg { color: #1e40af; }
+
+.card-header--purple { color: #6b21a8; }
+.card-header--purple svg { color: #6b21a8; }
+
+.card-header--pink { color: #9d174d; }
+.card-header--pink svg { color: #9d174d; }
+
+.card-header--indigo { color: #4338ca; }
+.card-header--indigo svg { color: #4338ca; }
+
+.card-header--green { color: #059669; }
+.card-header--green svg { color: #059669; }
+
+.card-header--red { color: #9a3412; }
+.card-header--red svg { color: #9a3412; }
+
+/* Subsection header - smaller, no border */
+.subsection-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 1.5rem 0 0.75rem 0;
+}
+
+.subsection-header svg {
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
 /* ========== Navigation Bar ========== */
 nav {
     background: var(--bg-sidebar);
@@ -2580,7 +2697,7 @@ def get(session):
     """Page shown when user doesn't have required role"""
     return page_layout("Access Denied",
         Div(
-            H1(icon("shield-x", size=28), " Access Denied", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("shield-x", size=28), " Access Denied", cls="page-header"),
             P("You don't have permission to access this page."),
             P("Contact your administrator if you believe this is an error."),
             Div(
@@ -2738,7 +2855,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("clock", size=22), f" Ожидают согласования ({pending_count})", style="color: #b45309; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("clock", size=24), f" Ожидают согласования ({pending_count})", cls="card-header card-header--accent card-header--orange"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Запрошено"), Th("Действие"))),
                         Tbody(*approval_rows) if approval_rows else Tbody(Tr(Td("Нет ожидающих", colspan="5", style="text-align: center;")))
@@ -2776,7 +2893,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("package", size=22), f" Закупки: ожидают оценки ({proc_count})", style="color: #92400e; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("package", size=24), f" Закупки: ожидают оценки ({proc_count})", cls="card-header card-header--accent card-header--amber"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
                         Tbody(*proc_rows)
@@ -2813,7 +2930,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("truck", size=22), f" Логистика: ожидают данных ({log_count})", style="color: #1e40af; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("truck", size=24), f" Логистика: ожидают данных ({log_count})", cls="card-header card-header--accent card-header--blue"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
                         Tbody(*log_rows)
@@ -2850,7 +2967,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("shield-check", size=22), f" Таможня: ожидают данных ({cust_count})", style="color: #6b21a8; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("shield-check", size=24), f" Таможня: ожидают данных ({cust_count})", cls="card-header card-header--accent card-header--purple"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
                         Tbody(*cust_rows)
@@ -2887,7 +3004,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("check-circle", size=22), f" Контроль КП: на проверке ({qc_count})", style="color: #9d174d; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("check-circle", size=24), f" Контроль КП: на проверке ({qc_count})", cls="card-header card-header--accent card-header--pink"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
                         Tbody(*qc_rows)
@@ -2917,7 +3034,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         if total_spec_work > 0:
             sections.append(
                 Div(
-                    H2(icon("file-text", size=22), f" Спецификации: требуют внимания ({total_spec_work})", style="color: #4338ca; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("file-text", size=24), f" Спецификации: требуют внимания ({total_spec_work})", cls="card-header card-header--accent card-header--indigo"),
                     Div(
                         Div(
                             Div(str(pending_spec_quotes), cls="stat-value", style="font-size: 1.5rem; color: #4338ca;"),
@@ -2964,7 +3081,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("wallet", size=22), f" Финансы: активные сделки ({active_deals})", style="color: #059669; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("wallet", size=24), f" Финансы: активные сделки ({active_deals})", cls="card-header card-header--accent card-header--green"),
                     Table(
                         Thead(Tr(Th("Сделка #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
                         Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="4", style="text-align: center;")))
@@ -3001,7 +3118,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("edit-3", size=22), f" Продажи: ожидают вашего решения ({sales_count})", style="color: #9a3412; display: flex; align-items: center; gap: 0.5rem;"),
+                    H2(icon("edit-3", size=24), f" Продажи: ожидают вашего решения ({sales_count})", cls="card-header card-header--accent card-header--red"),
                     Table(
                         Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
                         Tbody(*sales_rows)
@@ -3101,7 +3218,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         ),
 
         # Role-specific task sections
-        H2(icon("list-todo", size=22), " Задачи по отделам", style="margin-top: 1.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;") if task_sections else "",
+        H2(icon("list-todo", size=22), " Задачи по отделам", cls="section-header") if task_sections else "",
         *task_sections,
 
         # If no tasks, show helpful message
@@ -3111,7 +3228,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         ) if not task_sections else "",
 
         # Recent quotes
-        H2(icon("file-text", size=22), " Последние КП", style="margin-top: 1.5rem; display: flex; align-items: center; gap: 0.5rem;"),
+        H2(icon("file-text", size=22), " Последние КП", cls="section-header"),
         Table(
             Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Действия"))),
             Tbody(
@@ -3276,7 +3393,7 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
     return [
         # Header
         Div(
-            H1(icon("shopping-cart", size=28), " Закупки", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("shopping-cart", size=28), " Закупки", cls="page-header"),
             P("Рабочая зона менеджера по закупкам"),
             style="margin-bottom: 1rem;"
         ),
@@ -3498,7 +3615,7 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
 
     return [
         Div(
-            H1(icon("truck", size=28), " Логистика", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("truck", size=28), " Логистика", cls="page-header"),
             P("Рабочая зона логиста"),
             style="margin-bottom: 1rem;"
         ),
@@ -3702,7 +3819,7 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
 
     return [
         Div(
-            H1(icon("shield-check", size=28), " Таможня", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("shield-check", size=28), " Таможня", cls="page-header"),
             P("Рабочая зона таможенного отдела"),
             style="margin-bottom: 1rem;"
         ),
@@ -3900,7 +4017,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
 
     return [
         Div(
-            H1(icon("check-circle", size=28), " Контроль КП", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check-circle", size=28), " Контроль КП", cls="page-header"),
             P("Рабочая зона контроллера КП"),
             style="margin-bottom: 1rem;"
         ),
@@ -4126,7 +4243,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
         )
 
     return [
-        H1(icon("files", size=28), " Контроль спецификаций", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("files", size=28), " Контроль спецификаций", cls="page-header"),
 
         Div(
             Div(
@@ -4294,7 +4411,7 @@ def _dashboard_finance_content(user_id: str, org_id: str, supabase) -> list:
     # For finance, we show a simple redirect message or embed the finance content
     # For now, return a link to the full finance page
     return [
-        H1(icon("wallet", size=28), " Финансы", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("wallet", size=28), " Финансы", cls="page-header"),
         P("Финансовый раздел имеет собственные табы для детальной работы."),
         Div(
             A("Открыть полный раздел Финансы →", href="/finance", role="button"),
@@ -4433,7 +4550,7 @@ def get(session):
     content = [
         # Header
         Div(
-            H1(icon("inbox", size=28), " Мои задачи", style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("inbox", size=28), " Мои задачи", cls="page-header"),
             P(
                 Strong("Ваши роли: "), *role_badges,
                 style="color: #6b7280; margin-bottom: 1rem;"
@@ -4606,7 +4723,7 @@ def get(session):
         return labels.get(status, status.capitalize() if status else "—")
 
     return page_layout("Quotes",
-        H1(icon("file-text", size=28), " Коммерческие предложения", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("file-text", size=28), " Коммерческие предложения", cls="page-header"),
 
         # Unified table container
         Div(
@@ -5296,7 +5413,7 @@ def get(quote_id: str, session):
 
         # Workflow Actions (for pending_approval - Top Manager approval)
         Div(
-            H3(icon("clock", size=20), " Согласование", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("clock", size=20), " Согласование", cls="card-header"),
             P("Этот КП требует вашего одобрения.", style="margin-bottom: 1rem;"),
             Form(
                 Div(
@@ -7725,7 +7842,7 @@ def get(session):
 
         # Telegram settings link
         Div(
-            H3(icon("message-circle", size=20), " Telegram", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("message-circle", size=20), " Telegram", cls="card-header"),
             P("Привяжите Telegram для получения уведомлений о задачах и согласованиях.",
               style="color: #666; margin-bottom: 1rem;"),
             A("Настройки Telegram →", href="/settings/telegram",
@@ -8561,7 +8678,7 @@ def get(session):
     users = get_organization_users(org_id)
 
     return page_layout("Мой профиль",
-        H1(icon("user", size=28), " Мой профиль", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("user", size=28), " Мой профиль", cls="page-header"),
         Form(
             Div(H3("Личная информация"),
                 Div(Label("ФИО *", Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True)),
@@ -8696,7 +8813,7 @@ def get(session, user_id: str):
     users = get_organization_users(user["org_id"])
 
     return page_layout(f"Профиль пользователя",
-        H1(icon("user", size=28), f" Профиль: {profile.get('full_name') or 'Пользователь'}", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("user", size=28), f" Профиль: {profile.get('full_name') or 'Пользователь'}", cls="page-header"),
         Div(Span("👨‍💼 Режим администратора", style="font-weight: 600; color: #ef4444;"),
             Span(" — вы можете редактировать этот профиль", style="color: #666; font-size: 0.875rem;"),
             cls="alert alert-info", style="background: #fef3c7; border-color: #fbbf24;"),
@@ -10282,7 +10399,7 @@ def get(session, quote_id: str):
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
                 workflow_status_badge(workflow_status),
-                style="display: flex; align-items: center; gap: 0.5rem;"
+                cls="page-header"
             ),
             style="margin-bottom: 1rem;"
         ),
@@ -10296,7 +10413,7 @@ def get(session, quote_id: str):
 
         # Quote summary with v4.0 invoice-based stats
         Div(
-            H3(icon("file-text", size=20), " Сводка по КП", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("file-text", size=20), " Сводка по КП", cls="card-header"),
             Div(
                 Div(
                     Div(str(total_invoices), cls="stat-value"),
@@ -10898,7 +11015,7 @@ def get(session, quote_id: str):
 
     # Quote-level notes section
     quote_level_section = Div(
-        H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H3(icon("message-square", size=20), " Примечания", cls="card-header"),
         Div(
             Label("Примечания таможенника",
                 Textarea(
@@ -10967,11 +11084,11 @@ def get(session, quote_id: str):
 
         # Header
         Div(
-            H1(icon("shield-check", size=28), f" Таможня: {quote.get('idn_quote', '')}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("shield-check", size=28), f" Таможня: {quote.get('idn_quote', '')}", cls="page-header"),
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
                 workflow_status_badge(workflow_status),
-                style="display: flex; align-items: center; gap: 0.5rem;"
+                cls="page-header"
             ),
             style="margin-bottom: 1rem;"
         ),
@@ -10985,7 +11102,7 @@ def get(session, quote_id: str):
 
         # Quote summary with customs stats (v3.0)
         Div(
-            H3(icon("file-text", size=20), " Сводка по КП", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("file-text", size=20), " Сводка по КП", cls="card-header"),
             Div(
                 Div(
                     Div(str(total_items), cls="stat-value"),
@@ -11024,7 +11141,7 @@ def get(session, quote_id: str):
 
         # Instructions
         Div(
-            H3(icon("info", size=20), " Инструкция", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("info", size=20), " Инструкция", cls="card-header"),
             P("Для каждой позиции укажите код ТН ВЭД и процент пошлины. Пошлина рассчитывается от закупочной стоимости.", style="margin-bottom: 0;"),
             cls="card",
             style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
@@ -11558,11 +11675,25 @@ def get(session, quote_id: str, preset: str = None):
     payment_terms = calc_vars.get("client_payment_terms", "")
     prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
 
-    # Logistics costs
-    logistics_supplier_hub = float(calc_vars.get("logistics_supplier_hub", 0) or 0)
-    logistics_hub_customs = float(calc_vars.get("logistics_hub_customs", 0) or 0)
-    logistics_customs_client = float(calc_vars.get("logistics_customs_client", 0) or 0)
-    total_logistics = logistics_supplier_hub + logistics_hub_customs + logistics_customs_client
+    # Logistics costs - get from calculation results, not input variables
+    # calc_summary has the aggregated total, phase_results has per-item breakdown
+    total_logistics = float(calc_summary.get("calc_v16_total_logistics", 0) or 0)
+
+    # Calculate leg breakdown from phase_results (T16 = first leg, U16 = last leg)
+    # Note: V16 = T16 + U16 (total logistics per item)
+    logistics_first_leg = sum(
+        float(item.get("phase_results", {}).get("T16", 0) or 0)
+        for item in calc_items_data
+    )
+    logistics_last_leg = sum(
+        float(item.get("phase_results", {}).get("U16", 0) or 0)
+        for item in calc_items_data
+    )
+    # For display: first leg = supplier to hub + hub to customs, last leg = customs to client
+    # Simplified display as two legs since that's what calculation engine provides
+    logistics_supplier_hub = logistics_first_leg
+    logistics_hub_customs = 0  # Combined into first_leg in calculation
+    logistics_customs_client = logistics_last_leg
 
     # Min markup thresholds (these would typically come from settings)
     min_markup_supply = 12  # %
@@ -11687,7 +11818,7 @@ def get(session, quote_id: str, preset: str = None):
     checklist_items.append(checklist_item(
         "7. Корректность логистики",
         "Стоимость должна быть рассчитана, не 'из головы'",
-        f"Поставщик→Хаб: {format_money(logistics_supplier_hub)} | Хаб→Таможня: {format_money(logistics_hub_customs)} | Таможня→Клиент: {format_money(logistics_customs_client)}",
+        f"1-я нога (до таможни): {format_money(logistics_first_leg)} | 2-я нога (от таможни): {format_money(logistics_last_leg)}",
         logistics_status,
         f"Итого логистика: {format_money(total_logistics)}"
     ))
@@ -11804,7 +11935,7 @@ def get(session, quote_id: str, preset: str = None):
 
         # Header
         Div(
-            H1(icon("file-text", size=28), f" Проверка КП {quote.get('idn_quote', '')}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("file-text", size=28), f" Проверка КП {quote.get('idn_quote', '')}", cls="page-header"),
             P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #666;"),
             style="margin-bottom: 1rem;"
         ),
@@ -11850,7 +11981,7 @@ def get(session, quote_id: str, preset: str = None):
 
         # Checklist
         Div(
-            H3(icon("check-square", size=20), " Чек-лист проверки", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("check-square", size=20), " Чек-лист проверки", cls="card-header"),
             P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #666; margin-bottom: 1rem;"),
             *checklist_items,
             cls="card"
@@ -11858,7 +11989,7 @@ def get(session, quote_id: str, preset: str = None):
 
         # Detailed Calculation Results Table with Preset Selector
         Div(
-            H3(icon("calculator", size=20), " Детали расчёта по позициям", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("calculator", size=20), " Детали расчёта по позициям", cls="card-header"),
             P("Промежуточные значения расчёта для каждой позиции", style="color: #666; margin-bottom: 1rem;"),
 
             # Preset selector (links include #calc-table anchor to preserve scroll position)
@@ -12107,7 +12238,7 @@ def get(session, quote_id: str):
     return page_layout(
         "Настройка колонок расчёта",
 
-        H1(icon("settings", size=28), " Настройка колонок", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("settings", size=28), " Настройка колонок", cls="page-header"),
         P("Выберите колонки для отображения в таблице расчётов", style="color: #666; margin-bottom: 1rem;"),
 
         # Quick preset buttons
@@ -12423,7 +12554,7 @@ def post(session, quote_id: str, comment: str = ""):
 
         # Redirect to quote control list with success message
         return page_layout("Успешно",
-            H1(icon("check", size=28), " КП возвращено на доработку", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check", size=28), " КП возвращено на доработку", cls="page-header"),
             P(f"КП было успешно возвращено менеджеру по продажам."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
             A("← К задачам", href="/tasks", role="button"),
@@ -12538,7 +12669,7 @@ def get(session, quote_id: str):
         # Header
         Div(
             A("← Вернуться к проверке", href=f"/quote-control/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
-            H1(icon("clock", size=28), f" Запрос согласования КП {idn_quote}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("clock", size=28), f" Запрос согласования КП {idn_quote}", cls="page-header"),
             P(f"Клиент: {customer_name}", style="color: #666;"),
             style="margin-bottom: 1rem;"
         ),
@@ -12680,7 +12811,7 @@ def post(session, quote_id: str, comment: str = ""):
             details.append(P(f"Отправлено уведомлений в Telegram: {result.notifications_sent}"))
 
         return page_layout("Успешно",
-            H1(icon("check", size=28), " КП отправлено на согласование", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check", size=28), " КП отправлено на согласование", cls="page-header"),
             P(f"КП {idn_quote} было успешно отправлено на согласование топ-менеджеру."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
             *details,
@@ -12784,7 +12915,7 @@ def get(session, quote_id: str):
     # If approval is required, redirect to request-approval
     if approval_reasons:
         return page_layout("Требуется согласование",
-            H1(icon("alert-triangle", size=28), " Требуется согласование топ-менеджера", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("alert-triangle", size=28), " Требуется согласование топ-менеджера", cls="page-header"),
             P("Это КП не может быть одобрено напрямую, так как имеются следующие причины для согласования:"),
             Ul(*[Li(reason) for reason in approval_reasons]),
             A(icon("clock", size=16), " Отправить на согласование", href=f"/quote-control/{quote_id}/request-approval", role="button"),
@@ -12802,7 +12933,7 @@ def get(session, quote_id: str):
         # Header
         Div(
             A("← Вернуться к проверке", href=f"/quote-control/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
-            H1(icon("check", size=28), f" Одобрение КП {idn_quote}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check", size=28), f" Одобрение КП {idn_quote}", cls="page-header"),
             P(f"Клиент: {customer_name}", style="color: #666;"),
             style="margin-bottom: 1rem;"
         ),
@@ -12928,7 +13059,7 @@ def post(session, quote_id: str, comment: str = ""):
     if result.success:
         # Success - redirect to quote control list
         return page_layout("Успешно",
-            H1(icon("check-circle", size=28), " КП одобрено", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check-circle", size=28), " КП одобрено", cls="page-header"),
             P(f"КП {idn_quote} было успешно одобрено."),
             P("Теперь менеджер по продажам может отправить его клиенту.", style="color: #666;"),
             A("← К задачам", href="/tasks", role="button"),
@@ -13227,7 +13358,7 @@ def get(session, quote_id: str):
 
             # Section 1: Identification
             Div(
-                H3(icon("file-text", size=20), " Идентификация", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
                 Div(
                     Div(
                         Label("№ Спецификации", For="specification_number"),
@@ -13312,7 +13443,7 @@ def get(session, quote_id: str):
 
             # Section 3: Currency and Payment
             Div(
-                H3(icon("wallet", size=20), " Валюта и оплата", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("wallet", size=20), " Валюта и оплата", cls="card-header"),
                 Div(
                     Div(
                         Label("Валюта спецификации", For="specification_currency"),
@@ -13359,7 +13490,7 @@ def get(session, quote_id: str):
 
             # Section 4: Origin and Shipping
             Div(
-                H3(icon("truck", size=20), " Отгрузка и доставка", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("truck", size=20), " Отгрузка и доставка", cls="card-header"),
                 Div(
                     Div(
                         Label("Страна забора груза", For="cargo_pickup_country"),
@@ -13407,7 +13538,7 @@ def get(session, quote_id: str):
 
             # Section 5: Legal Entities (v3.0 enhanced)
             Div(
-                H3(icon("building-2", size=20), " Юридические лица", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("building-2", size=20), " Юридические лица", cls="card-header"),
                 Div(
                     Div(
                         Label("Наше юридическое лицо", For="our_legal_entity"),
@@ -13439,7 +13570,7 @@ def get(session, quote_id: str):
 
             # Section 6: Contract and Signatory (v3.0 NEW)
             Div(
-                H3(icon("file-signature", size=20), " Договор и подписант", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
                 Div(
                     Div(
                         Label("Договор клиента", For="contract_id"),
@@ -13969,7 +14100,7 @@ def get(session, spec_id: str):
 
             # Section 1: Identification
             Div(
-                H3(icon("file-text", size=20), " Идентификация", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
                 Div(
                     Div(
                         Label("№ Спецификации", For="specification_number"),
@@ -14068,7 +14199,7 @@ def get(session, spec_id: str):
 
             # Section 3: Currency and Payment
             Div(
-                H3(icon("wallet", size=20), " Валюта и оплата", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("wallet", size=20), " Валюта и оплата", cls="card-header"),
                 Div(
                     Div(
                         Label("Валюта спецификации", For="specification_currency"),
@@ -14122,7 +14253,7 @@ def get(session, spec_id: str):
 
             # Section 4: Origin and Shipping
             Div(
-                H3(icon("truck", size=20), " Отгрузка и доставка", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("truck", size=20), " Отгрузка и доставка", cls="card-header"),
                 Div(
                     Div(
                         Label("Страна забора груза", For="cargo_pickup_country"),
@@ -14178,7 +14309,7 @@ def get(session, spec_id: str):
 
             # Section 5: Legal Entities (v3.0 enhanced)
             Div(
-                H3(icon("building-2", size=20), " Юридические лица", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("building-2", size=20), " Юридические лица", cls="card-header"),
                 Div(
                     Div(
                         Label("Наше юридическое лицо", For="our_legal_entity"),
@@ -14212,7 +14343,7 @@ def get(session, spec_id: str):
 
             # Section 6: Contract and Signatory (v3.0 NEW)
             Div(
-                H3(icon("file-signature", size=20), " Договор и подписант", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
                 Div(
                     Div(
                         Label("Договор клиента", For="contract_id"),
@@ -14269,7 +14400,7 @@ def get(session, spec_id: str):
 
             # Feature #71: Section 7 - Signed Scan Upload (visible when status is approved or signed)
             Div(
-                H3(icon("pen-tool", size=20), " Подписанный скан", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H3(icon("pen-tool", size=20), " Подписанный скан", cls="card-header"),
                 # Show current scan if exists
                 Div(
                     P(
@@ -14953,7 +15084,7 @@ def post(session, spec_id: str):
 
         # Show success page
         return page_layout("Сделка создана",
-            H1(icon("check-circle", size=28), " Сделка успешно создана", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("check-circle", size=28), " Сделка успешно создана", cls="page-header"),
             Div(
                 H3(f"Номер сделки: {deal_number}"),
                 P(f"Клиент: {quote.get('client_name', 'N/A')}"),
@@ -17223,7 +17354,7 @@ def get(session, tab: str = "users"):
         tab_content = Div("Неизвестная вкладка", id="tab-content")
 
     return page_layout("Администрирование",
-        H1(icon("settings", size=28), " Администрирование", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("settings", size=28), " Администрирование", cls="page-header"),
 
         # Tabs navigation
         tabs_nav,
@@ -17946,7 +18077,7 @@ def post(session, brand: str, user_id: str):
     existing = get_brand_assignment_by_brand(org_id, brand)
     if existing:
         return page_layout("Ошибка",
-            H1(icon("alert-triangle", size=28), " Бренд уже назначен", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("alert-triangle", size=28), " Бренд уже назначен", cls="page-header"),
             P(f"Бренд '{brand}' уже назначен другому менеджеру."),
             P("Используйте функцию редактирования для изменения назначения."),
             A("← Назад к списку", href="/admin/brands", role="button"),
@@ -17976,7 +18107,7 @@ def post(session, brand: str, user_id: str):
         )
     else:
         return page_layout("Ошибка",
-            H1(icon("x-circle", size=28), " Ошибка создания", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("x-circle", size=28), " Ошибка создания", cls="page-header"),
             P("Не удалось создать назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -18116,7 +18247,7 @@ def post(assignment_id: str, session, user_id: str, brand: str = None):
         )
     else:
         return page_layout("Ошибка",
-            H1(icon("x-circle", size=28), " Ошибка обновления", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("x-circle", size=28), " Ошибка обновления", cls="page-header"),
             P("Не удалось обновить назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -18158,7 +18289,7 @@ def post(assignment_id: str, session):
         )
     else:
         return page_layout("Ошибка",
-            H1(icon("x-circle", size=28), " Ошибка удаления", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("x-circle", size=28), " Ошибка удаления", cls="page-header"),
             P("Не удалось удалить назначение. Попробуйте ещё раз."),
             A("← Назад к списку", href="/admin/brands", role="button"),
             session=session
@@ -19207,7 +19338,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
 
     return page_layout("Поставщики",
         # Header
-        H1(icon("package", size=28), " Поставщики", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("package", size=28), " Поставщики", cls="page-header"),
 
         # Stats cards
         Div(
@@ -19401,7 +19532,7 @@ def get(supplier_id: str, session):
     if not supplier:
         return page_layout("Поставщик не найден",
             Div(
-                H1(icon("x-circle", size=28), " Поставщик не найден", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H1(icon("x-circle", size=28), " Поставщик не найден", cls="page-header"),
                 P("Запрашиваемый поставщик не существует."),
                 A("← К списку поставщиков", href="/suppliers", role="button"),
                 cls="card"
@@ -19415,7 +19546,7 @@ def get(supplier_id: str, session):
     return page_layout(f"Поставщик: {supplier.name}",
         # Header with actions
         Div(
-            H1(icon("package", size=28), f" {supplier.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("package", size=28), f" {supplier.name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
                 A("← К списку", href="/suppliers", role="button", cls="secondary"),
@@ -19516,7 +19647,7 @@ def _supplier_form(supplier=None, error=None, session=None):
         # Error alert
         Div(error, cls="alert alert-error") if error else "",
 
-        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", cls="page-header"),
 
         Div(
             Form(
@@ -19647,7 +19778,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                             value="true"
                         ),
                         " Активный поставщик",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        cls="page-header"
                     ),
                     Small("Неактивные поставщики не отображаются в выпадающих списках", style="color: #666;"),
                 ) if is_edit else "",
@@ -19911,7 +20042,7 @@ def get(session, q: str = "", status: str = ""):
     return page_layout("Компании-покупатели",
         # Header
         Div(
-            H1(icon("building-2", size=28), " Компании-покупатели (закупки)", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("building-2", size=28), " Компании-покупатели (закупки)", cls="page-header"),
             A("+ Добавить компанию", href="/buyer-companies/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -20130,7 +20261,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div(
-                H1(icon("x-circle", size=28), " Компания не найдена", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H1(icon("x-circle", size=28), " Компания не найдена", cls="page-header"),
                 P("Запрашиваемая компания-покупатель не существует."),
                 A("← К списку компаний", href="/buyer-companies", role="button"),
                 cls="card"
@@ -20144,7 +20275,7 @@ def get(company_id: str, session):
     return page_layout(f"Компания: {company.name}",
         # Header with actions
         Div(
-            H1(icon("building-2", size=28), f" {company.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("building-2", size=28), f" {company.name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
                 A("← К списку", href="/buyer-companies", role="button", cls="secondary"),
@@ -20230,7 +20361,7 @@ def _buyer_company_form(company=None, error=None, session=None):
         # Error alert
         Div(error, cls="alert alert-error") if error else "",
 
-        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", cls="page-header"),
 
         # Info alert
         Div(
@@ -20362,7 +20493,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                             value="true"
                         ),
                         " Активная компания",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        cls="page-header"
                     ),
                     Small("Неактивные компании не отображаются в выпадающих списках", style="color: #666;"),
                 ) if is_edit else "",
@@ -20661,7 +20792,7 @@ def get(session, q: str = "", status: str = ""):
     return page_layout("Компании-продавцы",
         # Header
         Div(
-            H1(icon("building-2", size=28), " Компании-продавцы (наши юрлица)", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("building-2", size=28), " Компании-продавцы (наши юрлица)", cls="page-header"),
             A("+ Добавить компанию", href="/seller-companies/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -20887,7 +21018,7 @@ def get(company_id: str, session):
         Div(
             # Header with actions
             Div(
-                H1(icon("building-2", size=28), f" {company.supplier_code} - {company.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H1(icon("building-2", size=28), f" {company.supplier_code} - {company.name}", cls="page-header"),
                 Div(
                     A(icon("edit", size=16), " Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
                     " ",
@@ -20987,7 +21118,7 @@ def _seller_company_form(
     return page_layout(title,
         # Header
         Div(
-            H1(icon("building-2", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("building-2", size=28), f" {title}", cls="page-header"),
             cls="card"
         ),
 
@@ -21130,7 +21261,7 @@ def _seller_company_form(
                             value="true"
                         ),
                         " Активная компания",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        cls="page-header"
                     ),
                     Small("Неактивные компании не отображаются в выпадающих списках при создании КП", style="color: #666;"),
                 ) if is_edit else "",
@@ -21459,7 +21590,7 @@ def get(session, q: str = "", status: str = ""):
 
     return page_layout("Клиенты",
         # Header
-        H1(icon("users", size=28), " Клиенты", style="display: flex; align-items: center; gap: 0.5rem;"),
+        H1(icon("users", size=28), " Клиенты", cls="page-header"),
 
         # Info alert
         Div(
@@ -22195,7 +22326,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
     return page_layout(f"Клиент: {customer.name}",
         # Header with actions
         Div(
-            H1(icon("user", size=28), f" {customer.name}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("user", size=28), f" {customer.name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
                 A("← К списку", href="/customers", role="button", cls="secondary"),
@@ -22554,12 +22685,12 @@ def get(session, customer_id: str):
                     Label(
                         Input(type="checkbox", name="is_primary", value="true"),
                         " ★ Основной контакт (для основной коммуникации)",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        cls="page-header"
                     ),
                     Label(
                         Input(type="checkbox", name="is_signatory", value="true"),
                         icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        cls="page-header"
                     ),
                     cls="form-row"
                 ),
@@ -22651,12 +22782,12 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
                         Label(
                             Input(type="checkbox", name="is_primary", value="true", checked=is_primary=="true"),
                             " ★ Основной контакт (для основной коммуникации)",
-                            style="display: flex; align-items: center; gap: 0.5rem;"
+                            cls="page-header"
                         ),
                         Label(
                             Input(type="checkbox", name="is_signatory", value="true", checked=is_signatory=="true"),
                             icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
-                            style="display: flex; align-items: center; gap: 0.5rem;"
+                            cls="page-header"
                         ),
                         cls="form-row"
                     ),
@@ -23366,7 +23497,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
     return page_layout(page_title,
         # Header
         Div(
-            H1(icon("file-text", size=28), f" {page_title}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("file-text", size=28), f" {page_title}", cls="page-header"),
             A("+ Добавить договор", href="/customer-contracts/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -23491,7 +23622,7 @@ def get(contract_id: str, session):
     return page_layout(f"Договор: {contract.contract_number}",
         # Header with actions
         Div(
-            H1(icon("file-text", size=28), f" {contract.contract_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("file-text", size=28), f" {contract.contract_number}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
                 A("← К списку", href="/customer-contracts", role="button", cls="secondary"),
@@ -23508,7 +23639,7 @@ def get(contract_id: str, session):
 
         # Main info card
         Div(
-            H3(icon("clipboard-list", size=20), " Основная информация", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("clipboard-list", size=20), " Основная информация", cls="card-header"),
             Div(
                 Div(
                     Div(Strong("Номер договора"), style="color: #666; font-size: 0.9em;"),
@@ -23539,7 +23670,7 @@ def get(contract_id: str, session):
 
         # Notes card (if has notes)
         Div(
-            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
             P(contract.notes or "Нет примечаний"),
             cls="card"
         ) if contract.notes else "",
@@ -23703,7 +23834,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
     return page_layout("Справочник локаций",
         # Header
         Div(
-            H1(icon("map-pin", size=28), " Справочник локаций", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("map-pin", size=28), " Справочник локаций", cls="page-header"),
             A("+ Добавить локацию", href="/locations/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -23834,7 +23965,7 @@ def get(location_id: str, session):
     return page_layout(f"Локация: {display_name}",
         # Header with actions
         Div(
-            H1(icon("map-pin", size=28), f" {display_name}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("map-pin", size=28), f" {display_name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/locations/{location_id}/edit", role="button"),
                 A("← К списку", href="/locations", role="button", cls="secondary"),
@@ -23853,7 +23984,7 @@ def get(location_id: str, session):
 
         # Main info card
         Div(
-            H3(icon("clipboard-list", size=20), " Основная информация", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("clipboard-list", size=20), " Основная информация", cls="card-header"),
             Div(
                 Div(
                     Div(Strong("Код"), style="color: #666; font-size: 0.9em;"),
@@ -23882,7 +24013,7 @@ def get(location_id: str, session):
 
         # Type flags card
         Div(
-            H3(icon("tag", size=20), " Классификация", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("tag", size=20), " Классификация", cls="card-header"),
             Div(
                 Div(
                     Div(Strong("Логистический хаб"), style="color: #666; font-size: 0.9em;"),
@@ -23901,7 +24032,7 @@ def get(location_id: str, session):
 
         # Notes card (if has notes)
         Div(
-            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
             P(location.notes or "Нет примечаний"),
             cls="card"
         ) if location.notes else "",
@@ -23919,7 +24050,7 @@ def _location_form(location=None, error=None, session=None):
     return page_layout(title,
         # Header
         Div(
-            H1(icon("map-pin", size=28), f" {title}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("map-pin", size=28), f" {title}", cls="page-header"),
             cls="card"
         ),
 
@@ -24312,7 +24443,7 @@ def get(session):
 
         return page_layout("Локации загружены",
             Div(
-                H1(icon("check-circle", size=28), " Стандартные локации загружены", style="display: flex; align-items: center; gap: 0.5rem;"),
+                H1(icon("check-circle", size=28), " Стандартные локации загружены", cls="page-header"),
                 P(f"Создано локаций: {count}"),
                 P("Локации включают основные города Китая, России, Казахстана, Турции и Европы."),
                 A("← К списку локаций", href="/locations", role="button"),
@@ -24471,7 +24602,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
     return page_layout("Инвойсы поставщиков",
         # Header
         Div(
-            H1(icon("file-text", size=28), " Реестр инвойсов поставщиков", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("file-text", size=28), " Реестр инвойсов поставщиков", cls="page-header"),
             A("+ Добавить инвойс", href="/supplier-invoices/new", role="button"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
@@ -24658,7 +24789,7 @@ def get(invoice_id: str, session):
                 )
             )
         items_section = [
-            H3(icon("package", size=20), " Позиции инвойса", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("package", size=20), " Позиции инвойса", cls="card-header"),
             Table(
                 Thead(Tr(
                     Th("Описание"),
@@ -24720,7 +24851,7 @@ def get(invoice_id: str, session):
         # Header
         Div(
             A("← К реестру инвойсов", href="/supplier-invoices"),
-            H1(icon("file-text", size=28), f" Инвойс {invoice.invoice_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H1(icon("file-text", size=28), f" Инвойс {invoice.invoice_number}", cls="page-header"),
             Span(status_text, cls=f"status-badge {status_cls}", style="font-size: 1.2rem;"),
             style="margin-bottom: 1rem;"
         ),
@@ -24759,7 +24890,7 @@ def get(invoice_id: str, session):
 
         # Notes
         Div(
-            H3(icon("message-square", size=20), " Примечания", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
             P(invoice.notes or "Нет примечаний"),
             cls="card", style="margin-bottom: 1rem;"
         ) if invoice.notes else "",
@@ -24856,7 +24987,7 @@ def _invoice_payment_form(invoice, payment=None, error=None, session=None):
 
         # Invoice context card
         Div(
-            H3(icon("clipboard-list", size=20), f" Инвойс {invoice.invoice_number}", style="display: flex; align-items: center; gap: 0.5rem;"),
+            H3(icon("clipboard-list", size=20), f" Инвойс {invoice.invoice_number}", cls="card-header"),
             Div(
                 Div(
                     Table(
