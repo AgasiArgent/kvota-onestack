@@ -6843,7 +6843,8 @@ def get(quote_id: str, session):
     # ==========================================================================
     # AGGREGATE LOGISTICS FROM INVOICES (with multi-currency support)
     # Logistics costs are entered per-invoice by logistics department
-    # Each segment may have different currency - convert all to USD before summing
+    # Each segment may have different currency - convert all to QUOTE CURRENCY before summing
+    # The calculation engine expects logistics values in quote currency, not USD
     # ==========================================================================
     invoices_result = supabase.table("invoices") \
         .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
@@ -6853,26 +6854,30 @@ def get(quote_id: str, session):
 
     invoices_logistics = invoices_result.data or []
 
-    # Sum logistics costs from all invoices, converting each to USD
+    # Sum logistics costs from all invoices, converting each to quote currency
+    from services.currency_service import convert_amount
     total_logistics_supplier_hub = Decimal(0)
     total_logistics_hub_customs = Decimal(0)
     total_logistics_customs_client = Decimal(0)
 
     for inv in invoices_logistics:
-        # Supplier → Hub
+        # Supplier → Hub - convert to quote currency
         s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
         s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
-        total_logistics_supplier_hub += convert_to_usd(s2h_amount, s2h_currency)
+        if s2h_amount > 0:
+            total_logistics_supplier_hub += convert_amount(s2h_amount, s2h_currency, currency)
 
-        # Hub → Customs
+        # Hub → Customs - convert to quote currency
         h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
         h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
-        total_logistics_hub_customs += convert_to_usd(h2c_amount, h2c_currency)
+        if h2c_amount > 0:
+            total_logistics_hub_customs += convert_amount(h2c_amount, h2c_currency, currency)
 
-        # Customs → Customer
+        # Customs → Customer - convert to quote currency
         c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
         c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
-        total_logistics_customs_client += convert_to_usd(c2c_amount, c2c_currency)
+        if c2c_amount > 0:
+            total_logistics_customs_client += convert_amount(c2c_amount, c2c_currency, currency)
 
     # Convert to float for downstream compatibility
     total_logistics_supplier_hub = float(total_logistics_supplier_hub)
