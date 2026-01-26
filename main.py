@@ -6535,9 +6535,20 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
     Note: Uses purchase_price_original as base_price_vat for calculation engine.
     Calculation engine is NOT modified - we adapt data to match its expectations.
+
+    2026-01-26: Added per-item exchange rate calculation. Each item may have a different
+    purchase_currency, so we calculate individual exchange rates to quote_currency.
     """
+    from services.currency_service import convert_amount
+
+    # Get quote currency (target currency for all conversions)
+    quote_currency = variables.get('currency', 'USD')
+
     calc_inputs = []
     for item in items:
+        # Get item's purchase currency
+        item_currency = item.get('purchase_currency') or item.get('currency_of_base_price', 'USD')
+
         # Product fields (adapt new schema to calculation engine expectations)
         product = {
             'base_price_vat': safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')),
@@ -6545,14 +6556,23 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
             'weight_in_kg': safe_decimal(item.get('weight_in_kg')),
             'customs_code': item.get('customs_code', '0000000000'),
             'supplier_country': item.get('supplier_country', variables.get('supplier_country', 'Турция')),
-            'currency_of_base_price': item.get('purchase_currency') or item.get('currency_of_base_price', variables.get('currency_of_base_price', 'USD')),
+            'currency_of_base_price': item_currency,
             'import_tariff': item.get('customs_duty') or item.get('import_tariff'),  # customs_duty is saved by customs workspace
             'markup': item.get('markup'),
             'supplier_discount': item.get('supplier_discount'),
         }
 
-        # Get exchange rate (default to 1.0 if same currency)
-        exchange_rate = safe_decimal(variables.get('exchange_rate', '1.0'))
+        # Calculate per-item exchange rate (2026-01-26)
+        # Formula: exchange_rate = "how many units of source currency per 1 unit of quote currency"
+        # Example: if quote is EUR and item is USD, and 1 EUR = 1.08 USD, then exchange_rate = 1.08
+        # Calculation: P16 (in USD) / 1.08 = R16 (in EUR)
+        if item_currency == quote_currency:
+            exchange_rate = Decimal("1.0")
+        else:
+            # convert_amount(1, quote_currency, item_currency) gives how many item_currency = 1 quote_currency
+            exchange_rate = safe_decimal(convert_amount(Decimal("1"), quote_currency, item_currency))
+            if exchange_rate == 0:
+                exchange_rate = Decimal("1.0")  # Fallback if rate not found
 
         calc_input = map_variables_to_calculation_input(
             product=product,
