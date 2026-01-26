@@ -11874,34 +11874,42 @@ def get(session, quote_id: str, preset: str = None):
     ))
 
     # 11. Invoice verification (v3.0 Feature UI-022)
-    # Check if supplier invoices exist for quote items
-    from services.supplier_invoice_service import get_quote_invoicing_summary
-    invoicing_summary = get_quote_invoicing_summary(quote_id)
+    # Check invoices created by procurement team (from 'invoices' table)
+    # These are internal invoices grouping quote_items by supplier
+    invoices_result = supabase.table("invoices") \
+        .select("id, invoice_number, supplier_id, currency, total_weight_kg") \
+        .eq("quote_id", quote_id) \
+        .execute()
 
-    if invoicing_summary.total_items > 0:
-        invoice_coverage = invoicing_summary.coverage_percent
-        if invoice_coverage == 100:
+    invoices_list = invoices_result.data or []
+    invoice_count = len(invoices_list)
+
+    # Count items with invoice_id set (linked to invoices)
+    items_with_invoice = sum(1 for item in items if item.get("invoice_id"))
+    total_items = len(items)
+
+    if total_items > 0:
+        if invoice_count > 0 and items_with_invoice == total_items:
             invoice_status = "ok"
-            invoice_value = f"Все позиции ({invoicing_summary.items_with_invoices}/{invoicing_summary.total_items})"
-        elif invoice_coverage > 0:
+            invoice_value = f"{invoice_count} инвойс(ов), все позиции ({items_with_invoice}/{total_items})"
+        elif invoice_count > 0:
             invoice_status = "warning"
-            invoice_value = f"{invoicing_summary.items_with_invoices}/{invoicing_summary.total_items} позиций ({invoice_coverage:.0f}%)"
+            invoice_value = f"{invoice_count} инвойс(ов), {items_with_invoice}/{total_items} позиций привязано"
         else:
             invoice_status = "error"
             invoice_value = "Нет инвойсов от поставщиков"
 
         checklist_items.append(checklist_item(
             "11. Наличие инвойсов от поставщиков",
-            "Проверяет наличие инвойсов в реестре для всех позиций КП",
+            "Проверка внутренних инвойсов и привязки позиций",
             invoice_value,
             invoice_status,
-            f"Сумма: ожидаемая {format_money(float(invoicing_summary.total_expected))}, подтверждённая {format_money(float(invoicing_summary.total_invoiced))}"
-            if invoicing_summary.items_with_invoices > 0 else "Добавьте инвойсы от поставщиков в реестр"
+            f"Инвойсы: {', '.join(inv['invoice_number'] for inv in invoices_list)}" if invoices_list else "Создайте инвойсы на вкладке Закупки"
         ))
     else:
         checklist_items.append(checklist_item(
             "11. Наличие инвойсов от поставщиков",
-            "Проверяет наличие инвойсов в реестре для всех позиций КП",
+            "Проверка внутренних инвойсов и привязки позиций",
             "Нет позиций для проверки",
             "info",
             None
