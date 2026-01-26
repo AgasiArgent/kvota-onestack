@@ -11726,30 +11726,33 @@ def get(session, quote_id: str, preset: str = None):
 
     needs_approval = len(needs_approval_reasons) > 0
 
-    # Build checklist items with auto-detected status
+    # Build checklist items with auto-detected status (compact design)
     def checklist_item(name, description, value, status="info", details=None):
-        """Create a checklist item with status indicator."""
+        """Create a compact checklist item with status indicator."""
         status_colors = {
             "ok": ("#dcfce7", "#166534", "✓"),
             "warning": ("#fef3c7", "#92400e", "⚠"),
             "error": ("#fee2e2", "#991b1b", "✗"),
             "info": ("#dbeafe", "#1e40af", "ℹ"),
         }
-        bg, text_color, icon = status_colors.get(status, status_colors["info"])
+        bg, text_color, status_icon = status_colors.get(status, status_colors["info"])
 
+        # Compact single-line layout: icon + name + value
         return Div(
+            # Header row: status icon + name
             Div(
-                Span(icon, style=f"color: {text_color}; font-weight: bold; margin-right: 0.5rem;"),
-                Strong(name),
-                style="display: flex; align-items: center;"
+                Span(status_icon, style=f"color: {text_color}; font-weight: bold; font-size: 0.9rem; min-width: 1.25rem;"),
+                Span(name, style="font-weight: 500; font-size: 0.8125rem; color: #374151;"),
+                style="display: flex; align-items: center; gap: 0.25rem; margin-bottom: 0.25rem;"
             ),
-            P(description, style="color: #666; font-size: 0.875rem; margin: 0.25rem 0;"),
+            # Value row with background
             Div(
-                Strong(str(value) if value else "—"),
-                style=f"padding: 0.5rem; background: {bg}; border-radius: 4px; margin-top: 0.25rem;"
+                Span(str(value) if value else "—", style="font-weight: 600; font-size: 0.8125rem;"),
+                Span(f" · {details}" if details else "", style="color: #666; font-size: 0.75rem;") if details else None,
+                style=f"padding: 0.375rem 0.5rem; background: {bg}; border-radius: 4px; font-size: 0.8125rem;"
             ),
-            P(details, style="color: #666; font-size: 0.75rem; margin-top: 0.25rem;") if details else None,
-            style="padding: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 0.75rem;"
+            title=description,  # Description as tooltip
+            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; cursor: help;"
         )
 
     # Generate checklist
@@ -11995,11 +11998,14 @@ def get(session, quote_id: str, preset: str = None):
             style="margin-bottom: 1rem;"
         ),
 
-        # Checklist
+        # Checklist (compact 2-column grid)
         Div(
             H3(icon("check-square", size=20), " Чек-лист проверки", cls="card-header"),
-            P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #666; margin-bottom: 1rem;"),
-            *checklist_items,
+            P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #666; margin-bottom: 0.75rem; font-size: 0.875rem;"),
+            Div(
+                *checklist_items,
+                style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;"
+            ),
             cls="card"
         ),
 
