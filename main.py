@@ -10395,11 +10395,11 @@ def get(session, quote_id: str):
 
         # Header
         Div(
-            H1(f"Логистика: {quote.get('idn_quote', '')}"),
+            H1(f"Логистика: {quote.get('idn_quote', '')}", cls="page-header"),
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
                 workflow_status_badge(workflow_status),
-                cls="page-header"
+                style="display: flex; align-items: center; gap: 0.5rem;"
             ),
             style="margin-bottom: 1rem;"
         ),
@@ -11088,7 +11088,7 @@ def get(session, quote_id: str):
             Div(
                 Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
                 workflow_status_badge(workflow_status),
-                cls="page-header"
+                style="display: flex; align-items: center; gap: 0.5rem;"
             ),
             style="margin-bottom: 1rem;"
         ),
@@ -19778,7 +19778,7 @@ def _supplier_form(supplier=None, error=None, session=None):
                             value="true"
                         ),
                         " Активный поставщик",
-                        cls="page-header"
+                        style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     Small("Неактивные поставщики не отображаются в выпадающих списках", style="color: #666;"),
                 ) if is_edit else "",
@@ -20493,7 +20493,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                             value="true"
                         ),
                         " Активная компания",
-                        cls="page-header"
+                        style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     Small("Неактивные компании не отображаются в выпадающих списках", style="color: #666;"),
                 ) if is_edit else "",
@@ -21261,7 +21261,7 @@ def _seller_company_form(
                             value="true"
                         ),
                         " Активная компания",
-                        cls="page-header"
+                        style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     Small("Неактивные компании не отображаются в выпадающих списках при создании КП", style="color: #666;"),
                 ) if is_edit else "",
@@ -22685,12 +22685,12 @@ def get(session, customer_id: str):
                     Label(
                         Input(type="checkbox", name="is_primary", value="true"),
                         " ★ Основной контакт (для основной коммуникации)",
-                        cls="page-header"
+                        style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     Label(
                         Input(type="checkbox", name="is_signatory", value="true"),
                         icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
-                        cls="page-header"
+                        style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
                     cls="form-row"
                 ),
@@ -22782,12 +22782,12 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
                         Label(
                             Input(type="checkbox", name="is_primary", value="true", checked=is_primary=="true"),
                             " ★ Основной контакт (для основной коммуникации)",
-                            cls="page-header"
+                            style="display: flex; align-items: center; gap: 0.5rem;"
                         ),
                         Label(
                             Input(type="checkbox", name="is_signatory", value="true", checked=is_signatory=="true"),
                             icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
-                            cls="page-header"
+                            style="display: flex; align-items: center; gap: 0.5rem;"
                         ),
                         cls="form-row"
                     ),
