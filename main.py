@@ -7259,6 +7259,18 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     # Get quote currency (target currency for all conversions)
     quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
+    # Convert DM Fee from its currency to quote currency (2026-01-26)
+    # DM Fee can be entered in a different currency than the quote
+    dm_fee_type = variables.get('dm_fee_type', 'fixed')
+    dm_fee_value = safe_decimal(variables.get('dm_fee_value', 0))
+    dm_fee_currency = variables.get('dm_fee_currency', quote_currency)
+
+    if dm_fee_type == 'fixed' and dm_fee_currency != quote_currency and dm_fee_value > 0:
+        # Convert DM Fee to quote currency
+        converted_dm_fee = convert_amount(dm_fee_value, dm_fee_currency, quote_currency)
+        variables = {**variables, 'dm_fee_value': converted_dm_fee}
+        logger.info(f"DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} {quote_currency}")
+
     calc_inputs = []
     for item in items:
         # Get item's purchase currency
