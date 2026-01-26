@@ -1,8 +1,10 @@
 -- Migration 134: Fix get_quote_invoicing_summary function
--- Problem: Function uses INNER JOIN with products table, but quote_items.product_id is rarely set
--- Solution: Use LEFT JOIN and fallback to quote_items.product_name
+-- Problem: Function uses INNER JOIN with products table, but:
+--   1. products table doesn't exist in kvota schema
+--   2. quote_items.product_id is rarely set (items use free text product_name)
+--   3. Column names were wrong (unit_price, purchase_price don't exist)
+-- Solution: Remove products join, use only quote_items columns
 
--- Drop and recreate the function with fix
 CREATE OR REPLACE FUNCTION kvota.get_quote_invoicing_summary(p_quote_id UUID)
 RETURNS TABLE(
     quote_item_id UUID,
@@ -18,20 +20,18 @@ BEGIN
     RETURN QUERY
     SELECT
         qi.id AS quote_item_id,
-        -- Use product_name from quote_items directly, fallback to products table if linked
-        COALESCE(qi.product_name, p.name, 'Unknown') AS product_name,
-        qi.quantity AS quote_quantity,
-        COALESCE(qi.purchase_price, qi.unit_price, 0)::DECIMAL(15,4) AS quote_unit_price,
-        COALESCE(SUM(sii.quantity), 0::DECIMAL) AS invoiced_quantity,
-        COALESCE(SUM(sii.total_price), 0::DECIMAL) AS invoiced_amount,
+        COALESCE(qi.product_name, 'Без названия')::TEXT AS product_name,
+        qi.quantity::DECIMAL(10,2) AS quote_quantity,
+        COALESCE(qi.purchase_price_original, qi.base_price_vat, 0)::DECIMAL(15,4) AS quote_unit_price,
+        COALESCE(SUM(sii.quantity), 0)::DECIMAL(10,2) AS invoiced_quantity,
+        COALESCE(SUM(sii.total_price), 0)::DECIMAL(15,2) AS invoiced_amount,
         COUNT(DISTINCT sii.invoice_id)::INTEGER AS invoice_count,
-        COALESCE(SUM(sii.quantity), 0) >= qi.quantity AS is_fully_invoiced
+        (COALESCE(SUM(sii.quantity), 0) >= qi.quantity)::BOOLEAN AS is_fully_invoiced
     FROM kvota.quote_items qi
-    LEFT JOIN kvota.products p ON qi.product_id = p.id  -- Changed to LEFT JOIN
     LEFT JOIN kvota.supplier_invoice_items sii ON sii.quote_item_id = qi.id
     LEFT JOIN kvota.supplier_invoices si ON sii.invoice_id = si.id AND si.status NOT IN ('cancelled')
     WHERE qi.quote_id = p_quote_id
-    GROUP BY qi.id, qi.product_name, p.name, qi.quantity, qi.purchase_price, qi.unit_price
+    GROUP BY qi.id, qi.product_name, qi.quantity, qi.purchase_price_original, qi.base_price_vat
     ORDER BY qi.created_at;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -40,5 +40,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 GRANT EXECUTE ON FUNCTION kvota.get_quote_invoicing_summary(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION kvota.get_quote_invoicing_summary(UUID) TO service_role;
 
-COMMENT ON FUNCTION kvota.get_quote_invoicing_summary(UUID) IS 
-'Get invoicing status for all items in a quote. Fixed to use LEFT JOIN with products table.';
+COMMENT ON FUNCTION kvota.get_quote_invoicing_summary(UUID) IS
+'Get invoicing status for all items in a quote. Returns items with their invoice data.';
