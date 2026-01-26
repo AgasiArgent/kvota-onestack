@@ -7269,7 +7269,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         # Convert DM Fee to quote currency
         converted_dm_fee = convert_amount(dm_fee_value, dm_fee_currency, quote_currency)
         variables = {**variables, 'dm_fee_value': converted_dm_fee}
-        logger.info(f"DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} {quote_currency}")
+        print(f"[calc] DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} {quote_currency}")
 
     calc_inputs = []
     for item in items:
