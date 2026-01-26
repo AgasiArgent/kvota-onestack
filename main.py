@@ -5977,44 +5977,78 @@ def post(session, quote_id: str, justification: str = ""):
         "needs_justification": False
     }).eq("id", quote_id).execute()
 
-    # Get user's role codes for request_approval
+    # Get user's role codes for transition
     user_roles = get_user_roles_from_session(session)
 
-    # Now call request_approval to send to top manager
-    result = request_approval(
+    # Transition directly from pending_sales_review to pending_approval
+    # (using new transition added for justification workflow)
+    from services.workflow_service import transition_quote_status, WorkflowStatus
+    from services.approval_service import create_approvals_for_role
+    from services.telegram_service import send_approval_notification_for_quote
+    import asyncio
+
+    transition_result = transition_quote_status(
         quote_id=quote_id,
-        requested_by=user_id,
-        reason=f"[С обоснованием менеджера] {justification.strip()[:200]}...",  # Use justification as reason
-        organization_id=org_id,
+        to_status=WorkflowStatus.PENDING_APPROVAL,
+        actor_id=user_id,
         actor_roles=user_roles,
-        quote_idn=idn_quote,
-        customer_name=customer_name,
-        total_amount=float(total_amount) if total_amount else None,
-        send_notifications=True
+        comment=f"[С обоснованием] {justification.strip()[:200]}..."
     )
 
-    if result.success:
-        details = []
-        if result.approvals_created > 0:
-            details.append(P(f"Создано запросов на согласование: {result.approvals_created}"))
-        if result.notifications_sent > 0:
-            details.append(P(f"Отправлено уведомлений в Telegram: {result.notifications_sent}"))
-
-        return page_layout("Успешно",
-            H1(icon("check", size=28), " КП отправлено на согласование", cls="page-header"),
-            P(f"КП {idn_quote} с вашим обоснованием отправлено на согласование топ-менеджеру."),
-            *details,
-            P("Вы получите уведомление о решении.", style="color: #666;"),
-            A("← К задачам", href="/tasks", role="button"),
-            session=session
-        )
-    else:
+    if not transition_result.success:
         return page_layout("Ошибка",
             H1("Ошибка отправки"),
-            P(f"Не удалось отправить КП на согласование: {result.error_message}"),
+            P(f"Не удалось отправить КП на согласование: {transition_result.error_message}"),
             A("← Вернуться к форме", href=f"/quotes/{quote_id}/submit-justification"),
             session=session
         )
+
+    # Create approval records for top_manager/admin users
+    approvals = create_approvals_for_role(
+        quote_id=quote_id,
+        organization_id=org_id,
+        requested_by=user_id,
+        reason=f"[С обоснованием менеджера] {justification.strip()[:200]}...",
+        role_codes=['top_manager', 'admin'],
+        approval_type='top_manager'
+    )
+    approvals_created = len(approvals)
+
+    # Send Telegram notifications
+    notifications_sent = 0
+    if approvals_created > 0:
+        try:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+            notification_result = loop.run_until_complete(
+                send_approval_notification_for_quote(
+                    quote_id=quote_id,
+                    approval_reason=f"[С обоснованием менеджера] {justification.strip()[:100]}...",
+                    requester_id=user_id
+                )
+            )
+            notifications_sent = notification_result.get('telegram_sent', 0)
+        except Exception as e:
+            print(f"Error sending approval notifications: {e}")
+
+    details = []
+    if approvals_created > 0:
+        details.append(P(f"Создано запросов на согласование: {approvals_created}"))
+    if notifications_sent > 0:
+        details.append(P(f"Отправлено уведомлений в Telegram: {notifications_sent}"))
+
+    return page_layout("Успешно",
+        H1(icon("check", size=28), " КП отправлено на согласование", cls="page-header"),
+        P(f"КП {idn_quote} с вашим обоснованием отправлено на согласование топ-менеджеру."),
+        *details,
+        P("Вы получите уведомление о решении.", style="color: #666;"),
+        A("← К задачам", href="/tasks", role="button"),
+        session=session
+    )
 
 
 # ============================================================================

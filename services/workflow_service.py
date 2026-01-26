@@ -277,6 +277,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["sales", "admin"],
         requires_comment=True
     ),
+    # Feature: Approval justification workflow - sales can submit with justification directly to pending_approval
+    StatusTransition(
+        WorkflowStatus.PENDING_SALES_REVIEW,
+        WorkflowStatus.PENDING_APPROVAL,  # Submit with justification (when needs_justification=true)
+        ["sales", "sales_manager", "admin"],
+        requires_comment=True  # Justification is required
+    ),
 
     # From PENDING_QUOTE_CONTROL (Zhanna's review)
     StatusTransition(
