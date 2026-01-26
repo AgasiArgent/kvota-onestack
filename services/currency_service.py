@@ -258,8 +258,10 @@ def convert_amount(amount: Decimal, from_currency: str, to_currency: str, rate_d
         return amount
 
     rates = ensure_rates_available(rate_date)
+    print(f"[currency_service] convert_amount({amount}, {from_currency}, {to_currency}): rates={rates}")
 
     if not rates:
+        print(f"[currency_service] NO RATES AVAILABLE, returning original amount")
         return amount
 
     # Convert to RUB first

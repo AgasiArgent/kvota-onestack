@@ -6542,7 +6542,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     from services.currency_service import convert_amount
 
     # Get quote currency (target currency for all conversions)
-    quote_currency = variables.get('currency', 'USD')
+    quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
     calc_inputs = []
     for item in items:
