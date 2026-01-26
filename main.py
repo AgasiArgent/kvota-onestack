@@ -11915,6 +11915,11 @@ def get(session, quote_id: str, preset: str = None):
             None
         ))
 
+    # Load invoicing summary for detail section (using supplier_invoice_items for per-item breakdown)
+    # This is separate from criterion 11 which checks internal invoices
+    from services.supplier_invoice_service import get_quote_invoicing_summary
+    invoicing_summary = get_quote_invoicing_summary(quote_id)
+
     # Summary info
     customer_name = quote.get("customers", {}).get("name", "—")
     quote_total = float(quote.get("total_amount", 0) or 0)
