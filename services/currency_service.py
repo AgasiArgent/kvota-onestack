@@ -126,16 +126,19 @@ def get_rates_from_db(rate_date: date) -> dict[str, Decimal]:
     """Get exchange rates from database for today (latest fetched).
 
     Returns dict: {currency: rate_to_rub}
+    Specifically fetches USD, EUR, CNY, TRY rates.
     """
     try:
         supabase = _get_supabase()
 
-        # Get latest rates for each currency -> RUB pair
+        # Get latest rates for required currencies -> RUB
+        required_currencies = ['USD', 'EUR', 'CNY', 'TRY']
         result = supabase.table("exchange_rates")\
             .select("from_currency, rate")\
             .eq("to_currency", "RUB")\
+            .in_("from_currency", required_currencies)\
             .order("fetched_at", desc=True)\
-            .limit(10)\
+            .limit(20)\
             .execute()
 
         rates = {}
@@ -145,6 +148,7 @@ def get_rates_from_db(rate_date: date) -> dict[str, Decimal]:
             if currency not in rates:
                 rates[currency] = Decimal(str(row["rate"]))
 
+        print(f"[currency_service] Loaded rates from DB: {rates}")
         return rates
 
     except Exception as e:
