@@ -12378,12 +12378,6 @@ def get(session, quote_id: str):
                     Div("С пошлиной"),
                     cls="stat-card-mini"
                 ),
-                Div(
-                    Div(format_money(total_customs_cost, currency), cls="stat-value"),
-                    Div("Итого таможня"),
-                    cls="stat-card-mini",
-                    style="border: 2px solid #8b5cf6;" if total_customs_cost > 0 else ""
-                ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
             # Progress bar
