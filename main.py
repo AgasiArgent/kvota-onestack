@@ -12069,10 +12069,6 @@ def get(session, quote_id: str):
                 Span(icon("package", size=14), f" Кол-во: {item.get('quantity', 0)}", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                 Span(icon("scale", size=14), f" Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;") if weight else None,
                 Span(icon("globe", size=14), f" {item.get('supplier_country', '—')}", style="margin-right: 1rem; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                # Purchase value for duty calculation reference
-                Span(icon("wallet", size=14), f" Закуп: {format_money(purchase_price * quantity, currency)}",
-                     style="margin-right: 1rem; font-size: 0.875rem; color: #059669; display: inline-flex; align-items: center; gap: 0.25rem;",
-                     title="Стоимость закупки для расчёта пошлины") if purchase_price else None,
                 # Pickup location badge (v3.0)
                 Span(
                     icon("map-pin", size=14), f" {pickup_info['label'] if pickup_info else '—'}",
@@ -12124,17 +12120,10 @@ def get(session, quote_id: str):
                             ),
                             style="display: block; font-size: 0.875rem;"
                         ),
-                        Small(f"= {format_money(duty_amount, currency)}", style="color: #059669;") if duty_amount > 0 else None,
                         style="flex: 0 0 150px;"
                     ),
                     style="display: flex; gap: 0.75rem;"
                 ),
-                # Item total display (duty only, extra costs now at quote level)
-                Div(
-                    Span(f"Пошлина: {format_money(duty_amount, currency)}",
-                         style="font-weight: 500; color: #059669;"),
-                    style="text-align: right; margin-top: 0.5rem; font-size: 0.875rem;"
-                ) if duty_amount > 0 else None,
                 style="background: #f9fafb; padding: 1rem; border-radius: 4px;"
             ),
 
