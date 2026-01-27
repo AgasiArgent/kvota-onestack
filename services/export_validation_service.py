@@ -563,7 +563,7 @@ class ExportValidationService:
             ws = wb.create_sheet("API_Results")
 
         # Header
-        ws["A1"] = "API Calculation Results (USD)"
+        ws["A1"] = f"API Calculation Results ({quote_currency})"
         ws["A1"].font = Font(bold=True, size=14)
         ws.merge_cells("A1:F1")
 
@@ -589,8 +589,8 @@ class ExportValidationService:
 
         ws[f"A{row}"] = "Cell"
         ws[f"B{row}"] = "Field"
-        ws[f"C{row}"] = "API (USD)"
-        ws[f"D{row}"] = f"API ({quote_currency})"
+        ws[f"C{row}"] = f"API ({quote_currency})"
+        ws[f"D{row}"] = "For comparison"
         ws[f"E{row}"] = f"Excel ({quote_currency})"
         ws[f"F{row}"] = "Diff %"
         for col in ["A", "B", "C", "D", "E", "F"]:
@@ -598,14 +598,15 @@ class ExportValidationService:
             ws[f"{col}{row}"].border = THIN_BORDER
         row += 1
 
-        # Quote totals
+        # Quote totals - already in quote currency (summed from S16, V16, etc.)
+        # Calculation engine converts to quote currency internally
         for cell_addr, (field, display_name) in QUOTE_TOTAL_CELLS.items():
             ws[f"A{row}"] = cell_addr
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            # D = C * rate (convert USD to quote currency)
-            ws[f"D{row}"] = f"=C{row}*$G$2"
+            # D = C (no conversion - already in quote currency)
+            ws[f"D{row}"] = f"=C{row}"
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
             # Diff formula: compare D (API in quote currency) vs E (Excel in quote currency)
@@ -615,7 +616,7 @@ class ExportValidationService:
                 ws[f"{col}{row}"].border = THIN_BORDER
             row += 1
 
-        # Financing cells
+        # Financing cells - already in quote currency
         row += 1
         ws[f"A{row}"] = "Financing"
         ws[f"A{row}"].font = Font(bold=True)
@@ -627,7 +628,8 @@ class ExportValidationService:
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            ws[f"D{row}"] = f"=C{row}*$G$2"
+            # D = C (no conversion - already in quote currency)
+            ws[f"D{row}"] = f"=C{row}"
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
             ws[f"F{row}"] = f'=IF(E{row}=0,"N/A",ABS(D{row}-E{row})/ABS(E{row}))'
@@ -636,9 +638,9 @@ class ExportValidationService:
                 ws[f"{col}{row}"].border = THIN_BORDER
             row += 1
 
-        # Section: Product Results
+        # Section: Product Results (already in quote currency from calculation engine)
         row += 2
-        ws[f"A{row}"] = "Product Results (USD)"
+        ws[f"A{row}"] = f"Product Results ({quote_currency})"
         ws[f"A{row}"].font = Font(bold=True)
         ws[f"A{row}"].fill = HEADER_FILL
         row += 1
@@ -731,12 +733,13 @@ class ExportValidationService:
         ws["A2"].font = Font(color="888888", italic=True)
 
         row = 4
+        quote_currency = self._quote_currency if hasattr(self, '_quote_currency') else "Quote"
         ws[f"A{row}"] = "Product"
         ws[f"B{row}"] = "Cell"
         ws[f"C{row}"] = "Field"
-        ws[f"D{row}"] = "API (USD)"
-        ws[f"E{row}"] = "API (Quote)"
-        ws[f"F{row}"] = "Excel"
+        ws[f"D{row}"] = f"API ({quote_currency})"
+        ws[f"E{row}"] = "For comparison"
+        ws[f"F{row}"] = f"Excel ({quote_currency})"
         ws[f"G{row}"] = "Diff %"
         for col in ["A", "B", "C", "D", "E", "F", "G"]:
             ws[f"{col}{row}"].font = Font(bold=True)
@@ -745,8 +748,15 @@ class ExportValidationService:
             ws[f"{col}{row}"].border = THIN_BORDER
         row += 1
 
-        # Fields that are in BASE currency (not USD) - should NOT be converted
-        # N16 and P16 are the original purchase prices in supplier's currency
+        # Currency handling in Comparison sheet:
+        # - N16, P16: BASE currency (supplier's currency) - no conversion needed
+        # - R16 and onwards: QUOTE currency (calculation engine converts internally)
+        #
+        # Calculation engine does R16 = P16 / exchange_rate (already in quote currency!)
+        # So ALL output fields from R16 onwards are already in quote currency.
+        # NO conversion needed for API results comparison.
+        #
+        # Fields in BASE currency (supplier's original currency):
         BASE_CURRENCY_FIELDS = {"purchase_price_no_vat", "purchase_price_after_discount"}
 
         # For each product and each output column
@@ -763,15 +773,11 @@ class ExportValidationService:
                 api_col = list(PRODUCT_OUTPUT_COLUMNS.keys()).index(col_letter) + 2
                 ws[f"D{row}"] = f"=API_Results!{get_column_letter(api_col)}{api_results_row}"
 
-                # Column E: API value for comparison
-                # N16 and P16 are in BASE currency (same as Excel) - no conversion needed
-                # All other fields are in USD - need conversion to quote currency
-                if field in BASE_CURRENCY_FIELDS:
-                    # Base currency fields: direct comparison (both in same currency)
-                    ws[f"E{row}"] = f"=D{row}"
-                else:
-                    # USD fields: convert to quote currency (D * rate)
-                    ws[f"E{row}"] = f"=D{row}*API_Results!$G$2"
+                # Column E: API value for comparison (direct passthrough)
+                # ALL API results are already in quote currency (calculation engine converts internally)
+                # N16, P16 are in base currency - same for both API and Excel
+                # R16+ are in quote currency - calculation engine does R16 = P16 / exchange_rate
+                ws[f"E{row}"] = f"=D{row}"
                 ws[f"E{row}"].number_format = '#,##0.00'
 
                 # Column F: Excel value from расчет
