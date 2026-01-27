@@ -7909,8 +7909,12 @@ def post(
         form_logistics_hub_customs = safe_decimal(logistics_hub_customs)
         form_logistics_customs_client = safe_decimal(logistics_customs_client)
 
+        print(f"[calc-debug] Form logistics values: S2H={logistics_supplier_hub}, H2C={logistics_hub_customs}, C2C={logistics_customs_client}")
+        print(f"[calc-debug] Parsed form values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
+
         # If all form logistics values are 0, aggregate from invoices
         if form_logistics_supplier_hub == 0 and form_logistics_hub_customs == 0 and form_logistics_customs_client == 0:
+            print("[calc-debug] All form logistics are 0, aggregating from invoices...")
             invoices_result = supabase.table("invoices") \
                 .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
                         "logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
@@ -8003,12 +8007,16 @@ def post(
         # Build calculation inputs for all items
         calc_inputs = build_calculation_inputs(items, variables)
 
+        print(f"[calc-debug] Variables passed to calc: logistics_supplier_hub={variables['logistics_supplier_hub']}, logistics_hub_customs={variables['logistics_hub_customs']}, logistics_customs_client={variables['logistics_customs_client']}")
+        print(f"[calc-debug] Brokerage: hub={variables['brokerage_hub']}, customs={variables['brokerage_customs']}, warehousing={variables['warehousing_at_customs']}, docs={variables['customs_documentation']}, extra={variables['brokerage_extra']}")
+
         # Run full 13-phase calculation engine
         results = calculate_multiproduct_quote(calc_inputs)
 
         # Calculate totals from results
         total_purchase = sum(safe_decimal(r.purchase_price_total_quote_currency) for r in results)
         total_logistics = sum(safe_decimal(r.logistics_total) for r in results)
+        print(f"[calc-debug] Calc results: total_purchase={total_purchase}, total_logistics={total_logistics}")
         total_brokerage = (
             safe_decimal(variables['brokerage_hub']) +
             safe_decimal(variables['brokerage_customs']) +
