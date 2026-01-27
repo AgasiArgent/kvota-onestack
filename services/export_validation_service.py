@@ -984,9 +984,31 @@ def _get_usd_to_quote_rate(quote_currency: str) -> float:
     try:
         # convert_amount(1 USD, from=USD, to=quote_currency)
         rate = convert_amount(Decimal("1"), "USD", quote_currency)
-        return float(rate) if rate else 1.0
+        return round(float(rate), 4) if rate else 1.0  # 4 decimal places per CBR standard
     except Exception as e:
         logger.warning(f"Could not get USD to {quote_currency} rate: {e}")
+        return 1.0
+
+
+def _get_exchange_rate_to_quote(from_currency: str, quote_currency: str) -> float:
+    """
+    Get exchange rate from any source currency to quote currency.
+
+    Used for product-level exchange_rate field (column Q).
+    Returns rate with 4 decimal places precision (CBR standard).
+
+    Example: if from_currency=CNY, quote_currency=EUR, returns CNY→EUR rate
+    """
+    if not from_currency or not quote_currency:
+        return 1.0
+    if from_currency == quote_currency:
+        return 1.0
+
+    try:
+        rate = convert_amount(Decimal("1"), from_currency, quote_currency)
+        return round(float(rate), 4) if rate else 1.0
+    except Exception as e:
+        logger.warning(f"Could not get {from_currency} to {quote_currency} rate: {e}")
         return 1.0
 
 
@@ -1056,18 +1078,21 @@ def create_validation_excel(data) -> bytes:
 
     # Build product_inputs from items
     product_inputs = []
+    quote_currency = quote.get("currency", "USD")
     for item in items:
+        purchase_currency = item.get("purchase_currency", "USD")
         product_inputs.append({
             "brand": item.get("brand", ""),
             "sku": item.get("product_code", item.get("sku", "")),
             "name": item.get("product_name", ""),
             "quantity": item.get("quantity", 1),
             "weight_in_kg": item.get("weight_kg", 0),
-            "currency_of_base_price": item.get("purchase_currency", "USD"),
+            "currency_of_base_price": purchase_currency,
             "base_price_vat": item.get("purchase_price_original", item.get("base_price_vat", 0)),
             "supplier_country": item.get("supplier_country", ""),
             "supplier_discount": variables.get("supplier_discount", 0),
-            "exchange_rate": item.get("exchange_rate", variables.get("exchange_rate", 1.0)),
+            # Exchange rate: from purchase currency to quote currency (4 decimal places, CBR)
+            "exchange_rate": _get_exchange_rate_to_quote(purchase_currency, quote_currency),
             "customs_code": item.get("customs_code", ""),
             "import_tariff": item.get("import_tariff", 0),
             "markup": variables.get("markup", 15),
