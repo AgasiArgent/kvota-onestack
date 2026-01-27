@@ -7457,13 +7457,26 @@ def post(
         return Div("Add products to preview.", cls="alert alert-info", id="preview-panel")
 
     try:
+        # Aggregate delivery time from items (production_time_days) and invoices (logistics_total_days)
+        max_production_days = max((item.get("production_time_days") or 0) for item in items) if items else 0
+
+        invoices_days_result = supabase.table("invoices") \
+            .select("logistics_total_days") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        max_logistics_days = max((inv.get("logistics_total_days") or 0) for inv in (invoices_days_result.data or [])) if invoices_days_result.data else 0
+
+        aggregated_delivery_time = max_logistics_days + max_production_days
+        form_delivery_time = safe_int(delivery_time)
+        effective_delivery_time = max(aggregated_delivery_time, form_delivery_time)
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
             'markup': safe_decimal(markup),
             'supplier_discount': safe_decimal(supplier_discount),
             'offer_incoterms': offer_incoterms,
-            'delivery_time': safe_int(delivery_time),
+            'delivery_time': effective_delivery_time,  # Uses MAX(logistics_days + production_days) if greater
             'seller_company': seller_company,
             'offer_sale_type': offer_sale_type,
 
@@ -7912,6 +7925,41 @@ def post(
         print(f"[calc-debug] Form logistics values: S2H={logistics_supplier_hub}, H2C={logistics_hub_customs}, C2C={logistics_customs_client}")
         print(f"[calc-debug] Parsed form values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
 
+        # ==========================================================================
+        # AGGREGATE DELIVERY TIME from invoices (logistics_total_days) + items (production_time_days)
+        # ==========================================================================
+        max_logistics_days = 0
+        max_production_days = 0
+
+        # Get max production_time_days from quote_items
+        for item in items:
+            prod_days = item.get("production_time_days") or 0
+            if prod_days > max_production_days:
+                max_production_days = prod_days
+
+        # Get max logistics_total_days from invoices
+        invoices_days_result = supabase.table("invoices") \
+            .select("logistics_total_days") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        for inv in (invoices_days_result.data or []):
+            log_days = inv.get("logistics_total_days") or 0
+            if log_days > max_logistics_days:
+                max_logistics_days = log_days
+
+        # Calculate total delivery time
+        aggregated_delivery_time = max_logistics_days + max_production_days
+        form_delivery_time = safe_int(delivery_time)
+
+        # Use aggregated value if it's greater than form value
+        if aggregated_delivery_time > form_delivery_time:
+            effective_delivery_time = aggregated_delivery_time
+        else:
+            effective_delivery_time = form_delivery_time
+
+        print(f"[calc-debug] Delivery time: max_logistics={max_logistics_days}, max_production={max_production_days}, form={form_delivery_time}, effective={effective_delivery_time}")
+
         # If all form logistics values are 0, aggregate from invoices
         if form_logistics_supplier_hub == 0 and form_logistics_hub_customs == 0 and form_logistics_customs_client == 0:
             print("[calc-debug] All form logistics are 0, aggregating from invoices...")
@@ -7973,7 +8021,7 @@ def post(
             'markup': safe_decimal(markup),
             'supplier_discount': safe_decimal(supplier_discount),
             'offer_incoterms': offer_incoterms,
-            'delivery_time': safe_int(delivery_time),
+            'delivery_time': effective_delivery_time,  # Uses MAX(logistics_days + production_days) if greater than form value
             'seller_company': seller_company,
             'offer_sale_type': offer_sale_type,
 
