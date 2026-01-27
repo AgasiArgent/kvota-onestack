@@ -10428,9 +10428,9 @@ def get(quote_id: str, session):
     buyer_companies = {}
     buyer_company_codes = {}
     if buyer_company_ids:
-        buyers_result = supabase.table("buyer_companies").select("id, name, supplier_code").in_("id", buyer_company_ids).execute()
+        buyers_result = supabase.table("buyer_companies").select("id, name, company_code").in_("id", buyer_company_ids).execute()
         buyer_companies = {b["id"]: b["name"] for b in buyers_result.data or []}
-        buyer_company_codes = {b["id"]: b.get("supplier_code", "INV") for b in buyers_result.data or []}
+        buyer_company_codes = {b["id"]: b.get("company_code", "INV") for b in buyers_result.data or []}
 
     # Check if invoices already exist for this quote
     existing_invoices_result = supabase.table("invoices") \
