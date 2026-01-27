@@ -562,6 +562,10 @@ class ExportValidationService:
         else:
             ws = wb.create_sheet("API_Results")
 
+        # Get currency info first (needed for header)
+        usd_to_quote_rate = api_results.get("_usd_to_quote_rate", 1.0)
+        quote_currency = api_results.get("_quote_currency", "USD")
+
         # Header
         ws["A1"] = f"API Calculation Results ({quote_currency})"
         ws["A1"].font = Font(bold=True, size=14)
@@ -569,8 +573,6 @@ class ExportValidationService:
 
         # Exchange rate info (row 2) - used by formulas below
         # Store rate in G2 for formula reference
-        usd_to_quote_rate = api_results.get("_usd_to_quote_rate", 1.0)
-        quote_currency = api_results.get("_quote_currency", "USD")
 
         ws["A2"] = "Exchange Rate:"
         ws["B2"] = f"1 USD = {usd_to_quote_rate:.4f} {quote_currency}"
