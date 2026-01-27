@@ -992,12 +992,17 @@ def _get_usd_to_quote_rate(quote_currency: str) -> float:
 
 def _get_exchange_rate_to_quote(from_currency: str, quote_currency: str) -> float:
     """
-    Get exchange rate from any source currency to quote currency.
+    Get exchange rate for Excel column Q (product-level).
 
-    Used for product-level exchange_rate field (column Q).
+    Excel formula R16 = P16 / Q16 divides purchase price by exchange rate.
+    So Q must contain: "how many units of from_currency = 1 quote_currency"
+
+    Example: if from_currency=USD, quote_currency=EUR:
+    - Direct rate: 1 USD = 0.8553 EUR
+    - Excel expects: 1 EUR = 1.169 USD (inverse)
+    - Formula: 1000 USD / 1.169 = 855.26 EUR ✓
+
     Returns rate with 4 decimal places precision (CBR standard).
-
-    Example: if from_currency=CNY, quote_currency=EUR, returns CNY→EUR rate
     """
     if not from_currency or not quote_currency:
         return 1.0
@@ -1005,8 +1010,13 @@ def _get_exchange_rate_to_quote(from_currency: str, quote_currency: str) -> floa
         return 1.0
 
     try:
-        rate = convert_amount(Decimal("1"), from_currency, quote_currency)
-        return round(float(rate), 4) if rate else 1.0
+        # Get direct rate: 1 from_currency = X quote_currency
+        direct_rate = convert_amount(Decimal("1"), from_currency, quote_currency)
+        if not direct_rate or float(direct_rate) == 0:
+            return 1.0
+        # Excel needs inverse: 1 quote_currency = Y from_currency
+        inverse_rate = 1.0 / float(direct_rate)
+        return round(inverse_rate, 4)
     except Exception as e:
         logger.warning(f"Could not get {from_currency} to {quote_currency} rate: {e}")
         return 1.0
