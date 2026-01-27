@@ -11387,12 +11387,6 @@ def get(session, quote_id: str):
                     ),
                     style="margin-top: 0.75rem;"
                 ),
-                # Invoice total display
-                Div(
-                    Span(f"Итого по инвойсу: {format_money(invoice_logistics_total, inv_currency)}",
-                         style="font-weight: 500; color: #374151;"),
-                    style="text-align: right; margin-top: 0.5rem; font-size: 0.875rem;"
-                ) if invoice_logistics_total > 0 else None,
                 style="background: #f9fafb; padding: 1rem; border-radius: 4px;"
             ),
 
