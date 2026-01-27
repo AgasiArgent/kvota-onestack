@@ -2164,7 +2164,8 @@ def transition_to_pending_procurement(
     try:
         update_response = supabase.table("quotes") \
             .update({
-                "status": WorkflowStatus.PENDING_PROCUREMENT.value,  # Update legacy status column
+                # Note: Don't update legacy "status" field - it has different valid values
+                # Only update workflow_status which tracks the actual workflow state
                 "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
                 "procurement_completed_at": None  # Reset in case of re-evaluation
             }) \
