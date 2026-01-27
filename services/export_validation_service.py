@@ -16,6 +16,8 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import openpyxl
+
+from services.currency_service import convert_amount
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -967,6 +969,27 @@ def _map_sale_type(value: str) -> str:
     return SALE_TYPE_ADAPTER_MAP.get(str(value).lower(), str(value))
 
 
+def _get_usd_to_quote_rate(quote_currency: str) -> float:
+    """
+    Get exchange rate from USD to quote currency.
+
+    For validation export, we need to convert API results (in USD) to quote currency.
+    Returns: how many units of quote_currency = 1 USD
+
+    Example: if quote is EUR and 1 USD = 0.92 EUR, returns 0.92
+    """
+    if not quote_currency or quote_currency == "USD":
+        return 1.0
+
+    try:
+        # convert_amount(1 USD, from=USD, to=quote_currency)
+        rate = convert_amount(Decimal("1"), "USD", quote_currency)
+        return float(rate) if rate else 1.0
+    except Exception as e:
+        logger.warning(f"Could not get USD to {quote_currency} rate: {e}")
+        return 1.0
+
+
 def create_validation_excel(data) -> bytes:
     """
     Create validation Excel from OneStack ExportData.
@@ -1026,7 +1049,8 @@ def create_validation_excel(data) -> bytes:
         "rate_forex_risk": variables.get("rate_forex_risk", 0),
 
         # Internal: exchange rate for USD conversion
-        "_usd_to_quote_rate": variables.get("exchange_rate", 1.0),
+        # Get actual USD -> quote_currency rate from currency service
+        "_usd_to_quote_rate": _get_usd_to_quote_rate(quote.get("currency", "USD")),
         "_quote_currency": quote.get("currency", "RUB"),
     }
 
@@ -1073,7 +1097,7 @@ def create_validation_excel(data) -> bytes:
         "credit_sales_interest": 0,
 
         # Internal
-        "_usd_to_quote_rate": variables.get("exchange_rate", 1.0),
+        "_usd_to_quote_rate": _get_usd_to_quote_rate(quote.get("currency", "USD")),
         "_quote_currency": quote.get("currency", "RUB"),
     }
 
