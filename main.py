@@ -7398,7 +7398,8 @@ def post(
     seller_company: str = "МАСТЕР БЭРИНГ ООО",
     offer_sale_type: str = "поставка",
     offer_incoterms: str = "DDP",
-    # Pricing
+    # Pricing (note: 'currency' matches form field name)
+    currency: str = "RUB",
     markup: str = "15",
     supplier_discount: str = "0",
     exchange_rate: str = "1.0",
@@ -7441,7 +7442,8 @@ def post(
         return Div("Quote not found", cls="alert alert-error", id="preview-panel")
 
     quote = quote_result.data[0]
-    currency = quote.get("currency", "USD")
+    # Note: 'currency' comes from form parameter (user's selection)
+    # Don't override with quote.get("currency")
 
     # Get items
     items_result = supabase.table("quote_items") \
@@ -7707,7 +7709,7 @@ def get(quote_id: str, session):
                                     Option("USD", value="USD", selected=currency == "USD"),
                                     Option("EUR", value="EUR", selected=currency == "EUR"),
                                     Option("CNY", value="CNY", selected=currency == "CNY"),
-                                    name="quote_currency"
+                                    name="currency"
                                 ),
                                 Small("Валюта итоговой цены для клиента", style="color: #666; display: block; margin-top: 0.25rem;")
                             ),
@@ -7834,8 +7836,8 @@ def post(
     seller_company: str = "МАСТЕР БЭРИНГ ООО",
     offer_sale_type: str = "поставка",
     offer_incoterms: str = "DDP",
-    # Pricing
-    quote_currency: str = "RUB",
+    # Pricing (note: 'currency' matches form field name)
+    currency: str = "RUB",
     markup: str = "15",
     supplier_discount: str = "0",
     exchange_rate: str = "1.0",
@@ -7879,7 +7881,8 @@ def post(
         return page_layout("Error", Div("Quote not found", cls="alert alert-error"), session=session)
 
     quote = quote_result.data[0]
-    currency = quote.get("currency", "USD")
+    # Note: 'currency' comes from form parameter (user's selection on calculate page)
+    # Don't override with quote.get("currency") - the form value is what user wants
 
     # Get items
     items_result = supabase.table("quote_items") \
@@ -8124,9 +8127,9 @@ def post(
                 .execute()
 
         # Update quote currency if it changed
-        if quote.get("currency") != quote_currency:
+        if quote.get("currency") != currency:
             supabase.table("quotes") \
-                .update({"currency": quote_currency}) \
+                .update({"currency": currency}) \
                 .eq("id", quote_id) \
                 .execute()
 
