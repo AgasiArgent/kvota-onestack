@@ -104,6 +104,7 @@ PERCENTAGE_FIELDS = {
     "advance_on_shipping",
     "advance_on_customs",
     "rate_forex_risk",
+    "rate_fin_comm",
     "supplier_discount",
     "import_tariff",
     "markup",
@@ -1210,8 +1211,10 @@ def create_validation_excel(data) -> bytes:
         "dm_fee_type": _map_dm_fee_type(variables.get("dm_fee_type", "Фикс")),
         "dm_fee_value": dm_fee_value_usd,
 
-        # Admin settings
-        "rate_forex_risk": variables.get("rate_forex_risk", 0),
+        # Admin settings - use same defaults as calculation_mapper.get_default_admin_settings()
+        # If user hasn't overridden these, calculation uses these defaults
+        "rate_forex_risk": variables.get("rate_forex_risk") if variables.get("rate_forex_risk") is not None else 3,  # Default 3%
+        "rate_fin_comm": variables.get("rate_fin_comm") if variables.get("rate_fin_comm") is not None else 2,  # Default 2%
 
         # Internal: exchange rate for USD conversion
         # Get actual USD -> quote_currency rate from currency service
