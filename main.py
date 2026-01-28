@@ -7961,61 +7961,58 @@ def post(
 
         print(f"[calc-debug] Delivery time: max_logistics={max_logistics_days}, max_production={max_production_days}, form={form_delivery_time}, effective={effective_delivery_time}")
 
-        # If all form logistics values are 0, aggregate from invoices
-        if form_logistics_supplier_hub == 0 and form_logistics_hub_customs == 0 and form_logistics_customs_client == 0:
-            print("[calc-debug] All form logistics are 0, aggregating from invoices...")
-            invoices_result = supabase.table("invoices") \
-                .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
-                        "logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
-                .eq("quote_id", quote_id) \
-                .execute()
+        # ALWAYS aggregate logistics from invoices - invoices are the source of truth
+        # (form values may be stale from previous calculations with different currency logic)
+        print("[calc-debug] Aggregating logistics from invoices...")
+        invoices_result = supabase.table("invoices") \
+            .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, "
+                    "logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
+            .eq("quote_id", quote_id) \
+            .execute()
 
-            invoices_logistics = invoices_result.data or []
+        invoices_logistics = invoices_result.data or []
 
-            if invoices_logistics:
-                from services.currency_service import convert_amount
-                total_logistics_supplier_hub = Decimal(0)
-                total_logistics_hub_customs = Decimal(0)
-                total_logistics_customs_client = Decimal(0)
+        if invoices_logistics:
+            from services.currency_service import convert_amount
+            total_logistics_supplier_hub = Decimal(0)
+            total_logistics_hub_customs = Decimal(0)
+            total_logistics_customs_client = Decimal(0)
 
-                print(f"[calc-debug] Quote currency: {currency}")
-                print(f"[calc-debug] Found {len(invoices_logistics)} invoices with logistics data")
-                print(f"[calc-debug] Converting all logistics to USD (standard storage currency)")
+            print(f"[calc-debug] Quote currency: {currency}")
+            print(f"[calc-debug] Found {len(invoices_logistics)} invoices with logistics data")
+            print(f"[calc-debug] Converting all logistics to USD (standard storage currency)")
 
-                for inv in invoices_logistics:
-                    # Supplier → Hub - convert to USD (standard storage currency)
-                    s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
-                    s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
-                    if s2h_amount > 0:
-                        converted = convert_amount(s2h_amount, s2h_currency, "USD")
-                        print(f"[calc-debug] S2H: {s2h_amount} {s2h_currency} → {converted} USD")
-                        total_logistics_supplier_hub += converted
+            for inv in invoices_logistics:
+                # Supplier → Hub - convert to USD (standard storage currency)
+                s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
+                s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
+                if s2h_amount > 0:
+                    converted = convert_amount(s2h_amount, s2h_currency, "USD")
+                    print(f"[calc-debug] S2H: {s2h_amount} {s2h_currency} → {converted} USD")
+                    total_logistics_supplier_hub += converted
 
-                    # Hub → Customs - convert to USD
-                    h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
-                    h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
-                    if h2c_amount > 0:
-                        converted = convert_amount(h2c_amount, h2c_currency, "USD")
-                        print(f"[calc-debug] H2C: {h2c_amount} {h2c_currency} → {converted} USD")
-                        total_logistics_hub_customs += converted
+                # Hub → Customs - convert to USD
+                h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
+                h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
+                if h2c_amount > 0:
+                    converted = convert_amount(h2c_amount, h2c_currency, "USD")
+                    print(f"[calc-debug] H2C: {h2c_amount} {h2c_currency} → {converted} USD")
+                    total_logistics_hub_customs += converted
 
-                    # Customs → Customer - convert to USD
-                    c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
-                    c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
-                    if c2c_amount > 0:
-                        converted = convert_amount(c2c_amount, c2c_currency, "USD")
-                        print(f"[calc-debug] C2C: {c2c_amount} {c2c_currency} → {converted} USD")
-                        total_logistics_customs_client += converted
+                # Customs → Customer - convert to USD
+                c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
+                c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
+                if c2c_amount > 0:
+                    converted = convert_amount(c2c_amount, c2c_currency, "USD")
+                    print(f"[calc-debug] C2C: {c2c_amount} {c2c_currency} → {converted} USD")
+                    total_logistics_customs_client += converted
 
-                # Use aggregated values if any found
-                print(f"[calc-debug] Aggregated logistics: S2H={total_logistics_supplier_hub}, H2C={total_logistics_hub_customs}, C2C={total_logistics_customs_client}")
-                if total_logistics_supplier_hub > 0:
-                    form_logistics_supplier_hub = total_logistics_supplier_hub
-                if total_logistics_hub_customs > 0:
-                    form_logistics_hub_customs = total_logistics_hub_customs
-                if total_logistics_customs_client > 0:
-                    form_logistics_customs_client = total_logistics_customs_client
-                print(f"[calc-debug] Final logistics values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
+            # Use aggregated values (always override form values for logistics)
+            print(f"[calc-debug] Aggregated logistics: S2H={total_logistics_supplier_hub}, H2C={total_logistics_hub_customs}, C2C={total_logistics_customs_client}")
+            form_logistics_supplier_hub = total_logistics_supplier_hub
+            form_logistics_hub_customs = total_logistics_hub_customs
+            form_logistics_customs_client = total_logistics_customs_client
+            print(f"[calc-debug] Final logistics values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
 
         # Build variables from form parameters
         variables = {
