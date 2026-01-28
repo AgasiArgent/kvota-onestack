@@ -23991,11 +23991,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
         tab_content = Div(
             Div(
-                icon("lightbulb", size=16), " Кликните на поле для редактирования. Иконки ",
-                Span(icon("pen-tool", size=14), style="background: #10b981; color: white; width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;"),
-                " (подписант) и ",
-                Span(icon("star", size=14), style="background: #f59e0b; color: white; width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;"),
-                " (основной) — уникальны для клиента.",
+                icon("lightbulb", size=16), " Кликните на поле для редактирования. В колонке СТАТУС: ",
+                Span(icon("pen-tool", size=14), style="color: #10b981; display: inline-flex;"),
+                " подписант, ",
+                Span(icon("star", size=14), style="color: #f59e0b; display: inline-flex;"),
+                " основной контакт.",
                 cls="alert alert-info", style="margin: 1rem 0;"
             ),
             Div(
@@ -24638,20 +24638,20 @@ def _render_contact_field(contact_id: str, customer_id: str, field_name: str, va
 
 
 def _render_contact_name_cell(contact, customer_id: str):
-    """Render the name cell with badges and inline editing."""
-    badges = []
-    if contact.is_signatory:
-        badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
-    if contact.is_primary:
-        badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+    """Render the name cell with full name (Фамилия Имя Отчество) and inline editing."""
+    # Build full name: Фамилия Имя Отчество
+    name_parts = []
+    if contact.last_name:
+        name_parts.append(contact.last_name)
+    if contact.name:
+        name_parts.append(contact.name)
+    if contact.patronymic:
+        name_parts.append(contact.patronymic)
+    full_name = " ".join(name_parts) if name_parts else "—"
 
     return Td(
         Div(
-            Div(
-                Strong(contact.get_full_name()),
-                *badges,
-                style="display: flex; align-items: center; flex-wrap: wrap;"
-            ),
+            Strong(full_name),
             id=f"contact-{contact.id}-name",
             hx_get=f"/customers/{customer_id}/contacts/{contact.id}/edit-field/name",
             hx_target=f"#contact-{contact.id}-name",
