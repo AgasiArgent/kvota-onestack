@@ -808,6 +808,22 @@ table tbody td:last-child {
     width: 100px;
 }
 
+/* Status icon buttons in col-actions - transparent background, custom colors */
+.col-actions button.status-icon {
+    background: transparent !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 4px !important;
+    min-width: auto !important;
+    transform: none !important;
+}
+.col-actions button.status-icon:hover {
+    background: rgba(0,0,0,0.05) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 /* Unified Table Body */
 .unified-table tbody tr {
     border-bottom: 1px solid var(--border-color);
@@ -24677,8 +24693,8 @@ def _render_contact_flags_cell(contact, customer_id: str):
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                cls="ghost",
-                style=f"padding: 4px; color: {signatory_color} !important; min-width: auto;",
+                cls="status-icon",
+                style=f"color: {signatory_color};",
                 title="Подписант" if contact.is_signatory else "Сделать подписантом"
             ),
             Button(
@@ -24686,11 +24702,11 @@ def _render_contact_flags_cell(contact, customer_id: str):
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                cls="ghost",
-                style=f"padding: 4px; color: {primary_color} !important; min-width: auto;",
+                cls="status-icon",
+                style=f"color: {primary_color};",
                 title="Основной контакт" if contact.is_primary else "Сделать основным"
             ),
-            style="display: flex; align-items: center; gap: 2px;"
+            style="display: flex; align-items: center; gap: 4px;"
         ),
         cls="col-actions"
     )
