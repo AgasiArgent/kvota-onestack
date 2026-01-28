@@ -110,6 +110,34 @@
 
 **Исправлено:** Конвертация теперь выполняется в USD в POST handler перед вызовом build_calculation_inputs.
 
+### ✅ Проблема 3: rate_forex_risk/rate_fin_comm передавались неправильно (ИСПРАВЛЕНО)
+**Поля:** rate_forex_risk, rate_fin_comm
+
+**Было:** Дефолты в calculation_mapper.py были `Decimal("0.03")` и `Decimal("0.02")`, но Calculation Engine делит их на 100.
+Результат: 0.03 / 100 = 0.0003 (0.03%) вместо 3%.
+
+**Исправлено:**
+- Дефолты изменены на `Decimal("3")` и `Decimal("2")` (целые числа)
+- Engine сам делит на 100: 3 / 100 = 0.03 = 3%
+
+### ✅ Проблема 4: rate_forex_risk мапился на неправильную ячейку (ИСПРАВЛЕНО)
+**Поле:** rate_forex_risk в validation export
+
+**Было:** Мапился на ячейку AH11 (неправильно).
+
+**Исправлено:** Мапится на ячейку D30 (правильно - туда же где Excel ожидает "Резерв на курсовую разницу %").
+
+### ✅ Проблема 5: Quote Totals показывали 0 (ИСПРАВЛЕНО)
+**Поля:** S13, T13, V13, AB13, AK13, AL13, AF13 (Quote Totals в API_Results)
+
+**Было:** api_results читал из `quote_calculation_summaries` таблицы, которая могла содержать устаревшие/нулевые данные.
+Код использовал summaries если они существовали (даже если все нули), и только fallback на `calculate_totals_from_items()` если summaries пустой dict.
+
+**Исправлено:**
+- `create_validation_excel()` теперь ВСЕГДА вычисляет totals напрямую из item calculations
+- Суммирует S16, T16, U16, V16, AB16, AK16, AL16, AF16 из каждого item["calc"]
+- Это источник истины, соответствует product-level results
+
 ---
 
 ## ТЕКУЩЕЕ СОСТОЯНИЕ
@@ -150,4 +178,4 @@ Excel-шаблон ожидает:
 ---
 
 *Audit date: 2026-01-28*
-*Updated: 2026-01-28 (validation export fixed)*
+*Updated: 2026-01-28 (rate_forex_risk defaults, Quote Totals calculation fixed)*
