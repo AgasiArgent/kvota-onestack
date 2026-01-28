@@ -1680,6 +1680,10 @@ button[style*="#0172AD"] {
     display: none;
 }
 
+.sidebar.collapsed .sidebar-badge {
+    display: none;
+}
+
 .sidebar.collapsed .sidebar-item {
     justify-content: center;
     padding: 0.6rem;
@@ -1970,6 +1974,15 @@ def sidebar(session, current_path: str = ""):
 
     roles = user.get("roles", [])
     is_admin = "admin" in roles
+    user_id = user.get("id")
+
+    # Get pending approvals count for badge (top_manager/admin only)
+    pending_approvals_count = 0
+    if user_id and (is_admin or "top_manager" in roles):
+        try:
+            pending_approvals_count = count_pending_approvals(user_id)
+        except Exception:
+            pending_approvals_count = 0
 
     # Define menu structure with role requirements
     menu_sections = []
@@ -1984,9 +1997,15 @@ def sidebar(session, current_path: str = ""):
     # Add "Обзор" (analytics) for admin/top_manager
     if is_admin or "top_manager" in roles:
         main_items.append({"icon": "bar-chart-3", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
-    # Add "Согласования" (approvals workspace) for top_manager/admin
+    # Add "Согласования" (approvals workspace) for top_manager/admin with badge
     if is_admin or "top_manager" in roles:
-        main_items.append({"icon": "clock", "label": "Согласования", "href": "/approvals", "roles": ["admin", "top_manager"]})
+        main_items.append({
+            "icon": "clock",
+            "label": "Согласования",
+            "href": "/approvals",
+            "roles": ["admin", "top_manager"],
+            "badge": pending_approvals_count if pending_approvals_count > 0 else None
+        })
 
     menu_sections.append({"title": "Главное", "items": main_items})
 
@@ -2038,10 +2057,25 @@ def sidebar(session, current_path: str = ""):
                 is_active = current_path == item["href"] or (item["href"] != "/" and current_path.startswith(item["href"]))
                 if is_active:
                     has_active = True
+
+                # Build item content with optional badge
+                item_content = [
+                    icon(item["icon"], size=20, cls="sidebar-item-icon"),
+                    Span(item["label"], cls="sidebar-item-text"),
+                ]
+                # Add badge if present (e.g., pending approvals count)
+                if item.get("badge"):
+                    item_content.append(
+                        Span(
+                            str(item["badge"]),
+                            cls="sidebar-badge",
+                            style="background: #ef4444; color: white; font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; margin-left: auto; min-width: 18px; text-align: center;"
+                        )
+                    )
+
                 section_items.append(
                     A(
-                        icon(item["icon"], size=20, cls="sidebar-item-icon"),
-                        Span(item["label"], cls="sidebar-item-text"),
+                        *item_content,
                         href=item["href"],
                         cls=f"sidebar-item {'active' if is_active else ''}"
                     )
@@ -5836,11 +5870,23 @@ def get(quote_id: str, session):
 
         # Workflow Actions (for approved quotes - Send to Client)
         Div(
-            H3("Workflow"),
+            H3("Отправить клиенту"),
             Form(
-                Button(icon("send", size=16), " Send to Client", type="submit",
+                Div(
+                    Label("Email получателя", fr="sent_to_email", style="font-weight: 500;"),
+                    Input(
+                        type="email",
+                        name="sent_to_email",
+                        placeholder="client@company.com",
+                        value=customer.get("email", "") if customer else "",
+                        style="width: 100%; margin-top: 0.25rem;",
+                        required=True
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+                Button(icon("send", size=16), " Отправлено клиенту", type="submit",
                        style="background: #0891b2; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
-                P("Send approved quote to the client.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                P("Отметить КП как отправленное клиенту.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/send-to-client"
             ),
@@ -5883,6 +5929,52 @@ def get(quote_id: str, session):
             ),
             cls="card", style="border-left: 4px solid #16a34a;"
         ) if workflow_status == "client_negotiation" and user_has_any_role(session, ["sales", "admin"]) else None,
+
+        # Client Change Request Section (for sent_to_client or client_negotiation)
+        Div(
+            H3("Клиент просит изменения"),
+            P("Выберите тип изменений:", style="margin-bottom: 1rem; color: #666;"),
+            Form(
+                Div(
+                    # Change type radio buttons
+                    Div(
+                        Input(type="radio", name="change_type", value="add_item", id="change_add_item", required=True),
+                        Label(" Добавить позицию → Закупка", fr="change_add_item", style="margin-left: 0.25rem;"),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+                    Div(
+                        Input(type="radio", name="change_type", value="logistics", id="change_logistics"),
+                        Label(" Изменить логистику → Логистика", fr="change_logistics", style="margin-left: 0.25rem;"),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+                    Div(
+                        Input(type="radio", name="change_type", value="price", id="change_price"),
+                        Label(" Изменить цену → Расчёт", fr="change_price", style="margin-left: 0.25rem;"),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+                    Div(
+                        Input(type="radio", name="change_type", value="full", id="change_full"),
+                        Label(" Полный пересчёт → Начало", fr="change_full", style="margin-left: 0.25rem;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+                # Client comment
+                Div(
+                    Label("Комментарий клиента:", fr="client_comment", style="font-weight: 500;"),
+                    Textarea(name="client_comment", id="client_comment", placeholder="Опишите, что именно хочет изменить клиент...",
+                             rows="3", style="width: 100%; margin-top: 0.25rem;"),
+                    style="margin-bottom: 1rem;"
+                ),
+                Div(
+                    Button(icon("rotate-ccw", size=16), " Отправить на доработку", type="submit",
+                           style="background: #f59e0b; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                ),
+                method="post",
+                action=f"/quotes/{quote_id}/client-change-request"
+            ),
+            cls="card", style="border-left: 4px solid #f59e0b;"
+        ) if workflow_status in ["sent_to_client", "client_negotiation"] and user_has_any_role(session, ["sales", "admin"]) else None,
 
         # Actions section
         Div(
@@ -6662,7 +6754,7 @@ def post(session, quote_id: str, department: str = "quote_control", comment: str
 # ============================================================================
 
 @rt("/quotes/{quote_id}/send-to-client")
-def post(quote_id: str, session):
+def post(quote_id: str, session, sent_to_email: str = ""):
     """Send approved quote to client."""
     redirect = require_login(session)
     if redirect:
@@ -6674,12 +6766,96 @@ def post(quote_id: str, session):
     if not user_has_any_role(session, ["sales", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    # Save sent_at timestamp and sent_to_email
+    from datetime import datetime
+    supabase.table("quotes").update({
+        "sent_at": datetime.utcnow().isoformat(),
+        "sent_to_email": sent_to_email.strip() if sent_to_email else None
+    }).eq("id", quote_id).execute()
+
     result = transition_quote_status(
         quote_id=quote_id,
         to_status="sent_to_client",
         actor_id=user["id"],
         actor_roles=user_roles,
-        comment="Quote sent to client"
+        comment=f"Quote sent to client at {sent_to_email}" if sent_to_email else "Quote sent to client"
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Error",
+            Div(f"Error: {result.error_message}", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+# ============================================================================
+# CLIENT CHANGE REQUEST
+# ============================================================================
+
+@rt("/quotes/{quote_id}/client-change-request")
+def post(quote_id: str, session, change_type: str = "", client_comment: str = ""):
+    """Handle client change request - route to appropriate workflow stage."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Validate change type
+    valid_types = ["add_item", "logistics", "price", "full"]
+    if change_type not in valid_types:
+        return page_layout("Error",
+            Div("Invalid change type", cls="alert alert-error"),
+            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+    # Record the change request
+    from datetime import datetime
+    try:
+        supabase.table("quote_change_requests").insert({
+            "quote_id": quote_id,
+            "change_type": change_type,
+            "client_comment": client_comment.strip() if client_comment else None,
+            "requested_by": user["id"],
+            "requested_at": datetime.utcnow().isoformat()
+        }).execute()
+    except Exception as e:
+        # Table might not exist yet if migration not applied - continue anyway
+        pass
+
+    # Map change type to target workflow status
+    status_map = {
+        "add_item": "pending_procurement",
+        "logistics": "pending_logistics",
+        "price": "pending_markup",
+        "full": "pending_procurement"
+    }
+
+    target_status = status_map.get(change_type, "pending_procurement")
+
+    # Update quote with partial_recalc flag
+    try:
+        supabase.table("quotes").update({
+            "partial_recalc": change_type
+        }).eq("id", quote_id).execute()
+    except Exception:
+        pass
+
+    # Transition quote status
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status=target_status,
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment=f"Client change request: {change_type}. Comment: {client_comment}" if client_comment else f"Client change request: {change_type}"
     )
 
     if result.success:
@@ -8090,10 +8266,27 @@ def get(quote_id: str, session):
             Input(type="hidden", name="seller_company", value=""),
         )
 
+    # Check for partial recalculation
+    partial_recalc = quote.get("partial_recalc")
+
     return page_layout(f"Calculate - {quote.get('idn_quote', '')}",
         H1(f"Calculate {quote.get('idn_quote', '')}"),
         P(f"Customer: {quote.get('customers', {}).get('name', '-')} | Currency: {currency} | {len(items)} products",
           style="color: #666;"),
+
+        # Partial recalculation banner - shown when returning from client for price-only changes
+        Div(
+            Div(
+                Span("🔄 Частичный пересчёт: только наценка", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                P("Клиент запросил изменение цены. Данные закупки, логистики и таможни сохранены.", style="margin: 0 0 0.5rem;"),
+                P("После сохранения расчёта КП автоматически вернётся клиенту.", style="margin: 0; font-size: 0.875rem; color: #666;"),
+            ),
+            cls="card",
+            style="background: #f0fdf4; border: 2px solid #22c55e; margin-bottom: 1rem;"
+        ) if partial_recalc == "price" else None,
 
         # Main form with HTMX live preview
         Form(
@@ -8687,6 +8880,24 @@ def post(
                 .update({"currency": currency}) \
                 .eq("id", quote_id) \
                 .execute()
+
+        # Handle partial recalculation for price-only changes
+        partial_recalc = quote.get("partial_recalc")
+        if partial_recalc == "price":
+            # Clear partial_recalc flag
+            supabase.table("quotes").update({
+                "partial_recalc": None
+            }).eq("id", quote_id).execute()
+
+            # Transition back to client_negotiation
+            user_roles = user.get("roles", [])
+            transition_quote_status(
+                quote_id=quote_id,
+                to_status="client_negotiation",
+                actor_id=user["id"],
+                actor_roles=user_roles,
+                comment="Partial recalculation: price updated, returning to client negotiation"
+            )
 
         # Create immutable quote version for audit trail
         all_results = []
@@ -10619,6 +10830,34 @@ def get(quote_id: str, session):
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
 
+        # Partial recalculation banner - shown when returned from client for adding items
+        Div(
+            Div(
+                Span("🔄 Добавление позиций по запросу клиента", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                P("Клиент запросил добавление позиций. Вы можете добавить новые товары в существующие инвойсы.", style="margin: 0 0 0.5rem;"),
+                P("После завершения закупки КП пройдёт полный цикл пересчёта.", style="margin: 0; font-size: 0.875rem; color: #666;"),
+            ),
+            cls="card",
+            style="background: #dbeafe; border: 2px solid #3b82f6; margin-bottom: 1rem;"
+        ) if quote.get("partial_recalc") == "add_item" else None,
+
+        # Partial recalculation banner - shown for full recalculation
+        Div(
+            Div(
+                Span("🔄 Полный пересчёт по запросу клиента", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                P("Клиент запросил полный пересчёт КП.", style="margin: 0 0 0.5rem;"),
+                P("После завершения закупки КП пройдёт полный цикл пересчёта.", style="margin: 0; font-size: 0.875rem; color: #666;"),
+            ),
+            cls="card",
+            style="background: #fce7f3; border: 2px solid #ec4899; margin-bottom: 1rem;"
+        ) if quote.get("partial_recalc") == "full" else None,
+
         # Revision banner - shown when returned from quote control (Feature: multi-department return)
         Div(
             Div(
@@ -12020,6 +12259,20 @@ def get(session, quote_id: str):
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
 
+        # Partial recalculation banner - shown when returned from client for logistics-only changes
+        Div(
+            Div(
+                Span("🔄 Частичный пересчёт: только логистика", style="font-weight: 600; font-size: 1.1rem;"),
+                style="margin-bottom: 0.5rem;"
+            ),
+            Div(
+                P("Клиент запросил изменение логистики. Данные закупки и таможни сохранены.", style="margin: 0 0 0.5rem;"),
+                P("После обновления логистики КП автоматически вернётся клиенту.", style="margin: 0; font-size: 0.875rem; color: #666;"),
+            ),
+            cls="card",
+            style="background: #e0f2fe; border: 2px solid #0891b2; margin-bottom: 1rem;"
+        ) if quote.get("partial_recalc") == "logistics" else None,
+
         # Revision banner - shown when returned from quote control (Feature: multi-department return)
         Div(
             Div(
@@ -12242,6 +12495,34 @@ async def post(session, quote_id: str, request):
         if not result.success:
             # Log error but still redirect
             print(f"Error completing logistics: {result.error_message}")
+        else:
+            # Check for partial recalculation mode
+            try:
+                partial_check = supabase.table("quotes") \
+                    .select("partial_recalc") \
+                    .eq("id", quote_id) \
+                    .single() \
+                    .execute()
+
+                partial_recalc = partial_check.data.get("partial_recalc") if partial_check.data else None
+
+                if partial_recalc == "logistics":
+                    # Partial recalculation - skip customs, return to client negotiation
+                    # Clear partial_recalc flag and transition to client_negotiation
+                    supabase.table("quotes").update({
+                        "partial_recalc": None
+                    }).eq("id", quote_id).execute()
+
+                    # Transition directly to client_negotiation
+                    transition_quote_status(
+                        quote_id=quote_id,
+                        to_status="client_negotiation",
+                        actor_id=user_id,
+                        actor_roles=user_roles,
+                        comment="Partial recalculation: logistics updated, returning to client negotiation"
+                    )
+            except Exception as e:
+                print(f"Error checking partial_recalc: {e}")
 
     return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
 
