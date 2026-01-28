@@ -24666,9 +24666,9 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 def _render_contact_flags_cell(contact, customer_id: str):
     """Render the flags cell (signatory, primary) with minimal icon buttons."""
-    # Minimal style - just colored icons, no background (like header icons)
-    signatory_color = "#10b981" if contact.is_signatory else "#d1d5db"  # green or light gray
-    primary_color = "#f59e0b" if contact.is_primary else "#d1d5db"  # orange or light gray
+    # Colors: green for signatory, orange for primary, gray for inactive
+    signatory_color = "#10b981" if contact.is_signatory else "#9ca3af"
+    primary_color = "#f59e0b" if contact.is_primary else "#9ca3af"
 
     return Td(
         Div(
@@ -24677,7 +24677,8 @@ def _render_contact_flags_cell(contact, customer_id: str):
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=f"background: none; border: none; padding: 4px; cursor: pointer; color: {signatory_color}; opacity: {'1' if contact.is_signatory else '0.6'};",
+                cls="ghost",
+                style=f"padding: 4px; color: {signatory_color} !important; min-width: auto;",
                 title="Подписант" if contact.is_signatory else "Сделать подписантом"
             ),
             Button(
@@ -24685,7 +24686,8 @@ def _render_contact_flags_cell(contact, customer_id: str):
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=f"background: none; border: none; padding: 4px; cursor: pointer; color: {primary_color}; opacity: {'1' if contact.is_primary else '0.6'};",
+                cls="ghost",
+                style=f"padding: 4px; color: {primary_color} !important; min-width: auto;",
                 title="Основной контакт" if contact.is_primary else "Сделать основным"
             ),
             style="display: flex; align-items: center; gap: 2px;"
