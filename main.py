@@ -7426,6 +7426,7 @@ def post(
     # DM Fee
     dm_fee_type: str = "fixed",
     dm_fee_value: str = "0",
+    dm_fee_currency: str = "USD",
 ):
     """HTMX endpoint - returns preview panel only (no DB save)."""
     redirect = require_login(session)
@@ -7493,6 +7494,11 @@ def post(
         if brokerage_extra_currency != 'USD' and brokerage_extra_usd > 0:
             brokerage_extra_usd = convert_amount(brokerage_extra_usd, brokerage_extra_currency, 'USD')
 
+        # Convert DM Fee to USD
+        dm_fee_value_usd = safe_decimal(dm_fee_value)
+        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value_usd > 0:
+            dm_fee_value_usd = convert_amount(dm_fee_value_usd, dm_fee_currency, 'USD')
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
@@ -7521,9 +7527,10 @@ def post(
             'time_to_advance': safe_int(time_to_advance),
             'time_to_advance_on_receiving': safe_int(time_to_advance_on_receiving),
 
-            # DM Fee
+            # DM Fee (converted to USD)
             'dm_fee_type': dm_fee_type,
-            'dm_fee_value': safe_decimal(dm_fee_value),
+            'dm_fee_value': dm_fee_value_usd,
+            'dm_fee_currency': dm_fee_currency,
 
             # Exchange rate
             'exchange_rate': safe_decimal(exchange_rate),
@@ -8070,6 +8077,14 @@ def post(
 
         print(f"[calc-debug] Brokerage conversion: hub={brokerage_hub} {brokerage_hub_currency}→{brokerage_hub_usd} USD, customs={brokerage_customs} {brokerage_customs_currency}→{brokerage_customs_usd} USD")
 
+        # ==========================================================================
+        # CONVERT DM FEE TO USD (Calculation Engine works in USD)
+        # ==========================================================================
+        dm_fee_value_usd = safe_decimal(dm_fee_value)
+        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value_usd > 0:
+            dm_fee_value_usd = convert_amount(dm_fee_value_usd, dm_fee_currency, 'USD')
+            print(f"[calc-debug] DM Fee conversion: {dm_fee_value} {dm_fee_currency} → {dm_fee_value_usd} USD")
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
@@ -8104,10 +8119,10 @@ def post(
             'time_to_advance': safe_int(time_to_advance),
             'time_to_advance_on_receiving': safe_int(time_to_advance_on_receiving),
 
-            # DM Fee
+            # DM Fee (converted to USD)
             'dm_fee_type': dm_fee_type,
-            'dm_fee_value': safe_decimal(dm_fee_value),
-            'dm_fee_currency': dm_fee_currency,
+            'dm_fee_value': dm_fee_value_usd,
+            'dm_fee_currency': dm_fee_currency,  # Original currency for reference
 
             # Exchange rate
             'exchange_rate': safe_decimal(exchange_rate),
