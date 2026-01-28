@@ -217,9 +217,9 @@ def get_default_admin_settings() -> Dict[str, Decimal]:
         Dict with rate_forex_risk, rate_fin_comm, rate_loan_interest_annual
     """
     return {
-        'rate_forex_risk': Decimal("0.03"),         # 3%
-        'rate_fin_comm': Decimal("0.02"),           # 2%
-        'rate_loan_interest_annual': Decimal("0.25"), # 25%
+        'rate_forex_risk': Decimal("3"),            # 3% (engine divides by 100)
+        'rate_fin_comm': Decimal("2"),              # 2% (engine divides by 100)
+        'rate_loan_interest_annual': Decimal("0.25"), # 25% annual rate
         'customs_logistics_pmt_due': 10             # 10 days
     }
 
