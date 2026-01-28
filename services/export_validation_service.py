@@ -862,18 +862,20 @@ class ExportValidationService:
         BASE_CURRENCY_FIELDS = {"purchase_price_no_vat", "purchase_price_after_discount"}
 
         # Fields that are in USD and need conversion to quote currency
-        # Logistics comes from invoice aggregation in USD
-        # DM Fee is passed to engine in USD
-        USD_MONETARY_FIELDS = {
-            "logistics_first_leg",                     # T16 - from invoices, USD
-            "logistics_last_leg",                      # U16 - from invoices, USD
-            "logistics_total",                         # V16 - from invoices, USD
-            "dm_fee",                                  # AG16 - passed to engine in USD
-        }
+        # 2026-01-28: After fixing currency mixing bug, ALL inputs to engine are now
+        # converted to quote currency in build_calculation_inputs(). So engine outputs
+        # everything in quote currency. No more USD_MONETARY_FIELDS needed.
+        USD_MONETARY_FIELDS = set()  # Empty - all values now in quote currency
 
         # Fields already in quote currency (engine outputs in quote currency)
         # These should NOT be converted - passthrough only
         QUOTE_CURRENCY_FIELDS = {
+            # Logistics - converted to quote currency before engine (2026-01-28)
+            "logistics_first_leg",                     # T16 - now in quote currency
+            "logistics_last_leg",                      # U16 - now in quote currency
+            "logistics_total",                         # V16 - now in quote currency
+            "dm_fee",                                  # AG16 - now in quote currency
+            # Purchase prices
             "purchase_price_per_unit_quote_currency",  # R16 = P16 / exchange_rate
             "purchase_price_total_quote_currency",     # S16 = R16 * quantity
             "customs_fee",                             # Y16 - calculated in quote currency
@@ -883,7 +885,7 @@ class ExportValidationService:
             "sale_price_per_unit_excl_financial",      # AD16 - calculated in quote currency
             "sale_price_total_excl_financial",         # AE16 - calculated in quote currency
             "profit",                                  # AF16 - calculated in quote currency
-            # dm_fee is in USD_MONETARY_FIELDS (passed to engine in USD)
+            # dm_fee moved to QUOTE_CURRENCY_FIELDS (converted before engine 2026-01-28)
             "forex_reserve",                           # AH16 - calculated in quote currency
             "financial_agent_fee",                     # AI16 - calculated in quote currency
             "sales_price_per_unit_no_vat",             # AJ16 - calculated in quote currency

@@ -7263,58 +7263,85 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
     # ==========================================================================
-    # CONVERT MONETARY VALUES TO USD FOR CALCULATION ENGINE
-    # Values are stored in original currency, we convert here before calculation
+    # CONVERT MONETARY VALUES TO QUOTE CURRENCY FOR CALCULATION ENGINE
+    #
+    # IMPORTANT: The calculation engine uses exchange_rate to convert purchase
+    # prices to quote currency (R16 = P16 / exchange_rate). This means S16, AY16
+    # are in quote currency. For Y16 = tariff * (AY16 + T16) to be correct,
+    # T16 (logistics) must also be in quote currency.
+    #
+    # Values are stored in various currencies (logistics in USD, brokerage in
+    # original currency). We convert ALL to quote currency here.
+    #
+    # 2026-01-28: Fixed currency mixing bug - was converting to USD but engine
+    # outputs S16/AY16 in quote currency, causing Y16 calculation error.
     # ==========================================================================
 
-    # Helper to convert value from source_currency to USD
-    def to_usd(value, currency):
-        if not value or currency == 'USD':
+    # Helper to convert value from source_currency to quote_currency
+    def to_quote(value, from_currency):
+        if not value:
+            return safe_decimal(value)
+        if from_currency == quote_currency:
             return safe_decimal(value)
         val = safe_decimal(value)
         if val > 0:
-            return safe_decimal(convert_amount(val, currency, 'USD'))
+            return safe_decimal(convert_amount(val, from_currency, quote_currency))
         return val
 
-    # Convert brokerage fields from their currencies to USD
-    brokerage_hub_usd = to_usd(
+    # Convert brokerage fields from their currencies to quote currency
+    brokerage_hub_qc = to_quote(
         variables.get('brokerage_hub'),
         variables.get('brokerage_hub_currency', 'USD')
     )
-    brokerage_customs_usd = to_usd(
+    brokerage_customs_qc = to_quote(
         variables.get('brokerage_customs'),
         variables.get('brokerage_customs_currency', 'USD')
     )
-    warehousing_at_customs_usd = to_usd(
+    warehousing_at_customs_qc = to_quote(
         variables.get('warehousing_at_customs'),
         variables.get('warehousing_at_customs_currency', 'USD')
     )
-    customs_documentation_usd = to_usd(
+    customs_documentation_qc = to_quote(
         variables.get('customs_documentation'),
         variables.get('customs_documentation_currency', 'USD')
     )
-    brokerage_extra_usd = to_usd(
+    brokerage_extra_qc = to_quote(
         variables.get('brokerage_extra'),
         variables.get('brokerage_extra_currency', 'USD')
     )
 
-    # Convert DM Fee from its currency to USD (only for fixed type)
+    # Convert logistics fields from USD to quote currency
+    # Logistics costs are aggregated and stored in USD
+    logistics_supplier_hub_qc = to_quote(
+        variables.get('logistics_supplier_hub'), 'USD'
+    )
+    logistics_hub_customs_qc = to_quote(
+        variables.get('logistics_hub_customs'), 'USD'
+    )
+    logistics_customs_client_qc = to_quote(
+        variables.get('logistics_customs_client'), 'USD'
+    )
+
+    # Convert DM Fee from its currency to quote currency (only for fixed type)
     dm_fee_type = variables.get('dm_fee_type', 'fixed')
     dm_fee_currency = variables.get('dm_fee_currency', 'USD')
     if dm_fee_type == 'fixed':
-        dm_fee_value_usd = to_usd(variables.get('dm_fee_value'), dm_fee_currency)
+        dm_fee_value_qc = to_quote(variables.get('dm_fee_value'), dm_fee_currency)
     else:
         # Percentage - no conversion needed
-        dm_fee_value_usd = safe_decimal(variables.get('dm_fee_value'))
+        dm_fee_value_qc = safe_decimal(variables.get('dm_fee_value'))
 
-    # Create a copy of variables with USD-converted values for calculation
+    # Create a copy of variables with quote-currency-converted values
     calc_variables = dict(variables)
-    calc_variables['brokerage_hub'] = brokerage_hub_usd
-    calc_variables['brokerage_customs'] = brokerage_customs_usd
-    calc_variables['warehousing_at_customs'] = warehousing_at_customs_usd
-    calc_variables['customs_documentation'] = customs_documentation_usd
-    calc_variables['brokerage_extra'] = brokerage_extra_usd
-    calc_variables['dm_fee_value'] = dm_fee_value_usd
+    calc_variables['brokerage_hub'] = brokerage_hub_qc
+    calc_variables['brokerage_customs'] = brokerage_customs_qc
+    calc_variables['warehousing_at_customs'] = warehousing_at_customs_qc
+    calc_variables['customs_documentation'] = customs_documentation_qc
+    calc_variables['brokerage_extra'] = brokerage_extra_qc
+    calc_variables['logistics_supplier_hub'] = logistics_supplier_hub_qc
+    calc_variables['logistics_hub_customs'] = logistics_hub_customs_qc
+    calc_variables['logistics_customs_client'] = logistics_customs_client_qc
+    calc_variables['dm_fee_value'] = dm_fee_value_qc
 
     calc_inputs = []
     for item in items:
