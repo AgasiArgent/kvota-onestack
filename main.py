@@ -7259,17 +7259,16 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     # Get quote currency (target currency for all conversions)
     quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
-    # Convert DM Fee from its currency to quote currency (2026-01-26)
-    # DM Fee can be entered in a different currency than the quote
+    # Convert DM Fee from its currency to USD (calculation engine works in USD)
     dm_fee_type = variables.get('dm_fee_type', 'fixed')
     dm_fee_value = safe_decimal(variables.get('dm_fee_value', 0))
-    dm_fee_currency = variables.get('dm_fee_currency', quote_currency)
+    dm_fee_currency = variables.get('dm_fee_currency', 'USD')
 
-    if dm_fee_type == 'fixed' and dm_fee_currency != quote_currency and dm_fee_value > 0:
-        # Convert DM Fee to quote currency
-        converted_dm_fee = convert_amount(dm_fee_value, dm_fee_currency, quote_currency)
+    if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value > 0:
+        # Convert DM Fee to USD
+        converted_dm_fee = convert_amount(dm_fee_value, dm_fee_currency, 'USD')
         variables = {**variables, 'dm_fee_value': converted_dm_fee}
-        print(f"[calc] DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} {quote_currency}")
+        print(f"[calc] DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} USD")
 
     calc_inputs = []
     for item in items:
@@ -7408,12 +7407,17 @@ def post(
     logistics_supplier_hub: str = "0",
     logistics_hub_customs: str = "0",
     logistics_customs_client: str = "0",
-    # Brokerage
+    # Brokerage (values and currencies)
     brokerage_hub: str = "0",
+    brokerage_hub_currency: str = "RUB",
     brokerage_customs: str = "0",
+    brokerage_customs_currency: str = "RUB",
     warehousing_at_customs: str = "0",
+    warehousing_at_customs_currency: str = "RUB",
     customs_documentation: str = "0",
+    customs_documentation_currency: str = "RUB",
     brokerage_extra: str = "0",
+    brokerage_extra_currency: str = "RUB",
     # Payment terms
     advance_from_client: str = "100",
     advance_to_supplier: str = "100",
@@ -7470,6 +7474,25 @@ def post(
         form_delivery_time = safe_int(delivery_time)
         effective_delivery_time = max(aggregated_delivery_time, form_delivery_time)
 
+        # Convert brokerage values to USD (Calculation Engine works in USD)
+        from services.currency_service import convert_amount
+        brokerage_hub_usd = safe_decimal(brokerage_hub)
+        brokerage_customs_usd = safe_decimal(brokerage_customs)
+        warehousing_at_customs_usd = safe_decimal(warehousing_at_customs)
+        customs_documentation_usd = safe_decimal(customs_documentation)
+        brokerage_extra_usd = safe_decimal(brokerage_extra)
+
+        if brokerage_hub_currency != 'USD' and brokerage_hub_usd > 0:
+            brokerage_hub_usd = convert_amount(brokerage_hub_usd, brokerage_hub_currency, 'USD')
+        if brokerage_customs_currency != 'USD' and brokerage_customs_usd > 0:
+            brokerage_customs_usd = convert_amount(brokerage_customs_usd, brokerage_customs_currency, 'USD')
+        if warehousing_at_customs_currency != 'USD' and warehousing_at_customs_usd > 0:
+            warehousing_at_customs_usd = convert_amount(warehousing_at_customs_usd, warehousing_at_customs_currency, 'USD')
+        if customs_documentation_currency != 'USD' and customs_documentation_usd > 0:
+            customs_documentation_usd = convert_amount(customs_documentation_usd, customs_documentation_currency, 'USD')
+        if brokerage_extra_currency != 'USD' and brokerage_extra_usd > 0:
+            brokerage_extra_usd = convert_amount(brokerage_extra_usd, brokerage_extra_currency, 'USD')
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
@@ -7485,12 +7508,12 @@ def post(
             'logistics_hub_customs': safe_decimal(logistics_hub_customs),
             'logistics_customs_client': safe_decimal(logistics_customs_client),
 
-            # Brokerage
-            'brokerage_hub': safe_decimal(brokerage_hub),
-            'brokerage_customs': safe_decimal(brokerage_customs),
-            'warehousing_at_customs': safe_decimal(warehousing_at_customs),
-            'customs_documentation': safe_decimal(customs_documentation),
-            'brokerage_extra': safe_decimal(brokerage_extra),
+            # Brokerage (converted to USD)
+            'brokerage_hub': brokerage_hub_usd,
+            'brokerage_customs': brokerage_customs_usd,
+            'warehousing_at_customs': warehousing_at_customs_usd,
+            'customs_documentation': customs_documentation_usd,
+            'brokerage_extra': brokerage_extra_usd,
 
             # Payment terms
             'advance_from_client': safe_decimal(advance_from_client),
@@ -7740,10 +7763,15 @@ def get(quote_id: str, session):
                         Input(type="hidden", name="logistics_hub_customs", value=str(get_var('logistics_hub_customs', 0))),
                         Input(type="hidden", name="logistics_customs_client", value=str(get_var('logistics_customs_client', 0))),
                         Input(type="hidden", name="brokerage_hub", value=str(get_var('brokerage_hub', 0))),
+                        Input(type="hidden", name="brokerage_hub_currency", value=str(get_var('brokerage_hub_currency', 'RUB'))),
                         Input(type="hidden", name="brokerage_customs", value=str(get_var('brokerage_customs', 0))),
+                        Input(type="hidden", name="brokerage_customs_currency", value=str(get_var('brokerage_customs_currency', 'RUB'))),
                         Input(type="hidden", name="warehousing_at_customs", value=str(get_var('warehousing_at_customs', 0))),
+                        Input(type="hidden", name="warehousing_at_customs_currency", value=str(get_var('warehousing_at_customs_currency', 'RUB'))),
                         Input(type="hidden", name="customs_documentation", value=str(get_var('customs_documentation', 0))),
+                        Input(type="hidden", name="customs_documentation_currency", value=str(get_var('customs_documentation_currency', 'RUB'))),
                         Input(type="hidden", name="brokerage_extra", value=str(get_var('brokerage_extra', 0))),
+                        Input(type="hidden", name="brokerage_extra_currency", value=str(get_var('brokerage_extra_currency', 'RUB'))),
                         Input(type="hidden", name="advance_to_supplier", value=str(get_var('advance_to_supplier', 100))),
                         cls="card"
                     ),
@@ -7860,12 +7888,17 @@ def post(
     logistics_supplier_hub: str = "0",
     logistics_hub_customs: str = "0",
     logistics_customs_client: str = "0",
-    # Brokerage
+    # Brokerage (values and currencies)
     brokerage_hub: str = "0",
+    brokerage_hub_currency: str = "RUB",
     brokerage_customs: str = "0",
+    brokerage_customs_currency: str = "RUB",
     warehousing_at_customs: str = "0",
+    warehousing_at_customs_currency: str = "RUB",
     customs_documentation: str = "0",
+    customs_documentation_currency: str = "RUB",
     brokerage_extra: str = "0",
+    brokerage_extra_currency: str = "RUB",
     # Payment terms
     advance_from_client: str = "100",
     advance_to_supplier: str = "100",
@@ -8014,6 +8047,29 @@ def post(
             form_logistics_customs_client = total_logistics_customs_client
             print(f"[calc-debug] Final logistics values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
 
+        # ==========================================================================
+        # CONVERT BROKERAGE VALUES TO USD (Calculation Engine works in USD)
+        # ==========================================================================
+        brokerage_hub_usd = safe_decimal(brokerage_hub)
+        brokerage_customs_usd = safe_decimal(brokerage_customs)
+        warehousing_at_customs_usd = safe_decimal(warehousing_at_customs)
+        customs_documentation_usd = safe_decimal(customs_documentation)
+        brokerage_extra_usd = safe_decimal(brokerage_extra)
+
+        # Convert each brokerage value from its currency to USD
+        if brokerage_hub_currency != 'USD' and brokerage_hub_usd > 0:
+            brokerage_hub_usd = convert_amount(brokerage_hub_usd, brokerage_hub_currency, 'USD')
+        if brokerage_customs_currency != 'USD' and brokerage_customs_usd > 0:
+            brokerage_customs_usd = convert_amount(brokerage_customs_usd, brokerage_customs_currency, 'USD')
+        if warehousing_at_customs_currency != 'USD' and warehousing_at_customs_usd > 0:
+            warehousing_at_customs_usd = convert_amount(warehousing_at_customs_usd, warehousing_at_customs_currency, 'USD')
+        if customs_documentation_currency != 'USD' and customs_documentation_usd > 0:
+            customs_documentation_usd = convert_amount(customs_documentation_usd, customs_documentation_currency, 'USD')
+        if brokerage_extra_currency != 'USD' and brokerage_extra_usd > 0:
+            brokerage_extra_usd = convert_amount(brokerage_extra_usd, brokerage_extra_currency, 'USD')
+
+        print(f"[calc-debug] Brokerage conversion: hub={brokerage_hub} {brokerage_hub_currency}→{brokerage_hub_usd} USD, customs={brokerage_customs} {brokerage_customs_currency}→{brokerage_customs_usd} USD")
+
         # Build variables from form parameters
         variables = {
             'currency_of_quote': currency,
@@ -8029,12 +8085,18 @@ def post(
             'logistics_hub_customs': form_logistics_hub_customs,
             'logistics_customs_client': form_logistics_customs_client,
 
-            # Brokerage
-            'brokerage_hub': safe_decimal(brokerage_hub),
-            'brokerage_customs': safe_decimal(brokerage_customs),
-            'warehousing_at_customs': safe_decimal(warehousing_at_customs),
-            'customs_documentation': safe_decimal(customs_documentation),
-            'brokerage_extra': safe_decimal(brokerage_extra),
+            # Brokerage (converted to USD)
+            'brokerage_hub': brokerage_hub_usd,
+            'brokerage_customs': brokerage_customs_usd,
+            'warehousing_at_customs': warehousing_at_customs_usd,
+            'customs_documentation': customs_documentation_usd,
+            'brokerage_extra': brokerage_extra_usd,
+            # Store original currencies for display/export
+            'brokerage_hub_currency': brokerage_hub_currency,
+            'brokerage_customs_currency': brokerage_customs_currency,
+            'warehousing_at_customs_currency': warehousing_at_customs_currency,
+            'customs_documentation_currency': customs_documentation_currency,
+            'brokerage_extra_currency': brokerage_extra_currency,
 
             # Payment terms
             'advance_from_client': safe_decimal(advance_from_client),
@@ -12030,6 +12092,13 @@ def get(session, quote_id: str):
     customs_documentation = calc_vars.get("customs_documentation", 0)
     brokerage_extra = calc_vars.get("brokerage_extra", 0)
 
+    # Extract currency for each brokerage field (default RUB - as per user feedback these are typically in rubles)
+    brokerage_hub_currency = calc_vars.get("brokerage_hub_currency", "RUB")
+    brokerage_customs_currency = calc_vars.get("brokerage_customs_currency", "RUB")
+    warehousing_at_customs_currency = calc_vars.get("warehousing_at_customs_currency", "RUB")
+    customs_documentation_currency = calc_vars.get("customs_documentation_currency", "RUB")
+    brokerage_extra_currency = calc_vars.get("brokerage_extra_currency", "RUB")
+
     # Check if customs is editable
     editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
     is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
@@ -12211,16 +12280,22 @@ def get(session, quote_id: str):
         cls="card"
     )
 
+    # Helper to create currency options for brokerage fields
+    def brokerage_currency_options(selected_currency):
+        currencies = [("RUB", "₽ RUB"), ("USD", "$ USD"), ("EUR", "€ EUR"), ("CNY", "¥ CNY"), ("TRY", "₺ TRY")]
+        return [Option(label, value=code, selected=(code == selected_currency)) for code, label in currencies]
+
     # Quote-level costs section (customs/brokerage expenses)
     quote_level_costs_section = Div(
         H3(icon("wallet", size=20), " Общие расходы на КП", style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;"),
-        P("Укажите общие расходы на всю квоту в валюте КП (" + currency + "). Эти суммы будут распределены пропорционально стоимости товаров.",
+        P("Укажите общие расходы на всю квоту. Выберите валюту для каждого поля.",
           style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
         Div(
             # Row 1: brokerage_hub + brokerage_customs
             Div(
                 Div(
-                    Label("Брокерские (хаб)",
+                    Label("Брокерские (хаб)", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Div(
                         Input(
                             name="brokerage_hub",
                             type="number",
@@ -12228,15 +12303,22 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="flex: 1; min-width: 80px;"
                         ),
-                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                        Select(
+                            *brokerage_currency_options(brokerage_hub_currency),
+                            name="brokerage_hub_currency",
+                            disabled=not is_editable,
+                            style="width: 90px; margin-left: 0.5rem;"
+                        ),
+                        style="display: flex; align-items: center;"
                     ),
                     Small("Брокерские услуги на хабе", style="color: #999;"),
                     style="flex: 1;"
                 ),
                 Div(
-                    Label("Брокерские (таможня)",
+                    Label("Брокерские (таможня)", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Div(
                         Input(
                             name="brokerage_customs",
                             type="number",
@@ -12244,9 +12326,15 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="flex: 1; min-width: 80px;"
                         ),
-                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                        Select(
+                            *brokerage_currency_options(brokerage_customs_currency),
+                            name="brokerage_customs_currency",
+                            disabled=not is_editable,
+                            style="width: 90px; margin-left: 0.5rem;"
+                        ),
+                        style="display: flex; align-items: center;"
                     ),
                     Small("Брокерские услуги на таможне", style="color: #999;"),
                     style="flex: 1;"
@@ -12256,7 +12344,8 @@ def get(session, quote_id: str):
             # Row 2: warehousing_at_customs + customs_documentation
             Div(
                 Div(
-                    Label("СВХ",
+                    Label("СВХ", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Div(
                         Input(
                             name="warehousing_at_customs",
                             type="number",
@@ -12264,15 +12353,22 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="flex: 1; min-width: 80px;"
                         ),
-                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                        Select(
+                            *brokerage_currency_options(warehousing_at_customs_currency),
+                            name="warehousing_at_customs_currency",
+                            disabled=not is_editable,
+                            style="width: 90px; margin-left: 0.5rem;"
+                        ),
+                        style="display: flex; align-items: center;"
                     ),
                     Small("Стоимость склада временного хранения", style="color: #999;"),
                     style="flex: 1;"
                 ),
                 Div(
-                    Label("Сертификаты/документация",
+                    Label("Сертификаты/документация", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Div(
                         Input(
                             name="customs_documentation",
                             type="number",
@@ -12280,9 +12376,15 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="flex: 1; min-width: 80px;"
                         ),
-                        style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                        Select(
+                            *brokerage_currency_options(customs_documentation_currency),
+                            name="customs_documentation_currency",
+                            disabled=not is_editable,
+                            style="width: 90px; margin-left: 0.5rem;"
+                        ),
+                        style="display: flex; align-items: center;"
                     ),
                     Small("Сертификация, документация", style="color: #999;"),
                     style="flex: 1;"
@@ -12291,19 +12393,28 @@ def get(session, quote_id: str):
             ),
             # Row 3: brokerage_extra (full width)
             Div(
-                Label("Дополнительные брокерские",
-                    Input(
-                        name="brokerage_extra",
-                        type="number",
-                        value=str(brokerage_extra),
-                        min="0",
-                        step="0.01",
-                        disabled=not is_editable,
-                        style="width: 100%;"
+                Div(
+                    Label("Дополнительные брокерские", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Div(
+                        Input(
+                            name="brokerage_extra",
+                            type="number",
+                            value=str(brokerage_extra),
+                            min="0",
+                            step="0.01",
+                            disabled=not is_editable,
+                            style="flex: 1; min-width: 80px;"
+                        ),
+                        Select(
+                            *brokerage_currency_options(brokerage_extra_currency),
+                            name="brokerage_extra_currency",
+                            disabled=not is_editable,
+                            style="width: 90px; margin-left: 0.5rem;"
+                        ),
+                        style="display: flex; align-items: center;"
                     ),
-                    style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"
+                    Small("Дополнительные брокерские расходы", style="color: #999;"),
                 ),
-                Small("Дополнительные брокерские расходы", style="color: #999;"),
                 style="width: 50%;"
             ),
             # Total display
@@ -12586,6 +12697,13 @@ async def post(session, quote_id: str, request):
     customs_documentation = safe_decimal(form_data.get("customs_documentation", 0))
     brokerage_extra = safe_decimal(form_data.get("brokerage_extra", 0))
 
+    # Get currency values for each brokerage field (default RUB)
+    brokerage_hub_currency = form_data.get("brokerage_hub_currency", "RUB")
+    brokerage_customs_currency = form_data.get("brokerage_customs_currency", "RUB")
+    warehousing_at_customs_currency = form_data.get("warehousing_at_customs_currency", "RUB")
+    customs_documentation_currency = form_data.get("customs_documentation_currency", "RUB")
+    brokerage_extra_currency = form_data.get("brokerage_extra_currency", "RUB")
+
     # Load existing variables or create empty dict
     calc_vars_result = supabase.table("quote_calculation_variables") \
         .select("id, variables") \
@@ -12597,19 +12715,24 @@ async def post(session, quote_id: str, request):
         calc_var_id = calc_vars_result.data[0]["id"]
         existing_vars = calc_vars_result.data[0].get("variables", {})
 
-        # Update the 5 cost fields
+        # Update the 5 cost fields and their currencies
         existing_vars["brokerage_hub"] = brokerage_hub
         existing_vars["brokerage_customs"] = brokerage_customs
         existing_vars["warehousing_at_customs"] = warehousing_at_customs
         existing_vars["customs_documentation"] = customs_documentation
         existing_vars["brokerage_extra"] = brokerage_extra
+        existing_vars["brokerage_hub_currency"] = brokerage_hub_currency
+        existing_vars["brokerage_customs_currency"] = brokerage_customs_currency
+        existing_vars["warehousing_at_customs_currency"] = warehousing_at_customs_currency
+        existing_vars["customs_documentation_currency"] = customs_documentation_currency
+        existing_vars["brokerage_extra_currency"] = brokerage_extra_currency
 
         supabase.table("quote_calculation_variables") \
             .update({"variables": existing_vars}) \
             .eq("id", calc_var_id) \
             .execute()
     else:
-        # Create new record with 5 cost fields
+        # Create new record with 5 cost fields and currencies
         import uuid
         supabase.table("quote_calculation_variables") \
             .insert({
@@ -12620,7 +12743,12 @@ async def post(session, quote_id: str, request):
                     "brokerage_customs": brokerage_customs,
                     "warehousing_at_customs": warehousing_at_customs,
                     "customs_documentation": customs_documentation,
-                    "brokerage_extra": brokerage_extra
+                    "brokerage_extra": brokerage_extra,
+                    "brokerage_hub_currency": brokerage_hub_currency,
+                    "brokerage_customs_currency": brokerage_customs_currency,
+                    "warehousing_at_customs_currency": warehousing_at_customs_currency,
+                    "customs_documentation_currency": customs_documentation_currency,
+                    "brokerage_extra_currency": brokerage_extra_currency
                 }
             }) \
             .execute()
