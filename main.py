@@ -7606,6 +7606,22 @@ def get(quote_id: str, session):
     saved_vars = vars_result.data[0]["variables"] if vars_result.data else {}
 
     # ==========================================================================
+    # CONVERT DM FEE VALUE BACK TO ORIGINAL CURRENCY FOR DISPLAY
+    # dm_fee_value is stored in USD, but user entered it in dm_fee_currency
+    # We need to convert back for proper display in the form
+    # ==========================================================================
+    if saved_vars.get('dm_fee_value') and saved_vars.get('dm_fee_currency'):
+        dm_fee_currency = saved_vars.get('dm_fee_currency', 'USD')
+        dm_fee_type = saved_vars.get('dm_fee_type', 'fixed')
+        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD':
+            from services.currency_service import convert_amount
+            dm_fee_usd = Decimal(str(saved_vars['dm_fee_value']))
+            if dm_fee_usd > 0:
+                # Convert from USD back to original currency
+                dm_fee_original = convert_amount(dm_fee_usd, 'USD', dm_fee_currency)
+                saved_vars['dm_fee_value'] = float(dm_fee_original)
+
+    # ==========================================================================
     # AGGREGATE LOGISTICS FROM INVOICES (with multi-currency support)
     # Logistics costs are entered per-invoice by logistics department
     # Each segment may have different currency - convert all to QUOTE CURRENCY before summing
