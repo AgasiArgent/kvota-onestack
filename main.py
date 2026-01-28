@@ -23693,16 +23693,16 @@ def get(customer_id: str, session, request, tab: str = "general"):
             if contact.is_signatory:
                 badges.append(Span("✏️", title="Подписант", style="margin-left: 0.25rem;"))
             if contact.is_primary:
-                badges.append(Span("★", title="Основной", style="margin-left: 0.25rem; color: #fbbf24;"))
+                badges.append(Span("★", title="Основной", style="margin-left: 0.25rem; color: #f59e0b;"))
             contacts_preview_items.append(
                 Div(
                     Div(
-                        Span(contact.get_full_name(), style="font-weight: 500;"),
+                        Span(contact.get_full_name(), style="font-weight: 500; color: #374151;"),
                         *badges,
                         style="display: flex; align-items: center;"
                     ),
-                    Div(contact.position or "—", style="font-size: 0.75rem; color: #64748b;"),
-                    style="padding: 0.5rem 0; border-bottom: 1px solid #334155;"
+                    Div(contact.position or "—", style="font-size: 0.75rem; color: #6b7280;"),
+                    style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;"
                 )
             )
 
@@ -23710,16 +23710,16 @@ def get(customer_id: str, session, request, tab: str = "general"):
         contracts_preview_items = []
         for contract in contracts[:5]:
             status = contract.get("status", "")
-            status_color = "#10b981" if status == "active" else "#64748b"
+            status_color = "#10b981" if status == "active" else "#6b7280"
             status_text = "активен" if status == "active" else ("истёк" if status == "terminated" else status)
             contracts_preview_items.append(
                 Div(
                     Div(
-                        Span(f"№{contract.get('contract_number', '—')}", style="font-weight: 500;"),
+                        Span(f"№{contract.get('contract_number', '—')}", style="font-weight: 500; color: #374151;"),
                         style="display: flex; align-items: center;"
                     ),
                     Div(status_text, style=f"font-size: 0.75rem; color: {status_color};"),
-                    style="padding: 0.5rem 0; border-bottom: 1px solid #334155;"
+                    style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;"
                 )
             )
 
@@ -23813,9 +23813,9 @@ def get(customer_id: str, session, request, tab: str = "general"):
                             style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem;"
+                        style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
                     ),
-                    style="flex: 3;"
+                    style="flex: 2;"
                 ),
 
                 # RIGHT COLUMN: Contacts + Contracts previews (stacked vertically)
@@ -23823,22 +23823,22 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     # Contacts preview block
                     Div(
                         Div(
-                            Span(icon("users", size=14), " Контакты", style="color: #e2e8f0; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                            Span(icon("users", size=14), " Контакты", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
                             A("→", href=f"/customers/{customer_id}?tab=contacts",
                               hx_get=f"/customers/{customer_id}?tab=contacts",
                               hx_target="#tab-content",
                               hx_push_url="true",
-                              style="font-size: 0.875rem; color: #60a5fa;"),
+                              style="font-size: 0.875rem; color: #3b82f6;"),
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
                         Div(
                             *contacts_preview_items if contacts_preview_items else [
-                                Div("Нет контактов", style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
+                                Div("Нет контактов", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
                             ],
-                            style="max-height: 100px; overflow-y: auto;"
+                            style="max-height: 120px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;",
+                        style="background: white; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; margin-bottom: 0.5rem; border: 1px solid #e5e7eb;",
                         hx_get=f"/customers/{customer_id}?tab=contacts",
                         hx_target="#tab-content",
                         hx_push_url="true",
@@ -23847,100 +23847,99 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     # Contracts preview block
                     Div(
                         Div(
-                            Span(icon("file-text", size=14), " Договоры", style="color: #e2e8f0; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                            Span(icon("file-text", size=14), " Договоры", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
                             A("→", href=f"/customers/{customer_id}?tab=contracts",
                               hx_get=f"/customers/{customer_id}?tab=contracts",
                               hx_target="#tab-content",
                               hx_push_url="true",
-                              style="font-size: 0.875rem; color: #60a5fa;"),
+                              style="font-size: 0.875rem; color: #3b82f6;"),
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
                         Div(
                             *contracts_preview_items if contracts_preview_items else [
-                                Div("Нет договоров", style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
+                                Div("Нет договоров", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
                             ],
-                            style="max-height: 100px; overflow-y: auto;"
+                            style="max-height: 120px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.5rem; padding: 0.75rem; cursor: pointer;",
+                        style="background: white; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; border: 1px solid #e5e7eb;",
                         hx_get=f"/customers/{customer_id}?tab=contracts",
                         hx_target="#tab-content",
                         hx_push_url="true",
                     ),
-                    style="flex: 2;"
+                    style="flex: 1;"
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
 
-            # Row 2: Statistics cards (custom styling without DaisyUI borders)
-            Div(
-                _stat_card_simple(str(stats["quotes_count"]), "КП", "коммерческих предложений"),
-                _stat_card_simple(f"{stats['quotes_sum']:,.0f} ₽", "Сумма КП", "общая сумма предложений"),
-                _stat_card_simple(str(stats["specifications_count"]), "Спецификации", "подписанных спецификаций"),
-                _stat_card_simple(f"{stats['specifications_sum']:,.0f} ₽", "Сумма спецификаций", "общая сумма сделок"),
-                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
-            ),
-
-            # Row 3: Two tables side by side (Quotes + Specifications)
+            # Row 2: Two tables side by side (Quotes + Specifications) with stats in headers
             Div(
                 # Latest Quotes table
                 Div(
                     Div(
-                        H3(icon("file-text", size=20), " Последние КП", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
-                        A("Посмотреть все →", href=f"/customers/{customer_id}?tab=quotes",
+                        Div(
+                            H3(icon("file-text", size=18), " КП", style="margin: 0; color: #374151; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;"),
+                            Span(f"Всего: {stats['quotes_count']} • Сумма: {stats['quotes_sum']:,.0f} ₽", style="color: #6b7280; font-size: 0.75rem;"),
+                            style="display: flex; flex-direction: column; gap: 0.25rem;"
+                        ),
+                        A("Все →", href=f"/customers/{customer_id}?tab=quotes",
                           hx_get=f"/customers/{customer_id}?tab=quotes",
                           hx_target="#tab-content",
                           hx_push_url="true",
-                          style="font-size: 0.875rem;"),
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                          style="font-size: 0.75rem; color: #3b82f6;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
                     ),
                     Table(
                         Thead(
                             Tr(
-                                Th("№", style="font-size: 0.75rem;"),
-                                Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
-                                Th("Профит", style="font-size: 0.75rem; text-align: right;"),
-                                Th("Дата", style="font-size: 0.75rem;"),
-                                Th("Статус", style="font-size: 0.75rem;"),
+                                Th("№", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("Сумма", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
+                                Th("Профит", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
+                                Th("Дата", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("Статус", style="font-size: 0.75rem; color: #6b7280;"),
                             )
                         ),
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
-                            Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                            Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #9ca3af; padding: 1rem;"))
                         ),
                         style="font-size: 0.875rem;"
                     ),
                     cls="card",
-                    style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; flex: 1;"
+                    style="background: white; border-radius: 0.75rem; padding: 1rem; flex: 1; border: 1px solid #e5e7eb;"
                 ),
 
                 # Latest Specifications table
                 Div(
                     Div(
-                        H3("📑 Последние спецификации", style="margin: 0; color: #e2e8f0;"),
-                        A("Посмотреть все →", href=f"/customers/{customer_id}?tab=specifications",
+                        Div(
+                            H3(icon("clipboard", size=18), " Спецификации", style="margin: 0; color: #374151; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;"),
+                            Span(f"Всего: {stats['specifications_count']} • Сумма: {stats['specifications_sum']:,.0f} ₽", style="color: #6b7280; font-size: 0.75rem;"),
+                            style="display: flex; flex-direction: column; gap: 0.25rem;"
+                        ),
+                        A("Все →", href=f"/customers/{customer_id}?tab=specifications",
                           hx_get=f"/customers/{customer_id}?tab=specifications",
                           hx_target="#tab-content",
                           hx_push_url="true",
-                          style="font-size: 0.875rem;"),
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                          style="font-size: 0.75rem; color: #3b82f6;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
                     ),
                     Table(
                         Thead(
                             Tr(
-                                Th("№", style="font-size: 0.75rem;"),
-                                Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
-                                Th("Профит", style="font-size: 0.75rem; text-align: right;"),
-                                Th("Дата", style="font-size: 0.75rem;"),
-                                Th("Статус", style="font-size: 0.75rem;"),
+                                Th("№", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("Сумма", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
+                                Th("Профит", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
+                                Th("Дата", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("Статус", style="font-size: 0.75rem; color: #6b7280;"),
                             )
                         ),
                         Tbody(*specs_rows) if specs_rows else Tbody(
-                            Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                            Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #9ca3af; padding: 1rem;"))
                         ),
                         style="font-size: 0.875rem;"
                     ),
                     cls="card",
-                    style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; flex: 1;"
+                    style="background: white; border-radius: 0.75rem; padding: 1rem; flex: 1; border: 1px solid #e5e7eb;"
                 ),
                 style="display: flex; gap: 1.5rem;"
             )
