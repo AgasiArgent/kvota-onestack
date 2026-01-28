@@ -600,38 +600,73 @@ class ExportValidationService:
             ws[f"{col}{row}"].border = THIN_BORDER
         row += 1
 
-        # Quote totals - already in quote currency (summed from S16, V16, etc.)
-        # Calculation engine converts to quote currency internally
+        # Quote totals - API values are in USD, need conversion to quote currency
+        # NOTE: Calculation engine works in USD internally (currency_of_quote=USD)
+        #
+        # Fields that need USD → quote currency conversion:
+        QUOTE_TOTAL_USD_FIELDS = {
+            "total_purchase_price",    # S13 - sum of S16:Sxx (already converted per-product)
+            "total_logistics_first",   # T13 - sum of T16:Txx (USD, needs conversion)
+            "total_logistics_last",    # U13 - sum of U16:Uxx (USD, needs conversion)
+            "total_logistics",         # V13 - sum of V16:Vxx (USD, needs conversion)
+            "total_cogs",              # AB13 - sum of AB16:ABxx (USD, needs conversion)
+            "total_revenue",           # AK13 - sum of AK16:AKxx (USD, needs conversion)
+            "total_revenue_with_vat",  # AL13 - sum of AL16:ALxx (USD, needs conversion)
+            "total_profit",            # AF13 - sum of AF16:AFxx (USD, needs conversion)
+        }
+        # S13 (total_purchase_price) is already converted because S16 = R16 * qty and R16 is converted
+        QUOTE_TOTAL_ALREADY_CONVERTED = {"total_purchase_price"}
+
         for cell_addr, (field, display_name) in QUOTE_TOTAL_CELLS.items():
             ws[f"A{row}"] = cell_addr
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            # D = C (no conversion - already in quote currency)
-            ws[f"D{row}"] = f"=C{row}"
+            # D: Convert from USD to quote currency if needed
+            if field in QUOTE_TOTAL_USD_FIELDS and field not in QUOTE_TOTAL_ALREADY_CONVERTED:
+                ws[f"D{row}"] = f"=C{row}*API_Inputs!$E$2"
+            else:
+                ws[f"D{row}"] = f"=C{row}"
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
-            # Diff formula: compare D (API in quote currency) vs E (Excel in quote currency)
+            # Diff formula: compare D (API converted to quote currency) vs E (Excel in quote currency)
             ws[f"F{row}"] = f'=IF(E{row}=0,"N/A",ABS(D{row}-E{row})/ABS(E{row}))'
             ws[f"F{row}"].number_format = '0.00%'
             for col in ["A", "B", "C", "D", "E", "F"]:
                 ws[f"{col}{row}"].border = THIN_BORDER
             row += 1
 
-        # Financing cells - already in quote currency
+        # Financing cells - API values are in USD, need conversion to quote currency
         row += 1
         ws[f"A{row}"] = "Financing"
         ws[f"A{row}"].font = Font(bold=True)
         ws[f"A{row}"].fill = HEADER_FILL
         row += 1
 
+        # All financing fields are monetary values in USD
+        FINANCING_USD_FIELDS = {
+            "evaluated_revenue",           # BH2
+            "client_advance",              # BH3
+            "total_before_forwarding",     # BH4
+            "supplier_payment",            # BH6
+            "supplier_financing_cost",     # BJ7
+            "operational_financing_cost",  # BJ10
+            "total_financing_cost",        # BJ11
+            "credit_sales_amount",         # BL3
+            "credit_sales_fv",             # BL4
+            "credit_sales_interest",       # BL5
+        }
+
         for cell_addr, (field, display_name) in FINANCING_CELLS.items():
             ws[f"A{row}"] = cell_addr
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            # D = C (no conversion - already in quote currency)
-            ws[f"D{row}"] = f"=C{row}"
+            # D: Convert from USD to quote currency
+            if field in FINANCING_USD_FIELDS:
+                ws[f"D{row}"] = f"=C{row}*API_Inputs!$E$2"
+            else:
+                ws[f"D{row}"] = f"=C{row}"
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
             ws[f"F{row}"] = f'=IF(E{row}=0,"N/A",ABS(D{row}-E{row})/ABS(E{row}))'
@@ -640,9 +675,10 @@ class ExportValidationService:
                 ws[f"{col}{row}"].border = THIN_BORDER
             row += 1
 
-        # Section: Product Results (already in quote currency from calculation engine)
+        # Section: Product Results
+        # NOTE: Values from calculation engine are in USD, converted to quote currency in Comparison sheet
         row += 2
-        ws[f"A{row}"] = f"Product Results ({quote_currency})"
+        ws[f"A{row}"] = f"Product Results (USD, converted in Comparison)"
         ws[f"A{row}"].font = Font(bold=True)
         ws[f"A{row}"].fill = HEADER_FILL
         row += 1
@@ -751,15 +787,56 @@ class ExportValidationService:
         row += 1
 
         # Currency handling in Comparison sheet:
-        # - N16, P16: BASE currency (supplier's currency) - no conversion needed
-        # - R16 and onwards: QUOTE currency (calculation engine converts internally)
         #
-        # Calculation engine does R16 = P16 / exchange_rate (already in quote currency!)
-        # So ALL output fields from R16 onwards are already in quote currency.
-        # NO conversion needed for API results comparison.
+        # IMPORTANT: Calculation engine works internally in USD (currency_of_quote=Currency("USD"))
+        # All monetary OUTPUT values from the engine are in USD and need conversion to quote currency.
         #
-        # Fields in BASE currency (supplier's original currency):
+        # Categories:
+        # 1. BASE currency fields (N16, P16) - supplier's currency, no conversion needed
+        # 2. USD fields (most outputs) - need USD → quote currency conversion
+        # 3. Percentage/count fields - no conversion needed
+        #
+        # Conversion formula: =D{row}*API_Inputs!$E$2 (where E2 = USD to quote rate)
+        #
         BASE_CURRENCY_FIELDS = {"purchase_price_no_vat", "purchase_price_after_discount"}
+
+        # Fields that are monetary values in USD and need conversion to quote currency
+        # (most output fields from calculation engine)
+        USD_MONETARY_FIELDS = {
+            "purchase_price_per_unit_quote_currency",  # R16 - BUT this is already converted by engine
+            "purchase_price_total_quote_currency",     # S16 - already converted
+            "logistics_first_leg",                     # T16 - needs conversion
+            "logistics_last_leg",                      # U16 - needs conversion
+            "logistics_total",                         # V16 - needs conversion
+            "customs_fee",                             # Y16 - needs conversion
+            "excise_tax_amount",                       # Z16 - needs conversion
+            "cogs_per_unit",                           # AA16 - needs conversion
+            "cogs_per_product",                        # AB16 - needs conversion
+            "sale_price_per_unit_excl_financial",      # AD16 - needs conversion
+            "sale_price_total_excl_financial",         # AE16 - needs conversion
+            "profit",                                  # AF16 - needs conversion
+            "dm_fee",                                  # AG16 - needs conversion
+            "forex_reserve",                           # AH16 - needs conversion
+            "financial_agent_fee",                     # AI16 - needs conversion
+            "sales_price_per_unit_no_vat",             # AJ16 - needs conversion
+            "sales_price_total_no_vat",                # AK16 - needs conversion
+            "sales_price_total_with_vat",              # AL16 - needs conversion
+            "sales_price_per_unit_with_vat",           # AM16 - needs conversion
+            "vat_from_sales",                          # AN16 - needs conversion
+            "vat_on_import",                           # AO16 - needs conversion
+            "vat_net_payable",                         # AP16 - needs conversion
+            "transit_commission",                      # AQ16 - needs conversion
+            "internal_sale_price_per_unit",            # AX16 - needs conversion
+            "internal_sale_price_total",               # AY16 - needs conversion
+            "financing_cost_initial",                  # BA16 - needs conversion
+            "financing_cost_credit",                   # BB16 - needs conversion
+        }
+
+        # Fields already converted by engine (R16, S16 use exchange_rate internally)
+        ALREADY_CONVERTED_FIELDS = {
+            "purchase_price_per_unit_quote_currency",  # R16 = P16 / exchange_rate
+            "purchase_price_total_quote_currency",     # S16 = R16 * quantity
+        }
 
         # For each product and each output column
         for prod_idx in range(num_products):
@@ -771,15 +848,22 @@ class ExportValidationService:
                 ws[f"B{row}"] = f"{col_letter}{raschet_row}"
                 ws[f"C{row}"] = display_name
 
-                # Column D: API value from API_Results
+                # Column D: API value from API_Results (in USD)
                 api_col = list(PRODUCT_OUTPUT_COLUMNS.keys()).index(col_letter) + 2
                 ws[f"D{row}"] = f"=API_Results!{get_column_letter(api_col)}{api_results_row}"
 
-                # Column E: API value for comparison (direct passthrough)
-                # ALL API results are already in quote currency (calculation engine converts internally)
-                # N16, P16 are in base currency - same for both API and Excel
-                # R16+ are in quote currency - calculation engine does R16 = P16 / exchange_rate
-                ws[f"E{row}"] = f"=D{row}"
+                # Column E: API value converted to quote currency for comparison
+                # - BASE currency fields: passthrough (same currency for API and Excel)
+                # - Already converted fields (R16, S16): passthrough
+                # - USD monetary fields: multiply by USD→quote rate from API_Inputs!E2
+                if field in BASE_CURRENCY_FIELDS or field in ALREADY_CONVERTED_FIELDS:
+                    ws[f"E{row}"] = f"=D{row}"
+                elif field in USD_MONETARY_FIELDS:
+                    # Convert from USD to quote currency: value * rate
+                    ws[f"E{row}"] = f"=D{row}*API_Inputs!$E$2"
+                else:
+                    # Unknown field - passthrough (might be percentage or count)
+                    ws[f"E{row}"] = f"=D{row}"
                 ws[f"E{row}"].number_format = '#,##0.00'
 
                 # Column F: Excel value from расчет

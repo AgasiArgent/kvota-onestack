@@ -8188,23 +8188,44 @@ def post(
         for item, result in zip(items, results):
             # Build phase_results JSONB with all calculation outputs
             phase_results = {
+                # Purchase prices
                 "N16": float(result.purchase_price_no_vat or 0),
                 "P16": float(result.purchase_price_after_discount or 0),
                 "R16": float(result.purchase_price_per_unit_quote_currency or 0),
                 "S16": float(result.purchase_price_total_quote_currency or 0),
+                # Logistics
                 "T16": float(result.logistics_first_leg or 0),
                 "U16": float(result.logistics_last_leg or 0),
                 "V16": float(result.logistics_total or 0),
+                # Customs and taxes
                 "Y16": float(result.customs_fee or 0),
+                "Z16": float(result.excise_tax_amount or 0),
+                # COGS
                 "AA16": float(result.cogs_per_unit or 0),
                 "AB16": float(result.cogs_per_product or 0),
+                # Sale prices (excl financial)
+                "AD16": float(result.sale_price_per_unit_excl_financial or 0),
+                "AE16": float(result.sale_price_total_excl_financial or 0),
+                # Profit and fees
                 "AF16": float(result.profit or 0),
                 "AG16": float(result.dm_fee or 0),
-                "AD16": float(result.sale_price_per_unit_excl_financial or 0),
+                "AH16": float(result.forex_reserve or 0),
+                "AI16": float(result.financial_agent_fee or 0),
+                # Final sale prices
                 "AJ16": float(result.sales_price_per_unit_no_vat or 0),
                 "AK16": float(result.sales_price_total_no_vat or 0),
                 "AL16": float(result.sales_price_total_with_vat or 0),
+                "AM16": float(result.sales_price_per_unit_with_vat or 0),
+                # VAT breakdown
+                "AN16": float(result.vat_from_sales or 0),
+                "AO16": float(result.vat_on_import or 0),
                 "AP16": float(result.vat_net_payable or 0),
+                # Special
+                "AQ16": float(result.transit_commission or 0),
+                # Internal pricing
+                "AX16": float(result.internal_sale_price_per_unit or 0),
+                "AY16": float(result.internal_sale_price_total or 0),
+                # Financing
                 "BA16": float(result.financing_cost_initial or 0),
                 "BB16": float(result.financing_cost_credit or 0),
             }
