@@ -600,33 +600,34 @@ class ExportValidationService:
             ws[f"{col}{row}"].border = THIN_BORDER
         row += 1
 
-        # Quote totals - API values are in USD, need conversion to quote currency
-        # NOTE: Calculation engine works in USD internally (currency_of_quote=USD)
+        # Quote totals - Most API values are in QUOTE CURRENCY
+        # Only LOGISTICS totals are in USD (from invoice aggregation)
         #
         # Fields that need USD → quote currency conversion:
         QUOTE_TOTAL_USD_FIELDS = {
-            "total_purchase_price",    # S13 - sum of S16:Sxx (already converted per-product)
-            "total_logistics_first",   # T13 - sum of T16:Txx (USD, needs conversion)
-            "total_logistics_last",    # U13 - sum of U16:Uxx (USD, needs conversion)
-            "total_logistics",         # V13 - sum of V16:Vxx (USD, needs conversion)
-            "total_cogs",              # AB13 - sum of AB16:ABxx (USD, needs conversion)
-            "total_revenue",           # AK13 - sum of AK16:AKxx (USD, needs conversion)
-            "total_revenue_with_vat",  # AL13 - sum of AL16:ALxx (USD, needs conversion)
-            "total_profit",            # AF13 - sum of AF16:AFxx (USD, needs conversion)
+            "total_logistics_first",   # T13 - sum of T16:Txx (USD from invoices)
+            "total_logistics_last",    # U13 - sum of U16:Uxx (USD from invoices)
+            "total_logistics",         # V13 - sum of V16:Vxx (USD from invoices)
         }
-        # S13 (total_purchase_price) is already converted because S16 = R16 * qty and R16 is converted
-        QUOTE_TOTAL_ALREADY_CONVERTED = {"total_purchase_price"}
+        # Fields already in quote currency (no conversion needed)
+        QUOTE_TOTAL_QUOTE_CURRENCY = {
+            "total_purchase_price",    # S13 - already in quote currency
+            "total_cogs",              # AB13 - already in quote currency
+            "total_revenue",           # AK13 - already in quote currency
+            "total_revenue_with_vat",  # AL13 - already in quote currency
+            "total_profit",            # AF13 - already in quote currency
+        }
 
         for cell_addr, (field, display_name) in QUOTE_TOTAL_CELLS.items():
             ws[f"A{row}"] = cell_addr
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            # D: Convert from USD to quote currency if needed
-            if field in QUOTE_TOTAL_USD_FIELDS and field not in QUOTE_TOTAL_ALREADY_CONVERTED:
+            # D: Convert from USD to quote currency only for logistics
+            if field in QUOTE_TOTAL_USD_FIELDS:
                 ws[f"D{row}"] = f"=C{row}*API_Inputs!$E$2"
             else:
-                ws[f"D{row}"] = f"=C{row}"
+                ws[f"D{row}"] = f"=C{row}"  # Already in quote currency
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
             # Diff formula: compare D (API converted to quote currency) vs E (Excel in quote currency)
@@ -636,25 +637,26 @@ class ExportValidationService:
                 ws[f"{col}{row}"].border = THIN_BORDER
             row += 1
 
-        # Financing cells - API values are in USD, need conversion to quote currency
+        # Financing cells - API values are in QUOTE CURRENCY (same as other outputs)
         row += 1
         ws[f"A{row}"] = "Financing"
         ws[f"A{row}"].font = Font(bold=True)
         ws[f"A{row}"].fill = HEADER_FILL
         row += 1
 
-        # All financing fields are monetary values in USD
-        FINANCING_USD_FIELDS = {
-            "evaluated_revenue",           # BH2
-            "client_advance",              # BH3
-            "total_before_forwarding",     # BH4
-            "supplier_payment",            # BH6
-            "supplier_financing_cost",     # BJ7
-            "operational_financing_cost",  # BJ10
-            "total_financing_cost",        # BJ11
-            "credit_sales_amount",         # BL3
-            "credit_sales_fv",             # BL4
-            "credit_sales_interest",       # BL5
+        # Financing fields are already in quote currency (no conversion needed)
+        # Engine calculates everything in quote currency except logistics
+        FINANCING_QUOTE_CURRENCY_FIELDS = {
+            "evaluated_revenue",           # BH2 - in quote currency
+            "client_advance",              # BH3 - in quote currency
+            "total_before_forwarding",     # BH4 - in quote currency
+            "supplier_payment",            # BH6 - in quote currency
+            "supplier_financing_cost",     # BJ7 - in quote currency
+            "operational_financing_cost",  # BJ10 - in quote currency
+            "total_financing_cost",        # BJ11 - in quote currency
+            "credit_sales_amount",         # BL3 - in quote currency
+            "credit_sales_fv",             # BL4 - in quote currency
+            "credit_sales_interest",       # BL5 - in quote currency
         }
 
         for cell_addr, (field, display_name) in FINANCING_CELLS.items():
@@ -662,11 +664,8 @@ class ExportValidationService:
             ws[f"B{row}"] = display_name
             api_value = api_results.get(field)
             ws[f"C{row}"] = self._format_value(api_value)
-            # D: Convert from USD to quote currency
-            if field in FINANCING_USD_FIELDS:
-                ws[f"D{row}"] = f"=C{row}*API_Inputs!$E$2"
-            else:
-                ws[f"D{row}"] = f"=C{row}"
+            # D: No conversion needed - already in quote currency
+            ws[f"D{row}"] = f"=C{row}"
             ws[f"D{row}"].number_format = '#,##0.00'
             ws[f"E{row}"] = f"=расчет!{cell_addr}"
             ws[f"F{row}"] = f'=IF(E{row}=0,"N/A",ABS(D{row}-E{row})/ABS(E{row}))'
@@ -676,9 +675,10 @@ class ExportValidationService:
             row += 1
 
         # Section: Product Results
-        # NOTE: Values from calculation engine are in USD, converted to quote currency in Comparison sheet
+        # NOTE: Most values from calculation engine are in QUOTE CURRENCY
+        # Only logistics (T, U, V) are in USD and converted in Comparison sheet
         row += 2
-        ws[f"A{row}"] = f"Product Results (USD, converted in Comparison)"
+        ws[f"A{row}"] = f"Product Results (Quote Currency, logistics in USD)"
         ws[f"A{row}"].font = Font(bold=True)
         ws[f"A{row}"].fill = HEADER_FILL
         row += 1
@@ -788,55 +788,58 @@ class ExportValidationService:
 
         # Currency handling in Comparison sheet:
         #
-        # IMPORTANT: Calculation engine works internally in USD (currency_of_quote=Currency("USD"))
-        # All monetary OUTPUT values from the engine are in USD and need conversion to quote currency.
+        # IMPORTANT: Calculation engine works in QUOTE CURRENCY internally.
+        # Only LOGISTICS values come from invoice aggregation in USD.
         #
         # Categories:
         # 1. BASE currency fields (N16, P16) - supplier's currency, no conversion needed
-        # 2. USD fields (most outputs) - need USD → quote currency conversion
-        # 3. Percentage/count fields - no conversion needed
+        # 2. USD fields (ONLY logistics) - need USD → quote currency conversion
+        # 3. Quote currency fields (most outputs) - already in quote currency, NO conversion
+        # 4. Percentage/count fields - no conversion needed
         #
         # Conversion formula: =D{row}*API_Inputs!$E$2 (where E2 = USD to quote rate)
         #
         BASE_CURRENCY_FIELDS = {"purchase_price_no_vat", "purchase_price_after_discount"}
 
-        # Fields that are monetary values in USD and need conversion to quote currency
-        # (most output fields from calculation engine)
+        # Fields that are in USD and need conversion to quote currency
+        # ONLY logistics values come from invoice aggregation in USD
         USD_MONETARY_FIELDS = {
-            "purchase_price_per_unit_quote_currency",  # R16 - BUT this is already converted by engine
-            "purchase_price_total_quote_currency",     # S16 - already converted
-            "logistics_first_leg",                     # T16 - needs conversion
-            "logistics_last_leg",                      # U16 - needs conversion
-            "logistics_total",                         # V16 - needs conversion
-            "customs_fee",                             # Y16 - needs conversion
-            "excise_tax_amount",                       # Z16 - needs conversion
-            "cogs_per_unit",                           # AA16 - needs conversion
-            "cogs_per_product",                        # AB16 - needs conversion
-            "sale_price_per_unit_excl_financial",      # AD16 - needs conversion
-            "sale_price_total_excl_financial",         # AE16 - needs conversion
-            "profit",                                  # AF16 - needs conversion
-            "dm_fee",                                  # AG16 - needs conversion
-            "forex_reserve",                           # AH16 - needs conversion
-            "financial_agent_fee",                     # AI16 - needs conversion
-            "sales_price_per_unit_no_vat",             # AJ16 - needs conversion
-            "sales_price_total_no_vat",                # AK16 - needs conversion
-            "sales_price_total_with_vat",              # AL16 - needs conversion
-            "sales_price_per_unit_with_vat",           # AM16 - needs conversion
-            "vat_from_sales",                          # AN16 - needs conversion
-            "vat_on_import",                           # AO16 - needs conversion
-            "vat_net_payable",                         # AP16 - needs conversion
-            "transit_commission",                      # AQ16 - needs conversion
-            "internal_sale_price_per_unit",            # AX16 - needs conversion
-            "internal_sale_price_total",               # AY16 - needs conversion
-            "financing_cost_initial",                  # BA16 - needs conversion
-            "financing_cost_credit",                   # BB16 - needs conversion
+            "logistics_first_leg",                     # T16 - from invoices, USD
+            "logistics_last_leg",                      # U16 - from invoices, USD
+            "logistics_total",                         # V16 - from invoices, USD
         }
 
-        # Fields already converted by engine (R16, S16 use exchange_rate internally)
-        ALREADY_CONVERTED_FIELDS = {
+        # Fields already in quote currency (engine outputs in quote currency)
+        # These should NOT be converted - passthrough only
+        QUOTE_CURRENCY_FIELDS = {
             "purchase_price_per_unit_quote_currency",  # R16 = P16 / exchange_rate
             "purchase_price_total_quote_currency",     # S16 = R16 * quantity
+            "customs_fee",                             # Y16 - calculated in quote currency
+            "excise_tax_amount",                       # Z16 - calculated in quote currency
+            "cogs_per_unit",                           # AA16 - sum of quote currency values
+            "cogs_per_product",                        # AB16 - sum of quote currency values
+            "sale_price_per_unit_excl_financial",      # AD16 - calculated in quote currency
+            "sale_price_total_excl_financial",         # AE16 - calculated in quote currency
+            "profit",                                  # AF16 - calculated in quote currency
+            "dm_fee",                                  # AG16 - calculated in quote currency
+            "forex_reserve",                           # AH16 - calculated in quote currency
+            "financial_agent_fee",                     # AI16 - calculated in quote currency
+            "sales_price_per_unit_no_vat",             # AJ16 - calculated in quote currency
+            "sales_price_total_no_vat",                # AK16 - calculated in quote currency
+            "sales_price_total_with_vat",              # AL16 - calculated in quote currency
+            "sales_price_per_unit_with_vat",           # AM16 - calculated in quote currency
+            "vat_from_sales",                          # AN16 - calculated in quote currency
+            "vat_on_import",                           # AO16 - calculated in quote currency
+            "vat_net_payable",                         # AP16 - calculated in quote currency
+            "transit_commission",                      # AQ16 - calculated in quote currency
+            "internal_sale_price_per_unit",            # AX16 - calculated in quote currency
+            "internal_sale_price_total",               # AY16 - calculated in quote currency
+            "financing_cost_initial",                  # BA16 - calculated in quote currency
+            "financing_cost_credit",                   # BB16 - calculated in quote currency
         }
+
+        # Backwards compatibility alias
+        ALREADY_CONVERTED_FIELDS = QUOTE_CURRENCY_FIELDS
 
         # For each product and each output column
         for prod_idx in range(num_products):
