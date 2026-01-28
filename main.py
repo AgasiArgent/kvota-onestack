@@ -24389,10 +24389,11 @@ def get(customer_id: str, field_name: str, session):
 
     # Style for modern inline editing
     input_style = "padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
+    form_id = f"customer-field-form-{field_name}"
 
-    # Key handlers: Enter to save (for input), Escape to cancel
+    # Key handlers: Enter to click hidden submit button, Escape to cancel
     esc_handler = "if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }"
-    key_handler = "if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); } else " + esc_handler
+    key_handler = f"if(event.key === 'Enter' && !event.shiftKey) {{ event.preventDefault(); document.querySelector('#{form_id} button[type=submit]').click(); }} else " + esc_handler
 
     if input_type == "textarea":
         # Textarea: Escape cancels, Enter+Shift for newline, just Enter doesn't save (use button)
@@ -24416,12 +24417,13 @@ def get(customer_id: str, field_name: str, session):
     return Form(
         Div(
             input_elem,
+            Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
             id=f"field-{field_name}"
         ),
+        id=form_id,
         hx_post=f"/customers/{customer_id}/update-field/{field_name}",
         hx_target=f"#field-{field_name}",
-        hx_swap="outerHTML",
-        hx_trigger="submit"
+        hx_swap="outerHTML"
     )
 
 
@@ -24725,9 +24727,9 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
     # Get current value based on field
     if field_name == "name":
         # For name, we edit all three parts: last_name, name, patronymic
-        # Key handlers: Enter to save, Escape to cancel
-        # Use htmx.trigger to properly submit via HTMX (not browser submit)
-        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        # Key handlers: Enter to click hidden submit button, Escape to cancel
+        form_id = f"contact-name-form-{contact_id}"
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); document.querySelector('#{form_id} button[type=submit]').click(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
         input_style = "padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem;"
 
         return Div(
@@ -24742,12 +24744,13 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                     Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
                           style=input_style + " width: 90px;",
                           onkeydown=key_handler),
+                    Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
                     style="display: flex; align-items: center; gap: 0.25rem;"
                 ),
+                id=form_id,
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-row-{contact_id}",
-                hx_swap="outerHTML",
-                hx_trigger="submit"
+                hx_swap="outerHTML"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
@@ -24769,18 +24772,20 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
             input_type = "text"
             placeholder = ""
 
-        # Key handlers: Enter to save, Escape to cancel
-        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        # Key handlers: Enter to click hidden submit button, Escape to cancel
+        form_id = f"contact-field-form-{contact_id}-{field_name}"
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); document.querySelector('#{form_id} button[type=submit]').click(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
 
         return Div(
             Form(
                 Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
                       style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
                       onkeydown=key_handler),
+                Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
+                id=form_id,
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
-                hx_swap="outerHTML",
-                hx_trigger="submit"
+                hx_swap="outerHTML"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
