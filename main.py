@@ -12417,16 +12417,6 @@ def get(session, quote_id: str):
                 ),
                 style="width: 50%;"
             ),
-            # Total display
-            Div(
-                Strong("Итого общих расходов: "),
-                Span(format_money(
-                    float(brokerage_hub) + float(brokerage_customs) + float(warehousing_at_customs) +
-                    float(customs_documentation) + float(brokerage_extra),
-                    currency
-                ), style="color: #059669;"),
-                style="text-align: right; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.95rem;"
-            ) if any([brokerage_hub, brokerage_customs, warehousing_at_customs, customs_documentation, brokerage_extra]) else None,
         ),
         cls="card",
         style="margin-bottom: 1rem; background-color: #fffbeb; border-left: 3px solid #f59e0b;"
