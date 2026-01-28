@@ -802,11 +802,13 @@ class ExportValidationService:
         BASE_CURRENCY_FIELDS = {"purchase_price_no_vat", "purchase_price_after_discount"}
 
         # Fields that are in USD and need conversion to quote currency
-        # ONLY logistics values come from invoice aggregation in USD
+        # Logistics comes from invoice aggregation in USD
+        # DM Fee is passed to engine in USD
         USD_MONETARY_FIELDS = {
             "logistics_first_leg",                     # T16 - from invoices, USD
             "logistics_last_leg",                      # U16 - from invoices, USD
             "logistics_total",                         # V16 - from invoices, USD
+            "dm_fee",                                  # AG16 - passed to engine in USD
         }
 
         # Fields already in quote currency (engine outputs in quote currency)
@@ -821,7 +823,7 @@ class ExportValidationService:
             "sale_price_per_unit_excl_financial",      # AD16 - calculated in quote currency
             "sale_price_total_excl_financial",         # AE16 - calculated in quote currency
             "profit",                                  # AF16 - calculated in quote currency
-            "dm_fee",                                  # AG16 - calculated in quote currency
+            # dm_fee is in USD_MONETARY_FIELDS (passed to engine in USD)
             "forex_reserve",                           # AH16 - calculated in quote currency
             "financial_agent_fee",                     # AI16 - calculated in quote currency
             "sales_price_per_unit_no_vat",             # AJ16 - calculated in quote currency
