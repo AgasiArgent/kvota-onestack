@@ -24746,7 +24746,8 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                 ),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-row-{contact_id}",
-                hx_swap="outerHTML"
+                hx_swap="outerHTML",
+                hx_trigger="submit"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
@@ -24778,7 +24779,8 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                       onkeydown=key_handler),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
-                hx_swap="outerHTML"
+                hx_swap="outerHTML",
+                hx_trigger="submit"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
