@@ -236,7 +236,7 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
         .bank-section h3 {{
             font-size: 9pt;
             margin: 0 0 8px 0;
-            text-decoration: underline;
+            font-weight: bold;
         }}
 
         .bank-table {{
@@ -334,11 +334,11 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
         }}
 
         .col-num {{ width: 5%; text-align: center; }}
-        .col-name {{ width: 45%; }}
-        .col-qty {{ width: 10%; text-align: center; }}
-        .col-unit {{ width: 10%; text-align: center; }}
-        .col-price {{ width: 15%; text-align: right; }}
-        .col-total {{ width: 15%; text-align: right; }}
+        .col-name {{ width: 40%; }}
+        .col-qty {{ width: 8%; text-align: center; }}
+        .col-unit {{ width: 7%; text-align: center; }}
+        .col-price {{ width: 18%; text-align: right; white-space: nowrap; }}
+        .col-total {{ width: 22%; text-align: right; white-space: nowrap; }}
 
         /* Totals section */
         .totals-section {{
@@ -363,7 +363,8 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
         .totals-table .value {{
             text-align: right;
             font-weight: normal;
-            width: 35%;
+            width: 45%;
+            white-space: nowrap;
         }}
 
         .totals-table .total-row td {{
@@ -411,26 +412,21 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
             margin-top: 30px;
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: center;
         }}
 
-        .signature-block {{
-            width: 45%;
-        }}
-
-        .signature-title {{
+        .signature-position {{
             font-weight: bold;
-            margin-bottom: 20px;
         }}
 
         .signature-line {{
-            display: flex;
-            justify-content: flex-end;
-            align-items: flex-end;
+            width: 150px;
+            border-bottom: 1px solid #333;
+            margin: 0 15px;
         }}
 
         .signature-name {{
-            text-align: right;
+            font-weight: normal;
         }}
     </style>
 </head>
@@ -553,12 +549,9 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
 
     <!-- Signature -->
     <div class="signature-section">
-        <div class="signature-block">
-            <div class="signature-title">{director_position}</div>
-        </div>
-        <div class="signature-block">
-            <div class="signature-name">{director_name}</div>
-        </div>
+        <span class="signature-position">{director_position}</span>
+        <span class="signature-line"></span>
+        <span class="signature-name">{director_name}</span>
     </div>
 </body>
 </html>"""
