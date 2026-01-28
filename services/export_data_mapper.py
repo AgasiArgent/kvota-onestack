@@ -23,6 +23,8 @@ class ExportData:
     variables: Dict[str, Any]
     calculations: Dict[str, Any]  # totals and summaries
     seller_company: Optional[Dict[str, Any]] = None  # Our legal entity for invoices
+    bank_accounts: List[Dict[str, Any]] = None  # Bank accounts for seller_company
+    selected_bank_account: Optional[Dict[str, Any]] = None  # Selected bank account for invoice
 
 
 def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
@@ -113,6 +115,7 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
 
     # 8. Fetch seller company (our legal entity) if quote has seller_company_id
     seller_company = None
+    bank_accounts = []
     if quote.get("seller_company_id"):
         seller_result = supabase.table("seller_companies") \
             .select("*") \
@@ -121,6 +124,16 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
         if seller_result.data:
             seller_company = seller_result.data[0]
 
+            # 9. Fetch bank accounts for seller company
+            bank_result = supabase.table("bank_accounts") \
+                .select("*") \
+                .eq("entity_type", "seller_company") \
+                .eq("entity_id", quote["seller_company_id"]) \
+                .eq("is_active", True) \
+                .order("is_default", desc=True) \
+                .execute()
+            bank_accounts = bank_result.data or []
+
     return ExportData(
         quote=quote,
         items=items,
@@ -128,8 +141,58 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
         organization=organization,
         variables=variables,
         calculations=calculations,
-        seller_company=seller_company
+        seller_company=seller_company,
+        bank_accounts=bank_accounts,
+        selected_bank_account=bank_accounts[0] if bank_accounts else None  # Default to first (is_default=true comes first)
     )
+
+
+def fetch_export_data_with_bank(quote_id: str, org_id: str, bank_account_id: str = None) -> ExportData:
+    """
+    Fetch export data with specific bank account selected.
+
+    Args:
+        quote_id: Quote UUID
+        org_id: Organization UUID
+        bank_account_id: Optional bank account UUID to use (defaults to is_default=true)
+
+    Returns:
+        ExportData with selected_bank_account set
+    """
+    data = fetch_export_data(quote_id, org_id)
+
+    # If specific bank account requested, find and set it
+    if bank_account_id and data.bank_accounts:
+        for bank in data.bank_accounts:
+            if bank["id"] == bank_account_id:
+                data.selected_bank_account = bank
+                break
+
+    return data
+
+
+def get_bank_accounts_for_seller(seller_company_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all active bank accounts for a seller company.
+
+    Args:
+        seller_company_id: Seller company UUID
+
+    Returns:
+        List of bank account dicts
+    """
+    supabase = get_supabase()
+
+    result = supabase.table("bank_accounts") \
+        .select("*") \
+        .eq("entity_type", "seller_company") \
+        .eq("entity_id", seller_company_id) \
+        .eq("is_active", True) \
+        .order("is_default", desc=True) \
+        .order("currency") \
+        .execute()
+
+    return result.data or []
 
 
 def calculate_totals_from_items(items: List[Dict], currency: str) -> Dict[str, Any]:

@@ -99,11 +99,12 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     seller_phone = seller.get("phone", "")
     seller_website = seller.get("website", "")
 
-    # Bank details
-    bank_name = seller.get("bank_name", "")
-    bank_bik = seller.get("bik", "")
-    bank_corr = seller.get("correspondent_account", "")
-    bank_account = seller.get("payment_account", "")
+    # Bank details - prefer selected_bank_account, fallback to seller_company fields
+    bank = data.selected_bank_account or {}
+    bank_name = bank.get("bank_name") or seller.get("bank_name", "")
+    bank_bik = bank.get("bik") or seller.get("bik", "")
+    bank_corr = bank.get("correspondent_account") or seller.get("correspondent_account", "")
+    bank_account = bank.get("account_number") or seller.get("payment_account", "")
 
     # Director info
     director_name = ""
