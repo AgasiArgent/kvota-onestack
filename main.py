@@ -2771,6 +2771,13 @@ DASHBOARD_TABS = [
         "roles": ["finance", "top_manager", "admin"],
         "priority": 6,
     },
+    {
+        "id": "sales",
+        "icon": "user-circle",
+        "label": "Мой кабинет",
+        "roles": ["sales", "sales_manager"],
+        "priority": 7,
+    },
 ]
 
 
@@ -4426,6 +4433,318 @@ def _dashboard_finance_content(user_id: str, org_id: str, supabase) -> list:
     ]
 
 
+def _calculate_days_remaining(deadline_date) -> str:
+    """
+    Calculate days remaining until deadline.
+    Returns formatted string like 'осталось 5 дн.' or 'просрочено на 3 дн.'
+    """
+    if not deadline_date:
+        return "—"
+
+    try:
+        if isinstance(deadline_date, str):
+            deadline = datetime.strptime(deadline_date[:10], "%Y-%m-%d").date()
+        else:
+            deadline = deadline_date
+
+        today = date.today()
+        delta = (deadline - today).days
+
+        if delta > 0:
+            return f"осталось {delta} дн."
+        elif delta == 0:
+            return "сегодня"
+        else:
+            return f"просрочено на {abs(delta)} дн."
+    except (ValueError, TypeError):
+        return "—"
+
+
+def _format_deadline_display(deadline_date) -> str:
+    """
+    Format deadline date with days remaining.
+    Returns formatted string like '22.06.2026 (осталось 90 дн.)'
+    """
+    if not deadline_date:
+        return "—"
+
+    try:
+        if isinstance(deadline_date, str):
+            deadline = datetime.strptime(deadline_date[:10], "%Y-%m-%d").date()
+        else:
+            deadline = deadline_date
+
+        formatted_date = deadline.strftime("%d.%m.%Y")
+        days_remaining = _calculate_days_remaining(deadline_date)
+
+        return f"{formatted_date} ({days_remaining})"
+    except (ValueError, TypeError):
+        return "—"
+
+
+def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) -> list:
+    """
+    Sales Manager Dashboard tab content.
+    Shows personal statistics, active specifications, active quotes, and profile card.
+    """
+    from services.user_profile_service import get_user_profile, get_user_statistics
+
+    # Get user profile and statistics
+    profile = get_user_profile(user_id, org_id)
+    stats = get_user_statistics(user_id, org_id)
+
+    # Get organization name
+    org_result = supabase.table("organizations").select("name").eq("id", org_id).execute()
+    org_name = org_result.data[0].get("name", "—") if org_result.data else "—"
+
+    # Get current month sales (deals) and profit
+    now = datetime.now()
+    first_day_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Query deals closed this month by this user
+    month_deals_result = supabase.table("quotes") \
+        .select("id, total_amount_usd, total_profit_usd") \
+        .eq("organization_id", org_id) \
+        .eq("created_by_user_id", user_id) \
+        .eq("workflow_status", "deal") \
+        .gte("updated_at", first_day_of_month.isoformat()) \
+        .execute()
+
+    month_deals = month_deals_result.data or []
+    month_sales = sum(float(d.get("total_amount_usd") or 0) for d in month_deals)
+    month_profit = sum(float(d.get("total_profit_usd") or 0) for d in month_deals)
+
+    # Get active specifications (status != 'signed') for this user
+    active_specs_result = supabase.table("specifications") \
+        .select("""
+            id,
+            specification_number,
+            status,
+            actual_delivery_date,
+            created_at,
+            quotes(
+                id,
+                idn_quote,
+                total_amount_usd,
+                total_profit_usd,
+                customers(name)
+            )
+        """) \
+        .eq("organization_id", org_id) \
+        .eq("created_by", user_id) \
+        .neq("status", "signed") \
+        .order("created_at", desc=True) \
+        .limit(10) \
+        .execute()
+
+    active_specs = active_specs_result.data or []
+
+    # Calculate totals for active specs
+    specs_total_amount = sum(
+        float((s.get("quotes") or {}).get("total_amount_usd") or 0)
+        for s in active_specs
+    )
+    specs_total_profit = sum(
+        float((s.get("quotes") or {}).get("total_profit_usd") or 0)
+        for s in active_specs
+    )
+
+    # Get active quotes (not deal/rejected/cancelled) for this user
+    active_quotes_result = supabase.table("quotes") \
+        .select("id, idn_quote, workflow_status, total_amount_usd, total_profit_usd, customers(name)") \
+        .eq("organization_id", org_id) \
+        .eq("created_by_user_id", user_id) \
+        .not_.in_("workflow_status", ["deal", "rejected", "cancelled"]) \
+        .order("created_at", desc=True) \
+        .limit(10) \
+        .execute()
+
+    active_quotes = active_quotes_result.data or []
+
+    # Spec status badge helper
+    def spec_status_badge(status):
+        status_map = {
+            "draft": ("Черновик", "#6b7280", "#f3f4f6"),
+            "pending_review": ("На проверке", "#d97706", "#fef3c7"),
+            "approved": ("Одобрена", "#059669", "#d1fae5"),
+            "signed": ("Подписана", "#2563eb", "#dbeafe"),
+        }
+        label, color, bg = status_map.get(status, (status or "—", "#6b7280", "#f3f4f6"))
+        return Span(label, style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: {bg}; color: {color}; font-weight: 500;")
+
+    # Build spec rows
+    def build_spec_row(spec):
+        quote = spec.get("quotes") or {}
+        customer = quote.get("customers") or {}
+        spec_number = spec.get("specification_number") or "—"
+        customer_name = customer.get("name") or "—"
+        status = spec.get("status") or "draft"
+        amount = float(quote.get("total_amount_usd") or 0)
+        profit = float(quote.get("total_profit_usd") or 0)
+        deadline = spec.get("actual_delivery_date")
+
+        return Tr(
+            Td(spec_number, style="font-weight: 500;"),
+            Td(customer_name[:25] + "..." if len(customer_name) > 25 else customer_name),
+            Td(spec_status_badge(status)),
+            Td(f"${amount:,.0f}", style="text-align: right;"),
+            Td(f"${profit:,.0f}", style="text-align: right; color: #059669;"),
+            Td(_format_deadline_display(deadline), style="font-size: 0.875rem;"),
+            cls="clickable-row",
+            style="cursor: pointer;",
+            onclick=f"window.location='/specifications/{spec['id']}'"
+        )
+
+    # Build quote rows
+    def build_quote_row(quote):
+        customer = quote.get("customers") or {}
+        idn = quote.get("idn_quote") or "—"
+        customer_name = customer.get("name") or "—"
+        status = quote.get("workflow_status") or "draft"
+        amount = float(quote.get("total_amount_usd") or 0)
+        profit = float(quote.get("total_profit_usd") or 0)
+
+        return Tr(
+            Td(idn, style="font-weight: 500;"),
+            Td(customer_name[:25] + "..." if len(customer_name) > 25 else customer_name),
+            Td(workflow_status_badge(status)),
+            Td(f"${amount:,.0f}", style="text-align: right;"),
+            Td(f"${profit:,.0f}", style="text-align: right; color: #059669;"),
+            cls="clickable-row",
+            style="cursor: pointer;",
+            onclick=f"window.location='/quotes/{quote['id']}'"
+        )
+
+    return [
+        # Statistics cards row
+        Div(
+            Div(
+                Div(str(stats.get("total_customers", 0)), cls="stat-value", style="font-size: 1.75rem; font-weight: 700; color: #1f2937;"),
+                Div("Клиенты", style="font-size: 0.875rem; color: #6b7280;"),
+                cls="card stat-card", style="text-align: center; padding: 1rem;"
+            ),
+            Div(
+                Div(str(stats.get("total_quotes", 0)), cls="stat-value", style="font-size: 1.75rem; font-weight: 700; color: #1f2937;"),
+                Div("Ваши КП", style="font-size: 0.875rem; color: #6b7280;"),
+                cls="card stat-card", style="text-align: center; padding: 1rem;"
+            ),
+            Div(
+                Div(str(stats.get("total_specifications", 0)), cls="stat-value", style="font-size: 1.75rem; font-weight: 700; color: #1f2937;"),
+                Div("Ваши СП", style="font-size: 0.875rem; color: #6b7280;"),
+                cls="card stat-card", style="text-align: center; padding: 1rem;"
+            ),
+            Div(
+                Div(f"${month_sales:,.0f}", cls="stat-value", style="font-size: 1.75rem; font-weight: 700; color: #059669;"),
+                Div("Продажи (месяц)", style="font-size: 0.875rem; color: #6b7280;"),
+                cls="card stat-card", style="text-align: center; padding: 1rem;"
+            ),
+            Div(
+                Div(f"${month_profit:,.0f}", cls="stat-value", style="font-size: 1.75rem; font-weight: 700; color: #10b981;"),
+                Div("Профит (месяц)", style="font-size: 0.875rem; color: #6b7280;"),
+                cls="card stat-card", style="text-align: center; padding: 1rem;"
+            ),
+            cls="grid",
+            style="grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
+        ),
+
+        # Main content: two columns (tables + profile card)
+        Div(
+            # Left column: Tables
+            Div(
+                # Active Specifications section
+                Div(
+                    Div(
+                        H3("Активные спецификации", style="margin: 0; display: inline;"),
+                        Span(f"Итого: ${specs_total_amount:,.0f} | Профит: ${specs_total_profit:,.0f}",
+                             style="float: right; color: #6b7280; font-size: 0.875rem; font-weight: normal;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+                    Table(
+                        Thead(Tr(
+                            Th("ИНД"),
+                            Th("Клиент"),
+                            Th("Статус"),
+                            Th("Сумма", style="text-align: right;"),
+                            Th("Профит", style="text-align: right;"),
+                            Th("Дедлайн"),
+                        )),
+                        Tbody(
+                            *[build_spec_row(s) for s in active_specs]
+                        ) if active_specs else Tbody(
+                            Tr(Td("Нет активных спецификаций", colspan="6", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                        ),
+                        style="width: 100%;"
+                    ),
+                    A("→ изменить", href="/specifications", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
+                    cls="card",
+                    style="margin-bottom: 1.5rem;"
+                ),
+
+                # Active Quotes section
+                Div(
+                    H3("Активные КП", style="margin-bottom: 1rem;"),
+                    Table(
+                        Thead(Tr(
+                            Th("ИНД"),
+                            Th("Клиент"),
+                            Th("Статус"),
+                            Th("Сумма USD", style="text-align: right;"),
+                            Th("Профит USD", style="text-align: right;"),
+                        )),
+                        Tbody(
+                            *[build_quote_row(q) for q in active_quotes]
+                        ) if active_quotes else Tbody(
+                            Tr(Td("Нет активных КП", colspan="5", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                        ),
+                        style="width: 100%;"
+                    ),
+                    A("→ изменить", href="/quotes", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
+                    cls="card",
+                ),
+                style="flex: 1;"
+            ),
+
+            # Right column: Profile card
+            Div(
+                Div(
+                    # Avatar placeholder
+                    Div(
+                        icon("user", size=48, cls="", style="color: #9ca3af;"),
+                        style="width: 80px; height: 80px; background: #f3f4f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;"
+                    ),
+                    # Name
+                    H3(
+                        profile.get("full_name") or user.get("email", "—"),
+                        style="text-align: center; margin: 0 0 0.25rem 0; font-size: 1.125rem;"
+                    ),
+                    # Position
+                    P(
+                        profile.get("position") or "Менеджер по продажам",
+                        style="text-align: center; color: #6b7280; margin: 0 0 0.75rem 0; font-size: 0.875rem;"
+                    ),
+                    # Phone
+                    P(
+                        icon("phone", size=14, style="margin-right: 0.375rem;"),
+                        profile.get("phone") or "—",
+                        style="text-align: center; color: #374151; margin: 0 0 0.5rem 0; font-size: 0.875rem; display: flex; align-items: center; justify-content: center;"
+                    ) if profile and profile.get("phone") else None,
+                    # Organization
+                    P(
+                        icon("building-2", size=14, style="margin-right: 0.375rem;"),
+                        org_name,
+                        style="text-align: center; color: #374151; margin: 0; font-size: 0.875rem; display: flex; align-items: center; justify-content: center;"
+                    ),
+                    cls="card",
+                    style="padding: 1.5rem; text-align: center;"
+                ),
+                style="width: 260px; flex-shrink: 0;"
+            ),
+
+            style="display: flex; gap: 1.5rem; align-items: flex-start;"
+        ),
+    ]
+
+
 def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
     """
     Build the dashboard tab navigation.
@@ -4643,6 +4962,7 @@ def get(session, tab: str = None, status_filter: str = None):
         "quote-control": "Контроль КП",
         "spec-control": "Спецификации",
         "finance": "Финансы",
+        "sales": "Мой кабинет",
     }
     page_title = f"Dashboard - {tab_titles.get(tab, tab)}"
 
@@ -4661,6 +4981,8 @@ def get(session, tab: str = None, status_filter: str = None):
         content = _dashboard_spec_control_content(user_id, org_id, supabase, status_filter)
     elif tab == "finance":
         content = _dashboard_finance_content(user_id, org_id, supabase)
+    elif tab == "sales":
+        content = _dashboard_sales_content(user_id, org_id, user, supabase)
     else:
         content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
 
