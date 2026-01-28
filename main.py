@@ -24808,12 +24808,17 @@ async def post(customer_id: str, contact_id: str, field_name: str, session, requ
     # Get form data
     form_data = await request.form()
 
+    # DEBUG: Log form data
+    import logging
+    logging.info(f"[DEBUG] Contact update - field: {field_name}, form_data: {dict(form_data)}")
+
     try:
         if field_name == "name":
             # Update all name parts
             last_name = form_data.get("last_name", "")
             name = form_data.get("name", "")
             patronymic = form_data.get("patronymic", "")
+            logging.info(f"[DEBUG] Updating name: last_name={last_name!r}, name={name!r}, patronymic={patronymic!r}")
 
             updated_contact = update_contact(contact_id, name=name, last_name=last_name, patronymic=patronymic)
         else:
