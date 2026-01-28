@@ -7253,15 +7253,68 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
     2026-01-26: Added per-item exchange rate calculation. Each item may have a different
     purchase_currency, so we calculate individual exchange rates to quote_currency.
+
+    2026-01-28: Monetary values (brokerage, DM fee) are now stored in ORIGINAL currency.
+    Conversion to USD happens here, just before passing to calculation engine.
     """
     from services.currency_service import convert_amount
 
     # Get quote currency (target currency for all conversions)
     quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
-    # NOTE: DM Fee conversion to USD is now done in POST handler before calling this function
-    # The dm_fee_value coming here should already be in USD
-    # dm_fee_currency is kept for reference only (original currency user entered)
+    # ==========================================================================
+    # CONVERT MONETARY VALUES TO USD FOR CALCULATION ENGINE
+    # Values are stored in original currency, we convert here before calculation
+    # ==========================================================================
+
+    # Helper to convert value from source_currency to USD
+    def to_usd(value, currency):
+        if not value or currency == 'USD':
+            return safe_decimal(value)
+        val = safe_decimal(value)
+        if val > 0:
+            return safe_decimal(convert_amount(val, currency, 'USD'))
+        return val
+
+    # Convert brokerage fields from their currencies to USD
+    brokerage_hub_usd = to_usd(
+        variables.get('brokerage_hub'),
+        variables.get('brokerage_hub_currency', 'USD')
+    )
+    brokerage_customs_usd = to_usd(
+        variables.get('brokerage_customs'),
+        variables.get('brokerage_customs_currency', 'USD')
+    )
+    warehousing_at_customs_usd = to_usd(
+        variables.get('warehousing_at_customs'),
+        variables.get('warehousing_at_customs_currency', 'USD')
+    )
+    customs_documentation_usd = to_usd(
+        variables.get('customs_documentation'),
+        variables.get('customs_documentation_currency', 'USD')
+    )
+    brokerage_extra_usd = to_usd(
+        variables.get('brokerage_extra'),
+        variables.get('brokerage_extra_currency', 'USD')
+    )
+
+    # Convert DM Fee from its currency to USD (only for fixed type)
+    dm_fee_type = variables.get('dm_fee_type', 'fixed')
+    dm_fee_currency = variables.get('dm_fee_currency', 'USD')
+    if dm_fee_type == 'fixed':
+        dm_fee_value_usd = to_usd(variables.get('dm_fee_value'), dm_fee_currency)
+    else:
+        # Percentage - no conversion needed
+        dm_fee_value_usd = safe_decimal(variables.get('dm_fee_value'))
+
+    # Create a copy of variables with USD-converted values for calculation
+    calc_variables = dict(variables)
+    calc_variables['brokerage_hub'] = brokerage_hub_usd
+    calc_variables['brokerage_customs'] = brokerage_customs_usd
+    calc_variables['warehousing_at_customs'] = warehousing_at_customs_usd
+    calc_variables['customs_documentation'] = customs_documentation_usd
+    calc_variables['brokerage_extra'] = brokerage_extra_usd
+    calc_variables['dm_fee_value'] = dm_fee_value_usd
 
     calc_inputs = []
     for item in items:
@@ -7295,7 +7348,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
         calc_input = map_variables_to_calculation_input(
             product=product,
-            variables=variables,
+            variables=calc_variables,  # Use USD-converted values for calculation
             exchange_rate=exchange_rate
         )
         calc_inputs.append(calc_input)
@@ -7468,29 +7521,10 @@ def post(
         form_delivery_time = safe_int(delivery_time)
         effective_delivery_time = max(aggregated_delivery_time, form_delivery_time)
 
-        # Convert brokerage values to USD (Calculation Engine works in USD)
-        from services.currency_service import convert_amount
-        brokerage_hub_usd = safe_decimal(brokerage_hub)
-        brokerage_customs_usd = safe_decimal(brokerage_customs)
-        warehousing_at_customs_usd = safe_decimal(warehousing_at_customs)
-        customs_documentation_usd = safe_decimal(customs_documentation)
-        brokerage_extra_usd = safe_decimal(brokerage_extra)
-
-        if brokerage_hub_currency != 'USD' and brokerage_hub_usd > 0:
-            brokerage_hub_usd = convert_amount(brokerage_hub_usd, brokerage_hub_currency, 'USD')
-        if brokerage_customs_currency != 'USD' and brokerage_customs_usd > 0:
-            brokerage_customs_usd = convert_amount(brokerage_customs_usd, brokerage_customs_currency, 'USD')
-        if warehousing_at_customs_currency != 'USD' and warehousing_at_customs_usd > 0:
-            warehousing_at_customs_usd = convert_amount(warehousing_at_customs_usd, warehousing_at_customs_currency, 'USD')
-        if customs_documentation_currency != 'USD' and customs_documentation_usd > 0:
-            customs_documentation_usd = convert_amount(customs_documentation_usd, customs_documentation_currency, 'USD')
-        if brokerage_extra_currency != 'USD' and brokerage_extra_usd > 0:
-            brokerage_extra_usd = convert_amount(brokerage_extra_usd, brokerage_extra_currency, 'USD')
-
-        # Convert DM Fee to USD
-        dm_fee_value_usd = safe_decimal(dm_fee_value)
-        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value_usd > 0:
-            dm_fee_value_usd = convert_amount(dm_fee_value_usd, dm_fee_currency, 'USD')
+        # ==========================================================================
+        # STORE VALUES IN ORIGINAL CURRENCY (no conversion on save)
+        # Conversion to USD happens only in build_calculation_inputs() before calculation
+        # ==========================================================================
 
         # Build variables from form parameters
         variables = {
@@ -7502,17 +7536,22 @@ def post(
             'seller_company': seller_company,
             'offer_sale_type': offer_sale_type,
 
-            # Logistics
+            # Logistics (stored in USD - aggregated from invoices which are already converted)
             'logistics_supplier_hub': safe_decimal(logistics_supplier_hub),
             'logistics_hub_customs': safe_decimal(logistics_hub_customs),
             'logistics_customs_client': safe_decimal(logistics_customs_client),
 
-            # Brokerage (converted to USD)
-            'brokerage_hub': brokerage_hub_usd,
-            'brokerage_customs': brokerage_customs_usd,
-            'warehousing_at_customs': warehousing_at_customs_usd,
-            'customs_documentation': customs_documentation_usd,
-            'brokerage_extra': brokerage_extra_usd,
+            # Brokerage (stored in ORIGINAL currency, converted to USD in build_calculation_inputs)
+            'brokerage_hub': safe_decimal(brokerage_hub),
+            'brokerage_hub_currency': brokerage_hub_currency,
+            'brokerage_customs': safe_decimal(brokerage_customs),
+            'brokerage_customs_currency': brokerage_customs_currency,
+            'warehousing_at_customs': safe_decimal(warehousing_at_customs),
+            'warehousing_at_customs_currency': warehousing_at_customs_currency,
+            'customs_documentation': safe_decimal(customs_documentation),
+            'customs_documentation_currency': customs_documentation_currency,
+            'brokerage_extra': safe_decimal(brokerage_extra),
+            'brokerage_extra_currency': brokerage_extra_currency,
 
             # Payment terms
             'advance_from_client': safe_decimal(advance_from_client),
@@ -7520,9 +7559,9 @@ def post(
             'time_to_advance': safe_int(time_to_advance),
             'time_to_advance_on_receiving': safe_int(time_to_advance_on_receiving),
 
-            # DM Fee (converted to USD)
+            # DM Fee (stored in ORIGINAL currency, converted to USD in build_calculation_inputs)
             'dm_fee_type': dm_fee_type,
-            'dm_fee_value': dm_fee_value_usd,
+            'dm_fee_value': safe_decimal(dm_fee_value),
             'dm_fee_currency': dm_fee_currency,
 
             # Exchange rate
@@ -7605,21 +7644,8 @@ def get(quote_id: str, session):
 
     saved_vars = vars_result.data[0]["variables"] if vars_result.data else {}
 
-    # ==========================================================================
-    # CONVERT DM FEE VALUE BACK TO ORIGINAL CURRENCY FOR DISPLAY
-    # dm_fee_value is stored in USD, but user entered it in dm_fee_currency
-    # We need to convert back for proper display in the form
-    # ==========================================================================
-    if saved_vars.get('dm_fee_value') and saved_vars.get('dm_fee_currency'):
-        dm_fee_currency = saved_vars.get('dm_fee_currency', 'USD')
-        dm_fee_type = saved_vars.get('dm_fee_type', 'fixed')
-        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD':
-            from services.currency_service import convert_amount
-            dm_fee_usd = Decimal(str(saved_vars['dm_fee_value']))
-            if dm_fee_usd > 0:
-                # Convert from USD back to original currency
-                dm_fee_original = convert_amount(dm_fee_usd, 'USD', dm_fee_currency)
-                saved_vars['dm_fee_value'] = float(dm_fee_original)
+    # NOTE: Monetary values (brokerage, DM fee) are now stored in ORIGINAL currency
+    # No back-conversion needed for display - values are shown as entered
 
     # ==========================================================================
     # AGGREGATE LOGISTICS FROM INVOICES (with multi-currency support)
@@ -8064,37 +8090,12 @@ def post(
             print(f"[calc-debug] Final logistics values: S2H={form_logistics_supplier_hub}, H2C={form_logistics_hub_customs}, C2C={form_logistics_customs_client}")
 
         # ==========================================================================
-        # CONVERT BROKERAGE VALUES TO USD (Calculation Engine works in USD)
+        # STORE VALUES IN ORIGINAL CURRENCY (no conversion here)
+        # Conversion to USD happens in build_calculation_inputs() before calculation
         # ==========================================================================
-        brokerage_hub_usd = safe_decimal(brokerage_hub)
-        brokerage_customs_usd = safe_decimal(brokerage_customs)
-        warehousing_at_customs_usd = safe_decimal(warehousing_at_customs)
-        customs_documentation_usd = safe_decimal(customs_documentation)
-        brokerage_extra_usd = safe_decimal(brokerage_extra)
+        print(f"[calc-debug] Brokerage (original): hub={brokerage_hub} {brokerage_hub_currency}, customs={brokerage_customs} {brokerage_customs_currency}")
 
-        # Convert each brokerage value from its currency to USD
-        if brokerage_hub_currency != 'USD' and brokerage_hub_usd > 0:
-            brokerage_hub_usd = convert_amount(brokerage_hub_usd, brokerage_hub_currency, 'USD')
-        if brokerage_customs_currency != 'USD' and brokerage_customs_usd > 0:
-            brokerage_customs_usd = convert_amount(brokerage_customs_usd, brokerage_customs_currency, 'USD')
-        if warehousing_at_customs_currency != 'USD' and warehousing_at_customs_usd > 0:
-            warehousing_at_customs_usd = convert_amount(warehousing_at_customs_usd, warehousing_at_customs_currency, 'USD')
-        if customs_documentation_currency != 'USD' and customs_documentation_usd > 0:
-            customs_documentation_usd = convert_amount(customs_documentation_usd, customs_documentation_currency, 'USD')
-        if brokerage_extra_currency != 'USD' and brokerage_extra_usd > 0:
-            brokerage_extra_usd = convert_amount(brokerage_extra_usd, brokerage_extra_currency, 'USD')
-
-        print(f"[calc-debug] Brokerage conversion: hub={brokerage_hub} {brokerage_hub_currency}→{brokerage_hub_usd} USD, customs={brokerage_customs} {brokerage_customs_currency}→{brokerage_customs_usd} USD")
-
-        # ==========================================================================
-        # CONVERT DM FEE TO USD (Calculation Engine works in USD)
-        # ==========================================================================
-        dm_fee_value_usd = safe_decimal(dm_fee_value)
-        if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value_usd > 0:
-            dm_fee_value_usd = convert_amount(dm_fee_value_usd, dm_fee_currency, 'USD')
-            print(f"[calc-debug] DM Fee conversion: {dm_fee_value} {dm_fee_currency} → {dm_fee_value_usd} USD")
-
-        # Build variables from form parameters
+        # Build variables from form parameters (store in ORIGINAL currency)
         variables = {
             'currency_of_quote': currency,
             'markup': safe_decimal(markup),
@@ -8104,22 +8105,21 @@ def post(
             'seller_company': seller_company,
             'offer_sale_type': offer_sale_type,
 
-            # Logistics (use aggregated values if form was empty)
+            # Logistics (stored in USD - aggregated from invoices which are already converted)
             'logistics_supplier_hub': form_logistics_supplier_hub,
             'logistics_hub_customs': form_logistics_hub_customs,
             'logistics_customs_client': form_logistics_customs_client,
 
-            # Brokerage (converted to USD)
-            'brokerage_hub': brokerage_hub_usd,
-            'brokerage_customs': brokerage_customs_usd,
-            'warehousing_at_customs': warehousing_at_customs_usd,
-            'customs_documentation': customs_documentation_usd,
-            'brokerage_extra': brokerage_extra_usd,
-            # Store original currencies for display/export
+            # Brokerage (stored in ORIGINAL currency, converted to USD in build_calculation_inputs)
+            'brokerage_hub': safe_decimal(brokerage_hub),
             'brokerage_hub_currency': brokerage_hub_currency,
+            'brokerage_customs': safe_decimal(brokerage_customs),
             'brokerage_customs_currency': brokerage_customs_currency,
+            'warehousing_at_customs': safe_decimal(warehousing_at_customs),
             'warehousing_at_customs_currency': warehousing_at_customs_currency,
+            'customs_documentation': safe_decimal(customs_documentation),
             'customs_documentation_currency': customs_documentation_currency,
+            'brokerage_extra': safe_decimal(brokerage_extra),
             'brokerage_extra_currency': brokerage_extra_currency,
 
             # Payment terms
@@ -8128,10 +8128,10 @@ def post(
             'time_to_advance': safe_int(time_to_advance),
             'time_to_advance_on_receiving': safe_int(time_to_advance_on_receiving),
 
-            # DM Fee (converted to USD)
+            # DM Fee (stored in ORIGINAL currency, converted to USD in build_calculation_inputs)
             'dm_fee_type': dm_fee_type,
-            'dm_fee_value': dm_fee_value_usd,
-            'dm_fee_currency': dm_fee_currency,  # Original currency for reference
+            'dm_fee_value': safe_decimal(dm_fee_value),
+            'dm_fee_currency': dm_fee_currency,
 
             # Exchange rate
             'exchange_rate': safe_decimal(exchange_rate),
