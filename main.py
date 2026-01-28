@@ -8193,11 +8193,28 @@ def post(
 
         avg_margin = (total_profit / total_cogs * 100) if total_cogs else Decimal("0")
 
+        # Calculate exchange rate from quote currency to USD for analytics
+        if currency == 'USD':
+            exchange_rate_to_usd = Decimal("1.0")
+        else:
+            exchange_rate_to_usd = safe_decimal(convert_amount(Decimal("1"), currency, 'USD'))
+            if exchange_rate_to_usd == 0:
+                exchange_rate_to_usd = Decimal("1.0")  # Fallback
+
+        # Calculate USD equivalents for analytics
+        subtotal_usd = total_purchase * exchange_rate_to_usd
+        total_amount_usd = total_with_vat * exchange_rate_to_usd
+        total_profit_usd = total_profit * exchange_rate_to_usd
+
         # Update quote totals (only use columns that exist in quotes table)
         supabase.table("quotes").update({
             "subtotal": float(total_purchase),
             "total_amount": float(total_with_vat),
-            "total_profit_usd": float(total_profit),
+            "total_profit_usd": float(total_profit_usd),
+            # USD analytics columns
+            "exchange_rate_to_usd": float(exchange_rate_to_usd),
+            "subtotal_usd": float(subtotal_usd),
+            "total_amount_usd": float(total_amount_usd),
             "updated_at": datetime.now().isoformat()
         }).eq("id", quote_id).execute()
 
@@ -8273,10 +8290,15 @@ def post(
                 "BB16": float(result.financing_cost_credit or 0),
             }
 
+            # Convert phase_results to USD for analytics
+            rate = float(exchange_rate_to_usd)
+            phase_results_usd = {k: v * rate for k, v in phase_results.items()}
+
             item_result = {
                 "quote_id": quote_id,
                 "quote_item_id": item["id"],
                 "phase_results": phase_results,
+                "phase_results_usd": phase_results_usd,
                 "calculated_at": datetime.now().isoformat()
             }
             existing_result = supabase.table("quote_calculation_results") \
@@ -8300,9 +8322,11 @@ def post(
                 "base_price_vat": base_price_vat_per_unit
             }).eq("id", item["id"]).execute()
 
-        # Store calculation summary
+        # Store calculation summary (with USD equivalents for analytics)
+        rate = float(exchange_rate_to_usd)
         calc_summary = {
             "quote_id": quote_id,
+            # Quote currency values
             "calc_s16_total_purchase_price": float(total_purchase),
             "calc_v16_total_logistics": float(total_logistics),
             "calc_y16_customs_duty": float(total_customs),
@@ -8310,6 +8334,15 @@ def post(
             "calc_ae16_sale_price_total": float(total_no_vat),
             "calc_al16_total_with_vat": float(total_with_vat),
             "calc_af16_profit_margin": float(avg_margin),
+            # USD equivalents for analytics
+            "exchange_rate_to_usd": rate,
+            "calc_s16_total_purchase_price_usd": float(total_purchase) * rate,
+            "calc_v16_total_logistics_usd": float(total_logistics) * rate,
+            "calc_y16_customs_duty_usd": float(total_customs) * rate,
+            "calc_total_brokerage_usd": float(total_brokerage) * rate,
+            "calc_ae16_sale_price_total_usd": float(total_no_vat) * rate,
+            "calc_al16_total_with_vat_usd": float(total_with_vat) * rate,
+            "calc_af16_total_profit_usd": float(total_profit) * rate,
             "calculated_at": datetime.now().isoformat()
         }
         existing_summary = supabase.table("quote_calculation_summaries") \
