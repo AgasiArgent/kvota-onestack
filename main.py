@@ -23991,11 +23991,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
         tab_content = Div(
             Div(
-                icon("lightbulb", size=16), " Кликните на поле для редактирования. Используйте кнопки ",
-                Span(icon("pen-tool", size=12), style="background: #10b981; color: white; padding: 0.125rem 0.25rem; border-radius: 0.25rem; display: inline-flex; align-items: center;"),
-                " и ",
-                Span("★", style="background: #f59e0b; color: white; padding: 0.125rem 0.375rem; border-radius: 0.25rem;"),
-                " для установки подписанта и основного контакта.",
+                icon("lightbulb", size=16), " Кликните на поле для редактирования. Иконки ",
+                Span(icon("pen-tool", size=14), style="background: #10b981; color: white; width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;"),
+                " (подписант) и ",
+                Span(icon("star", size=14), style="background: #f59e0b; color: white; width: 20px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;"),
+                " (основной) — уникальны для клиента.",
                 cls="alert alert-info", style="margin: 1rem 0;"
             ),
             Div(
@@ -24007,8 +24007,9 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 Div(
                     Table(
                         Thead(Tr(Th("ФИО"), Th("ДОЛЖНОСТЬ"), Th("EMAIL"), Th("ТЕЛЕФОН"), Th("ЗАМЕТКИ"), Th("СТАТУС", cls="col-actions"))),
-                        Tbody(*contacts_rows) if contacts_rows else Tbody(
-                            Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
+                        Tbody(*contacts_rows, id="contacts-tbody") if contacts_rows else Tbody(
+                            Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;")),
+                            id="contacts-tbody"
                         ),
                         cls="unified-table"
                     ),
@@ -24664,26 +24665,32 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 
 def _render_contact_flags_cell(contact, customer_id: str):
-    """Render the flags cell (signatory, primary) with toggle buttons."""
+    """Render the flags cell (signatory, primary) with small icon toggle buttons."""
+    # Small icon button style (like sidebar icons - 24x24px with 16px icon)
+    btn_base = "border: none; border-radius: 4px; cursor: pointer; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s;"
+
+    signatory_style = f"{btn_base} background: {'#10b981' if contact.is_signatory else 'transparent'}; color: {'white' if contact.is_signatory else '#9ca3af'};"
+    primary_style = f"{btn_base} background: {'#f59e0b' if contact.is_primary else 'transparent'}; color: {'white' if contact.is_primary else '#9ca3af'};"
+
     return Td(
         Div(
             Button(
-                icon("pen-tool", size=12),
+                icon("pen-tool", size=14),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
-                hx_target=f"#contact-row-{contact.id}",
-                hx_swap="outerHTML",
-                style=f"background: {'#10b981' if contact.is_signatory else '#e5e7eb'}; color: {'white' if contact.is_signatory else '#374151'}; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; margin-right: 0.25rem;",
+                hx_target="#contacts-tbody",
+                hx_swap="innerHTML",
+                style=signatory_style,
                 title="Подписант" if contact.is_signatory else "Сделать подписантом"
             ),
             Button(
-                "★",
+                icon("star", size=14),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
-                hx_target=f"#contact-row-{contact.id}",
-                hx_swap="outerHTML",
-                style=f"background: {'#f59e0b' if contact.is_primary else '#e5e7eb'}; color: {'white' if contact.is_primary else '#374151'}; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;",
+                hx_target="#contacts-tbody",
+                hx_swap="innerHTML",
+                style=primary_style,
                 title="Основной контакт" if contact.is_primary else "Сделать основным"
             ),
-            style="display: flex; align-items: center;"
+            style="display: flex; align-items: center; gap: 4px;"
         ),
         cls="col-actions"
     )
@@ -24917,46 +24924,50 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
 
 @rt("/customers/{customer_id}/contacts/{contact_id}/toggle-signatory")
 def post(customer_id: str, contact_id: str, session):
-    """Toggle signatory status for a contact."""
+    """Toggle signatory status for a contact. Returns all contacts to show unique signatory."""
     redirect = require_login(session)
     if redirect:
         return redirect
 
-    from services.customer_service import get_contact, update_contact
+    from services.customer_service import get_contact, update_contact, get_customer_by_id
 
     contact = get_contact(contact_id)
     if not contact:
         return Tr(Td("Контакт не найден", colspan="6"))
 
-    # Toggle signatory status
+    # Toggle signatory status (backend will unset other signatories if setting to true)
     new_status = not contact.is_signatory
-    updated_contact = update_contact(contact_id, is_signatory=new_status)
+    update_contact(contact_id, is_signatory=new_status)
 
-    if updated_contact:
-        return _render_contact_row(updated_contact, customer_id)
-    return _render_contact_row(contact, customer_id)
+    # Re-fetch all contacts to show updated state (including unset signatory on other contacts)
+    customer = get_customer_by_id(customer_id)
+    if customer and customer.contacts:
+        return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
+    return Tr(Td("Контакты не найдены", colspan="6"))
 
 
 @rt("/customers/{customer_id}/contacts/{contact_id}/toggle-primary")
 def post(customer_id: str, contact_id: str, session):
-    """Toggle primary status for a contact."""
+    """Toggle primary status for a contact. Returns all contacts to show unique primary."""
     redirect = require_login(session)
     if redirect:
         return redirect
 
-    from services.customer_service import get_contact, update_contact
+    from services.customer_service import get_contact, update_contact, get_customer_by_id
 
     contact = get_contact(contact_id)
     if not contact:
         return Tr(Td("Контакт не найден", colspan="6"))
 
-    # Toggle primary status
+    # Toggle primary status (backend will unset other primaries if setting to true)
     new_status = not contact.is_primary
-    updated_contact = update_contact(contact_id, is_primary=new_status)
+    update_contact(contact_id, is_primary=new_status)
 
-    if updated_contact:
-        return _render_contact_row(updated_contact, customer_id)
-    return _render_contact_row(contact, customer_id)
+    # Re-fetch all contacts to show updated state (including unset primary on other contacts)
+    customer = get_customer_by_id(customer_id)
+    if customer and customer.contacts:
+        return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
+    return Tr(Td("Контакты не найдены", colspan="6"))
 
 
 # ============================================================================
