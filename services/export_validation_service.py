@@ -104,7 +104,6 @@ PERCENTAGE_FIELDS = {
     "advance_on_shipping",
     "advance_on_customs",
     "rate_forex_risk",
-    "rate_fin_comm",
     "supplier_discount",
     "import_tariff",
     "markup",
@@ -162,9 +161,8 @@ QUOTE_INPUT_MAPPING = {
     # AG6: dm_fee_value when type is "комиссия %" (percentage, divided by 100)
     "AG3": ("dm_fee_type", "Тип вознаграждения ЛПР"),
     # NOTE: dm_fee_value is handled separately in _modify_raschet_references()
-    # Admin settings
-    "AH11": ("rate_forex_risk", "Резерв на курсовую разницу (%)"),
-    "AH12": ("rate_fin_comm", "Комиссия ФинАгента (%)"),
+    # Admin settings - C30/D30 on API_Inputs, mapped to расчет internally
+    "D30": ("rate_forex_risk", "Резерв на курсовую разницу (%)"),
 }
 
 # =============================================================================
@@ -1213,9 +1211,8 @@ def create_validation_excel(data) -> bytes:
         "dm_fee_value": dm_fee_value_usd,
 
         # Admin settings - use same defaults as calculation_mapper.get_default_admin_settings()
-        # If user hasn't overridden these, calculation uses these defaults
+        # rate_forex_risk goes to D30, Excel maps it internally to расчет
         "rate_forex_risk": variables.get("rate_forex_risk") if variables.get("rate_forex_risk") is not None else 3,  # Default 3%
-        "rate_fin_comm": variables.get("rate_fin_comm") if variables.get("rate_fin_comm") is not None else 2,  # Default 2%
 
         # Internal: exchange rate for USD conversion
         # Get actual USD -> quote_currency rate from currency service
