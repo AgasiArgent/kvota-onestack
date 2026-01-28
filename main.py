@@ -24388,40 +24388,44 @@ def get(customer_id: str, field_name: str, session):
     label, value, input_type = field_config[field_name]
 
     # Style for modern inline editing
-    input_style = "width: 100%; padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
+    input_style = "padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
 
-    # Form-level focusout handler - save when clicking outside the form
-    form_focusout = "setTimeout(() => { if(!this.contains(document.activeElement)) this.requestSubmit(); }, 100)"
+    # Key handlers: Enter to save (for input), Escape to cancel
     esc_handler = "if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }"
+    key_handler = "if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); } else " + esc_handler
 
     if input_type == "textarea":
+        # Textarea: Escape cancels, Enter+Shift for newline, just Enter doesn't save (use button)
         input_elem = Textarea(
             value, name=field_name,
             autofocus=True,
-            style=input_style + " min-height: 80px; font-family: inherit;",
+            style=input_style + " width: 100%; min-height: 80px; font-family: inherit;",
             required=True if field_name == "name" else False,
             onkeydown=esc_handler
         )
     else:
+        # Input: Enter saves, Escape cancels
         input_elem = Input(
             value=value, name=field_name,
             autofocus=True,
-            style=input_style,
+            style=input_style + " flex: 1;",
             required=True if field_name == "name" else False,
-            onkeydown=esc_handler
+            onkeydown=key_handler
         )
 
     return Form(
         Div(
-            input_elem,
-            style="position: relative;",
+            Div(
+                input_elem,
+                Button("✓", type="submit", style="padding: 0.5rem 0.75rem; background: #10b981; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-weight: bold; margin-left: 0.5rem;", title="Сохранить (Enter)"),
+                style="display: flex; align-items: flex-start;" if input_type == "textarea" else "display: flex; align-items: center;"
+            ),
             id=f"field-{field_name}"
         ),
         hx_post=f"/customers/{customer_id}/update-field/{field_name}",
         hx_target=f"#field-{field_name}",
         hx_swap="outerHTML",
-        hx_trigger="submit",
-        onfocusout=form_focusout
+        hx_trigger="submit"
     )
 
 
@@ -24725,28 +24729,28 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
     # Get current value based on field
     if field_name == "name":
         # For name, we edit all three parts: last_name, name, patronymic
-        # Use focusout on form to save when clicking outside (not when switching between fields)
-        form_focusout = f"setTimeout(() => {{ if(!this.contains(document.activeElement)) this.requestSubmit(); }}, 100)"
-        esc_handler = f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        # Key handlers: Enter to save, Escape to cancel
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); this.form.requestSubmit(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        input_style = "padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem;"
 
         return Div(
             Form(
                 Div(
                     Input(type="text", name="last_name", value=contact.last_name or "", placeholder="Фамилия",
-                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px; margin-right: 0.25rem;",
-                          onkeydown=esc_handler),
+                          style=input_style + " width: 90px; margin-right: 0.25rem;",
+                          onkeydown=key_handler),
                     Input(type="text", name="name", value=contact.name or "", placeholder="Имя", required=True,
-                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 80px; margin-right: 0.25rem;", autofocus=True,
-                          onkeydown=esc_handler),
+                          style=input_style + " width: 70px; margin-right: 0.25rem;", autofocus=True,
+                          onkeydown=key_handler),
                     Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
-                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px;",
-                          onkeydown=esc_handler),
+                          style=input_style + " width: 90px; margin-right: 0.25rem;",
+                          onkeydown=key_handler),
+                    Button("✓", type="submit", style="padding: 0.35rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-weight: bold;", title="Сохранить (Enter)"),
                     style="display: flex; align-items: center;"
                 ),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-row-{contact_id}",
-                hx_swap="outerHTML",
-                onfocusout=form_focusout
+                hx_swap="outerHTML"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
@@ -24768,19 +24772,21 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
             input_type = "text"
             placeholder = ""
 
-        # Save when clicking outside the form
-        form_focusout = "setTimeout(() => { if(!this.contains(document.activeElement)) this.requestSubmit(); }, 100)"
-        esc_handler = f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        # Key handlers: Enter to save, Escape to cancel
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); this.form.requestSubmit(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
 
         return Div(
             Form(
-                Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
-                      style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
-                      onkeydown=esc_handler),
+                Div(
+                    Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
+                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 140px; margin-right: 0.25rem;", autofocus=True,
+                          onkeydown=key_handler),
+                    Button("✓", type="submit", style="padding: 0.35rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-weight: bold;", title="Сохранить (Enter)"),
+                    style="display: flex; align-items: center;"
+                ),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
-                hx_swap="outerHTML",
-                onfocusout=form_focusout
+                hx_swap="outerHTML"
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
