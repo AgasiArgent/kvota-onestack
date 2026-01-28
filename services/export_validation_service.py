@@ -1243,22 +1243,43 @@ def create_validation_excel(data) -> bytes:
             "markup": variables.get("markup", 15),
         })
 
-    # Build api_results from calculations
+    # Build api_results by summing from item calculations (source of truth)
+    # quote_calculation_summaries may have stale data, so we always calculate from items
+    total_purchase = Decimal("0")
+    total_logistics_first = Decimal("0")
+    total_logistics_last = Decimal("0")
+    total_logistics = Decimal("0")
+    total_cogs = Decimal("0")
+    total_revenue = Decimal("0")  # AK = sales_price_total_no_vat
+    total_revenue_with_vat = Decimal("0")  # AL
+    total_profit = Decimal("0")  # AF
+
+    for item in items:
+        calc = item.get("calc", {})
+        total_purchase += Decimal(str(calc.get("S16", 0) or 0))
+        total_logistics_first += Decimal(str(calc.get("T16", 0) or 0))
+        total_logistics_last += Decimal(str(calc.get("U16", 0) or 0))
+        total_logistics += Decimal(str(calc.get("V16", 0) or 0))
+        total_cogs += Decimal(str(calc.get("AB16", 0) or 0))
+        total_revenue += Decimal(str(calc.get("AK16", 0) or 0))
+        total_revenue_with_vat += Decimal(str(calc.get("AL16", 0) or 0))
+        total_profit += Decimal(str(calc.get("AF16", 0) or 0))
+
     api_results = {
-        "total_purchase_price": calculations.get("total_purchase", 0),
-        "total_logistics_first": calculations.get("total_logistics", 0) / 2 if calculations.get("total_logistics") else 0,
-        "total_logistics_last": calculations.get("total_logistics", 0) / 2 if calculations.get("total_logistics") else 0,
-        "total_logistics": calculations.get("total_logistics", 0),
-        "total_cogs": calculations.get("total_cogs", 0),
-        "total_revenue": calculations.get("total_no_vat", 0),
-        "total_revenue_with_vat": calculations.get("total_with_vat", 0),
-        "total_profit": calculations.get("total_profit", 0),
+        "total_purchase_price": float(total_purchase),
+        "total_logistics_first": float(total_logistics_first),
+        "total_logistics_last": float(total_logistics_last),
+        "total_logistics": float(total_logistics),
+        "total_cogs": float(total_cogs),
+        "total_revenue": float(total_revenue),
+        "total_revenue_with_vat": float(total_revenue_with_vat),
+        "total_profit": float(total_profit),
 
         # Financing (may not be available)
-        "evaluated_revenue": calculations.get("total_with_vat", 0),
+        "evaluated_revenue": float(total_revenue_with_vat),
         "client_advance": 0,
         "total_before_forwarding": 0,
-        "supplier_payment": calculations.get("total_purchase", 0),
+        "supplier_payment": float(total_purchase),
         "supplier_financing_cost": 0,
         "operational_financing_cost": 0,
         "total_financing_cost": 0,
