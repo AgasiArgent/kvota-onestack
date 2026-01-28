@@ -24390,8 +24390,9 @@ def get(customer_id: str, field_name: str, session):
     # Style for modern inline editing
     input_style = "width: 100%; padding: 0.5rem 0.75rem; border: 2px solid #3b82f6; border-radius: 0.375rem; font-size: inherit; outline: none;"
 
-    # Blur handler - save on click outside (with small delay to allow cancel to work)
-    blur_handler = "setTimeout(() => { if(this.form && document.contains(this)) this.form.requestSubmit(); }, 150)"
+    # Form-level focusout handler - save when clicking outside the form
+    form_focusout = "setTimeout(() => { if(!this.contains(document.activeElement)) this.requestSubmit(); }, 100)"
+    esc_handler = "if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }"
 
     if input_type == "textarea":
         input_elem = Textarea(
@@ -24399,32 +24400,28 @@ def get(customer_id: str, field_name: str, session):
             autofocus=True,
             style=input_style + " min-height: 80px; font-family: inherit;",
             required=True if field_name == "name" else False,
-            onkeydown="if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }",
-            onblur=blur_handler
+            onkeydown=esc_handler
         )
-        action_buttons = None  # No buttons needed - blur saves, Escape cancels
     else:
         input_elem = Input(
             value=value, name=field_name,
             autofocus=True,
             style=input_style,
             required=True if field_name == "name" else False,
-            onkeydown="if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }",
-            onblur=blur_handler
+            onkeydown=esc_handler
         )
-        action_buttons = None  # No buttons needed - blur saves, Escape cancels
 
     return Form(
         Div(
             input_elem,
-            action_buttons if action_buttons else None,
             style="position: relative;",
             id=f"field-{field_name}"
         ),
         hx_post=f"/customers/{customer_id}/update-field/{field_name}",
         hx_target=f"#field-{field_name}",
         hx_swap="outerHTML",
-        hx_trigger="submit"
+        hx_trigger="submit",
+        onfocusout=form_focusout
     )
 
 
@@ -24728,25 +24725,28 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
     # Get current value based on field
     if field_name == "name":
         # For name, we edit all three parts: last_name, name, patronymic
-        # Keep submit button for multi-field form, but add blur save on last field
+        # Use focusout on form to save when clicking outside (not when switching between fields)
+        form_focusout = f"setTimeout(() => {{ if(!this.contains(document.activeElement)) this.requestSubmit(); }}, 100)"
+        esc_handler = f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+
         return Div(
             Form(
                 Div(
                     Input(type="text", name="last_name", value=contact.last_name or "", placeholder="Фамилия",
                           style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px; margin-right: 0.25rem;",
-                          onkeydown=f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"),
+                          onkeydown=esc_handler),
                     Input(type="text", name="name", value=contact.name or "", placeholder="Имя", required=True,
                           style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 80px; margin-right: 0.25rem;", autofocus=True,
-                          onkeydown=f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"),
+                          onkeydown=esc_handler),
                     Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
                           style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px;",
-                          onkeydown=f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}",
-                          onblur=blur_save),
+                          onkeydown=esc_handler),
                     style="display: flex; align-items: center;"
                 ),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-row-{contact_id}",
-                hx_swap="outerHTML"
+                hx_swap="outerHTML",
+                onfocusout=form_focusout
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
@@ -24768,15 +24768,19 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
             input_type = "text"
             placeholder = ""
 
+        # Save when clicking outside the form
+        form_focusout = "setTimeout(() => { if(!this.contains(document.activeElement)) this.requestSubmit(); }, 100)"
+        esc_handler = f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+
         return Div(
             Form(
                 Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
                       style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
-                      onkeydown=f"if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}",
-                      onblur=blur_save),
+                      onkeydown=esc_handler),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
-                hx_swap="outerHTML"
+                hx_swap="outerHTML",
+                onfocusout=form_focusout
             ),
             id=f"contact-{contact_id}-{field_name}",
             style="padding: 0.25rem;"
