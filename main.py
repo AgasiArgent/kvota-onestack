@@ -24415,11 +24415,7 @@ def get(customer_id: str, field_name: str, session):
 
     return Form(
         Div(
-            Div(
-                input_elem,
-                Button("✓", type="submit", style="padding: 0.5rem 0.75rem; background: #10b981; color: white; border: none; border-radius: 0.375rem; cursor: pointer; font-weight: bold; margin-left: 0.5rem;", title="Сохранить (Enter)"),
-                style="display: flex; align-items: flex-start;" if input_type == "textarea" else "display: flex; align-items: center;"
-            ),
+            input_elem,
             id=f"field-{field_name}"
         ),
         hx_post=f"/customers/{customer_id}/update-field/{field_name}",
@@ -24667,9 +24663,9 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 def _render_contact_flags_cell(contact, customer_id: str):
     """Render the flags cell (signatory, primary) with minimal clickable icons."""
-    # Colors: green for signatory, orange for primary, gray for inactive
-    signatory_color = "#10b981" if contact.is_signatory else "#d1d5db"
-    primary_color = "#f59e0b" if contact.is_primary else "#d1d5db"
+    # Colors: green for signatory, orange for primary, darker gray for inactive (more visible)
+    signatory_color = "#10b981" if contact.is_signatory else "#9ca3af"
+    primary_color = "#f59e0b" if contact.is_primary else "#9ca3af"
 
     # Use Span with HTMX instead of Button to avoid global button styling
     return Td(
@@ -24743,10 +24739,9 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                           style=input_style + " width: 70px; margin-right: 0.25rem;", autofocus=True,
                           onkeydown=key_handler),
                     Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
-                          style=input_style + " width: 90px; margin-right: 0.25rem;",
+                          style=input_style + " width: 90px;",
                           onkeydown=key_handler),
-                    Button("✓", type="submit", style="padding: 0.35rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-weight: bold;", title="Сохранить (Enter)"),
-                    style="display: flex; align-items: center;"
+                    style="display: flex; align-items: center; gap: 0.25rem;"
                 ),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-row-{contact_id}",
@@ -24777,13 +24772,9 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
 
         return Div(
             Form(
-                Div(
-                    Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
-                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 140px; margin-right: 0.25rem;", autofocus=True,
-                          onkeydown=key_handler),
-                    Button("✓", type="submit", style="padding: 0.35rem 0.5rem; background: #10b981; color: white; border: none; border-radius: 0.25rem; cursor: pointer; font-weight: bold;", title="Сохранить (Enter)"),
-                    style="display: flex; align-items: center;"
-                ),
+                Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
+                      style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
+                      onkeydown=key_handler),
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
                 hx_swap="outerHTML"
