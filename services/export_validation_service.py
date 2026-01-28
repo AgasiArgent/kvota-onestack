@@ -1132,6 +1132,47 @@ def create_validation_excel(data) -> bytes:
     variables = data.variables
     calculations = data.calculations
 
+    # Helper to convert value from source_currency to USD
+    # Brokerage and DM Fee are stored in ORIGINAL currency, need conversion to USD for export
+    def to_usd(value, currency):
+        if not value or currency == 'USD':
+            return value or 0
+        try:
+            val = Decimal(str(value))
+            if val > 0:
+                return float(convert_amount(val, currency, 'USD'))
+        except:
+            pass
+        return value or 0
+
+    # Convert brokerage fields from their original currencies to USD
+    brokerage_hub_usd = to_usd(
+        variables.get('brokerage_hub', 0),
+        variables.get('brokerage_hub_currency', 'USD')
+    )
+    brokerage_customs_usd = to_usd(
+        variables.get('brokerage_customs', 0),
+        variables.get('brokerage_customs_currency', 'USD')
+    )
+    warehousing_usd = to_usd(
+        variables.get('warehousing_at_customs', 0),
+        variables.get('warehousing_at_customs_currency', 'USD')
+    )
+    documentation_usd = to_usd(
+        variables.get('customs_documentation', 0),
+        variables.get('customs_documentation_currency', 'USD')
+    )
+    other_costs_usd = to_usd(
+        variables.get('brokerage_extra', 0),
+        variables.get('brokerage_extra_currency', 'USD')
+    )
+
+    # Convert DM Fee from original currency to USD
+    dm_fee_value_usd = to_usd(
+        variables.get('dm_fee_value', 0),
+        variables.get('dm_fee_currency', 'USD')
+    )
+
     # Build quote_inputs from variables
     quote_inputs = {
         # Company and terms
@@ -1153,21 +1194,21 @@ def create_validation_excel(data) -> bytes:
         "time_to_advance_customs": variables.get("time_to_advance_customs", 0),
         "time_to_payment": variables.get("time_to_payment", 0),
 
-        # Logistics costs
+        # Logistics costs (already in USD from invoice aggregation)
         "logistics_supplier_hub": variables.get("logistics_supplier_hub", 0),
         "logistics_hub_customs": variables.get("logistics_hub_customs", 0),
         "logistics_customs_client": variables.get("logistics_customs_client", 0),
 
-        # Brokerage costs
-        "brokerage_hub": variables.get("brokerage_hub", 0),
-        "brokerage_customs": variables.get("brokerage_customs", 0),
-        "warehousing": variables.get("warehousing_at_customs", 0),
-        "documentation": variables.get("customs_documentation", 0),
-        "other_costs": variables.get("brokerage_extra", 0),
+        # Brokerage costs (converted from original currency to USD)
+        "brokerage_hub": brokerage_hub_usd,
+        "brokerage_customs": brokerage_customs_usd,
+        "warehousing": warehousing_usd,
+        "documentation": documentation_usd,
+        "other_costs": other_costs_usd,
 
-        # DM Fee - map to Russian values expected by Excel
+        # DM Fee - map to Russian values expected by Excel (value converted to USD)
         "dm_fee_type": _map_dm_fee_type(variables.get("dm_fee_type", "Фикс")),
-        "dm_fee_value": variables.get("dm_fee_value", 0),
+        "dm_fee_value": dm_fee_value_usd,
 
         # Admin settings
         "rate_forex_risk": variables.get("rate_forex_risk", 0),
@@ -1196,7 +1237,8 @@ def create_validation_excel(data) -> bytes:
             # Exchange rate: from purchase currency to quote currency (4 decimal places, CBR)
             "exchange_rate": _get_exchange_rate_to_quote(purchase_currency, quote_currency),
             "customs_code": item.get("customs_code", ""),
-            "import_tariff": item.get("import_tariff", 0),
+            # import_tariff: customs_duty is saved by customs workspace, fallback to import_tariff
+            "import_tariff": item.get("customs_duty") or item.get("import_tariff", 0),
             "markup": variables.get("markup", 15),
         })
 
