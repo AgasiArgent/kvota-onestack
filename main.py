@@ -7259,16 +7259,9 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     # Get quote currency (target currency for all conversions)
     quote_currency = variables.get('currency_of_quote') or variables.get('currency', 'USD')
 
-    # Convert DM Fee from its currency to USD (calculation engine works in USD)
-    dm_fee_type = variables.get('dm_fee_type', 'fixed')
-    dm_fee_value = safe_decimal(variables.get('dm_fee_value', 0))
-    dm_fee_currency = variables.get('dm_fee_currency', 'USD')
-
-    if dm_fee_type == 'fixed' and dm_fee_currency != 'USD' and dm_fee_value > 0:
-        # Convert DM Fee to USD
-        converted_dm_fee = convert_amount(dm_fee_value, dm_fee_currency, 'USD')
-        variables = {**variables, 'dm_fee_value': converted_dm_fee}
-        print(f"[calc] DM Fee converted: {dm_fee_value} {dm_fee_currency} → {converted_dm_fee} USD")
+    # NOTE: DM Fee conversion to USD is now done in POST handler before calling this function
+    # The dm_fee_value coming here should already be in USD
+    # dm_fee_currency is kept for reference only (original currency user entered)
 
     calc_inputs = []
     for item in items:
