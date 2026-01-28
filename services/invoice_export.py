@@ -120,10 +120,10 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     director_position = seller.get("general_director_position", "Генеральный директор")
 
     # Customer info
-    customer_name = customer.get("name", quote.get("customer_name", "Покупатель"))
-    customer_inn = customer.get("inn", "")
-    customer_address = customer.get("address", "")
-    customer_phone = customer.get("phone", "")
+    customer_name = customer.get("name") or quote.get("customer_name") or "Покупатель"
+    customer_inn = customer.get("inn") or ""
+    customer_address = customer.get("address") or ""
+    customer_phone = customer.get("phone") or ""
 
     # Calculate totals from items
     total_no_vat = Decimal("0")
@@ -494,7 +494,7 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     <!-- Buyer info -->
     <div class="party-section">
         <p><span class="party-label">Покупатель:</span></p>
-        <p><span class="party-name">"{customer_name}"</span>{f", ИНН {customer_inn}" if customer_inn else ""}, {customer_address}{f", тел.: {customer_phone}" if customer_phone else ""}</p>
+        <p><span class="party-name">"{customer_name}"</span>{f", ИНН {customer_inn}" if customer_inn else ""}{f", {customer_address}" if customer_address else ""}{f", тел.: {customer_phone}" if customer_phone else ""}</p>
     </div>
 
     <!-- Currency indicator -->
