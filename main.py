@@ -23598,6 +23598,16 @@ def get(session, q: str = "", status: str = ""):
     )
 
 
+def _stat_card_simple(value: str, label: str, description: str = None):
+    """Simple stat card without DaisyUI borders."""
+    return Div(
+        Div(label, style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;"),
+        Div(value, style="font-size: 1.75rem; font-weight: 600; color: #e2e8f0;"),
+        Div(description, style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;") if description else None,
+        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; text-align: center;"
+    )
+
+
 @rt("/customers/{customer_id}")
 def get(customer_id: str, session, request, tab: str = "general"):
     """Customer detail view page with tabbed interface."""
@@ -23622,16 +23632,16 @@ def get(customer_id: str, session, request, tab: str = "general"):
             session=session
         )
 
-    # Tab navigation using DaisyUI tabs
+    # Tab navigation using DaisyUI tabs (short labels to prevent wrapping)
     tabs_nav = tab_nav([
-        {'id': 'general', 'label': 'Общая информация', 'url': f'/customers/{customer_id}?tab=general'},
+        {'id': 'general', 'label': 'Общая', 'url': f'/customers/{customer_id}?tab=general'},
         {'id': 'addresses', 'label': 'Адреса', 'url': f'/customers/{customer_id}?tab=addresses'},
         {'id': 'contacts', 'label': 'Контакты', 'url': f'/customers/{customer_id}?tab=contacts'},
         {'id': 'contracts', 'label': 'Договоры', 'url': f'/customers/{customer_id}?tab=contracts'},
         {'id': 'quotes', 'label': 'КП', 'url': f'/customers/{customer_id}?tab=quotes'},
-        {'id': 'specifications', 'label': 'Спецификации', 'url': f'/customers/{customer_id}?tab=specifications'},
-        {'id': 'requested_items', 'label': 'Запрашиваемые позиции', 'url': f'/customers/{customer_id}?tab=requested_items'},
-        {'id': 'additional', 'label': 'Дополнительно', 'url': f'/customers/{customer_id}?tab=additional'},
+        {'id': 'specifications', 'label': 'Спеки', 'url': f'/customers/{customer_id}?tab=specifications'},
+        {'id': 'requested_items', 'label': 'Позиции', 'url': f'/customers/{customer_id}?tab=requested_items'},
+        {'id': 'additional', 'label': 'Ещё', 'url': f'/customers/{customer_id}?tab=additional'},
         {'id': 'calls', 'label': 'Звонки', 'url': f'/customers/{customer_id}?tab=calls'},
         {'id': 'meetings', 'label': 'Встречи', 'url': f'/customers/{customer_id}?tab=meetings'},
     ], active_tab=tab, target_id="tab-content")
@@ -23758,89 +23768,77 @@ def get(customer_id: str, session, request, tab: str = "general"):
             )
 
         tab_content = Div(
-            # Row 1: Main info (left) + Contacts preview + Contracts preview (right)
+            # Row 1: Main info (left, 60%) + Contacts & Contracts previews (right, 40%)
             Div(
-                # LEFT COLUMN: Main info (spans 6 cols)
+                # LEFT COLUMN: Main info with inline editing
                 Div(
                     Div(
-                        H3(icon("clipboard-list", size=20), " Основная информация", style="margin-bottom: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
+                        # Company name (inline editable)
                         Div(
-                            # Company name
+                            Div("Название компании", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                            _render_field_display(customer_id, "name", customer.name or ""),
+                            style="margin-bottom: 0.75rem;"
+                        ),
+                        # INN, KPP, OGRN in a row (inline editable)
+                        Div(
                             Div(
-                                Div("Название компании", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                Div(customer.name or "—", style="font-weight: 600; font-size: 1.1rem;"),
-                                style="margin-bottom: 1rem;"
+                                Div("ИНН", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                _render_field_display(customer_id, "inn", customer.inn or ""),
                             ),
-                            # INN, KPP, OGRN in a row
                             Div(
-                                Div(
-                                    Div("ИНН", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div(customer.inn or "—"),
-                                ),
-                                Div(
-                                    Div("КПП", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div(customer.kpp or "—"),
-                                ),
-                                Div(
-                                    Div("ОГРН", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div(customer.ogrn or "—"),
-                                ),
-                                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;"
+                                Div("КПП", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                _render_field_display(customer_id, "kpp", customer.kpp or ""),
                             ),
-                            # Manager and Status
                             Div(
-                                Div(
-                                    Div("Менеджер", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div("Не назначен", style="color: #64748b;"),
-                                ),
-                                Div(
-                                    Div("Статус", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Span("Активен" if customer.is_active else "Неактивен",
-                                         cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
-                                ),
-                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                                Div("ОГРН", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
                             ),
-                            # Dates
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 0.75rem;"
+                        ),
+                        # Status and Dates row
+                        Div(
                             Div(
-                                Div(
-                                    Div("Дата добавления", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div(created_at or "—", style="color: #94a3b8;"),
-                                ),
-                                Div(
-                                    Div("Дата обновления", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.25rem;"),
-                                    Div(updated_at or "—", style="color: #94a3b8;"),
-                                ),
-                                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;"
+                                Div("Статус", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                Span("Активен" if customer.is_active else "Неактивен",
+                                     cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
                             ),
-                            style="padding: 1rem;"
+                            Div(
+                                Div("Создан", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                Div(created_at or "—", style="color: #64748b; font-size: 0.875rem;"),
+                            ),
+                            Div(
+                                Div("Обновлён", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
+                                Div(updated_at or "—", style="color: #64748b; font-size: 0.875rem;"),
+                            ),
+                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; height: 100%;"
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem;"
                     ),
-                    style="flex: 1;"
+                    style="flex: 3;"
                 ),
 
-                # RIGHT COLUMN: Contacts + Contracts previews (spans 6 cols, split in 2)
+                # RIGHT COLUMN: Contacts + Contracts previews (stacked vertically)
                 Div(
                     # Contacts preview block
                     Div(
                         Div(
-                            H4(icon("users", size=16), " Контакты", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;"),
-                            A("Все →", href=f"/customers/{customer_id}?tab=contacts",
+                            Span(icon("users", size=14), " Контакты", style="color: #e2e8f0; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                            A("→", href=f"/customers/{customer_id}?tab=contacts",
                               hx_get=f"/customers/{customer_id}?tab=contacts",
                               hx_target="#tab-content",
                               hx_push_url="true",
-                              style="font-size: 0.75rem; color: #60a5fa;"),
+                              style="font-size: 0.875rem; color: #60a5fa;"),
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
                         Div(
                             *contacts_preview_items if contacts_preview_items else [
-                                Div("Нет контактов", style="color: #64748b; padding: 1rem; text-align: center;")
+                                Div("Нет контактов", style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
                             ],
-                            style="max-height: 150px; overflow-y: auto;"
+                            style="max-height: 100px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 0.75rem; cursor: pointer;",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;",
                         hx_get=f"/customers/{customer_id}?tab=contacts",
                         hx_target="#tab-content",
                         hx_push_url="true",
@@ -23849,58 +23847,38 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     # Contracts preview block
                     Div(
                         Div(
-                            H4(icon("file-text", size=16), " Договоры", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;"),
-                            A("Все →", href=f"/customers/{customer_id}?tab=contracts",
+                            Span(icon("file-text", size=14), " Договоры", style="color: #e2e8f0; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                            A("→", href=f"/customers/{customer_id}?tab=contracts",
                               hx_get=f"/customers/{customer_id}?tab=contracts",
                               hx_target="#tab-content",
                               hx_push_url="true",
-                              style="font-size: 0.75rem; color: #60a5fa;"),
+                              style="font-size: 0.875rem; color: #60a5fa;"),
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
                         Div(
                             *contracts_preview_items if contracts_preview_items else [
-                                Div("Нет договоров", style="color: #64748b; padding: 1rem; text-align: center;")
+                                Div("Нет договоров", style="color: #64748b; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
                             ],
-                            style="max-height: 150px; overflow-y: auto;"
+                            style="max-height: 100px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 0.75rem; cursor: pointer;",
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.5rem; padding: 0.75rem; cursor: pointer;",
                         hx_get=f"/customers/{customer_id}?tab=contracts",
                         hx_target="#tab-content",
                         hx_push_url="true",
                     ),
-                    style="display: flex; gap: 1rem; flex: 1;"
+                    style="flex: 2;"
                 ),
-                style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem;"
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
 
-            # Row 2: Statistics cards
+            # Row 2: Statistics cards (custom styling without DaisyUI borders)
             Div(
-                Div(
-                    stat_card(
-                        value=str(stats["quotes_count"]),
-                        label="КП",
-                        description="коммерческих предложений"
-                    ),
-                    stat_card(
-                        value=f"{stats['quotes_sum']:,.0f} ₽",
-                        label="Сумма КП",
-                        description="общая сумма предложений"
-                    ),
-                    stat_card(
-                        value=str(stats["specifications_count"]),
-                        label="Спецификации",
-                        description="подписанных спецификаций"
-                    ),
-                    stat_card(
-                        value=f"{stats['specifications_sum']:,.0f} ₽",
-                        label="Сумма спецификаций",
-                        description="общая сумма сделок"
-                    ),
-                    cls="stats",
-                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
-                ),
-                style="margin-bottom: 1.5rem;"
+                _stat_card_simple(str(stats["quotes_count"]), "КП", "коммерческих предложений"),
+                _stat_card_simple(f"{stats['quotes_sum']:,.0f} ₽", "Сумма КП", "общая сумма предложений"),
+                _stat_card_simple(str(stats["specifications_count"]), "Спецификации", "подписанных спецификаций"),
+                _stat_card_simple(f"{stats['specifications_sum']:,.0f} ₽", "Сумма спецификаций", "общая сумма сделок"),
+                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
             ),
 
             # Row 3: Two tables side by side (Quotes + Specifications)
@@ -24017,40 +23995,18 @@ def get(customer_id: str, session, request, tab: str = "general"):
         )
 
     elif tab == "contacts":
-        # Build contacts list
+        # Build contacts list with inline editing
         contacts_rows = []
         for contact in customer.contacts:
-            badges = []
-            if contact.is_signatory:
-                badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
-            if contact.is_primary:
-                badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
-
-            contacts_rows.append(
-                Tr(
-                    Td(Strong(contact.get_full_name()), *badges),
-                    Td(contact.position or "—"),
-                    Td(
-                        A(contact.email, href=f"mailto:{contact.email}") if contact.email else "—"
-                    ),
-                    Td(
-                        A(contact.phone, href=f"tel:{contact.phone}") if contact.phone else "—"
-                    ),
-                    Td(contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes or "—"),
-                    Td(
-                        A(icon("edit", size=14), href=f"/customers/{customer_id}/contacts/{contact.id}/edit", title="Редактировать"),
-                    )
-                )
-            )
+            contacts_rows.append(_render_contact_row(contact, customer_id))
 
         tab_content = Div(
             Div(
-                icon("lightbulb", size=16), " Отметьте одного контакта как ",
-                Span(icon("pen-tool", size=14), " Подписант", style="font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                " — его имя будет использоваться в спецификациях (PDF). ",
-                "Контакт ",
-                Span("★ Основной", style="font-weight: bold;"),
-                " — для основной коммуникации.",
+                icon("lightbulb", size=16), " Кликните на поле для редактирования. Используйте кнопки ",
+                Span(icon("pen-tool", size=12), style="background: #10b981; color: white; padding: 0.125rem 0.25rem; border-radius: 0.25rem; display: inline-flex; align-items: center;"),
+                " и ",
+                Span("★", style="background: #f59e0b; color: white; padding: 0.125rem 0.375rem; border-radius: 0.25rem;"),
+                " для установки подписанта и основного контакта.",
                 cls="alert alert-info", style="margin: 1rem 0;"
             ),
             Div(
@@ -24061,7 +24017,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 ),
                 Div(
                     Table(
-                        Thead(Tr(Th("ФИО"), Th("ДОЛЖНОСТЬ"), Th("EMAIL"), Th("ТЕЛЕФОН"), Th("ЗАМЕТКИ"), Th("", cls="col-actions"))),
+                        Thead(Tr(Th("ФИО"), Th("ДОЛЖНОСТЬ"), Th("EMAIL"), Th("ТЕЛЕФОН"), Th("ЗАМЕТКИ"), Th("СТАТУС", cls="col-actions"))),
                         Tbody(*contacts_rows) if contacts_rows else Tbody(
                             Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
@@ -24391,15 +24347,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
         return tab_content
 
     return page_layout(f"Клиент: {customer.name}",
-        # Header with actions
+        # Minimal header - just back link
         Div(
-            H1(icon("user", size=28), f" {customer.name}", cls="page-header"),
-            Div(
-                A(icon("edit", size=16), " Редактировать", href=f"/customers/{customer_id}/edit", role="button"),
-                A("← К списку", href="/customers", role="button", cls="secondary"),
-                style="display: flex; gap: 0.5rem;"
-            ),
-            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;"
+            A(icon("arrow-left", size=16), " Клиенты", href="/customers",
+              style="color: #64748b; text-decoration: none; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+            style="margin-bottom: 0.75rem;"
         ),
 
         # Tabs navigation (DaisyUI)
@@ -24674,6 +24626,371 @@ def get(customer_id: str, session):
         return Div("Клиент не найден")
 
     return _render_notes_display(customer_id, customer.notes or "")
+
+
+# ============================================================================
+# Contact Inline Editing
+# ============================================================================
+
+def _render_contact_field(contact_id: str, customer_id: str, field_name: str, value: str, is_link: bool = False):
+    """Helper function to render a contact field with inline editing capability."""
+    display_value = value if value else "—"
+
+    # For email/phone links
+    if is_link and value:
+        if field_name == "email":
+            content = A(value, href=f"mailto:{value}", style="color: #3b82f6; text-decoration: none;")
+        elif field_name == "phone":
+            content = A(value, href=f"tel:{value}", style="color: #3b82f6; text-decoration: none;")
+        else:
+            content = display_value
+    else:
+        content = display_value
+
+    return Td(
+        Div(
+            content,
+            id=f"contact-{contact_id}-{field_name}",
+            hx_get=f"/customers/{customer_id}/contacts/{contact_id}/edit-field/{field_name}",
+            hx_target=f"#contact-{contact_id}-{field_name}",
+            hx_swap="outerHTML",
+            style="cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.25rem; transition: background 0.15s ease; min-width: 60px;",
+            onmouseover="this.style.background='#f3f4f6'",
+            onmouseout="this.style.background='transparent'",
+            title="Кликните для редактирования"
+        )
+    )
+
+
+def _render_contact_name_cell(contact, customer_id: str):
+    """Render the name cell with badges and inline editing."""
+    badges = []
+    if contact.is_signatory:
+        badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
+    if contact.is_primary:
+        badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+
+    return Td(
+        Div(
+            Div(
+                Strong(contact.get_full_name()),
+                *badges,
+                style="display: flex; align-items: center; flex-wrap: wrap;"
+            ),
+            id=f"contact-{contact.id}-name",
+            hx_get=f"/customers/{customer_id}/contacts/{contact.id}/edit-field/name",
+            hx_target=f"#contact-{contact.id}-name",
+            hx_swap="outerHTML",
+            style="cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.25rem; transition: background 0.15s ease;",
+            onmouseover="this.style.background='#f3f4f6'",
+            onmouseout="this.style.background='transparent'",
+            title="Кликните для редактирования"
+        )
+    )
+
+
+def _render_contact_flags_cell(contact, customer_id: str):
+    """Render the flags cell (signatory, primary) with toggle buttons."""
+    return Td(
+        Div(
+            Button(
+                icon("pen-tool", size=12),
+                hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
+                hx_target=f"#contact-row-{contact.id}",
+                hx_swap="outerHTML",
+                style=f"background: {'#10b981' if contact.is_signatory else '#e5e7eb'}; color: {'white' if contact.is_signatory else '#374151'}; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; margin-right: 0.25rem;",
+                title="Подписант" if contact.is_signatory else "Сделать подписантом"
+            ),
+            Button(
+                "★",
+                hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
+                hx_target=f"#contact-row-{contact.id}",
+                hx_swap="outerHTML",
+                style=f"background: {'#f59e0b' if contact.is_primary else '#e5e7eb'}; color: {'white' if contact.is_primary else '#374151'}; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;",
+                title="Основной контакт" if contact.is_primary else "Сделать основным"
+            ),
+            style="display: flex; align-items: center;"
+        ),
+        cls="col-actions"
+    )
+
+
+def _render_contact_row(contact, customer_id: str):
+    """Render a single contact row with inline editing."""
+    return Tr(
+        _render_contact_name_cell(contact, customer_id),
+        _render_contact_field(contact.id, customer_id, "position", contact.position or ""),
+        _render_contact_field(contact.id, customer_id, "email", contact.email or "", is_link=True),
+        _render_contact_field(contact.id, customer_id, "phone", contact.phone or "", is_link=True),
+        _render_contact_field(contact.id, customer_id, "notes", (contact.notes[:50] + "..." if contact.notes and len(contact.notes) > 50 else contact.notes) or ""),
+        _render_contact_flags_cell(contact, customer_id),
+        id=f"contact-row-{contact.id}"
+    )
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/edit-field/{field_name}")
+def get(customer_id: str, contact_id: str, field_name: str, session):
+    """Return inline edit form for a contact field."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Div("Контакт не найден", id=f"contact-{contact_id}-{field_name}")
+
+    # Get current value based on field
+    if field_name == "name":
+        # For name, we edit all three parts: last_name, name, patronymic
+        return Div(
+            Form(
+                Div(
+                    Input(type="text", name="last_name", value=contact.last_name or "", placeholder="Фамилия",
+                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px; margin-right: 0.25rem;"),
+                    Input(type="text", name="name", value=contact.name or "", placeholder="Имя", required=True,
+                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 80px; margin-right: 0.25rem;", autofocus=True),
+                    Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
+                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 100px;"),
+                    style="display: flex; align-items: center; margin-bottom: 0.5rem;"
+                ),
+                Div(
+                    Button("✓", type="submit", style="background: #10b981; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; margin-right: 0.25rem;"),
+                    Button("✕", type="button",
+                          hx_get=f"/customers/{customer_id}/contacts/{contact_id}/cancel-edit/{field_name}",
+                          hx_target=f"#contact-{contact_id}-{field_name}",
+                          hx_swap="outerHTML",
+                          style="background: #ef4444; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer;"),
+                    style="display: flex;"
+                ),
+                hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
+                hx_target=f"#contact-row-{contact_id}",
+                hx_swap="outerHTML"
+            ),
+            id=f"contact-{contact_id}-{field_name}",
+            style="padding: 0.25rem;"
+        )
+    else:
+        current_value = getattr(contact, field_name, "") or ""
+
+        # Determine input type
+        if field_name == "email":
+            input_type = "email"
+            placeholder = "email@example.com"
+        elif field_name == "phone":
+            input_type = "tel"
+            placeholder = "+7 (999) 123-45-67"
+        elif field_name == "notes":
+            input_type = "text"
+            placeholder = "Заметки..."
+        else:
+            input_type = "text"
+            placeholder = ""
+
+        return Div(
+            Form(
+                Div(
+                    Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
+                          style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
+                          onkeydown="if(event.key === 'Escape') { event.target.closest('form').querySelector('.cancel-btn').click(); }"),
+                    Button("✓", type="submit", style="background: #10b981; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; margin-left: 0.25rem;"),
+                    Button("✕", type="button", cls="cancel-btn",
+                          hx_get=f"/customers/{customer_id}/contacts/{contact_id}/cancel-edit/{field_name}",
+                          hx_target=f"#contact-{contact_id}-{field_name}",
+                          hx_swap="outerHTML",
+                          style="background: #ef4444; color: white; border: none; padding: 0.25rem 0.5rem; border-radius: 0.25rem; cursor: pointer; margin-left: 0.25rem;"),
+                    style="display: flex; align-items: center;"
+                ),
+                hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
+                hx_target=f"#contact-{contact_id}-{field_name}",
+                hx_swap="outerHTML"
+            ),
+            id=f"contact-{contact_id}-{field_name}",
+            style="padding: 0.25rem;"
+        )
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}")
+async def post(customer_id: str, contact_id: str, field_name: str, session, request):
+    """Update a contact field via inline editing."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact, update_contact
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Div("Контакт не найден", id=f"contact-{contact_id}-{field_name}")
+
+    # Get form data
+    form_data = await request.form()
+
+    try:
+        if field_name == "name":
+            # Update all name parts
+            last_name = form_data.get("last_name", "")
+            name = form_data.get("name", "")
+            patronymic = form_data.get("patronymic", "")
+
+            updated_contact = update_contact(contact_id, name=name, last_name=last_name, patronymic=patronymic)
+        else:
+            new_value = form_data.get(field_name, "")
+            kwargs = {field_name: new_value}
+            updated_contact = update_contact(contact_id, **kwargs)
+
+        if not updated_contact:
+            return Div("Ошибка обновления", id=f"contact-{contact_id}-{field_name}")
+
+        # For name field, return the full row
+        if field_name == "name":
+            return _render_contact_row(updated_contact, customer_id)
+
+        # For other fields, return just the updated cell content
+        is_link = field_name in ("email", "phone")
+        value = getattr(updated_contact, field_name, "") or ""
+        if field_name == "notes" and value and len(value) > 50:
+            value = value[:50] + "..."
+
+        display_value = value if value else "—"
+
+        if is_link and value:
+            if field_name == "email":
+                content = A(value, href=f"mailto:{value}", style="color: #3b82f6; text-decoration: none;")
+            elif field_name == "phone":
+                content = A(value, href=f"tel:{value}", style="color: #3b82f6; text-decoration: none;")
+            else:
+                content = display_value
+        else:
+            content = display_value
+
+        return Div(
+            content,
+            id=f"contact-{contact_id}-{field_name}",
+            hx_get=f"/customers/{customer_id}/contacts/{contact_id}/edit-field/{field_name}",
+            hx_target=f"#contact-{contact_id}-{field_name}",
+            hx_swap="outerHTML",
+            style="cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.25rem; transition: background 0.15s ease; min-width: 60px;",
+            onmouseover="this.style.background='#f3f4f6'",
+            onmouseout="this.style.background='transparent'",
+            title="Кликните для редактирования"
+        )
+
+    except ValueError as e:
+        return Div(str(e), id=f"contact-{contact_id}-{field_name}", style="color: red; padding: 0.25rem 0.5rem;")
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/cancel-edit/{field_name}")
+def get(customer_id: str, contact_id: str, field_name: str, session):
+    """Cancel inline editing of a contact field."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Div("Контакт не найден", id=f"contact-{contact_id}-{field_name}")
+
+    if field_name == "name":
+        # Return the name cell with badges
+        badges = []
+        if contact.is_signatory:
+            badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
+        if contact.is_primary:
+            badges.append(Span("★ Основной", cls="status-badge status-pending", style="margin-left: 0.5rem;"))
+
+        return Div(
+            Div(
+                Strong(contact.get_full_name()),
+                *badges,
+                style="display: flex; align-items: center; flex-wrap: wrap;"
+            ),
+            id=f"contact-{contact.id}-name",
+            hx_get=f"/customers/{customer_id}/contacts/{contact.id}/edit-field/name",
+            hx_target=f"#contact-{contact.id}-name",
+            hx_swap="outerHTML",
+            style="cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.25rem; transition: background 0.15s ease;",
+            onmouseover="this.style.background='#f3f4f6'",
+            onmouseout="this.style.background='transparent'",
+            title="Кликните для редактирования"
+        )
+
+    # For other fields
+    is_link = field_name in ("email", "phone")
+    value = getattr(contact, field_name, "") or ""
+    if field_name == "notes" and value and len(value) > 50:
+        value = value[:50] + "..."
+
+    display_value = value if value else "—"
+
+    if is_link and value:
+        if field_name == "email":
+            content = A(value, href=f"mailto:{value}", style="color: #3b82f6; text-decoration: none;")
+        elif field_name == "phone":
+            content = A(value, href=f"tel:{value}", style="color: #3b82f6; text-decoration: none;")
+        else:
+            content = display_value
+    else:
+        content = display_value
+
+    return Div(
+        content,
+        id=f"contact-{contact_id}-{field_name}",
+        hx_get=f"/customers/{customer_id}/contacts/{contact_id}/edit-field/{field_name}",
+        hx_target=f"#contact-{contact_id}-{field_name}",
+        hx_swap="outerHTML",
+        style="cursor: pointer; padding: 0.25rem 0.5rem; border-radius: 0.25rem; transition: background 0.15s ease; min-width: 60px;",
+        onmouseover="this.style.background='#f3f4f6'",
+        onmouseout="this.style.background='transparent'",
+        title="Кликните для редактирования"
+    )
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/toggle-signatory")
+def post(customer_id: str, contact_id: str, session):
+    """Toggle signatory status for a contact."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact, update_contact
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Tr(Td("Контакт не найден", colspan="6"))
+
+    # Toggle signatory status
+    new_status = not contact.is_signatory
+    updated_contact = update_contact(contact_id, is_signatory=new_status)
+
+    if updated_contact:
+        return _render_contact_row(updated_contact, customer_id)
+    return _render_contact_row(contact, customer_id)
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/toggle-primary")
+def post(customer_id: str, contact_id: str, session):
+    """Toggle primary status for a contact."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact, update_contact
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Tr(Td("Контакт не найден", colspan="6"))
+
+    # Toggle primary status
+    new_status = not contact.is_primary
+    updated_contact = update_contact(contact_id, is_primary=new_status)
+
+    if updated_contact:
+        return _render_contact_row(updated_contact, customer_id)
+    return _render_contact_row(contact, customer_id)
 
 
 # ============================================================================

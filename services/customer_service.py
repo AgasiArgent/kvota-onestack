@@ -1035,6 +1035,8 @@ def update_contact(
     contact_id: str,
     *,
     name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    patronymic: Optional[str] = None,
     position: Optional[str] = None,
     email: Optional[str] = None,
     phone: Optional[str] = None,
@@ -1089,6 +1091,10 @@ def update_contact(
         update_data = {}
         if name is not None:
             update_data["name"] = name
+        if last_name is not None:
+            update_data["last_name"] = last_name
+        if patronymic is not None:
+            update_data["patronymic"] = patronymic
         if position is not None:
             update_data["position"] = position
         if email is not None:
