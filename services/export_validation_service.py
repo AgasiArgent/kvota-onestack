@@ -68,6 +68,7 @@ SALE_TYPE_MAP = {
 
 # Supplier country mapping (code -> Russian dropdown values)
 # Includes both 2-letter codes and Russian names (for passthrough)
+# IMPORTANT: Must map API values to Excel's list_vat table values for correct VLOOKUP
 COUNTRY_MAP = {
     # 2-letter country codes
     "TR": "Турция",
@@ -92,8 +93,13 @@ COUNTRY_MAP = {
     "Польша": "Польша",
     "ОАЭ": "ОАЭ",
     "Прочие": "Прочие",
-    "Турция (транзитная зона)": "Турция (транзитная зона)",
+    # Excel passthrough (exact match with list_vat table)
     "ЕС (закупка между странами ЕС)": "ЕС (закупка между странами ЕС)",
+    "Турция (отгрузка на транзитной зоне)": "Турция (отгрузка на транзитной зоне)",
+    # API value → Excel value mappings (2026-01-28: Fix internal_markup VLOOKUP mismatch)
+    # These map calculation_mapper.py normalized values to Excel's list_vat table values
+    "Турция (транзитная зона)": "Турция (отгрузка на транзитной зоне)",
+    "ЕС (между странами ЕС)": "ЕС (закупка между странами ЕС)",
 }
 
 # Fields that are percentages (need to be divided by 100)
