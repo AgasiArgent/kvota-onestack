@@ -22,6 +22,7 @@ class ExportData:
     organization: Dict[str, Any]
     variables: Dict[str, Any]
     calculations: Dict[str, Any]  # totals and summaries
+    seller_company: Optional[Dict[str, Any]] = None  # Our legal entity for invoices
 
 
 def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
@@ -110,13 +111,24 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
     if not calculations:
         calculations = calculate_totals_from_items(items, quote.get("currency", "USD"))
 
+    # 8. Fetch seller company (our legal entity) if quote has seller_company_id
+    seller_company = None
+    if quote.get("seller_company_id"):
+        seller_result = supabase.table("seller_companies") \
+            .select("*") \
+            .eq("id", quote["seller_company_id"]) \
+            .execute()
+        if seller_result.data:
+            seller_company = seller_result.data[0]
+
     return ExportData(
         quote=quote,
         items=items,
         customer=customer,
         organization=organization,
         variables=variables,
-        calculations=calculations
+        calculations=calculations,
+        seller_company=seller_company
     )
 
 
