@@ -144,7 +144,7 @@ QUOTE_INPUT_MAPPING = {
     "K7": ("time_to_advance_shipping", "Дней до аванса отправки"),
     "J8": ("advance_on_customs", "Аванс при таможне (%)"),
     "K8": ("time_to_advance_customs", "Дней до аванса таможни"),
-    "K9": ("time_to_payment", "Дней до оплаты после получения"),
+    "K9": ("time_to_advance_on_receiving", "Дней до оплаты после получения"),
     # Logistics costs
     "W2": ("logistics_supplier_hub", "Логистика: Поставщик-Хаб"),
     "W3": ("logistics_hub_customs", "Логистика: Хаб-Таможня"),
@@ -1177,6 +1177,11 @@ def create_validation_excel(data) -> bytes:
         variables.get('dm_fee_currency', 'USD')
     )
 
+    # Debug: log key variables
+    print(f"[export-debug] logistics: hub={variables.get('logistics_supplier_hub')}, customs={variables.get('logistics_hub_customs')}, client={variables.get('logistics_customs_client')}")
+    print(f"[export-debug] time_to_advance_on_receiving={variables.get('time_to_advance_on_receiving')}")
+    print(f"[export-debug] brokerage: docs_usd={documentation_usd}, warehousing_usd={warehousing_usd}")
+
     # Build quote_inputs from variables
     quote_inputs = {
         # Company and terms
@@ -1196,7 +1201,7 @@ def create_validation_excel(data) -> bytes:
         "time_to_advance_shipping": variables.get("time_to_advance_shipping", 0),
         "advance_on_customs": variables.get("advance_on_customs", 0),
         "time_to_advance_customs": variables.get("time_to_advance_customs", 0),
-        "time_to_payment": variables.get("time_to_payment", 0),
+        "time_to_advance_on_receiving": variables.get("time_to_advance_on_receiving", 0),
 
         # Logistics costs (already in USD from invoice aggregation)
         "logistics_supplier_hub": variables.get("logistics_supplier_hub", 0),
