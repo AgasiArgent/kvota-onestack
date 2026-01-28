@@ -23768,108 +23768,98 @@ def get(customer_id: str, session, request, tab: str = "general"):
             )
 
         tab_content = Div(
-            # Row 1: Main info (left, 60%) + Contacts & Contracts previews (right, 40%)
+            # Row 1: Three cards side by side with equal height
             Div(
-                # LEFT COLUMN: Main info with inline editing
+                # Card 1: Company info (narrow, 2 columns layout)
                 Div(
+                    # Company name (full width)
                     Div(
-                        # Company name (inline editable)
-                        Div(
-                            Div("Название компании", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                            _render_field_display(customer_id, "name", customer.name or ""),
-                            style="margin-bottom: 0.75rem;"
-                        ),
-                        # INN, KPP, OGRN in a row (inline editable)
-                        Div(
-                            Div(
-                                Div("ИНН", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                _render_field_display(customer_id, "inn", customer.inn or ""),
-                            ),
-                            Div(
-                                Div("КПП", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                _render_field_display(customer_id, "kpp", customer.kpp or ""),
-                            ),
-                            Div(
-                                Div("ОГРН", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
-                            ),
-                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 0.75rem;"
-                        ),
-                        # Status and Dates row
-                        Div(
-                            Div(
-                                Div("Статус", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                Span("Активен" if customer.is_active else "Неактивен",
-                                     cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}"),
-                            ),
-                            Div(
-                                Div("Создан", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                Div(created_at or "—", style="color: #64748b; font-size: 0.875rem;"),
-                            ),
-                            Div(
-                                Div("Обновлён", style="color: #94a3b8; font-size: 0.75rem; margin-bottom: 0.25rem;"),
-                                Div(updated_at or "—", style="color: #64748b; font-size: 0.875rem;"),
-                            ),
-                            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;"
-                        ),
-                        cls="card",
-                        style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
+                        Div("Название", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                        _render_field_display(customer_id, "name", customer.name or ""),
+                        style="margin-bottom: 0.5rem;"
                     ),
-                    style="flex: 2;"
+                    # 2-column grid for fields
+                    Div(
+                        Div(
+                            Div("ИНН", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            _render_field_display(customer_id, "inn", customer.inn or ""),
+                        ),
+                        Div(
+                            Div("КПП", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            _render_field_display(customer_id, "kpp", customer.kpp or ""),
+                        ),
+                        Div(
+                            Div("ОГРН", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            _render_field_display(customer_id, "ogrn", customer.ogrn or ""),
+                        ),
+                        Div(
+                            Div("Статус", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            Span("Активен" if customer.is_active else "Неактивен",
+                                 cls=f"status-badge {'status-approved' if customer.is_active else 'status-rejected'}",
+                                 style="margin-top: 0.25rem; display: inline-block;"),
+                        ),
+                        Div(
+                            Div("Создан", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            Div(created_at or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                        ),
+                        Div(
+                            Div("Обновлён", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            Div(updated_at or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                        ),
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+                    ),
+                    cls="card",
+                    style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; flex: 1; min-width: 200px;"
                 ),
 
-                # RIGHT COLUMN: Contacts + Contracts previews (stacked vertically)
+                # Card 2: Contacts preview
                 Div(
-                    # Contacts preview block
                     Div(
-                        Div(
-                            Span(icon("users", size=14), " Контакты", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
-                            A("→", href=f"/customers/{customer_id}?tab=contacts",
-                              hx_get=f"/customers/{customer_id}?tab=contacts",
-                              hx_target="#tab-content",
-                              hx_push_url="true",
-                              style="font-size: 0.875rem; color: #3b82f6;"),
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
-                        ),
-                        Div(
-                            *contacts_preview_items if contacts_preview_items else [
-                                Div("Нет контактов", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
-                            ],
-                            style="max-height: 120px; overflow-y: auto;"
-                        ),
-                        cls="card",
-                        style="background: white; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; margin-bottom: 0.5rem; border: 1px solid #e5e7eb;",
-                        hx_get=f"/customers/{customer_id}?tab=contacts",
-                        hx_target="#tab-content",
-                        hx_push_url="true",
+                        Span(icon("users", size=14), " Контакты", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                        A("→", href=f"/customers/{customer_id}?tab=contacts",
+                          hx_get=f"/customers/{customer_id}?tab=contacts",
+                          hx_target="#tab-content",
+                          hx_push_url="true",
+                          style="font-size: 0.875rem; color: #3b82f6;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                     ),
-
-                    # Contracts preview block
                     Div(
-                        Div(
-                            Span(icon("file-text", size=14), " Договоры", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
-                            A("→", href=f"/customers/{customer_id}?tab=contracts",
-                              hx_get=f"/customers/{customer_id}?tab=contracts",
-                              hx_target="#tab-content",
-                              hx_push_url="true",
-                              style="font-size: 0.875rem; color: #3b82f6;"),
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
-                        ),
-                        Div(
-                            *contracts_preview_items if contracts_preview_items else [
-                                Div("Нет договоров", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 0.5rem;")
-                            ],
-                            style="max-height: 120px; overflow-y: auto;"
-                        ),
-                        cls="card",
-                        style="background: white; border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; border: 1px solid #e5e7eb;",
-                        hx_get=f"/customers/{customer_id}?tab=contracts",
-                        hx_target="#tab-content",
-                        hx_push_url="true",
+                        *contacts_preview_items if contacts_preview_items else [
+                            Div("Нет контактов", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 1rem;")
+                        ],
+                        style="flex: 1; overflow-y: auto;"
                     ),
-                    style="flex: 1;"
+                    cls="card",
+                    style="background: white; border-radius: 0.75rem; padding: 0.75rem; cursor: pointer; border: 1px solid #e5e7eb; flex: 1; display: flex; flex-direction: column;",
+                    hx_get=f"/customers/{customer_id}?tab=contacts",
+                    hx_target="#tab-content",
+                    hx_push_url="true",
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+
+                # Card 3: Contracts preview
+                Div(
+                    Div(
+                        Span(icon("file-text", size=14), " Договоры", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                        A("→", href=f"/customers/{customer_id}?tab=contracts",
+                          hx_get=f"/customers/{customer_id}?tab=contracts",
+                          hx_target="#tab-content",
+                          hx_push_url="true",
+                          style="font-size: 0.875rem; color: #3b82f6;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+                    ),
+                    Div(
+                        *contracts_preview_items if contracts_preview_items else [
+                            Div("Нет договоров", style="color: #9ca3af; font-size: 0.8rem; text-align: center; padding: 1rem;")
+                        ],
+                        style="flex: 1; overflow-y: auto;"
+                    ),
+                    cls="card",
+                    style="background: white; border-radius: 0.75rem; padding: 0.75rem; cursor: pointer; border: 1px solid #e5e7eb; flex: 1; display: flex; flex-direction: column;",
+                    hx_get=f"/customers/{customer_id}?tab=contracts",
+                    hx_target="#tab-content",
+                    hx_push_url="true",
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: stretch;"
             ),
 
             # Row 2: Two tables side by side (Quotes + Specifications) with stats in headers
