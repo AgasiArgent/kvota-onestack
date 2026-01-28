@@ -125,5 +125,29 @@
 
 ---
 
+## VALIDATION EXPORT (export_validation_service.py)
+
+### Правило: API_Inputs должен содержать USD значения
+
+Excel-шаблон ожидает:
+- Колонка C: значение в USD
+- Колонка D: конвертация USD → валюта КП через формулу `=C*$E$2`
+
+**Исправлено (2026-01-28):**
+- `create_validation_excel()` теперь конвертирует brokerage и DM fee из оригинальной валюты в USD
+- `import_tariff` читается из поля `customs_duty` (заполняется таможней), с fallback на `import_tariff`
+
+| Поле в API_Inputs | Источник | Конвертация |
+|-------------------|----------|-------------|
+| W5 brokerage_hub | variables + *_currency | original → USD |
+| W6 brokerage_customs | variables + *_currency | original → USD |
+| W7 warehousing | variables + *_currency | original → USD |
+| W8 documentation | variables + *_currency | original → USD |
+| W9 other_costs | variables + *_currency | original → USD |
+| AG4/AG6 dm_fee_value | variables + dm_fee_currency | original → USD |
+| X16 import_tariff | item.customs_duty or item.import_tariff | passthrough (%) |
+
+---
+
 *Audit date: 2026-01-28*
-*Updated: 2026-01-28 (all issues fixed)*
+*Updated: 2026-01-28 (validation export fixed)*
