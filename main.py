@@ -24392,7 +24392,7 @@ def get(customer_id: str, field_name: str, session):
 
     # Key handlers: Enter to save (for input), Escape to cancel
     esc_handler = "if(event.key === 'Escape') { event.preventDefault(); htmx.ajax('GET', '" + f"/customers/{customer_id}/cancel-edit/{field_name}" + "', {target: '#field-" + field_name + "', swap: 'outerHTML'}); }"
-    key_handler = "if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.closest('form').requestSubmit(); } else " + esc_handler
+    key_handler = "if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); } else " + esc_handler
 
     if input_type == "textarea":
         # Textarea: Escape cancels, Enter+Shift for newline, just Enter doesn't save (use button)
@@ -24726,8 +24726,8 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
     if field_name == "name":
         # For name, we edit all three parts: last_name, name, patronymic
         # Key handlers: Enter to save, Escape to cancel
-        # Use closest('form') to reliably find the form from any input
-        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); this.closest('form').requestSubmit(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        # Use htmx.trigger to properly submit via HTMX (not browser submit)
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
         input_style = "padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem;"
 
         return Div(
@@ -24769,7 +24769,7 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
             placeholder = ""
 
         # Key handlers: Enter to save, Escape to cancel
-        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); this.closest('form').requestSubmit(); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
+        key_handler = f"if(event.key === 'Enter') {{ event.preventDefault(); htmx.trigger(this.closest('form'), 'submit'); }} else if(event.key === 'Escape') {{ event.preventDefault(); htmx.ajax('GET', '{cancel_url}', {{target: '#contact-{contact_id}-{field_name}', swap: 'outerHTML'}}); }}"
 
         return Div(
             Form(
