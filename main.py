@@ -24929,7 +24929,7 @@ def post(customer_id: str, contact_id: str, session):
     if redirect:
         return redirect
 
-    from services.customer_service import get_contact, update_contact, get_customer_by_id
+    from services.customer_service import get_contact, update_contact, get_customer_with_contacts
 
     contact = get_contact(contact_id)
     if not contact:
@@ -24940,7 +24940,7 @@ def post(customer_id: str, contact_id: str, session):
     update_contact(contact_id, is_signatory=new_status)
 
     # Re-fetch all contacts to show updated state (including unset signatory on other contacts)
-    customer = get_customer_by_id(customer_id)
+    customer = get_customer_with_contacts(customer_id)
     if customer and customer.contacts:
         return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
     return Tr(Td("Контакты не найдены", colspan="6"))
@@ -24953,7 +24953,7 @@ def post(customer_id: str, contact_id: str, session):
     if redirect:
         return redirect
 
-    from services.customer_service import get_contact, update_contact, get_customer_by_id
+    from services.customer_service import get_contact, update_contact, get_customer_with_contacts
 
     contact = get_contact(contact_id)
     if not contact:
@@ -24964,7 +24964,7 @@ def post(customer_id: str, contact_id: str, session):
     update_contact(contact_id, is_primary=new_status)
 
     # Re-fetch all contacts to show updated state (including unset primary on other contacts)
-    customer = get_customer_by_id(customer_id)
+    customer = get_customer_with_contacts(customer_id)
     if customer and customer.contacts:
         return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
     return Tr(Td("Контакты не найдены", colspan="6"))
