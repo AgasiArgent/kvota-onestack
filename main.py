@@ -1270,11 +1270,11 @@ form[method="get"] button {
 
 /* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
 /* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header),
-[role="button"],
-.button,
-button[type="submit"],
-button[type="button"]:not(.sidebar-toggle-btn),
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.status-icon),
+[role="button"]:not(.status-icon),
+.button:not(.status-icon),
+button[type="submit"]:not(.status-icon),
+button[type="button"]:not(.sidebar-toggle-btn):not(.status-icon),
 input[type="submit"],
 input[type="button"],
 a[href*="/new"]:not(.sidebar-item),
@@ -1294,11 +1294,11 @@ a[href*="/create"]:not(.sidebar-item) {
     cursor: pointer !important;
 }
 
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):hover,
-[role="button"]:hover,
-.button:hover,
-button[type="submit"]:hover,
-button[type="button"]:not(.sidebar-toggle-btn):hover,
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.status-icon):hover,
+[role="button"]:not(.status-icon):hover,
+.button:not(.status-icon):hover,
+button[type="submit"]:not(.status-icon):hover,
+button[type="button"]:not(.sidebar-toggle-btn):not(.status-icon):hover,
 input[type="submit"]:hover,
 input[type="button"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover,
