@@ -164,6 +164,7 @@ QUOTE_INPUT_MAPPING = {
     # NOTE: dm_fee_value is handled separately in _modify_raschet_references()
     # Admin settings
     "AH11": ("rate_forex_risk", "Резерв на курсовую разницу (%)"),
+    "AH12": ("rate_fin_comm", "Комиссия ФинАгента (%)"),
 }
 
 # =============================================================================
