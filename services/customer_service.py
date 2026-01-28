@@ -132,6 +132,8 @@ def _parse_contact(data: dict) -> CustomerContact:
         id=data["id"],
         customer_id=data["customer_id"],
         name=data["name"],
+        last_name=data.get("last_name"),  # Фамилия
+        patronymic=data.get("patronymic"),  # Отчество
         position=data.get("position"),
         email=data.get("email"),
         phone=data.get("phone"),

@@ -24808,16 +24808,12 @@ async def post(customer_id: str, contact_id: str, field_name: str, session, requ
     # Get form data
     form_data = await request.form()
 
-    # DEBUG: Print form data (will show in docker logs)
-    print(f"[CONTACT-DEBUG] field: {field_name}, form_data: {dict(form_data)}", flush=True)
-
     try:
         if field_name == "name":
             # Update all name parts
             last_name = form_data.get("last_name", "")
             name = form_data.get("name", "")
             patronymic = form_data.get("patronymic", "")
-            print(f"[CONTACT-DEBUG] Updating: last_name={last_name!r}, name={name!r}, patronymic={patronymic!r}", flush=True)
 
             updated_contact = update_contact(contact_id, name=name, last_name=last_name, patronymic=patronymic)
         else:
