@@ -24417,7 +24417,7 @@ def get(customer_id: str, field_name: str, session):
     return Form(
         Div(
             input_elem,
-            Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
+            Button(type="submit", style="position: absolute; left: -9999px; width: 1px; height: 1px;"),  # Offscreen submit button
             id=f"field-{field_name}"
         ),
         id=form_id,
@@ -24744,7 +24744,7 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                     Input(type="text", name="patronymic", value=contact.patronymic or "", placeholder="Отчество",
                           style=input_style + " width: 90px;",
                           onkeydown=key_handler),
-                    Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
+                    Button(type="submit", style="position: absolute; left: -9999px; width: 1px; height: 1px;"),  # Offscreen submit button
                     style="display: flex; align-items: center; gap: 0.25rem;"
                 ),
                 id=form_id,
@@ -24781,7 +24781,7 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
                 Input(type=input_type, name=field_name, value=current_value, placeholder=placeholder,
                       style="padding: 0.35rem 0.5rem; border: 2px solid #3b82f6; border-radius: 0.25rem; width: 150px;", autofocus=True,
                       onkeydown=key_handler),
-                Button(type="submit", style="display: none;"),  # Hidden submit button for Enter key
+                Button(type="submit", style="position: absolute; left: -9999px; width: 1px; height: 1px;"),  # Offscreen submit button
                 id=form_id,
                 hx_post=f"/customers/{customer_id}/contacts/{contact_id}/update-field/{field_name}",
                 hx_target=f"#contact-{contact_id}-{field_name}",
