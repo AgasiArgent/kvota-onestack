@@ -23630,12 +23630,15 @@ def get(customer_id: str, session, request, tab: str = "general"):
         {'id': 'contracts', 'label': 'Договоры', 'url': f'/customers/{customer_id}?tab=contracts'},
         {'id': 'quotes', 'label': 'КП', 'url': f'/customers/{customer_id}?tab=quotes'},
         {'id': 'specifications', 'label': 'Спецификации', 'url': f'/customers/{customer_id}?tab=specifications'},
-        {'id': 'requested_items', 'label': 'Запрашиваемые позиции', 'url': f'/customers/{customer_id}?tab=requested_items'}
+        {'id': 'requested_items', 'label': 'Запрашиваемые позиции', 'url': f'/customers/{customer_id}?tab=requested_items'},
+        {'id': 'additional', 'label': 'Дополнительно', 'url': f'/customers/{customer_id}?tab=additional'},
+        {'id': 'calls', 'label': 'Звонки', 'url': f'/customers/{customer_id}?tab=calls'},
+        {'id': 'meetings', 'label': 'Встречи', 'url': f'/customers/{customer_id}?tab=meetings'},
     ], active_tab=tab, target_id="tab-content")
 
     # Build tab content based on selected tab
     if tab == "general":
-        from services.customer_service import get_customer_statistics, get_customer_quotes, get_customer_specifications
+        from services.customer_service import get_customer_statistics, get_customer_quotes, get_customer_specifications, get_customer_contracts
         from datetime import datetime
 
         # Get statistics
@@ -23644,8 +23647,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
         # Get latest quotes and specifications (for summary)
         all_quotes = get_customer_quotes(customer_id)
         all_specs = get_customer_specifications(customer_id)
-        latest_quotes = all_quotes[:3] if all_quotes else []
-        latest_specs = all_specs[:3] if all_specs else []
+        latest_quotes = all_quotes[:5] if all_quotes else []
+        latest_specs = all_specs[:5] if all_specs else []
+
+        # Get contracts for preview
+        contracts = get_customer_contracts(customer_id)
 
         # Format dates
         created_at = ""
@@ -23665,9 +23671,47 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 'rejected': ('Отклонено', 'status-rejected'),
                 'in_progress': ('В работе', 'status-progress'),
                 'pending': ('На рассмотрении', 'status-pending'),
+                'deal': ('Сделка', 'status-approved'),
             }
             label, cls = status_map.get(status, (status or '—', 'status-draft'))
             return Span(label, cls=f"status-badge {cls}", style="font-size: 0.75rem; padding: 0.25rem 0.5rem;")
+
+        # Build contacts preview items
+        contacts_preview_items = []
+        for contact in customer.contacts[:5]:
+            badges = []
+            if contact.is_signatory:
+                badges.append(Span("✏️", title="Подписант", style="margin-left: 0.25rem;"))
+            if contact.is_primary:
+                badges.append(Span("★", title="Основной", style="margin-left: 0.25rem; color: #fbbf24;"))
+            contacts_preview_items.append(
+                Div(
+                    Div(
+                        Span(contact.get_full_name(), style="font-weight: 500;"),
+                        *badges,
+                        style="display: flex; align-items: center;"
+                    ),
+                    Div(contact.position or "—", style="font-size: 0.75rem; color: #64748b;"),
+                    style="padding: 0.5rem 0; border-bottom: 1px solid #334155;"
+                )
+            )
+
+        # Build contracts preview items
+        contracts_preview_items = []
+        for contract in contracts[:5]:
+            status = contract.get("status", "")
+            status_color = "#10b981" if status == "active" else "#64748b"
+            status_text = "активен" if status == "active" else ("истёк" if status == "terminated" else status)
+            contracts_preview_items.append(
+                Div(
+                    Div(
+                        Span(f"№{contract.get('contract_number', '—')}", style="font-weight: 500;"),
+                        style="display: flex; align-items: center;"
+                    ),
+                    Div(status_text, style=f"font-size: 0.75rem; color: {status_color};"),
+                    style="padding: 0.5rem 0; border-bottom: 1px solid #334155;"
+                )
+            )
 
         # Build latest quotes rows
         quotes_rows = []
@@ -23714,40 +23758,10 @@ def get(customer_id: str, session, request, tab: str = "general"):
             )
 
         tab_content = Div(
-            # Statistics cards at the top
+            # Row 1: Main info (left) + Contacts preview + Contracts preview (right)
             Div(
+                # LEFT COLUMN: Main info (spans 6 cols)
                 Div(
-                    stat_card(
-                        value=str(stats["quotes_count"]),
-                        label="КП",
-                        description="коммерческих предложений"
-                    ),
-                    stat_card(
-                        value=f"{stats['quotes_sum']:,.0f} ₽",
-                        label="Сумма КП",
-                        description="общая сумма предложений"
-                    ),
-                    stat_card(
-                        value=str(stats["specifications_count"]),
-                        label="Спецификации",
-                        description="подписанных спецификаций"
-                    ),
-                    stat_card(
-                        value=f"{stats['specifications_sum']:,.0f} ₽",
-                        label="Сумма спецификаций",
-                        description="общая сумма сделок"
-                    ),
-                    cls="stats",
-                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
-                ),
-                style="margin-bottom: 2rem;"
-            ),
-
-            # Two-column layout
-            Div(
-                # LEFT COLUMN: Main info
-                Div(
-                    # Main info section
                     Div(
                         H3(icon("clipboard-list", size=20), " Основная информация", style="margin-bottom: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
                         Div(
@@ -23801,65 +23815,154 @@ def get(customer_id: str, session, request, tab: str = "general"):
                             style="padding: 1rem;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem;"
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; height: 100%;"
                     ),
                     style="flex: 1;"
                 ),
 
-                # RIGHT COLUMN: Recent Quotes + Recent Specs
+                # RIGHT COLUMN: Contacts + Contracts previews (spans 6 cols, split in 2)
                 Div(
-                    # Latest Quotes section
+                    # Contacts preview block
                     Div(
                         Div(
-                            H3(icon("file-text", size=20), " Последние КП", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
-                            A("Посмотреть все →", href=f"/customers/{customer_id}?tab=quotes", style="font-size: 0.875rem;"),
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                            H4(icon("users", size=16), " Контакты", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;"),
+                            A("Все →", href=f"/customers/{customer_id}?tab=contacts",
+                              hx_get=f"/customers/{customer_id}?tab=contacts",
+                              hx_target="#tab-content",
+                              hx_push_url="true",
+                              style="font-size: 0.75rem; color: #60a5fa;"),
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
-                        Table(
-                            Thead(
-                                Tr(
-                                    Th("№", style="font-size: 0.75rem;"),
-                                    Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
-                                    Th("Профит", style="font-size: 0.75rem; text-align: right;"),
-                                    Th("Дата", style="font-size: 0.75rem;"),
-                                    Th("Статус", style="font-size: 0.75rem;"),
-                                )
-                            ),
-                            Tbody(*quotes_rows) if quotes_rows else Tbody(
-                                Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
-                            ),
-                            style="font-size: 0.875rem;"
+                        Div(
+                            *contacts_preview_items if contacts_preview_items else [
+                                Div("Нет контактов", style="color: #64748b; padding: 1rem; text-align: center;")
+                            ],
+                            style="max-height: 150px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem;"
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 0.75rem; cursor: pointer;",
+                        hx_get=f"/customers/{customer_id}?tab=contacts",
+                        hx_target="#tab-content",
+                        hx_push_url="true",
                     ),
 
-                    # Latest Specifications section
+                    # Contracts preview block
                     Div(
                         Div(
-                            H3("📑 Последние спецификации", style="margin: 0; color: #e2e8f0;"),
-                            A("Посмотреть все →", href=f"/customers/{customer_id}?tab=specifications", style="font-size: 0.875rem;"),
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                            H4(icon("file-text", size=16), " Договоры", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;"),
+                            A("Все →", href=f"/customers/{customer_id}?tab=contracts",
+                              hx_get=f"/customers/{customer_id}?tab=contracts",
+                              hx_target="#tab-content",
+                              hx_push_url="true",
+                              style="font-size: 0.75rem; color: #60a5fa;"),
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                         ),
-                        Table(
-                            Thead(
-                                Tr(
-                                    Th("№", style="font-size: 0.75rem;"),
-                                    Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
-                                    Th("Профит", style="font-size: 0.75rem; text-align: right;"),
-                                    Th("Дата", style="font-size: 0.75rem;"),
-                                    Th("Статус", style="font-size: 0.75rem;"),
-                                )
-                            ),
-                            Tbody(*specs_rows) if specs_rows else Tbody(
-                                Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
-                            ),
-                            style="font-size: 0.875rem;"
+                        Div(
+                            *contracts_preview_items if contracts_preview_items else [
+                                Div("Нет договоров", style="color: #64748b; padding: 1rem; text-align: center;")
+                            ],
+                            style="max-height: 150px; overflow-y: auto;"
                         ),
                         cls="card",
-                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem;"
+                        style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 0.75rem; cursor: pointer;",
+                        hx_get=f"/customers/{customer_id}?tab=contracts",
+                        hx_target="#tab-content",
+                        hx_push_url="true",
                     ),
-                    style="flex: 1;"
+                    style="display: flex; gap: 1rem; flex: 1;"
+                ),
+                style="display: flex; gap: 1.5rem; margin-bottom: 1.5rem;"
+            ),
+
+            # Row 2: Statistics cards
+            Div(
+                Div(
+                    stat_card(
+                        value=str(stats["quotes_count"]),
+                        label="КП",
+                        description="коммерческих предложений"
+                    ),
+                    stat_card(
+                        value=f"{stats['quotes_sum']:,.0f} ₽",
+                        label="Сумма КП",
+                        description="общая сумма предложений"
+                    ),
+                    stat_card(
+                        value=str(stats["specifications_count"]),
+                        label="Спецификации",
+                        description="подписанных спецификаций"
+                    ),
+                    stat_card(
+                        value=f"{stats['specifications_sum']:,.0f} ₽",
+                        label="Сумма спецификаций",
+                        description="общая сумма сделок"
+                    ),
+                    cls="stats",
+                    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
+                ),
+                style="margin-bottom: 1.5rem;"
+            ),
+
+            # Row 3: Two tables side by side (Quotes + Specifications)
+            Div(
+                # Latest Quotes table
+                Div(
+                    Div(
+                        H3(icon("file-text", size=20), " Последние КП", style="margin: 0; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
+                        A("Посмотреть все →", href=f"/customers/{customer_id}?tab=quotes",
+                          hx_get=f"/customers/{customer_id}?tab=quotes",
+                          hx_target="#tab-content",
+                          hx_push_url="true",
+                          style="font-size: 0.875rem;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                    ),
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("№", style="font-size: 0.75rem;"),
+                                Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
+                                Th("Профит", style="font-size: 0.75rem; text-align: right;"),
+                                Th("Дата", style="font-size: 0.75rem;"),
+                                Th("Статус", style="font-size: 0.75rem;"),
+                            )
+                        ),
+                        Tbody(*quotes_rows) if quotes_rows else Tbody(
+                            Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                        ),
+                        style="font-size: 0.875rem;"
+                    ),
+                    cls="card",
+                    style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; flex: 1;"
+                ),
+
+                # Latest Specifications table
+                Div(
+                    Div(
+                        H3("📑 Последние спецификации", style="margin: 0; color: #e2e8f0;"),
+                        A("Посмотреть все →", href=f"/customers/{customer_id}?tab=specifications",
+                          hx_get=f"/customers/{customer_id}?tab=specifications",
+                          hx_target="#tab-content",
+                          hx_push_url="true",
+                          style="font-size: 0.875rem;"),
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                    ),
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("№", style="font-size: 0.75rem;"),
+                                Th("Сумма", style="font-size: 0.75rem; text-align: right;"),
+                                Th("Профит", style="font-size: 0.75rem; text-align: right;"),
+                                Th("Дата", style="font-size: 0.75rem;"),
+                                Th("Статус", style="font-size: 0.75rem;"),
+                            )
+                        ),
+                        Tbody(*specs_rows) if specs_rows else Tbody(
+                            Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #64748b; padding: 1rem;"))
+                        ),
+                        style="font-size: 0.875rem;"
+                    ),
+                    cls="card",
+                    style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; padding: 1rem; flex: 1;"
                 ),
                 style="display: flex; gap: 1.5rem;"
             )
@@ -24234,6 +24337,52 @@ def get(customer_id: str, session, request, tab: str = "general"):
             )
         )
 
+    elif tab == "additional":
+        # Additional tab - notes/remarks with inline editing
+        tab_content = Div(
+            Div(
+                H3(icon("more-horizontal", size=20), " Дополнительная информация", style="margin-bottom: 1rem; color: #e2e8f0; display: flex; align-items: center; gap: 0.5rem;"),
+                Div(
+                    Div(
+                        Div("Заметки / Примечания", style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 0.5rem;"),
+                        _render_notes_display(customer_id, customer.notes or ""),
+                        style="margin-bottom: 1rem;"
+                    ),
+                    style="padding: 1rem;"
+                ),
+                cls="card",
+                style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem; max-width: 800px;"
+            )
+        )
+
+    elif tab == "calls":
+        # Calls tab - placeholder
+        tab_content = Div(
+            Div(
+                icon("phone", size=48),
+                H3("Звонки", style="margin: 1rem 0 0.5rem; color: #e2e8f0;"),
+                P("Функционал находится в разработке", style="color: #64748b;"),
+                cls="flex flex-col items-center justify-center",
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem; text-align: center; color: #94a3b8;"
+            ),
+            cls="card",
+            style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem;"
+        )
+
+    elif tab == "meetings":
+        # Meetings tab - placeholder
+        tab_content = Div(
+            Div(
+                icon("calendar", size=48),
+                H3("Встречи", style="margin: 1rem 0 0.5rem; color: #e2e8f0;"),
+                P("Функционал находится в разработке", style="color: #64748b;"),
+                cls="flex flex-col items-center justify-center",
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem; text-align: center; color: #94a3b8;"
+            ),
+            cls="card",
+            style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem;"
+        )
+
     else:
         tab_content = Div("Неизвестная вкладка")
 
@@ -24288,6 +24437,7 @@ def get(customer_id: str, field_name: str, session):
         "ogrn": ("ОГРН", customer.ogrn or "", "text"),
         "legal_address": ("Юридический адрес", customer.legal_address or "", "textarea"),
         "actual_address": ("Фактический адрес", customer.actual_address or "", "textarea"),
+        "postal_address": ("Почтовый адрес", customer.postal_address or "", "textarea"),
     }
 
     if field_name not in field_config:
@@ -24421,6 +24571,109 @@ def _render_field_display(customer_id: str, field_name: str, value: str):
         onmouseout="this.style.background='transparent'",
         title="Кликните для редактирования"
     )
+
+
+def _render_notes_display(customer_id: str, value: str):
+    """Helper function to render notes field in display mode with inline edit."""
+    display_value = value if value else "Нажмите чтобы добавить заметки..."
+    display_color = "#64748b" if not value else "#e2e8f0"
+
+    return Div(
+        Pre(display_value, style="white-space: pre-wrap; margin: 0; font-family: inherit;") if value else Span(display_value, style="font-style: italic;"),
+        id="field-notes",
+        hx_get=f"/customers/{customer_id}/edit-notes",
+        hx_target="#field-notes",
+        hx_swap="outerHTML",
+        style=f"cursor: pointer; padding: 1rem; border-radius: 0.5rem; transition: background 0.15s ease; color: {display_color}; min-height: 100px; background: rgba(255,255,255,0.03);",
+        onmouseover="this.style.background='rgba(255,255,255,0.08)'",
+        onmouseout="this.style.background='rgba(255,255,255,0.03)'",
+        title="Кликните для редактирования"
+    )
+
+
+@rt("/customers/{customer_id}/edit-notes")
+def get(customer_id: str, session):
+    """Return inline edit form for notes field."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    return Form(
+        Div(
+            Textarea(
+                customer.notes or "",
+                name="notes",
+                autofocus=True,
+                style="width: 100%; min-height: 150px; padding: 0.75rem; border: 2px solid #3b82f6; border-radius: 0.5rem; font-family: inherit; font-size: inherit; background: #1e1e2f; color: #e2e8f0; resize: vertical;",
+                placeholder="Введите заметки о клиенте...",
+                onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
+            ),
+            Div(
+                Button("✓ Сохранить", type="submit",
+                      style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;"),
+                Button("✕ Отмена", type="button",
+                      cls="cancel-btn",
+                      hx_get=f"/customers/{customer_id}/cancel-edit-notes",
+                      hx_target="#field-notes",
+                      hx_swap="outerHTML",
+                      style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;"),
+                style="display: flex; gap: 0.5rem; margin-top: 0.75rem;"
+            ),
+            id="field-notes"
+        ),
+        hx_post=f"/customers/{customer_id}/update-notes",
+        hx_target="#field-notes",
+        hx_swap="outerHTML"
+    )
+
+
+@rt("/customers/{customer_id}/update-notes")
+async def post(customer_id: str, session, request):
+    """Update notes field via inline editing."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer, update_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    # Get form data
+    form_data = await request.form()
+    new_value = form_data.get("notes", "")
+
+    # Update customer
+    success = update_customer(customer_id, notes=new_value)
+
+    if not success:
+        return Div("Ошибка обновления", id="field-notes")
+
+    # Return updated display
+    return _render_notes_display(customer_id, new_value)
+
+
+@rt("/customers/{customer_id}/cancel-edit-notes")
+def get(customer_id: str, session):
+    """Cancel inline editing of notes and return to display mode."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_customer
+
+    customer = get_customer(customer_id)
+    if not customer:
+        return Div("Клиент не найден")
+
+    return _render_notes_display(customer_id, customer.notes or "")
 
 
 # ============================================================================
