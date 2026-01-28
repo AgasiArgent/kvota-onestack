@@ -1158,10 +1158,14 @@ def create_validation_excel(data) -> bytes:
         variables.get('warehousing_at_customs', 0),
         variables.get('warehousing_at_customs_currency', 'USD')
     )
-    documentation_usd = to_usd(
-        variables.get('customs_documentation', 0),
-        variables.get('customs_documentation_currency', 'USD')
-    )
+    # Debug: log raw values before conversion
+    raw_docs = variables.get('customs_documentation', 0)
+    raw_docs_currency = variables.get('customs_documentation_currency', 'USD')
+    logger.info(f"[export-debug] customs_documentation: raw={raw_docs}, currency={raw_docs_currency}")
+
+    documentation_usd = to_usd(raw_docs, raw_docs_currency)
+    logger.info(f"[export-debug] customs_documentation: after to_usd={documentation_usd}")
+
     other_costs_usd = to_usd(
         variables.get('brokerage_extra', 0),
         variables.get('brokerage_extra_currency', 'USD')
