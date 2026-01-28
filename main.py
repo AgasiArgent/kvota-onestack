@@ -24665,32 +24665,30 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 
 def _render_contact_flags_cell(contact, customer_id: str):
-    """Render the flags cell (signatory, primary) with small icon toggle buttons."""
-    # Small icon button style (like sidebar icons - 24x24px with 16px icon)
-    btn_base = "border: none; border-radius: 4px; cursor: pointer; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s;"
-
-    signatory_style = f"{btn_base} background: {'#10b981' if contact.is_signatory else 'transparent'}; color: {'white' if contact.is_signatory else '#9ca3af'};"
-    primary_style = f"{btn_base} background: {'#f59e0b' if contact.is_primary else 'transparent'}; color: {'white' if contact.is_primary else '#9ca3af'};"
+    """Render the flags cell (signatory, primary) with minimal icon buttons."""
+    # Minimal style - just colored icons, no background (like header icons)
+    signatory_color = "#10b981" if contact.is_signatory else "#d1d5db"  # green or light gray
+    primary_color = "#f59e0b" if contact.is_primary else "#d1d5db"  # orange or light gray
 
     return Td(
         Div(
             Button(
-                icon("pen-tool", size=14),
+                icon("pen-tool", size=16),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=signatory_style,
+                style=f"background: none; border: none; padding: 4px; cursor: pointer; color: {signatory_color}; opacity: {'1' if contact.is_signatory else '0.6'};",
                 title="Подписант" if contact.is_signatory else "Сделать подписантом"
             ),
             Button(
-                icon("star", size=14),
+                icon("star", size=16),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=primary_style,
+                style=f"background: none; border: none; padding: 4px; cursor: pointer; color: {primary_color}; opacity: {'1' if contact.is_primary else '0.6'};",
                 title="Основной контакт" if contact.is_primary else "Сделать основным"
             ),
-            style="display: flex; align-items: center; gap: 4px;"
+            style="display: flex; align-items: center; gap: 2px;"
         ),
         cls="col-actions"
     )
