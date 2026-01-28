@@ -808,22 +808,6 @@ table tbody td:last-child {
     width: 100px;
 }
 
-/* Status icon buttons in col-actions - transparent background, custom colors */
-.col-actions button.status-icon {
-    background: transparent !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 4px !important;
-    min-width: auto !important;
-    transform: none !important;
-}
-.col-actions button.status-icon:hover {
-    background: rgba(0,0,0,0.05) !important;
-    transform: none !important;
-    box-shadow: none !important;
-}
-
 /* Unified Table Body */
 .unified-table tbody tr {
     border-bottom: 1px solid var(--border-color);
@@ -1270,11 +1254,11 @@ form[method="get"] button {
 
 /* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
 /* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.status-icon),
-[role="button"]:not(.status-icon),
-.button:not(.status-icon),
-button[type="submit"]:not(.status-icon),
-button[type="button"]:not(.sidebar-toggle-btn):not(.status-icon),
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle),
+[role="button"],
+.button,
+button[type="submit"],
+button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle),
 input[type="submit"],
 input[type="button"],
 a[href*="/new"]:not(.sidebar-item),
@@ -1294,11 +1278,11 @@ a[href*="/create"]:not(.sidebar-item) {
     cursor: pointer !important;
 }
 
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.status-icon):hover,
-[role="button"]:not(.status-icon):hover,
-.button:not(.status-icon):hover,
-button[type="submit"]:not(.status-icon):hover,
-button[type="button"]:not(.sidebar-toggle-btn):not(.status-icon):hover,
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle):hover,
+[role="button"]:hover,
+.button:hover,
+button[type="submit"]:hover,
+button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle):hover,
 input[type="submit"]:hover,
 input[type="button"]:hover,
 a[href*="/new"]:not(.sidebar-item):hover,
@@ -24681,29 +24665,28 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 
 def _render_contact_flags_cell(contact, customer_id: str):
-    """Render the flags cell (signatory, primary) with minimal icon buttons."""
+    """Render the flags cell (signatory, primary) with minimal clickable icons."""
     # Colors: green for signatory, orange for primary, gray for inactive
-    signatory_color = "#10b981" if contact.is_signatory else "#9ca3af"
-    primary_color = "#f59e0b" if contact.is_primary else "#9ca3af"
+    signatory_color = "#10b981" if contact.is_signatory else "#d1d5db"
+    primary_color = "#f59e0b" if contact.is_primary else "#d1d5db"
 
+    # Use Span with HTMX instead of Button to avoid global button styling
     return Td(
         Div(
-            Button(
+            Span(
                 icon("pen-tool", size=16),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                cls="status-icon",
-                style=f"color: {signatory_color};",
+                style=f"color: {signatory_color}; cursor: pointer; padding: 4px; display: inline-flex;",
                 title="Подписант" if contact.is_signatory else "Сделать подписантом"
             ),
-            Button(
+            Span(
                 icon("star", size=16),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                cls="status-icon",
-                style=f"color: {primary_color};",
+                style=f"color: {primary_color}; cursor: pointer; padding: 4px; display: inline-flex;",
                 title="Основной контакт" if contact.is_primary else "Сделать основным"
             ),
             style="display: flex; align-items: center; gap: 4px;"
