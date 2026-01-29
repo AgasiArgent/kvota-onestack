@@ -5867,67 +5867,52 @@ def get(quote_id: str, session):
                     const headers = jsonData[0];
                     const preview = jsonData.slice(1, 6);
 
+                    // Build select options
+                    function buildOptions(defaultText) {{
+                        var opts = '<option value="">' + defaultText + '</option>';
+                        for (var i = 0; i < headers.length; i++) {{
+                            opts += '<option value="' + i + '">' + (headers[i] || 'Колонка ' + (i+1)) + '</option>';
+                        }}
+                        return opts;
+                    }}
+
+                    // Build preview table
+                    function buildPreviewTable() {{
+                        var html = '<table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;"><thead><tr style="background: #f3f4f6;">';
+                        for (var i = 0; i < headers.length; i++) {{
+                            html += '<th style="padding: 0.5rem; border: 1px solid #e5e7eb; text-align: left;">' + (headers[i] || '—') + '</th>';
+                        }}
+                        html += '</tr></thead><tbody>';
+                        for (var r = 0; r < preview.length; r++) {{
+                            html += '<tr>';
+                            for (var c = 0; c < headers.length; c++) {{
+                                html += '<td style="padding: 0.5rem; border: 1px solid #e5e7eb;">' + (preview[r][c] || '') + '</td>';
+                            }}
+                            html += '</tr>';
+                        }}
+                        html += '</tbody></table>';
+                        return html;
+                    }}
+
                     // Create modal
                     const modal = document.createElement('div');
                     modal.id = 'import-modal';
-                    modal.innerHTML = `
-                        <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-                            <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto;">
-                                <h3 style="margin-top: 0;">Импорт из файла</h3>
-                                <p>Найдено строк: ${{jsonData.length - 1}}</p>
-
-                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-                                    <div>
-                                        <label>Наименование *</label>
-                                        <select id="map-name" style="width: 100%; padding: 0.5rem;">
-                                            <option value="">-- Выберите колонку --</option>
-                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label>Артикул</label>
-                                        <select id="map-code" style="width: 100%; padding: 0.5rem;">
-                                            <option value="">-- Не импортировать --</option>
-                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label>Бренд</label>
-                                        <select id="map-brand" style="width: 100%; padding: 0.5rem;">
-                                            <option value="">-- Не импортировать --</option>
-                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label>Количество</label>
-                                        <select id="map-qty" style="width: 100%; padding: 0.5rem;">
-                                            <option value="">-- По умолчанию 1 --</option>
-                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <h4>Превью данных:</h4>
-                                <div style="overflow-x: auto; margin-bottom: 1.5rem;">
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                                        <thead>
-                                            <tr style="background: #f3f4f6;">
-                                                ${{headers.map(h => \`<th style="padding: 0.5rem; border: 1px solid #e5e7eb; text-align: left;">${{h || '—'}}</th>\`).join('')}}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${{preview.map(row => \`<tr>${{headers.map((_, i) => \`<td style="padding: 0.5rem; border: 1px solid #e5e7eb;">${{row[i] || ''}}</td>\`).join('')}}</tr>\`).join('')}}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                                    <button onclick="document.getElementById('import-modal').remove()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; border-radius: 8px; cursor: pointer;">Отмена</button>
-                                    <button onclick="doImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    modal.innerHTML = '<div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">' +
+                        '<div style="background: white; padding: 2rem; border-radius: 12px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto;">' +
+                        '<h3 style="margin-top: 0;">Импорт из файла</h3>' +
+                        '<p>Найдено строк: ' + (jsonData.length - 1) + '</p>' +
+                        '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem;">' +
+                        '<div><label>Наименование *</label><select id="map-name" style="width: 100%; padding: 0.5rem;">' + buildOptions('-- Выберите колонку --') + '</select></div>' +
+                        '<div><label>Артикул</label><select id="map-code" style="width: 100%; padding: 0.5rem;">' + buildOptions('-- Не импортировать --') + '</select></div>' +
+                        '<div><label>Бренд</label><select id="map-brand" style="width: 100%; padding: 0.5rem;">' + buildOptions('-- Не импортировать --') + '</select></div>' +
+                        '<div><label>Количество</label><select id="map-qty" style="width: 100%; padding: 0.5rem;">' + buildOptions('-- По умолчанию 1 --') + '</select></div>' +
+                        '</div>' +
+                        '<h4>Превью данных:</h4>' +
+                        '<div style="overflow-x: auto; margin-bottom: 1.5rem;">' + buildPreviewTable() + '</div>' +
+                        '<div style="display: flex; gap: 1rem; justify-content: flex-end;">' +
+                        '<button onclick="document.getElementById(\'import-modal\').remove()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; border-radius: 8px; cursor: pointer;">Отмена</button>' +
+                        '<button onclick="doImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>' +
+                        '</div></div></div>';
                     document.body.appendChild(modal);
 
                     // Auto-detect columns
