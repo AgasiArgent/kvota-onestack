@@ -2808,7 +2808,7 @@ DASHBOARD_TABS = [
     {
         "id": "sales",
         "icon": "user-circle",
-        "label": "Мой кабинет",
+        "label": "Продажи",
         "roles": ["sales", "sales_manager"],
         "priority": 7,
     },
@@ -4996,7 +4996,7 @@ def get(session, tab: str = None, status_filter: str = None):
         "quote-control": "Контроль КП",
         "spec-control": "Спецификации",
         "finance": "Финансы",
-        "sales": "Мой кабинет",
+        "sales": "Продажи",
     }
     page_title = f"Dashboard - {tab_titles.get(tab, tab)}"
 
