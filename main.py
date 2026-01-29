@@ -7640,13 +7640,13 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
     except Exception as e:
         pass  # Ignore if no items existed
 
-    # Prepare items for insert with sequential row numbers
+    # Prepare items for insert
     # base_price_vat is nullable with default 0, so we don't pass it
+    # row_num column doesn't exist - ordering is by created_at
     insert_items = []
     for idx, item in enumerate(items_data, start=1):
         insert_items.append({
             "quote_id": quote_id,
-            "row_num": idx,  # Sequential numbering on save
             "product_name": item.get("product_name", ""),
             "product_code": item.get("product_code", ""),
             "brand": item.get("brand", ""),
@@ -7696,22 +7696,9 @@ async def create_single_quote_item(quote_id: str, session, request):
     except:
         return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
 
-    # Get max row_num for this quote
-    max_row_result = supabase.table("quote_items") \
-        .select("row_num") \
-        .eq("quote_id", quote_id) \
-        .order("row_num", desc=True) \
-        .limit(1) \
-        .execute()
-
-    next_row_num = 1
-    if max_row_result.data:
-        next_row_num = (max_row_result.data[0].get("row_num") or 0) + 1
-
-    # Prepare item for insert
+    # Prepare item for insert (row_num column doesn't exist, ordering is by created_at)
     insert_data = {
         "quote_id": quote_id,
-        "row_num": next_row_num,
         "product_name": item_data.get("product_name", ""),
         "product_code": item_data.get("product_code", ""),
         "brand": item_data.get("brand", ""),
@@ -7727,7 +7714,7 @@ async def create_single_quote_item(quote_id: str, session, request):
         if result.data:
             return JSONResponse({
                 "success": True,
-                "item": {"id": result.data[0]["id"], "row_num": result.data[0]["row_num"]}
+                "item": {"id": result.data[0]["id"]}
             })
         else:
             return JSONResponse({"success": False, "error": "Insert failed"}, status_code=500)
