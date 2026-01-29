@@ -5571,13 +5571,13 @@ def get(quote_id: str, session):
                         Option("—", value=""),
                         *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
                         name="delivery_method",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
+                        style="width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1 1 180px; min-width: 180px;"
+                    style="flex: 1 1 200px; min-width: 200px;"
                 ),
                 # Delivery Terms
                 Div(
