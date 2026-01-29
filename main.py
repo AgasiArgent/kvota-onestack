@@ -6089,23 +6089,29 @@ def get(quote_id: str, session):
             style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
         ) if workflow_status in ['pending_review', 'pending_procurement', 'pending_logistics', 'pending_customs', 'pending_sales', 'pending_control', 'pending_spec_control'] and approval_status else None,
 
-        # CSS for submit button states
+        # CSS for submit button states (using high specificity to override Pico)
         Style("""
-            .btn-submit-disabled {
+            a[role="button"].btn-submit-disabled,
+            a[role="button"].btn-submit-disabled:hover,
+            a.btn-submit-disabled[role="button"],
+            #btn-submit-procurement.btn-submit-disabled {
                 background: #e5e7eb !important;
                 background-color: #e5e7eb !important;
                 color: #9ca3af !important;
                 border: 1px solid #d1d5db !important;
-                pointer-events: none;
-                cursor: not-allowed;
+                pointer-events: none !important;
+                cursor: not-allowed !important;
             }
-            .btn-submit-enabled {
+            a[role="button"].btn-submit-enabled,
+            a[role="button"].btn-submit-enabled:hover,
+            a.btn-submit-enabled[role="button"],
+            #btn-submit-procurement.btn-submit-enabled {
                 background: #16a34a !important;
                 background-color: #16a34a !important;
                 color: white !important;
                 border: 1px solid #16a34a !important;
-                pointer-events: auto;
-                cursor: pointer;
+                pointer-events: auto !important;
+                cursor: pointer !important;
             }
         """) if workflow_status == 'draft' else None,
 
