@@ -5713,17 +5713,10 @@ def get(quote_id: str, session):
                     saveTimeout = setTimeout(function() {{ saveCell(row, prop, newVal); }}, 500);
                 }}
 
+                // Row numbers are assigned on save, not during editing
+                // This function just updates the count display
                 function updateRowNumbers() {{
-                    if (!hot) return;
-                    var data = hot.getSourceData();
-                    for (var i = 0; i < data.length; i++) {{
-                        if (!data[i]) {{
-                            data[i] = {{row_num: i + 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт'}};
-                        }} else {{
-                            data[i].row_num = i + 1;
-                        }}
-                    }}
-                    hot.render();
+                    updateCount();
                 }}
 
                 function initTable() {{
@@ -5735,7 +5728,15 @@ def get(quote_id: str, session):
                         data: initialData.length > 0 ? initialData : [{{row_num: 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт'}}],
                         colHeaders: ['№', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Ед.изм.'],
                         columns: [
-                            {{data: 'row_num', readOnly: true, type: 'numeric', width: 50}},
+                            {{data: 'row_num', readOnly: true, type: 'numeric', width: 50,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  // Always show visual row number (1-based), regardless of stored value
+                                  td.innerHTML = row + 1;
+                                  td.style.textAlign = 'center';
+                                  td.style.color = '#666';
+                                  return td;
+                              }}
+                            }},
                             {{data: 'brand', type: 'text', width: 120}},
                             {{data: 'product_code', type: 'text', width: 140}},
                             {{data: 'product_name', type: 'text', width: 300}},
@@ -5761,15 +5762,12 @@ def get(quote_id: str, session):
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterCreateRow: function(index, amount, source) {{
-                            if (!hot) return;
-                            // Always update row numbers regardless of source (button, context menu, etc.)
-                            updateRowNumbers();
+                            // Just update count - row numbers are assigned on save
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterRemoveRow: function() {{
-                            if (!hot) return;
-                            updateRowNumbers();
+                            // Just update count - row numbers are assigned on save
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
@@ -5791,17 +5789,9 @@ def get(quote_id: str, session):
                     var btnAdd = document.getElementById('btn-add-row');
                     if (btnAdd) {{
                         btnAdd.addEventListener('click', function() {{
-                            var newRowNum = hot.countRows() + 1;
-                            var sourceData = hot.getSourceData();
-                            sourceData.push({{
-                                row_num: newRowNum,
-                                brand: '',
-                                product_code: '',
-                                product_name: '',
-                                quantity: 1,
-                                unit: 'шт'
-                            }});
-                            hot.loadData(sourceData);
+                            // Add empty row - row_num will be assigned on save
+                            // The renderer shows visual row index automatically
+                            hot.alter('insert_row_below');
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }});
@@ -7995,12 +7985,22 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
     if not items_data:
         return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
 
-    # Prepare items for insert (note: organization_id is not a column in quote_items)
+    # First, delete existing items for this quote (we're replacing all)
+    try:
+        supabase.table("quote_items") \
+            .delete() \
+            .eq("quote_id", quote_id) \
+            .execute()
+    except Exception as e:
+        pass  # Ignore if no items existed
+
+    # Prepare items for insert with sequential row numbers
     # base_price_vat is nullable with default 0, so we don't pass it
     insert_items = []
-    for item in items_data:
+    for idx, item in enumerate(items_data, start=1):
         insert_items.append({
             "quote_id": quote_id,
+            "row_num": idx,  # Sequential numbering on save
             "product_name": item.get("product_name", ""),
             "product_code": item.get("product_code", ""),
             "brand": item.get("brand", ""),
