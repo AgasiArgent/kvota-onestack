@@ -5677,10 +5677,13 @@ def get(quote_id: str, session):
         ),
         # Handsontable initialization script
         Script(f"""
+            console.log('Script start');
             (function() {{
+                console.log('IIFE start');
                 const quoteId = '{quote_id}';
                 const quoteIdn = '{quote.get("idn_quote", "")}';
                 const initialData = {items_json};
+                console.log('Variables initialized');
 
                 let saveTimeout = null;
                 let hot = null;
