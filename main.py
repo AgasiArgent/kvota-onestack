@@ -7319,6 +7319,8 @@ def post(quote_id: str, session, change_type: str = "", client_comment: str = ""
     if not user_has_any_role(session, ["sales", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    supabase = get_supabase()
+
     # Validate change type
     valid_types = ["add_item", "logistics", "price", "full"]
     if change_type not in valid_types:
