@@ -5362,8 +5362,6 @@ def get(session):
             "organization_id": user["org_id"],
             "currency": "RUB",
             "delivery_terms": "DDP",
-            "delivery_city": "Москва",
-            "delivery_country": "Россия",
             "status": "draft",
             "created_by": user["id"]
         }
@@ -5532,7 +5530,7 @@ def get(quote_id: str, session):
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
-            # Row 2: Delivery City, Country, Method
+            # Row 2: Delivery City, Country, Method, Terms (all equal width)
             Div(
                 # Delivery City
                 Div(
@@ -5548,7 +5546,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_city", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1;"
+                    style="flex: 1 1 0; min-width: 0;"
                 ),
                 # Delivery Country
                 Div(
@@ -5564,7 +5562,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_country", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1;"
+                    style="flex: 1 1 0; min-width: 0;"
                 ),
                 # Delivery Method
                 Div(
@@ -5579,7 +5577,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1;"
+                    style="flex: 1 1 0; min-width: 0;"
                 ),
                 # Delivery Terms
                 Div(
@@ -5593,7 +5591,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_terms", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1;"
+                    style="flex: 1 1 0; min-width: 0;"
                 ),
                 style="display: flex; gap: 1rem;"
             ),
@@ -5792,7 +5790,19 @@ def get(quote_id: str, session):
                     var btnAdd = document.getElementById('btn-add-row');
                     if (btnAdd) {{
                         btnAdd.addEventListener('click', function() {{
-                            hot.alter('insert_row_below', hot.countRows() - 1);
+                            var newRowNum = hot.countRows() + 1;
+                            var sourceData = hot.getSourceData();
+                            sourceData.push({{
+                                row_num: newRowNum,
+                                brand: '',
+                                product_code: '',
+                                product_name: '',
+                                quantity: 1,
+                                unit: 'шт'
+                            }});
+                            hot.loadData(sourceData);
+                            updateCount();
+                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }});
                     }}
 
@@ -7984,6 +7994,7 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
 
     # Prepare items for insert (note: organization_id is not a column in quote_items)
+    # base_price_vat is nullable with default 0, so we don't pass it
     insert_items = []
     for item in items_data:
         insert_items.append({
@@ -7992,8 +8003,7 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
             "product_code": item.get("product_code", ""),
             "brand": item.get("brand", ""),
             "quantity": int(item.get("quantity", 1)),
-            "unit": item.get("unit", "шт"),
-            "base_price_vat": 0  # Default to 0, procurement will fill in later
+            "unit": item.get("unit", "шт")
         })
 
     try:
