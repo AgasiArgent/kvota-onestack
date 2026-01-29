@@ -5356,24 +5356,36 @@ def get(session):
     from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
     seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
-    return page_layout("New Quote",
-        H1("Create New Quote"),
+    if not customers:
+        return page_layout("Новый КП",
+            H1("Создать КП"),
+            Div(
+                P("Сначала нужно ", A("добавить клиента", href="/customers/new"), " перед созданием КП."),
+                cls="alert alert-error"
+            ),
+            session=session
+        )
 
-        # Quote details form
+    return page_layout("Новый КП",
+        H1("Создать КП"),
+
+        # Minimal form - just customer and seller company
         Div(
-            H3("Quote Details"),
             Form(
                 Div(
-                    Label("Customer *",
+                    Label("Клиент *",
                         Select(
-                            Option("Select customer...", value="", disabled=True, selected=True),
-                            *[Option(f"{c['name']} ({c.get('inn', '')})", value=c["id"]) for c in customers],
+                            Option("Выберите клиента...", value="", disabled=True, selected=True),
+                            *[Option(
+                                f"{c['name']}" + (f" ({c.get('inn', '')})" if c.get('inn') else ""),
+                                value=c["id"]
+                            ) for c in customers],
                             name="customer_id", required=True
-                        )
+                        ),
+                        style="width: 100%;"
                     ),
                     cls="form-group"
                 ),
-                # Seller company selector (v3.0 - at quote level)
                 Div(
                     Label("Компания-продавец *",
                         Select(
@@ -5384,84 +5396,29 @@ def get(session):
                             ) for sc in seller_companies],
                             name="seller_company_id", required=True
                         ),
-                        Small("Наше юридическое лицо для продажи (определяет IDN котировки)",
-                              style="color: #666; display: block; margin-top: 0.25rem;")
+                        Small("Наше юрлицо (определяет IDN котировки)", style="color: #666; display: block; margin-top: 0.25rem;")
                     ),
                     cls="form-group"
                 ),
                 Div(
-                    Label("Delivery Terms",
-                        Select(
-                            Option("EXW - Ex Works", value="EXW"),
-                            Option("FOB - Free on Board", value="FOB"),
-                            Option("CIF - Cost, Insurance, Freight", value="CIF"),
-                            Option("DDP - Delivered Duty Paid", value="DDP", selected=True),
-                            name="delivery_terms"
-                        )
-                    ),
-                    cls="form-group"
-                ),
-                # Delivery location fields
-                Div(
-                    Label("Delivery City",
-                        Input(
-                            name="delivery_city",
-                            type="text",
-                            placeholder="Moscow, Beijing, etc.",
-                            required=False
-                        )
-                    ),
-                    Label("Delivery Country",
-                        Input(
-                            name="delivery_country",
-                            type="text",
-                            placeholder="Russia, China, etc.",
-                            required=False
-                        )
-                    ),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Delivery Method",
-                        Select(
-                            Option("-- Select delivery method --", value="", selected=True),
-                            Option("Авиа", value="air"),
-                            Option("Авто", value="auto"),
-                            Option("Море", value="sea"),
-                            Option("Мультимодально (все)", value="multimodal"),
-                            name="delivery_method"
-                        )
-                    ),
-                    cls="form-group"
-                ),
-                Label("Notes", Textarea(name="notes", placeholder="Additional notes...", rows="3")),
-                Div(
-                    Button("Create Quote", type="submit"),
-                    A("Cancel", href="/quotes", role="button", cls="secondary"),
-                    cls="form-actions"
+                    Button("Создать и перейти к редактированию →", type="submit"),
+                    A("Отмена", href="/quotes", role="button", cls="secondary"),
+                    cls="form-actions", style="display: flex; gap: 1rem; margin-top: 1.5rem;"
                 ),
                 method="post",
                 action="/quotes/new"
             ),
-            cls="card"
+            cls="card", style="max-width: 500px;"
         ),
 
-        Div(
-            P("After creating the quote, you'll be able to add products."),
-            cls="alert alert-info"
-        ) if customers else Div(
-            P("You need to ", A("add a customer", href="/customers/new"), " first before creating a quote."),
-            cls="alert alert-error"
-        ),
+        P("После создания вы сразу перейдёте к заполнению деталей и товаров.", style="color: #666; margin-top: 1rem;"),
 
         session=session
     )
 
 
 @rt("/quotes/new")
-def post(customer_id: str, delivery_terms: str, notes: str,
-         delivery_city: str = None, delivery_country: str = None,
-         delivery_method: str = None, seller_company_id: str = None, session=None):
+def post(customer_id: str, seller_company_id: str = None, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -5486,27 +5443,18 @@ def post(customer_id: str, delivery_terms: str, notes: str,
             .single() \
             .execute()
         customer_name = customer_result.data.get("name", "Unknown") if customer_result.data else "Unknown"
-        title = f"Quote for {customer_name}"
+        title = f"КП для {customer_name}"
 
         insert_data = {
             "idn_quote": idn_quote,
             "title": title,
             "customer_id": customer_id,
             "organization_id": user["org_id"],
-            "currency": "RUB",  # Default currency, will be set during calculation
-            "delivery_terms": delivery_terms,
-            "notes": notes or None,
+            "currency": "RUB",
+            "delivery_terms": "DDP",  # Default
             "status": "draft",
             "created_by": user["id"]
         }
-
-        # Add delivery location if provided
-        if delivery_city and delivery_city.strip():
-            insert_data["delivery_city"] = delivery_city.strip()
-        if delivery_country and delivery_country.strip():
-            insert_data["delivery_country"] = delivery_country.strip()
-        if delivery_method and delivery_method.strip():
-            insert_data["delivery_method"] = delivery_method.strip()
 
         # v3.0: seller_company_id at quote level
         if seller_company_id and seller_company_id.strip():
@@ -5515,12 +5463,13 @@ def post(customer_id: str, delivery_terms: str, notes: str,
         result = supabase.table("quotes").insert(insert_data).execute()
 
         new_quote = result.data[0]
+        # Redirect to quote detail page for inline editing
         return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
 
     except Exception as e:
-        return page_layout("Error",
-            Div(f"Error creating quote: {str(e)}", cls="alert alert-error"),
-            A("← Back to Quotes", href="/quotes"),
+        return page_layout("Ошибка",
+            Div(f"Ошибка создания КП: {str(e)}", cls="alert alert-error"),
+            A("← Назад к списку КП", href="/quotes"),
             session=session
         )
 
@@ -5554,6 +5503,18 @@ def get(quote_id: str, session):
 
     quote = result.data[0]
     customer = quote.get("customers", {})
+
+    # Get customers for dropdown (for inline editing)
+    customers_result = supabase.table("customers") \
+        .select("id, name, inn") \
+        .eq("organization_id", user["org_id"]) \
+        .order("name") \
+        .execute()
+    customers = customers_result.data or []
+
+    # Get seller companies for dropdown
+    from services.seller_company_service import get_all_seller_companies
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
     # Get quote items
     items_result = supabase.table("quote_items") \
@@ -5593,49 +5554,141 @@ def get(quote_id: str, session):
     # Get approval status for multi-department workflow (Bug #8 follow-up)
     approval_status = get_quote_approval_status(quote_id, user["org_id"]) or {}
 
+    # Delivery terms options
+    delivery_terms_options = ["DDP", "DAP", "EXW", "FCA", "CPT", "CIP", "FOB", "CIF"]
+    delivery_method_options = [
+        ("air", "Авиа"),
+        ("auto", "Авто"),
+        ("sea", "Море"),
+        ("multimodal", "Мультимодально")
+    ]
+
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
+        # Compact header with inline editing
         Div(
+            # Title row
             Div(
-                H1(f"Quote {quote.get('idn_quote', '')}"),
+                H2(f"КП {quote.get('idn_quote', '')}", style="margin: 0;"),
                 workflow_status_badge(workflow_status),
                 style="display: flex; align-items: center; gap: 1rem;"
             ),
-            Div(
-                A("Edit", href=f"/quotes/{quote_id}/edit", role="button", cls="secondary", style="margin-right: 0.5rem;"),
-                A("Add Products", href=f"/quotes/{quote_id}/products", role="button"),
-            ),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style="margin-bottom: 1rem;"
         ),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "overview", user.get("roles", [])),
 
-        # Customer info
+        # Compact inline-editable details card
         Div(
-            H3("Customer"),
-            P(Strong(customer.get("name", "—"))),
-            P(f"INN: {customer.get('inn', '')}") if customer.get("inn") else None,
-            P(customer.get("email", "")) if customer.get("email") else None,
-            cls="card"
-        ),
-
-        # Quote details
-        Div(
-            H3("Details"),
-            Table(
-                Tr(Td("Currency:"), Td(quote.get("currency", "RUB"))),
-                Tr(Td("Delivery Terms:"), Td(quote.get("delivery_terms", "—"))),
-                (Tr(Td("Delivery City:"), Td(quote.get("delivery_city", "—"))) if quote.get("delivery_city") else None),
-                (Tr(Td("Delivery Country:"), Td(quote.get("delivery_country", "—"))) if quote.get("delivery_country") else None),
-                (Tr(Td("Delivery Method:"), Td(
-                    {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мультимодально (все)"}.get(
-                        quote.get("delivery_method"), "—"
-                    )
-                )) if quote.get("delivery_method") else None),
-                Tr(Td("Payment Terms:"), Td(f"{quote.get('payment_terms', 0)} days")),
-                Tr(Td("Created:"), Td(quote.get("created_at", "")[:10])),
+            # Row 1: Customer and Seller Company
+            Div(
+                # Customer dropdown
+                Div(
+                    Label("Клиент", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Select(
+                        *[Option(
+                            f"{c['name']}" + (f" ({c.get('inn', '')})" if c.get('inn') else ""),
+                            value=c["id"],
+                            selected=(c["id"] == quote.get("customer_id"))
+                        ) for c in customers],
+                        name="customer_id",
+                        id="inline-customer",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "customer_id", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1; min-width: 200px;"
+                ),
+                # Seller Company dropdown
+                Div(
+                    Label("Продавец", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Select(
+                        Option("—", value=""),
+                        *[Option(
+                            sc.short_name or sc.legal_name,
+                            value=str(sc.id),
+                            selected=(str(sc.id) == str(quote.get("seller_company_id") or ""))
+                        ) for sc in seller_companies],
+                        name="seller_company_id",
+                        id="inline-seller",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "seller_company_id", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1; min-width: 200px;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
-            cls="card"
+            # Row 2: Delivery City, Country, Method
+            Div(
+                # Delivery City
+                Div(
+                    Label("Город доставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Input(
+                        type="text",
+                        value=quote.get("delivery_city", ""),
+                        placeholder="Москва",
+                        name="delivery_city",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_city", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1;"
+                ),
+                # Delivery Country
+                Div(
+                    Label("Страна", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Input(
+                        type="text",
+                        value=quote.get("delivery_country", ""),
+                        placeholder="Россия",
+                        name="delivery_country",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_country", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1;"
+                ),
+                # Delivery Method
+                Div(
+                    Label("Способ доставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Select(
+                        Option("—", value=""),
+                        *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
+                        name="delivery_method",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_method", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1;"
+                ),
+                # Delivery Terms
+                Div(
+                    Label("Условия поставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Select(
+                        *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
+                        name="delivery_terms",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_terms", value: this.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 1rem;"
+            ),
+            cls="card", style="padding: 1rem; margin-bottom: 1rem;"
         ),
 
         # Products (Handsontable spreadsheet)
@@ -7919,6 +7972,59 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         })
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/quotes/{quote_id}/inline", methods=["PATCH"])
+async def inline_update_quote(quote_id: str, session, request):
+    """Inline update a single quote field via HTMX"""
+    redirect = require_login(session)
+    if redirect:
+        return ""
+
+    user = session["user"]
+    supabase = get_supabase()
+
+    # Verify quote belongs to user's org
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", user["org_id"]) \
+        .execute()
+
+    if not quote_result.data:
+        return ""
+
+    # Parse form data from HTMX
+    form = await request.form()
+    field = form.get("field")
+    value = form.get("value")
+
+    if not field:
+        return ""
+
+    # Allowed fields for inline update
+    allowed_fields = [
+        'customer_id', 'seller_company_id', 'delivery_city',
+        'delivery_country', 'delivery_method', 'delivery_terms',
+        'currency', 'payment_terms', 'notes'
+    ]
+
+    if field not in allowed_fields:
+        return ""
+
+    # Handle empty values
+    if value == "" or value is None:
+        value = None
+
+    try:
+        supabase.table("quotes") \
+            .update({field: value}) \
+            .eq("id", quote_id) \
+            .execute()
+        return ""  # HTMX swap="none", no response needed
+    except Exception as e:
+        print(f"Inline update error: {e}")
+        return ""
 
 
 @rt("/quotes/{quote_id}/cancel", methods=["POST"])
