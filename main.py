@@ -5540,7 +5540,7 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px;",
+                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_city", value: this.value}',
@@ -5556,7 +5556,7 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_country") or "",
                         placeholder="Россия",
                         name="delivery_country",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px;",
+                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_country", value: this.value}',
@@ -5571,7 +5571,7 @@ def get(quote_id: str, session):
                         Option("—", value=""),
                         *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
                         name="delivery_method",
-                        style="width: 100%; padding: 0.375rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
+                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: this.value}',
@@ -5585,7 +5585,7 @@ def get(quote_id: str, session):
                     Select(
                         *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
                         name="delivery_terms",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
+                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_terms", value: this.value}',
@@ -5650,6 +5650,9 @@ def get(quote_id: str, session):
                     if (footer) footer.textContent = 'Всего: ' + count + ' позиций';
                 }}
 
+                var saveRetryCount = 0;
+                var maxRetries = 3;
+
                 function showSaveStatus(status) {{
                     var el = document.getElementById('save-status');
                     if (!el) return;
@@ -5657,59 +5660,94 @@ def get(quote_id: str, session):
                         el.textContent = 'Сохранение...';
                         el.style.color = '#f59e0b';
                     }} else if (status === 'saved') {{
-                        el.textContent = 'Сохранено';
+                        el.textContent = 'Сохранено ✓';
                         el.style.color = '#10b981';
+                        saveRetryCount = 0;
                         setTimeout(function() {{ el.textContent = ''; }}, 2000);
+                    }} else if (status === 'retrying') {{
+                        el.textContent = 'Сохранение... (повтор)';
+                        el.style.color = '#f59e0b';
                     }} else if (status === 'error') {{
-                        el.textContent = 'Ошибка сохранения';
+                        el.textContent = 'Не удалось сохранить';
                         el.style.color = '#ef4444';
+                        setTimeout(function() {{ el.textContent = ''; }}, 5000);
                     }}
                 }}
 
-                function saveCell(row, prop, newVal) {{
+                function saveCell(row, prop, newVal, retryAttempt) {{
+                    retryAttempt = retryAttempt || 0;
                     var rowData = hot.getSourceDataAtRow(row);
                     if (!rowData || !rowData.id) {{
-                        createNewRow(rowData);
+                        createNewRow(rowData, 0);
                         return;
                     }}
-                    showSaveStatus('saving');
+                    showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
                     var body = {{}};
                     body[prop] = newVal;
+
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function() {{ controller.abort(); }}, 10000);
+
                     fetch('/quotes/' + quoteId + '/items/' + rowData.id, {{
                         method: 'PATCH',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify(body)
+                        body: JSON.stringify(body),
+                        signal: controller.signal
                     }})
-                    .then(function(r) {{ return r.json(); }})
+                    .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
                     .then(function(data) {{
                         if (data.success) {{
                             showSaveStatus('saved');
+                        }} else if (retryAttempt < maxRetries) {{
+                            setTimeout(function() {{ saveCell(row, prop, newVal, retryAttempt + 1); }}, 1000);
                         }} else {{
                             showSaveStatus('error');
                         }}
                     }})
-                    .catch(function() {{ showSaveStatus('error'); }});
+                    .catch(function(e) {{
+                        clearTimeout(timeoutId);
+                        if (retryAttempt < maxRetries) {{
+                            setTimeout(function() {{ saveCell(row, prop, newVal, retryAttempt + 1); }}, 1000);
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }});
                 }}
 
-                function createNewRow(rowData) {{
+                function createNewRow(rowData, retryAttempt) {{
+                    retryAttempt = retryAttempt || 0;
                     if (!rowData || !rowData.product_name) return;
-                    showSaveStatus('saving');
+                    showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
+
+                    var controller = new AbortController();
+                    var timeoutId = setTimeout(function() {{ controller.abort(); }}, 10000);
+
                     fetch('/quotes/' + quoteId + '/items/bulk', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ items: [rowData] }})
+                        body: JSON.stringify({{ items: [rowData] }}),
+                        signal: controller.signal
                     }})
-                    .then(function(r) {{ return r.json(); }})
+                    .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
                     .then(function(data) {{
                         if (data.success && data.items && data.items[0]) {{
                             var physicalRow = hot.toPhysicalRow(hot.countRows() - 1);
                             hot.getSourceData()[physicalRow].id = data.items[0].id;
                             showSaveStatus('saved');
+                        }} else if (retryAttempt < maxRetries) {{
+                            setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
                         }} else {{
                             showSaveStatus('error');
                         }}
                     }})
-                    .catch(function() {{ showSaveStatus('error'); }});
+                    .catch(function(e) {{
+                        clearTimeout(timeoutId);
+                        if (retryAttempt < maxRetries) {{
+                            setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }});
                 }}
 
                 function debouncedSave(row, prop, newVal) {{
