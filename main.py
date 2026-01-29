@@ -5613,8 +5613,8 @@ def get(quote_id: str, session):
                     (Span(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
                         style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_profit_usd') is not None else None),
                     Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
-                    Button(icon("plus", size=16), " Добавить строку", id="btn-add-row", style="background: white; color: #374151; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #d1d5db; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem;"),
-                    Button(icon("upload", size=16), " Загрузить из файла", id="btn-import", style="background: white; color: #374151; padding: 0.5rem 1rem; border-radius: 8px; border: 1px solid #d1d5db; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    Button(icon("plus", size=16), " Добавить строку", id="btn-add-row", cls="outline", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem;"),
+                    Button(icon("upload", size=16), " Загрузить из файла", id="btn-import", cls="outline", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem;"),
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
                     cls="table-header-right", style="display: flex; align-items: center;"
                 ),
