@@ -5659,366 +5659,366 @@ def get(quote_id: str, session):
                 Span(id="footer-count"),
                 cls="table-footer"
             ),
-            cls="table-container", style="margin: 0;",
-            # Inline JavaScript for Handsontable initialization
-            **{"_after": Script(f"""
-                (function() {{
-                    const quoteId = '{quote_id}';
-                    const quoteIdn = '{quote.get("idn_quote", "")}';
-                    const initialData = {json.dumps([
-                        {{
-                            'id': item.get('id'),
-                            'row_num': idx + 1,
-                            'brand': item.get('brand', ''),
-                            'product_code': item.get('product_code', ''),
-                            'product_name': item.get('product_name', ''),
-                            'quantity': item.get('quantity', 1),
-                            'unit': item.get('unit', 'шт')
-                        }} for idx, item in enumerate(items)
-                    ])};
+            cls="table-container", style="margin: 0;"
+        ),
+        # Handsontable initialization script
+        Script(NotStr(f"""
+            (function() {{
+                const quoteId = '{quote_id}';
+                const quoteIdn = '{quote.get("idn_quote", "")}';
+                const initialData = {json.dumps([
+                    {{
+                        'id': item.get('id'),
+                        'row_num': idx + 1,
+                        'brand': item.get('brand', ''),
+                        'product_code': item.get('product_code', ''),
+                        'product_name': item.get('product_name', ''),
+                        'quantity': item.get('quantity', 1),
+                        'unit': item.get('unit', 'шт')
+                    }} for idx, item in enumerate(items)
+                ])};
 
-                    let saveTimeout = null;
-                    let hot = null;
+                let saveTimeout = null;
+                let hot = null;
 
-                    function updateCount() {{
-                        const count = hot ? hot.countRows() : 0;
-                        document.getElementById('items-count').textContent = '(' + count + ')';
-                        document.getElementById('footer-count').textContent = 'Всего: ' + count + ' позиций';
+                function updateCount() {{
+                    const count = hot ? hot.countRows() : 0;
+                    document.getElementById('items-count').textContent = '(' + count + ')';
+                    document.getElementById('footer-count').textContent = 'Всего: ' + count + ' позиций';
+                }}
+
+                function showSaveStatus(status) {{
+                    const el = document.getElementById('save-status');
+                    if (status === 'saving') {{
+                        el.textContent = 'Сохранение...';
+                        el.style.color = '#f59e0b';
+                    }} else if (status === 'saved') {{
+                        el.textContent = 'Сохранено ✓';
+                        el.style.color = '#10b981';
+                        setTimeout(() => {{ el.textContent = ''; }}, 2000);
+                    }} else if (status === 'error') {{
+                        el.textContent = 'Ошибка сохранения';
+                        el.style.color = '#ef4444';
+                    }}
+                }}
+
+                function saveCell(row, prop, newVal) {{
+                    const rowData = hot.getSourceDataAtRow(row);
+                    if (!rowData || !rowData.id) {{
+                        // New row - create it
+                        createNewRow(rowData);
+                        return;
                     }}
 
-                    function showSaveStatus(status) {{
-                        const el = document.getElementById('save-status');
-                        if (status === 'saving') {{
-                            el.textContent = 'Сохранение...';
-                            el.style.color = '#f59e0b';
-                        }} else if (status === 'saved') {{
-                            el.textContent = 'Сохранено ✓';
-                            el.style.color = '#10b981';
-                            setTimeout(() => {{ el.textContent = ''; }}, 2000);
-                        }} else if (status === 'error') {{
-                            el.textContent = 'Ошибка сохранения';
-                            el.style.color = '#ef4444';
+                    showSaveStatus('saving');
+                    fetch('/quotes/' + quoteId + '/items/' + rowData.id, {{
+                        method: 'PATCH',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ [prop]: newVal }})
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.success) {{
+                            showSaveStatus('saved');
+                        }} else {{
+                            showSaveStatus('error');
                         }}
+                    }})
+                    .catch(() => showSaveStatus('error'));
+                }}
+
+                function createNewRow(rowData) {{
+                    if (!rowData.product_name) return; // Don't save empty rows
+
+                    showSaveStatus('saving');
+                    fetch('/quotes/' + quoteId + '/items/bulk', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ items: [rowData] }})
+                    }})
+                    .then(r => r.json())
+                    .then(data => {{
+                        if (data.success && data.items && data.items[0]) {{
+                            // Update row with new ID
+                            const physicalRow = hot.toPhysicalRow(hot.countRows() - 1);
+                            hot.getSourceData()[physicalRow].id = data.items[0].id;
+                            showSaveStatus('saved');
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }})
+                    .catch(() => showSaveStatus('error'));
+                }}
+
+                function debouncedSave(row, prop, newVal) {{
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(() => saveCell(row, prop, newVal), 500);
+                }}
+
+                // Initialize Handsontable
+                document.addEventListener('DOMContentLoaded', function() {{
+                    const container = document.getElementById('items-spreadsheet');
+                    if (!container || typeof Handsontable === 'undefined') return;
+
+                    hot = new Handsontable(container, {{
+                        licenseKey: 'non-commercial-and-evaluation',
+                        data: initialData.length > 0 ? initialData : [{{ row_num: 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт' }}],
+                        colHeaders: ['№', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Ед.изм.'],
+                        columns: [
+                            {{ data: 'row_num', readOnly: true, type: 'numeric', width: 50 }},
+                            {{ data: 'brand', type: 'text', width: 120 }},
+                            {{ data: 'product_code', type: 'text', width: 140 }},
+                            {{ data: 'product_name', type: 'text', width: 300 }},
+                            {{ data: 'quantity', type: 'numeric', width: 80, validator: function(value, callback) {{ callback(value > 0); }} }},
+                            {{ data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'кг', 'м', 'л', 'компл'], width: 80 }}
+                        ],
+                        rowHeaders: false,
+                        stretchH: 'all',
+                        autoWrapRow: true,
+                        autoWrapCol: true,
+                        contextMenu: ['row_above', 'row_below', 'remove_row', '---------', 'copy', 'cut'],
+                        manualColumnResize: true,
+                        minSpareRows: 1,
+                        afterChange: function(changes, source) {{
+                            if (source === 'loadData' || !changes) return;
+                            changes.forEach(function(change) {{
+                                const [row, prop, oldVal, newVal] = change;
+                                if (oldVal !== newVal && prop !== 'row_num') {{
+                                    debouncedSave(row, prop, newVal);
+                                }}
+                            }});
+                            updateCount();
+                        }},
+                        afterCreateRow: function(index, amount) {{
+                            // Update row numbers
+                            for (let i = 0; i < hot.countRows(); i++) {{
+                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                            }}
+                            updateCount();
+                        }},
+                        afterRemoveRow: function() {{
+                            // Update row numbers
+                            for (let i = 0; i < hot.countRows(); i++) {{
+                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                            }}
+                            updateCount();
+                        }},
+                        cells: function(row, col) {{
+                            const cellProperties = {{}};
+                            const rowData = this.instance.getSourceDataAtRow(row);
+                            // Show IDN-SKU as tooltip
+                            if (rowData && rowData.id) {{
+                                cellProperties.title = quoteIdn + '-' + (row + 1);
+                            }}
+                            return cellProperties;
+                        }}
+                    }});
+
+                    updateCount();
+
+                    // Add row button
+                    document.getElementById('btn-add-row').addEventListener('click', function() {{
+                        hot.alter('insert_row_below', hot.countRows() - 1);
+                    }});
+
+                    // Import button
+                    document.getElementById('btn-import').addEventListener('click', function() {{
+                        document.getElementById('file-import').click();
+                    }});
+
+                    // File import handler
+                    document.getElementById('file-import').addEventListener('change', function(e) {{
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        const reader = new FileReader();
+                        reader.onload = function(e) {{
+                            const data = new Uint8Array(e.target.result);
+                            const workbook = XLSX.read(data, {{ type: 'array' }});
+                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const jsonData = XLSX.utils.sheet_to_json(firstSheet, {{ header: 1 }});
+
+                            // Show import modal
+                            showImportModal(jsonData);
+                        }};
+                        reader.readAsArrayBuffer(file);
+                        e.target.value = ''; // Reset input
+                    }});
+
+                    // Tab switching
+                    window.switchTab = function(tab) {{
+                        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                        document.getElementById('tab-' + tab).classList.add('active');
+                        // For now just visual, markup tab implementation later
+                    }};
+                }});
+
+                // Import modal
+                window.showImportModal = function(jsonData) {{
+                    if (jsonData.length < 2) {{
+                        alert('Файл пустой или содержит только заголовки');
+                        return;
                     }}
 
-                    function saveCell(row, prop, newVal) {{
-                        const rowData = hot.getSourceDataAtRow(row);
-                        if (!rowData || !rowData.id) {{
-                            // New row - create it
-                            createNewRow(rowData);
+                    const headers = jsonData[0];
+                    const preview = jsonData.slice(1, 6);
+
+                    // Create modal
+                    const modal = document.createElement('div');
+                    modal.id = 'import-modal';
+                    modal.innerHTML = `
+                        <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
+                            <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto;">
+                                <h3 style="margin-top: 0;">Импорт из файла</h3>
+                                <p>Найдено строк: ${{jsonData.length - 1}}</p>
+
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                                    <div>
+                                        <label>Наименование *</label>
+                                        <select id="map-name" style="width: 100%; padding: 0.5rem;">
+                                            <option value="">-- Выберите колонку --</option>
+                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label>Артикул</label>
+                                        <select id="map-code" style="width: 100%; padding: 0.5rem;">
+                                            <option value="">-- Не импортировать --</option>
+                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label>Бренд</label>
+                                        <select id="map-brand" style="width: 100%; padding: 0.5rem;">
+                                            <option value="">-- Не импортировать --</option>
+                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label>Количество</label>
+                                        <select id="map-qty" style="width: 100%; padding: 0.5rem;">
+                                            <option value="">-- По умолчанию 1 --</option>
+                                            ${{headers.map((h, i) => \`<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>\`).join('')}}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <h4>Превью данных:</h4>
+                                <div style="overflow-x: auto; margin-bottom: 1.5rem;">
+                                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                                        <thead>
+                                            <tr style="background: #f3f4f6;">
+                                                ${{headers.map(h => \`<th style="padding: 0.5rem; border: 1px solid #e5e7eb; text-align: left;">${{h || '—'}}</th>\`).join('')}}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${{preview.map(row => \`<tr>${{headers.map((_, i) => \`<td style="padding: 0.5rem; border: 1px solid #e5e7eb;">${{row[i] || ''}}</td>\`).join('')}}</tr>\`).join('')}}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                                    <button onclick="document.getElementById('import-modal').remove()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; border-radius: 8px; cursor: pointer;">Отмена</button>
+                                    <button onclick="doImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(modal);
+
+                    // Auto-detect columns
+                    headers.forEach((h, i) => {{
+                        const lower = (h || '').toString().toLowerCase();
+                        if (lower.includes('наименование') || lower.includes('название') || lower.includes('name') || lower.includes('товар')) {{
+                            document.getElementById('map-name').value = i;
+                        }}
+                        if (lower.includes('артикул') || lower.includes('код') || lower.includes('sku') || lower.includes('code')) {{
+                            document.getElementById('map-code').value = i;
+                        }}
+                        if (lower.includes('бренд') || lower.includes('brand') || lower.includes('производитель')) {{
+                            document.getElementById('map-brand').value = i;
+                        }}
+                        if (lower.includes('кол') || lower.includes('qty') || lower.includes('quantity') || lower.includes('количество')) {{
+                            document.getElementById('map-qty').value = i;
+                        }}
+                    }});
+
+                    // Import function
+                    window.doImport = function() {{
+                        const nameIdx = document.getElementById('map-name').value;
+                        if (nameIdx === '') {{
+                            alert('Выберите колонку для наименования');
                             return;
                         }}
 
-                        showSaveStatus('saving');
-                        fetch('/quotes/' + quoteId + '/items/' + rowData.id, {{
-                            method: 'PATCH',
-                            headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ [prop]: newVal }})
-                        }})
-                        .then(r => r.json())
-                        .then(data => {{
-                            if (data.success) {{
-                                showSaveStatus('saved');
-                            }} else {{
-                                showSaveStatus('error');
-                            }}
-                        }})
-                        .catch(() => showSaveStatus('error'));
-                    }}
+                        const codeIdx = document.getElementById('map-code').value;
+                        const brandIdx = document.getElementById('map-brand').value;
+                        const qtyIdx = document.getElementById('map-qty').value;
 
-                    function createNewRow(rowData) {{
-                        if (!rowData.product_name) return; // Don't save empty rows
+                        const newItems = [];
+                        const currentCount = hot.countRows();
 
+                        for (let i = 1; i < jsonData.length; i++) {{
+                            const row = jsonData[i];
+                            const name = row[nameIdx];
+                            if (!name) continue;
+
+                            newItems.push({{
+                                row_num: currentCount + newItems.length,
+                                brand: brandIdx !== '' ? (row[brandIdx] || '') : '',
+                                product_code: codeIdx !== '' ? (row[codeIdx] || '') : '',
+                                product_name: name,
+                                quantity: qtyIdx !== '' ? (parseInt(row[qtyIdx]) || 1) : 1,
+                                unit: 'шт'
+                            }});
+                        }}
+
+                        if (newItems.length === 0) {{
+                            alert('Нет данных для импорта');
+                            return;
+                        }}
+
+                        // Send to server
                         showSaveStatus('saving');
                         fetch('/quotes/' + quoteId + '/items/bulk', {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ items: [rowData] }})
+                            body: JSON.stringify({{ items: newItems }})
                         }})
                         .then(r => r.json())
                         .then(data => {{
-                            if (data.success && data.items && data.items[0]) {{
-                                // Update row with new ID
-                                const physicalRow = hot.toPhysicalRow(hot.countRows() - 1);
-                                hot.getSourceData()[physicalRow].id = data.items[0].id;
+                            if (data.success) {{
+                                // Add to table
+                                data.items.forEach((item, idx) => {{
+                                    newItems[idx].id = item.id;
+                                }});
+
+                                // Remove spare row, add imported items
+                                const sourceData = hot.getSourceData();
+                                const filtered = sourceData.filter(r => r.id || r.product_name);
+                                hot.loadData([...filtered, ...newItems]);
+
+                                // Update row numbers
+                                for (let i = 0; i < hot.countRows(); i++) {{
+                                    hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                                }}
+
                                 showSaveStatus('saved');
+                                document.getElementById('import-modal').remove();
+                                updateCount();
                             }} else {{
                                 showSaveStatus('error');
+                                alert('Ошибка импорта: ' + (data.error || 'Неизвестная ошибка'));
                             }}
                         }})
-                        .catch(() => showSaveStatus('error'));
-                    }}
-
-                    function debouncedSave(row, prop, newVal) {{
-                        clearTimeout(saveTimeout);
-                        saveTimeout = setTimeout(() => saveCell(row, prop, newVal), 500);
-                    }}
-
-                    // Initialize Handsontable
-                    document.addEventListener('DOMContentLoaded', function() {{
-                        const container = document.getElementById('items-spreadsheet');
-                        if (!container || typeof Handsontable === 'undefined') return;
-
-                        hot = new Handsontable(container, {{
-                            licenseKey: 'non-commercial-and-evaluation',
-                            data: initialData.length > 0 ? initialData : [{{ row_num: 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт' }}],
-                            colHeaders: ['№', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Ед.изм.'],
-                            columns: [
-                                {{ data: 'row_num', readOnly: true, type: 'numeric', width: 50 }},
-                                {{ data: 'brand', type: 'text', width: 120 }},
-                                {{ data: 'product_code', type: 'text', width: 140 }},
-                                {{ data: 'product_name', type: 'text', width: 300 }},
-                                {{ data: 'quantity', type: 'numeric', width: 80, validator: function(value, callback) {{ callback(value > 0); }} }},
-                                {{ data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'кг', 'м', 'л', 'компл'], width: 80 }}
-                            ],
-                            rowHeaders: false,
-                            stretchH: 'all',
-                            autoWrapRow: true,
-                            autoWrapCol: true,
-                            contextMenu: ['row_above', 'row_below', 'remove_row', '---------', 'copy', 'cut'],
-                            manualColumnResize: true,
-                            minSpareRows: 1,
-                            afterChange: function(changes, source) {{
-                                if (source === 'loadData' || !changes) return;
-                                changes.forEach(function(change) {{
-                                    const [row, prop, oldVal, newVal] = change;
-                                    if (oldVal !== newVal && prop !== 'row_num') {{
-                                        debouncedSave(row, prop, newVal);
-                                    }}
-                                }});
-                                updateCount();
-                            }},
-                            afterCreateRow: function(index, amount) {{
-                                // Update row numbers
-                                for (let i = 0; i < hot.countRows(); i++) {{
-                                    hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                                }}
-                                updateCount();
-                            }},
-                            afterRemoveRow: function() {{
-                                // Update row numbers
-                                for (let i = 0; i < hot.countRows(); i++) {{
-                                    hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                                }}
-                                updateCount();
-                            }},
-                            cells: function(row, col) {{
-                                const cellProperties = {{}};
-                                const rowData = this.instance.getSourceDataAtRow(row);
-                                // Show IDN-SKU as tooltip
-                                if (rowData && rowData.id) {{
-                                    cellProperties.title = quoteIdn + '-' + (row + 1);
-                                }}
-                                return cellProperties;
-                            }}
+                        .catch(err => {{
+                            showSaveStatus('error');
+                            alert('Ошибка импорта: ' + err.message);
                         }});
-
-                        updateCount();
-
-                        // Add row button
-                        document.getElementById('btn-add-row').addEventListener('click', function() {{
-                            hot.alter('insert_row_below', hot.countRows() - 1);
-                        }});
-
-                        // Import button
-                        document.getElementById('btn-import').addEventListener('click', function() {{
-                            document.getElementById('file-import').click();
-                        }});
-
-                        // File import handler
-                        document.getElementById('file-import').addEventListener('change', function(e) {{
-                            const file = e.target.files[0];
-                            if (!file) return;
-
-                            const reader = new FileReader();
-                            reader.onload = function(e) {{
-                                const data = new Uint8Array(e.target.result);
-                                const workbook = XLSX.read(data, {{ type: 'array' }});
-                                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {{ header: 1 }});
-
-                                // Show import modal
-                                showImportModal(jsonData);
-                            }};
-                            reader.readAsArrayBuffer(file);
-                            e.target.value = ''; // Reset input
-                        }});
-
-                        // Tab switching
-                        window.switchTab = function(tab) {{
-                            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-                            document.getElementById('tab-' + tab).classList.add('active');
-                            // For now just visual, markup tab implementation later
-                        }};
-                    }});
-
-                    // Import modal
-                    window.showImportModal = function(jsonData) {{
-                        if (jsonData.length < 2) {{
-                            alert('Файл пустой или содержит только заголовки');
-                            return;
-                        }}
-
-                        const headers = jsonData[0];
-                        const preview = jsonData.slice(1, 6);
-
-                        // Create modal
-                        const modal = document.createElement('div');
-                        modal.id = 'import-modal';
-                        modal.innerHTML = `
-                            <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-                                <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 800px; width: 90%; max-height: 80vh; overflow: auto;">
-                                    <h3 style="margin-top: 0;">Импорт из файла</h3>
-                                    <p>Найдено строк: ${{jsonData.length - 1}}</p>
-
-                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
-                                        <div>
-                                            <label>Наименование *</label>
-                                            <select id="map-name" style="width: 100%; padding: 0.5rem;">
-                                                <option value="">-- Выберите колонку --</option>
-                                                ${{headers.map((h, i) => `<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>`).join('')}}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label>Артикул</label>
-                                            <select id="map-code" style="width: 100%; padding: 0.5rem;">
-                                                <option value="">-- Не импортировать --</option>
-                                                ${{headers.map((h, i) => `<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>`).join('')}}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label>Бренд</label>
-                                            <select id="map-brand" style="width: 100%; padding: 0.5rem;">
-                                                <option value="">-- Не импортировать --</option>
-                                                ${{headers.map((h, i) => `<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>`).join('')}}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label>Количество</label>
-                                            <select id="map-qty" style="width: 100%; padding: 0.5rem;">
-                                                <option value="">-- По умолчанию 1 --</option>
-                                                ${{headers.map((h, i) => `<option value="${{i}}">${{h || 'Колонка ' + (i+1)}}</option>`).join('')}}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <h4>Превью данных:</h4>
-                                    <div style="overflow-x: auto; margin-bottom: 1.5rem;">
-                                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                                            <thead>
-                                                <tr style="background: #f3f4f6;">
-                                                    ${{headers.map(h => `<th style="padding: 0.5rem; border: 1px solid #e5e7eb; text-align: left;">${{h || '—'}}</th>`).join('')}}
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                ${{preview.map(row => `<tr>${{headers.map((_, i) => `<td style="padding: 0.5rem; border: 1px solid #e5e7eb;">${{row[i] || ''}}</td>`).join('')}}</tr>`).join('')}}
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
-                                        <button onclick="document.getElementById('import-modal').remove()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; border-radius: 8px; cursor: pointer;">Отмена</button>
-                                        <button onclick="doImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        document.body.appendChild(modal);
-
-                        // Auto-detect columns
-                        headers.forEach((h, i) => {{
-                            const lower = (h || '').toString().toLowerCase();
-                            if (lower.includes('наименование') || lower.includes('название') || lower.includes('name') || lower.includes('товар')) {{
-                                document.getElementById('map-name').value = i;
-                            }}
-                            if (lower.includes('артикул') || lower.includes('код') || lower.includes('sku') || lower.includes('code')) {{
-                                document.getElementById('map-code').value = i;
-                            }}
-                            if (lower.includes('бренд') || lower.includes('brand') || lower.includes('производитель')) {{
-                                document.getElementById('map-brand').value = i;
-                            }}
-                            if (lower.includes('кол') || lower.includes('qty') || lower.includes('quantity') || lower.includes('количество')) {{
-                                document.getElementById('map-qty').value = i;
-                            }}
-                        }});
-
-                        // Import function
-                        window.doImport = function() {{
-                            const nameIdx = document.getElementById('map-name').value;
-                            if (nameIdx === '') {{
-                                alert('Выберите колонку для наименования');
-                                return;
-                            }}
-
-                            const codeIdx = document.getElementById('map-code').value;
-                            const brandIdx = document.getElementById('map-brand').value;
-                            const qtyIdx = document.getElementById('map-qty').value;
-
-                            const newItems = [];
-                            const currentCount = hot.countRows();
-
-                            for (let i = 1; i < jsonData.length; i++) {{
-                                const row = jsonData[i];
-                                const name = row[nameIdx];
-                                if (!name) continue;
-
-                                newItems.push({{
-                                    row_num: currentCount + newItems.length,
-                                    brand: brandIdx !== '' ? (row[brandIdx] || '') : '',
-                                    product_code: codeIdx !== '' ? (row[codeIdx] || '') : '',
-                                    product_name: name,
-                                    quantity: qtyIdx !== '' ? (parseInt(row[qtyIdx]) || 1) : 1,
-                                    unit: 'шт'
-                                }});
-                            }}
-
-                            if (newItems.length === 0) {{
-                                alert('Нет данных для импорта');
-                                return;
-                            }}
-
-                            // Send to server
-                            showSaveStatus('saving');
-                            fetch('/quotes/' + quoteId + '/items/bulk', {{
-                                method: 'POST',
-                                headers: {{ 'Content-Type': 'application/json' }},
-                                body: JSON.stringify({{ items: newItems }})
-                            }})
-                            .then(r => r.json())
-                            .then(data => {{
-                                if (data.success) {{
-                                    // Add to table
-                                    data.items.forEach((item, idx) => {{
-                                        newItems[idx].id = item.id;
-                                    }});
-
-                                    // Remove spare row, add imported items
-                                    const sourceData = hot.getSourceData();
-                                    const filtered = sourceData.filter(r => r.id || r.product_name);
-                                    hot.loadData([...filtered, ...newItems]);
-
-                                    // Update row numbers
-                                    for (let i = 0; i < hot.countRows(); i++) {{
-                                        hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                                    }}
-
-                                    showSaveStatus('saved');
-                                    document.getElementById('import-modal').remove();
-                                    updateCount();
-                                }} else {{
-                                    showSaveStatus('error');
-                                    alert('Ошибка импорта: ' + (data.error || 'Неизвестная ошибка'));
-                                }}
-                            }})
-                            .catch(err => {{
-                                showSaveStatus('error');
-                                alert('Ошибка импорта: ' + err.message);
-                            }});
-                        }};
                     }};
-                }})();
-            """)}
-        ),
+                }};
+            }})();
+        """)),
         # Tab button styles
         Style("""
             .tab-btn {
