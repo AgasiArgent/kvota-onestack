@@ -5613,8 +5613,8 @@ def get(quote_id: str, session):
                     (Span(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
                         style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_profit_usd') is not None else None),
                     Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
-                    Button(icon("plus", size=16), " Добавить строку", id="btn-add-row", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem;"),
-                    Button(icon("upload", size=16), " Загрузить из файла", id="btn-import", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    A(icon("plus", size=16), " Добавить строку", id="btn-add-row", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;"),
+                    A(icon("upload", size=16), " Загрузить из файла", id="btn-import", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;"),
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
                     cls="table-header-right", style="display: flex; align-items: center;"
                 ),
