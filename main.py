@@ -5918,7 +5918,7 @@ def get(quote_id: str, session):
                         '<div style="overflow-x: auto; margin-bottom: 1.5rem;">' + buildPreviewTable() + '</div>' +
                         '<div style="display: flex; gap: 1rem; justify-content: flex-end;">' +
                         '<button onclick="document.getElementById(\'import-modal\').remove()" style="padding: 0.75rem 1.5rem; border: 1px solid #d1d5db; background: white; border-radius: 8px; cursor: pointer;">Отмена</button>' +
-                        '<button onclick="doImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>' +
+                        '<button onclick="executeFileImport()" style="padding: 0.75rem 1.5rem; background: #6366f1; color: white; border: none; border-radius: 8px; cursor: pointer;">Импортировать</button>' +
                         '</div></div></div>';
                     document.body.appendChild(modal);
 
@@ -5940,7 +5940,7 @@ def get(quote_id: str, session):
                     }});
 
                     // Import function
-                    window.doImport = function() {{
+                    window.executeFileImport = function() {{
                         const nameIdx = document.getElementById('map-name').value;
                         if (nameIdx === '') {{
                             alert('Выберите колонку для наименования');
