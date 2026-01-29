@@ -13711,7 +13711,7 @@ def get(session, quote_id: str):
                     hot = new Handsontable(container, {{
                         licenseKey: 'non-commercial-and-evaluation',
                         data: initialData,
-                        colHeaders: ['№', 'Бренд', 'Наименование', 'Кол-во', 'Страна', 'Код ТН ВЭД', 'Пошлина %'],
+                        colHeaders: ['№', 'Бренд', 'Наименование', 'Кол-во', 'Страна закупки', 'Код ТН ВЭД', 'Пошлина %'],
                         columns: [
                             {{data: 'row_num', readOnly: true, type: 'numeric', width: 40,
                               renderer: function(instance, td, row, col, prop, value, cellProperties) {{
