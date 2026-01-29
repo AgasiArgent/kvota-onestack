@@ -5336,89 +5336,7 @@ def post(name: str, inn: str, email: str, phone: str, address: str, session):
 
 @rt("/quotes/new")
 def get(session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    # Get customers for dropdown
-    customers_result = supabase.table("customers") \
-        .select("id, name, inn") \
-        .eq("organization_id", user["org_id"]) \
-        .order("name") \
-        .execute()
-
-    customers = customers_result.data or []
-
-    # Get seller companies for dropdown (v3.0)
-    from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
-    seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
-
-    if not customers:
-        return page_layout("Новый КП",
-            H1("Создать КП"),
-            Div(
-                P("Сначала нужно ", A("добавить клиента", href="/customers/new"), " перед созданием КП."),
-                cls="alert alert-error"
-            ),
-            session=session
-        )
-
-    return page_layout("Новый КП",
-        H1("Создать КП"),
-
-        # Minimal form - just customer and seller company
-        Div(
-            Form(
-                Div(
-                    Label("Клиент *",
-                        Select(
-                            Option("Выберите клиента...", value="", disabled=True, selected=True),
-                            *[Option(
-                                f"{c['name']}" + (f" ({c.get('inn', '')})" if c.get('inn') else ""),
-                                value=c["id"]
-                            ) for c in customers],
-                            name="customer_id", required=True
-                        ),
-                        style="width: 100%;"
-                    ),
-                    cls="form-group"
-                ),
-                Div(
-                    Label("Компания-продавец *",
-                        Select(
-                            Option("Выберите компанию...", value="", disabled=True, selected=True),
-                            *[Option(
-                                format_seller_company_for_dropdown(sc)["label"],
-                                value=sc.id
-                            ) for sc in seller_companies],
-                            name="seller_company_id", required=True
-                        ),
-                        Small("Наше юрлицо (определяет IDN котировки)", style="color: #666; display: block; margin-top: 0.25rem;")
-                    ),
-                    cls="form-group"
-                ),
-                Div(
-                    Button("Создать и перейти к редактированию →", type="submit"),
-                    A("Отмена", href="/quotes", role="button", cls="secondary"),
-                    cls="form-actions", style="display: flex; gap: 1rem; margin-top: 1.5rem;"
-                ),
-                method="post",
-                action="/quotes/new"
-            ),
-            cls="card", style="max-width: 500px;"
-        ),
-
-        P("После создания вы сразу перейдёте к заполнению деталей и товаров.", style="color: #666; margin-top: 1rem;"),
-
-        session=session
-    )
-
-
-@rt("/quotes/new")
-def post(customer_id: str, seller_company_id: str = None, session=None):
+    """Create a new draft quote immediately and redirect to edit page."""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -5436,34 +5354,22 @@ def post(customer_id: str, seller_company_id: str = None, session=None):
         quote_num = (count_result.count or 0) + 1
         idn_quote = f"Q-{datetime.now().strftime('%Y%m')}-{quote_num:04d}"
 
-        # Get customer name for title
-        customer_result = supabase.table("customers") \
-            .select("name") \
-            .eq("id", customer_id) \
-            .single() \
-            .execute()
-        customer_name = customer_result.data.get("name", "Unknown") if customer_result.data else "Unknown"
-        title = f"КП для {customer_name}"
-
+        # Create empty draft (customer_id is now nullable)
         insert_data = {
             "idn_quote": idn_quote,
-            "title": title,
-            "customer_id": customer_id,
+            "title": "Новый КП",
+            "customer_id": None,  # Will be selected on detail page
             "organization_id": user["org_id"],
             "currency": "RUB",
-            "delivery_terms": "DDP",  # Default
+            "delivery_terms": "DDP",
             "status": "draft",
             "created_by": user["id"]
         }
 
-        # v3.0: seller_company_id at quote level
-        if seller_company_id and seller_company_id.strip():
-            insert_data["seller_company_id"] = seller_company_id.strip()
-
         result = supabase.table("quotes").insert(insert_data).execute()
-
         new_quote = result.data[0]
-        # Redirect to quote detail page for inline editing
+
+        # Redirect immediately to edit page
         return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
 
     except Exception as e:
@@ -5584,8 +5490,9 @@ def get(quote_id: str, session):
             Div(
                 # Customer dropdown
                 Div(
-                    Label("Клиент", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("Клиент *", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
                     Select(
+                        Option("Выберите клиента...", value="", selected=(not quote.get("customer_id"))),
                         *[Option(
                             f"{c['name']}" + (f" ({c.get('inn', '')})" if c.get('inn') else ""),
                             value=c["id"],
@@ -5593,7 +5500,7 @@ def get(quote_id: str, session):
                         ) for c in customers],
                         name="customer_id",
                         id="inline-customer",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;" + (" border-color: #f59e0b;" if not quote.get("customer_id") else ""),
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "customer_id", value: this.value}',
@@ -6178,18 +6085,40 @@ def get(quote_id: str, session):
             style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
         ) if workflow_status in ['pending_review', 'pending_procurement', 'pending_logistics', 'pending_customs', 'pending_sales', 'pending_control', 'pending_spec_control'] and approval_status else None,
 
-        # Workflow Actions (for draft quotes with items)
+        # Workflow Actions (for draft quotes) - Save and Submit buttons
         Div(
-            H3("Workflow"),
-            Form(
-                Button("📤 Submit for Procurement", type="submit",
-                       style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
-                P("Send quote to procurement for supplier pricing.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
-                method="post",
-                action=f"/quotes/{quote_id}/submit-procurement"
+            Div(
+                # Save button (visual confirmation - auto-save is already working)
+                Button(icon("save", size=16), " Сохранить черновик", type="button", id="btn-save-draft",
+                       style="background: #6b7280; color: white; font-size: 1rem; padding: 0.75rem 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; border: none; border-radius: 8px; cursor: pointer;",
+                       onclick="showSaveConfirmation()"),
+                # Submit to Procurement button (only if has items)
+                Form(
+                    Button(icon("send", size=16), " Передать в закупки", type="submit",
+                           style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; border: none; border-radius: 8px; cursor: pointer;",
+                           disabled=not items),
+                    method="post",
+                    action=f"/quotes/{quote_id}/submit-procurement",
+                    style="display: inline;"
+                ),
+                style="display: flex; gap: 1rem; flex-wrap: wrap;"
             ),
-            cls="card", style="border-left: 4px solid #16a34a;"
-        ) if workflow_status == "draft" and items else None,
+            P("Добавьте позиции для передачи в закупки." if not items else "После передачи в закупки отдел закупок заполнит цены и поставщиков.",
+              style="margin-top: 0.75rem; font-size: 0.875rem; color: #666;"),
+            Script("""
+                function showSaveConfirmation() {
+                    var btn = document.getElementById('btn-save-draft');
+                    var originalText = btn.innerHTML;
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Сохранено!';
+                    btn.style.background = '#16a34a';
+                    setTimeout(function() {
+                        btn.innerHTML = originalText;
+                        btn.style.background = '#6b7280';
+                    }, 2000);
+                }
+            """),
+            cls="card", style="border-left: 4px solid #16a34a; margin-bottom: 1rem;"
+        ) if workflow_status == "draft" else None,
 
         # Revision banner for sales (Feature: multi-department return)
         Div(
@@ -6397,7 +6326,7 @@ def get(quote_id: str, session):
             cls="card", style="border-left: 4px solid #f59e0b;"
         ) if workflow_status in ["sent_to_client", "client_negotiation"] and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Actions section
+        # Actions section (only for non-draft quotes - after calculation)
         Div(
             H3("Actions"),
             Div(
@@ -6411,7 +6340,7 @@ def get(quote_id: str, session):
                 A("Validation Excel", href=f"/quotes/{quote_id}/export/validation", role="button", cls="secondary", style="margin-left: 0.5rem;"),
             ),
             cls="card"
-        ),
+        ) if workflow_status != "draft" else None,
 
         # Delete quote button (soft delete)
         Div(
