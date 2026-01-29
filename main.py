@@ -5540,12 +5540,13 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_city", value: this.value}',
                         hx_swap="none"
-                    )
+                    ),
+                    style="min-width: 0;"
                 ),
                 # Delivery Country
                 Div(
@@ -5555,12 +5556,13 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_country") or "",
                         placeholder="Россия",
                         name="delivery_country",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_country", value: this.value}',
                         hx_swap="none"
-                    )
+                    ),
+                    style="min-width: 0;"
                 ),
                 # Delivery Method
                 Div(
@@ -5569,12 +5571,13 @@ def get(quote_id: str, session):
                         Option("—", value=""),
                         *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
                         name="delivery_method",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
-                    )
+                    ),
+                    style="min-width: 0;"
                 ),
                 # Delivery Terms
                 Div(
@@ -5582,12 +5585,13 @@ def get(quote_id: str, session):
                     Select(
                         *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
                         name="delivery_terms",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; height: 38px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_terms", value: this.value}',
                         hx_swap="none"
-                    )
+                    ),
+                    style="min-width: 0;"
                 ),
                 style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem;"
             ),
