@@ -5722,22 +5722,30 @@ def get(quote_id: str, session):
                     var controller = new AbortController();
                     var timeoutId = setTimeout(function() {{ controller.abort(); }}, 10000);
 
-                    fetch('/quotes/' + quoteId + '/items/bulk', {{
+                    // Use single item endpoint (not bulk which deletes existing items!)
+                    fetch('/quotes/' + quoteId + '/items', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ items: [rowData] }}),
+                        body: JSON.stringify(rowData),
                         signal: controller.signal
                     }})
                     .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
                     .then(function(data) {{
-                        if (data.success && data.items && data.items[0]) {{
-                            var physicalRow = hot.toPhysicalRow(hot.countRows() - 1);
-                            hot.getSourceData()[physicalRow].id = data.items[0].id;
+                        if (data.success && data.item) {{
+                            // Find the row in source data and set its ID
+                            var sourceData = hot.getSourceData();
+                            for (var i = 0; i < sourceData.length; i++) {{
+                                if (!sourceData[i].id && sourceData[i].product_name === rowData.product_name) {{
+                                    sourceData[i].id = data.item.id;
+                                    break;
+                                }}
+                            }}
                             showSaveStatus('saved');
                         }} else if (retryAttempt < maxRetries) {{
                             setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
                         }} else {{
                             showSaveStatus('error');
+                            console.error('Create row failed:', data.error);
                         }}
                     }})
                     .catch(function(e) {{
@@ -5746,6 +5754,7 @@ def get(quote_id: str, session):
                             setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
                         }} else {{
                             showSaveStatus('error');
+                            console.error('Create row error:', e);
                         }}
                     }});
                 }}
@@ -7656,6 +7665,74 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
             "count": len(result.data)
         })
     except Exception as e:
+        print(f"Bulk insert error: {e}")
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/quotes/{quote_id}/items", methods=["POST"])
+async def create_single_quote_item(quote_id: str, session, request):
+    """Create a single quote item (for Handsontable new row)"""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+    supabase = get_supabase()
+
+    # Verify quote belongs to user's org
+    quote_result = supabase.table("quotes") \
+        .select("id, organization_id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", user["org_id"]) \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
+    # Parse JSON body
+    body = await request.body()
+    try:
+        item_data = json.loads(body)
+    except:
+        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
+
+    # Get max row_num for this quote
+    max_row_result = supabase.table("quote_items") \
+        .select("row_num") \
+        .eq("quote_id", quote_id) \
+        .order("row_num", desc=True) \
+        .limit(1) \
+        .execute()
+
+    next_row_num = 1
+    if max_row_result.data:
+        next_row_num = (max_row_result.data[0].get("row_num") or 0) + 1
+
+    # Prepare item for insert
+    insert_data = {
+        "quote_id": quote_id,
+        "row_num": next_row_num,
+        "product_name": item_data.get("product_name", ""),
+        "product_code": item_data.get("product_code", ""),
+        "brand": item_data.get("brand", ""),
+        "quantity": int(item_data.get("quantity", 1)) if item_data.get("quantity") else 1,
+        "unit": item_data.get("unit", "шт")
+    }
+
+    try:
+        result = supabase.table("quote_items") \
+            .insert(insert_data) \
+            .execute()
+
+        if result.data:
+            return JSONResponse({
+                "success": True,
+                "item": {"id": result.data[0]["id"], "row_num": result.data[0]["row_num"]}
+            })
+        else:
+            return JSONResponse({"success": False, "error": "Insert failed"}, status_code=500)
+    except Exception as e:
+        print(f"Single item insert error: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
