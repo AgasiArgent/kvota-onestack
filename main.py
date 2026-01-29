@@ -5600,7 +5600,7 @@ def get(quote_id: str, session):
 
         # Products (Handsontable spreadsheet)
         Div(
-            # Header with totals and action buttons
+            # Header with action buttons (all on one row for drafts)
             Div(
                 Div(
                     H4(f"Позиции", style="margin: 0;", id="items-title"),
@@ -5608,15 +5608,19 @@ def get(quote_id: str, session):
                     cls="table-header-left", style="display: flex; align-items: center;"
                 ),
                 Div(
+                    # Show totals only for non-draft quotes
                     (Span(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
-                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_amount') else None),
-                    (Span(f"Профит: {format_money(quote.get('total_profit_usd'), quote.get('currency', 'RUB'))}",
-                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_profit_usd') is not None else None),
+                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_amount') and workflow_status != 'draft' else None),
                     Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
+                    # Add row button
                     A(icon("plus", size=16), " Добавить строку", id="btn-add-row", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;"),
-                    A(icon("upload", size=16), " Загрузить из файла", id="btn-import", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none;"),
+                    # Import button
+                    A(icon("upload", size=16), " Загрузить из файла", id="btn-import", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;"),
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
-                    cls="table-header-right", style="display: flex; align-items: center;"
+                    # Draft workflow buttons (only for draft status)
+                    (A(icon("save", size=16), " Сохранить", id="btn-save-draft", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;", onclick="showSaveConfirmation()") if workflow_status == 'draft' else None),
+                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; background: #d1d5db; color: #6b7280; border: 1px solid #9ca3af; border-radius: 8px; pointer-events: none;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
+                    cls="table-header-right", style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
                 ),
                 cls="table-header"
             ),
@@ -5754,16 +5758,19 @@ def get(quote_id: str, session):
                                 }}
                             }});
                             updateCount();
+                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterCreateRow: function(index, amount, source) {{
                             if (!hot || source === 'auto') return;
                             updateRowNumbers();
                             updateCount();
+                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterRemoveRow: function() {{
                             if (!hot) return;
                             updateRowNumbers();
                             updateCount();
+                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         cells: function(row, col) {{
                             var cellProperties = {{}};
@@ -5776,6 +5783,9 @@ def get(quote_id: str, session):
                     }});
 
                     updateCount();
+                    // Make hot available globally for validation
+                    window.hot = hot;
+                    if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
 
                     var btnAdd = document.getElementById('btn-add-row');
                     if (btnAdd) {{
@@ -6079,40 +6089,122 @@ def get(quote_id: str, session):
             style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
         ) if workflow_status in ['pending_review', 'pending_procurement', 'pending_logistics', 'pending_customs', 'pending_sales', 'pending_control', 'pending_spec_control'] and approval_status else None,
 
-        # Workflow Actions (for draft quotes) - Save and Submit buttons
-        Div(
-            Div(
-                # Save button (visual confirmation - auto-save is already working)
-                Button(icon("save", size=16), " Сохранить черновик", type="button", id="btn-save-draft",
-                       style="background: #6b7280; color: white; font-size: 1rem; padding: 0.75rem 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; border: none; border-radius: 8px; cursor: pointer;",
-                       onclick="showSaveConfirmation()"),
-                # Submit to Procurement button (only if has items)
-                Form(
-                    Button(icon("send", size=16), " Передать в закупки", type="submit",
-                           style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; border: none; border-radius: 8px; cursor: pointer;",
-                           disabled=not items),
-                    method="post",
-                    action=f"/quotes/{quote_id}/submit-procurement",
-                    style="display: inline;"
-                ),
-                style="display: flex; gap: 1rem; flex-wrap: wrap;"
-            ),
-            P("Добавьте позиции для передачи в закупки." if not items else "После передачи в закупки отдел закупок заполнит цены и поставщиков.",
-              style="margin-top: 0.75rem; font-size: 0.875rem; color: #666;"),
-            Script("""
-                function showSaveConfirmation() {
-                    var btn = document.getElementById('btn-save-draft');
-                    var originalText = btn.innerHTML;
-                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Сохранено!';
+        # Draft validation script (moved to header buttons)
+        Script(f"""
+            // Save confirmation for draft
+            function showSaveConfirmation() {{
+                var btn = document.getElementById('btn-save-draft');
+                if (!btn) return;
+                var originalHTML = btn.innerHTML;
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Сохранено!';
+                btn.style.background = '#dcfce7';
+                btn.style.borderColor = '#16a34a';
+                btn.style.color = '#16a34a';
+                setTimeout(function() {{
+                    btn.innerHTML = originalHTML;
+                    btn.style.background = '';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                }}, 2000);
+            }}
+
+            // Validation for submit to procurement
+            function validateForProcurement() {{
+                var errors = [];
+
+                // Check header fields
+                var customer = document.getElementById('inline-customer');
+                if (!customer || !customer.value) errors.push('Клиент');
+
+                var seller = document.getElementById('inline-seller');
+                if (!seller || !seller.value) errors.push('Продавец');
+
+                var city = document.querySelector('input[name="delivery_city"]');
+                if (!city || !city.value.trim()) errors.push('Город доставки');
+
+                var country = document.querySelector('input[name="delivery_country"]');
+                if (!country || !country.value.trim()) errors.push('Страна');
+
+                var method = document.querySelector('select[name="delivery_method"]');
+                if (!method || !method.value) errors.push('Способ доставки');
+
+                var terms = document.querySelector('select[name="delivery_terms"]');
+                if (!terms || !terms.value) errors.push('Условия поставки');
+
+                // Check items in Handsontable
+                if (typeof hot !== 'undefined' && hot) {{
+                    var data = hot.getSourceData();
+                    var validItems = 0;
+                    for (var i = 0; i < data.length; i++) {{
+                        var row = data[i];
+                        if (row && row.product_name && row.product_name.trim() &&
+                            row.quantity && !isNaN(row.quantity) && row.quantity > 0 &&
+                            row.unit && row.unit.trim()) {{
+                            validItems++;
+                        }}
+                    }}
+                    if (validItems === 0) {{
+                        errors.push('Хотя бы одна позиция (наименование, количество, ед.изм.)');
+                    }}
+                }} else {{
+                    errors.push('Позиции не загружены');
+                }}
+
+                return errors;
+            }}
+
+            // Update submit button state based on validation
+            function updateSubmitButtonState() {{
+                var btn = document.getElementById('btn-submit-procurement');
+                if (!btn) return;
+
+                var errors = validateForProcurement();
+                if (errors.length === 0) {{
                     btn.style.background = '#16a34a';
-                    setTimeout(function() {
-                        btn.innerHTML = originalText;
-                        btn.style.background = '#6b7280';
-                    }, 2000);
-                }
-            """),
-            cls="card", style="border-left: 4px solid #16a34a; margin-bottom: 1rem;"
-        ) if workflow_status == "draft" else None,
+                    btn.style.color = 'white';
+                    btn.style.borderColor = '#16a34a';
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.cursor = 'pointer';
+                    btn.title = 'Передать КП в отдел закупок';
+                }} else {{
+                    btn.style.background = '#d1d5db';
+                    btn.style.color = '#6b7280';
+                    btn.style.borderColor = '#9ca3af';
+                    btn.style.pointerEvents = 'none';
+                    btn.style.cursor = 'not-allowed';
+                    btn.title = 'Заполните: ' + errors.join(', ');
+                }}
+            }}
+
+            // Submit to procurement with validation
+            function submitToProcurement() {{
+                var errors = validateForProcurement();
+                if (errors.length > 0) {{
+                    alert('Заполните обязательные поля:\\n- ' + errors.join('\\n- '));
+                    return false;
+                }}
+                // Submit via POST
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/quotes/{quote_id}/submit-procurement';
+                document.body.appendChild(form);
+                form.submit();
+                return true;
+            }}
+
+            // Run validation on page load and on changes
+            document.addEventListener('DOMContentLoaded', function() {{
+                updateSubmitButtonState();
+
+                // Listen for changes to update button state
+                document.querySelectorAll('input, select').forEach(function(el) {{
+                    el.addEventListener('change', updateSubmitButtonState);
+                }});
+            }});
+
+            // Also update after Handsontable changes
+            window.updateSubmitButtonState = updateSubmitButtonState;
+        """) if workflow_status == "draft" else None,
 
         # Revision banner for sales (Feature: multi-department return)
         Div(
