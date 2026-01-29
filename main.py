@@ -5793,12 +5793,14 @@ def get(quote_id: str, session):
                             updateCount();
                         }},
                         afterCreateRow: function() {{
+                            if (!hot) return;
                             for (var i = 0; i < hot.countRows(); i++) {{
                                 hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
                             }}
                             updateCount();
                         }},
                         afterRemoveRow: function() {{
+                            if (!hot) return;
                             for (var i = 0; i < hot.countRows(); i++) {{
                                 hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
                             }}
