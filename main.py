@@ -5362,6 +5362,8 @@ def get(session):
             "organization_id": user["org_id"],
             "currency": "RUB",
             "delivery_terms": "DDP",
+            "delivery_city": "Москва",
+            "delivery_country": "Россия",
             "status": "draft",
             "created_by": user["id"]
         }
@@ -5537,7 +5539,7 @@ def get(quote_id: str, session):
                     Label("Город доставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
                     Input(
                         type="text",
-                        value=quote.get("delivery_city", ""),
+                        value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
                         style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
@@ -5553,7 +5555,7 @@ def get(quote_id: str, session):
                     Label("Страна", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
                     Input(
                         type="text",
-                        value=quote.get("delivery_country", ""),
+                        value=quote.get("delivery_country") or "",
                         placeholder="Россия",
                         name="delivery_country",
                         style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
