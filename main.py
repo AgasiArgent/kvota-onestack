@@ -7981,18 +7981,17 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
     if not items_data:
         return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
 
-    # Prepare items for insert
-    org_id = quote_result.data[0]["organization_id"]
+    # Prepare items for insert (note: organization_id is not a column in quote_items)
     insert_items = []
     for item in items_data:
         insert_items.append({
             "quote_id": quote_id,
-            "organization_id": org_id,
             "product_name": item.get("product_name", ""),
             "product_code": item.get("product_code", ""),
             "brand": item.get("brand", ""),
             "quantity": int(item.get("quantity", 1)),
-            "unit": item.get("unit", "шт")
+            "unit": item.get("unit", "шт"),
+            "base_price_vat": 0  # Default to 0, procurement will fill in later
         })
 
     try:
