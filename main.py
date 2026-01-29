@@ -5607,7 +5607,7 @@ def get(quote_id: str, session):
                     Select(
                         Option("—", value=""),
                         *[Option(
-                            sc.short_name or sc.legal_name,
+                            f"{sc.supplier_code} - {sc.name}" if sc.supplier_code else sc.name,
                             value=str(sc.id),
                             selected=(str(sc.id) == str(quote.get("seller_company_id") or ""))
                         ) for sc in seller_companies],
