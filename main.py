@@ -5530,7 +5530,7 @@ def get(quote_id: str, session):
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
-            # Row 2: Delivery City, Country, Method, Terms (all equal width)
+            # Row 2: Delivery City, Country, Method, Terms (CSS grid for equal width)
             Div(
                 # Delivery City
                 Div(
@@ -5540,13 +5540,12 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_city", value: this.value}',
                         hx_swap="none"
-                    ),
-                    style="flex: 1 1 0; min-width: 0;"
+                    )
                 ),
                 # Delivery Country
                 Div(
@@ -5556,13 +5555,12 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_country") or "",
                         placeholder="Россия",
                         name="delivery_country",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_country", value: this.value}',
                         hx_swap="none"
-                    ),
-                    style="flex: 1 1 0; min-width: 0;"
+                    )
                 ),
                 # Delivery Method
                 Div(
@@ -5571,13 +5569,12 @@ def get(quote_id: str, session):
                         Option("—", value=""),
                         *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
                         name="delivery_method",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
-                    ),
-                    style="flex: 1 1 0; min-width: 0;"
+                    )
                 ),
                 # Delivery Terms
                 Div(
@@ -5585,15 +5582,14 @@ def get(quote_id: str, session):
                     Select(
                         *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
                         name="delivery_terms",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_terms", value: this.value}',
                         hx_swap="none"
-                    ),
-                    style="flex: 1 1 0; min-width: 0;"
+                    )
                 ),
-                style="display: flex; gap: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem;"
             ),
             cls="card", style="padding: 1rem; margin-bottom: 1rem;"
         ),
@@ -5721,7 +5717,11 @@ def get(quote_id: str, session):
                     if (!hot) return;
                     var data = hot.getSourceData();
                     for (var i = 0; i < data.length; i++) {{
-                        data[i].row_num = i + 1;
+                        if (!data[i]) {{
+                            data[i] = {{row_num: i + 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт'}};
+                        }} else {{
+                            data[i].row_num = i + 1;
+                        }}
                     }}
                     hot.render();
                 }}
@@ -5761,7 +5761,8 @@ def get(quote_id: str, session):
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterCreateRow: function(index, amount, source) {{
-                            if (!hot || source === 'auto') return;
+                            if (!hot) return;
+                            // Always update row numbers regardless of source (button, context menu, etc.)
                             updateRowNumbers();
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
