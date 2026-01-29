@@ -236,6 +236,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["logistics", "admin"],
         requires_comment=True  # Must explain what was fixed
     ),
+    # Return to client negotiation after partial logistics recalc
+    StatusTransition(
+        WorkflowStatus.PENDING_LOGISTICS,
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        ["logistics", "admin"],
+        requires_comment=False
+    ),
 
     # From PENDING_CUSTOMS
     StatusTransition(
@@ -283,6 +290,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         WorkflowStatus.PENDING_APPROVAL,  # Submit with justification (when needs_justification=true)
         ["sales", "sales_manager", "admin"],
         requires_comment=True  # Justification is required
+    ),
+    # Return to client negotiation after partial price recalc
+    StatusTransition(
+        WorkflowStatus.PENDING_SALES_REVIEW,
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        ["sales", "admin"],
+        requires_comment=False
     ),
 
     # From PENDING_QUOTE_CONTROL (Zhanna's review)
@@ -414,6 +428,25 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["sales", "admin"],
         requires_comment=True
     ),
+    # Partial recalc transitions from SENT_TO_CLIENT
+    StatusTransition(
+        WorkflowStatus.SENT_TO_CLIENT,
+        WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.SENT_TO_CLIENT,
+        WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.SENT_TO_CLIENT,
+        WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
+        ["sales", "admin"],
+        requires_comment=False
+    ),
 
     # From CLIENT_NEGOTIATION
     StatusTransition(
@@ -439,6 +472,25 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         WorkflowStatus.CANCELLED,
         ["sales", "admin"],
         requires_comment=True
+    ),
+    # Partial recalc transitions from CLIENT_NEGOTIATION
+    StatusTransition(
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
+        ["sales", "admin"],
+        requires_comment=False
     ),
 
     # From PENDING_SPEC_CONTROL
