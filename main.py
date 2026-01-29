@@ -5564,6 +5564,20 @@ def get(quote_id: str, session):
 
     items = items_result.data or []
 
+    # Prepare items data for Handsontable (JSON)
+    items_for_handsontable = [
+        {
+            'id': item.get('id'),
+            'row_num': idx + 1,
+            'brand': item.get('brand', ''),
+            'product_code': item.get('product_code', ''),
+            'product_name': item.get('product_name', ''),
+            'quantity': item.get('quantity', 1),
+            'unit': item.get('unit', 'шт')
+        } for idx, item in enumerate(items)
+    ]
+    items_json = json.dumps(items_for_handsontable)
+
     workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
 
     # Check for revision status (returned from quote control)
@@ -5666,17 +5680,7 @@ def get(quote_id: str, session):
             (function() {{
                 const quoteId = '{quote_id}';
                 const quoteIdn = '{quote.get("idn_quote", "")}';
-                const initialData = {json.dumps([
-                    {{
-                        'id': item.get('id'),
-                        'row_num': idx + 1,
-                        'brand': item.get('brand', ''),
-                        'product_code': item.get('product_code', ''),
-                        'product_name': item.get('product_name', ''),
-                        'quantity': item.get('quantity', 1),
-                        'unit': item.get('unit', 'шт')
-                    }} for idx, item in enumerate(items)
-                ])};
+                const initialData = {items_json};
 
                 let saveTimeout = null;
                 let hot = null;
