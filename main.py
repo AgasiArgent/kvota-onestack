@@ -5676,7 +5676,7 @@ def get(quote_id: str, session):
             cls="table-container", style="margin: 0;"
         ),
         # Handsontable initialization script
-        Script(NotStr(f"""
+        Script(f"""
             (function() {{
                 const quoteId = '{quote_id}';
                 const quoteIdn = '{quote.get("idn_quote", "")}';
@@ -5842,7 +5842,7 @@ def get(quote_id: str, session):
                             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                             const jsonData = XLSX.utils.sheet_to_json(firstSheet, {{ header: 1 }});
 
-                            // Show import modal
+                            // Show file upload modal
                             showImportModal(jsonData);
                         }};
                         reader.readAsArrayBuffer(file);
@@ -5864,7 +5864,7 @@ def get(quote_id: str, session):
                     initHandsontable();
                 }}
 
-                // Import modal
+                // File upload modal handler
                 window.showImportModal = function(jsonData) {{
                     if (jsonData.length < 2) {{
                         alert('Файл пустой или содержит только заголовки');
@@ -6014,7 +6014,7 @@ def get(quote_id: str, session):
                     }};
                 }};
             }})();
-        """)),
+        """),
         # Tab button styles
         Style("""
             .tab-btn {
