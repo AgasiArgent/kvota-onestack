@@ -5577,7 +5577,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="min-width: 120px;"
+                    style="min-width: 160px;"
                 ),
                 # Delivery Terms
                 Div(
@@ -5593,7 +5593,7 @@ def get(quote_id: str, session):
                     ),
                     style="min-width: 80px;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr minmax(140px, 1fr) minmax(100px, 1fr); gap: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr minmax(160px, 1fr) minmax(80px, 1fr); gap: 1rem;"
             ),
             cls="card", style="padding: 1rem; margin-bottom: 1rem;"
         ),
