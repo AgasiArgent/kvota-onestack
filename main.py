@@ -5760,7 +5760,7 @@ def get(quote_id: str, session):
                 }}
 
                 // Initialize Handsontable
-                document.addEventListener('DOMContentLoaded', function() {{
+                function initHandsontable() {{
                     const container = document.getElementById('items-spreadsheet');
                     if (!container || typeof Handsontable === 'undefined') return;
 
@@ -5855,7 +5855,14 @@ def get(quote_id: str, session):
                         document.getElementById('tab-' + tab).classList.add('active');
                         // For now just visual, markup tab implementation later
                     }};
-                }});
+                }}
+
+                // Call init - if DOM already loaded, init immediately; otherwise wait
+                if (document.readyState === 'loading') {{
+                    document.addEventListener('DOMContentLoaded', initHandsontable);
+                }} else {{
+                    initHandsontable();
+                }}
 
                 // Import modal
                 window.showImportModal = function(jsonData) {{
