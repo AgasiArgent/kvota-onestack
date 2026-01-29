@@ -5619,7 +5619,7 @@ def get(quote_id: str, session):
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
                     # Draft workflow buttons (only for draft status)
                     (A(icon("save", size=16), " Сохранить", id="btn-save-draft", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;", onclick="showSaveConfirmation()") if workflow_status == 'draft' else None),
-                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; background: #d1d5db; color: #6b7280; border: 1px solid #9ca3af; border-radius: 8px; pointer-events: none;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
+                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", cls="btn-submit-disabled", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; border-radius: 8px;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
                     cls="table-header-right", style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
                 ),
                 cls="table-header"
@@ -6089,6 +6089,26 @@ def get(quote_id: str, session):
             style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
         ) if workflow_status in ['pending_review', 'pending_procurement', 'pending_logistics', 'pending_customs', 'pending_sales', 'pending_control', 'pending_spec_control'] and approval_status else None,
 
+        # CSS for submit button states
+        Style("""
+            .btn-submit-disabled {
+                background: #e5e7eb !important;
+                background-color: #e5e7eb !important;
+                color: #9ca3af !important;
+                border: 1px solid #d1d5db !important;
+                pointer-events: none;
+                cursor: not-allowed;
+            }
+            .btn-submit-enabled {
+                background: #16a34a !important;
+                background-color: #16a34a !important;
+                color: white !important;
+                border: 1px solid #16a34a !important;
+                pointer-events: auto;
+                cursor: pointer;
+            }
+        """) if workflow_status == 'draft' else None,
+
         # Draft validation script (moved to header buttons)
         Script(f"""
             // Save confirmation for draft
@@ -6160,18 +6180,12 @@ def get(quote_id: str, session):
 
                 var errors = validateForProcurement();
                 if (errors.length === 0) {{
-                    btn.style.background = '#16a34a';
-                    btn.style.color = 'white';
-                    btn.style.borderColor = '#16a34a';
-                    btn.style.pointerEvents = 'auto';
-                    btn.style.cursor = 'pointer';
+                    btn.classList.remove('btn-submit-disabled');
+                    btn.classList.add('btn-submit-enabled');
                     btn.title = 'Передать КП в отдел закупок';
                 }} else {{
-                    btn.style.background = '#d1d5db';
-                    btn.style.color = '#6b7280';
-                    btn.style.borderColor = '#9ca3af';
-                    btn.style.pointerEvents = 'none';
-                    btn.style.cursor = 'not-allowed';
+                    btn.classList.remove('btn-submit-enabled');
+                    btn.classList.add('btn-submit-disabled');
                     btn.title = 'Заполните: ' + errors.join(', ');
                 }}
             }}
