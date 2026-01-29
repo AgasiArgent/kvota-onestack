@@ -106,59 +106,27 @@ def mock_quote_item_with_supplier(mock_supplier):
 # =============================================================================
 
 class TestProductRow:
-    """Tests for the product_row function with supplier support"""
+    """Tests for the product_row function with supplier support
 
+    Note: product_row function was removed in 2026-01-29 refactor.
+    Products page (/quotes/{id}/products) replaced by Handsontable on overview page.
+    These tests are skipped as the functionality moved to Handsontable.
+    """
+
+    @pytest.mark.skip(reason="product_row removed in 2026-01-29 refactor - products page replaced by Handsontable")
     def test_product_row_without_supplier(self, mock_quote_item):
         """Test product row renders without supplier info"""
-        # Import is done inside function to avoid import errors in test collection
-        try:
-            import sys
-            sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
-            from main import product_row
-            from fasthtml.common import to_xml
+        pass
 
-            result = product_row(mock_quote_item, "RUB")
-            # Convert to HTML string to check content
-            result_str = to_xml(result)
-
-            assert "Test Product" in result_str
-            assert "SKU-001" in result_str
-            # Should not have supplier icon when no supplier
-            # The icon is only added when supplier_info is passed or supplier_id exists
-        except ImportError as e:
-            pytest.skip(f"Cannot import main module: {e}")
-
+    @pytest.mark.skip(reason="product_row removed in 2026-01-29 refactor - products page replaced by Handsontable")
     def test_product_row_with_supplier_info(self, mock_quote_item_with_supplier, mock_supplier):
         """Test product row shows supplier badge when supplier_info provided"""
-        try:
-            import sys
-            sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
-            from main import product_row
-            from fasthtml.common import to_xml
+        pass
 
-            result = product_row(mock_quote_item_with_supplier, "RUB", supplier_info=mock_supplier)
-            result_str = to_xml(result)
-
-            # Should contain supplier icon/badge
-            assert "TSC" in result_str or "Test Supplier" in result_str
-        except ImportError as e:
-            pytest.skip(f"Cannot import main module: {e}")
-
+    @pytest.mark.skip(reason="product_row removed in 2026-01-29 refactor - products page replaced by Handsontable")
     def test_product_row_with_supplier_id_no_info(self, mock_quote_item_with_supplier):
         """Test product row shows placeholder when supplier_id exists but no info passed"""
-        try:
-            import sys
-            sys.path.insert(0, "/Users/andreynovikov/workspace/tech/projects/kvota/onestack")
-            from main import product_row
-            from fasthtml.common import to_xml
-
-            result = product_row(mock_quote_item_with_supplier, "RUB")
-            result_str = to_xml(result)
-
-            # Should contain supplier indicator (just the icon)
-            # When supplier_id exists but supplier_info not passed
-        except ImportError as e:
-            pytest.skip(f"Cannot import main module: {e}")
+        pass
 
 
 # =============================================================================
