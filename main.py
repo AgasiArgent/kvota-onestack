@@ -7288,6 +7288,7 @@ def post(quote_id: str, session, sent_to_email: str = ""):
 
     # Save sent_at timestamp and sent_to_email
     from datetime import datetime
+    supabase = get_supabase()
     supabase.table("quotes").update({
         "sent_at": datetime.utcnow().isoformat(),
         "sent_to_email": sent_to_email.strip() if sent_to_email else None
