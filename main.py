@@ -5675,56 +5675,327 @@ def get(quote_id: str, session):
             ),
             cls="table-container", style="margin: 0;"
         ),
-        # Handsontable initialization script - MINIMAL TEST
+        # Handsontable initialization script with auto-save and context menu
         Script(f"""
-            console.log('MINIMAL TEST SCRIPT START');
-            var quoteId = '{quote_id}';
-            var quoteIdn = '{quote.get("idn_quote", "")}';
-            var initialData = {items_json};
-            console.log('Variables set:', quoteId, initialData.length);
+            (function() {{
+                var quoteId = '{quote_id}';
+                var quoteIdn = '{quote.get("idn_quote", "")}';
+                var initialData = {items_json};
+                var saveTimeout = null;
+                var hot = null;
 
-            var hot = null;
-
-            function initTable() {{
-                console.log('initTable called');
-                var container = document.getElementById('items-spreadsheet');
-                if (!container) {{
-                    console.log('Container not found');
-                    return;
+                function updateCount() {{
+                    var count = hot ? hot.countRows() : 0;
+                    var el = document.getElementById('items-count');
+                    if (el) el.textContent = '(' + count + ')';
+                    var footer = document.getElementById('footer-count');
+                    if (footer) footer.textContent = 'Всего: ' + count + ' позиций';
                 }}
-                if (typeof Handsontable === 'undefined') {{
-                    console.log('Handsontable not loaded');
-                    return;
+
+                function showSaveStatus(status) {{
+                    var el = document.getElementById('save-status');
+                    if (!el) return;
+                    if (status === 'saving') {{
+                        el.textContent = 'Сохранение...';
+                        el.style.color = '#f59e0b';
+                    }} else if (status === 'saved') {{
+                        el.textContent = 'Сохранено';
+                        el.style.color = '#10b981';
+                        setTimeout(function() {{ el.textContent = ''; }}, 2000);
+                    }} else if (status === 'error') {{
+                        el.textContent = 'Ошибка сохранения';
+                        el.style.color = '#ef4444';
+                    }}
                 }}
-                console.log('Creating Handsontable...');
 
-                hot = new Handsontable(container, {{
-                    licenseKey: 'non-commercial-and-evaluation',
-                    data: initialData.length > 0 ? initialData : [{{row_num: 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт'}}],
-                    colHeaders: ['#', 'Brand', 'SKU', 'Name', 'Qty', 'Unit'],
-                    columns: [
-                        {{data: 'row_num', readOnly: true, type: 'numeric', width: 50}},
-                        {{data: 'brand', type: 'text', width: 120}},
-                        {{data: 'product_code', type: 'text', width: 140}},
-                        {{data: 'product_name', type: 'text', width: 300}},
-                        {{data: 'quantity', type: 'numeric', width: 80}},
-                        {{data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'кг'], width: 80}}
-                    ],
-                    rowHeaders: false,
-                    stretchH: 'all',
-                    minSpareRows: 1
-                }});
+                function saveCell(row, prop, newVal) {{
+                    var rowData = hot.getSourceDataAtRow(row);
+                    if (!rowData || !rowData.id) {{
+                        createNewRow(rowData);
+                        return;
+                    }}
+                    showSaveStatus('saving');
+                    var body = {{}};
+                    body[prop] = newVal;
+                    fetch('/quotes/' + quoteId + '/items/' + rowData.id, {{
+                        method: 'PATCH',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify(body)
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(data) {{
+                        if (data.success) {{
+                            showSaveStatus('saved');
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }})
+                    .catch(function() {{ showSaveStatus('error'); }});
+                }}
 
-                console.log('Handsontable created successfully!');
-                document.getElementById('items-count').textContent = '(' + hot.countRows() + ')';
-            }}
+                function createNewRow(rowData) {{
+                    if (!rowData || !rowData.product_name) return;
+                    showSaveStatus('saving');
+                    fetch('/quotes/' + quoteId + '/items/bulk', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ items: [rowData] }})
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(data) {{
+                        if (data.success && data.items && data.items[0]) {{
+                            var physicalRow = hot.toPhysicalRow(hot.countRows() - 1);
+                            hot.getSourceData()[physicalRow].id = data.items[0].id;
+                            showSaveStatus('saved');
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }})
+                    .catch(function() {{ showSaveStatus('error'); }});
+                }}
 
-            if (document.readyState === 'loading') {{
-                document.addEventListener('DOMContentLoaded', initTable);
-            }} else {{
-                initTable();
-            }}
-            console.log('MINIMAL TEST SCRIPT END');
+                function debouncedSave(row, prop, newVal) {{
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(function() {{ saveCell(row, prop, newVal); }}, 500);
+                }}
+
+                function initTable() {{
+                    var container = document.getElementById('items-spreadsheet');
+                    if (!container || typeof Handsontable === 'undefined') return;
+
+                    hot = new Handsontable(container, {{
+                        licenseKey: 'non-commercial-and-evaluation',
+                        data: initialData.length > 0 ? initialData : [{{row_num: 1, brand: '', product_code: '', product_name: '', quantity: 1, unit: 'шт'}}],
+                        colHeaders: ['№', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Ед.изм.'],
+                        columns: [
+                            {{data: 'row_num', readOnly: true, type: 'numeric', width: 50}},
+                            {{data: 'brand', type: 'text', width: 120}},
+                            {{data: 'product_code', type: 'text', width: 140}},
+                            {{data: 'product_name', type: 'text', width: 300}},
+                            {{data: 'quantity', type: 'numeric', width: 80}},
+                            {{data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'кг', 'м', 'л', 'компл'], width: 80}}
+                        ],
+                        rowHeaders: false,
+                        stretchH: 'all',
+                        autoWrapRow: true,
+                        autoWrapCol: true,
+                        contextMenu: ['row_above', 'row_below', 'remove_row', '---------', 'copy', 'cut'],
+                        manualColumnResize: true,
+                        minSpareRows: 1,
+                        afterChange: function(changes, source) {{
+                            if (source === 'loadData' || !changes) return;
+                            changes.forEach(function(change) {{
+                                var row = change[0], prop = change[1], oldVal = change[2], newVal = change[3];
+                                if (oldVal !== newVal && prop !== 'row_num') {{
+                                    debouncedSave(row, prop, newVal);
+                                }}
+                            }});
+                            updateCount();
+                        }},
+                        afterCreateRow: function() {{
+                            for (var i = 0; i < hot.countRows(); i++) {{
+                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                            }}
+                            updateCount();
+                        }},
+                        afterRemoveRow: function() {{
+                            for (var i = 0; i < hot.countRows(); i++) {{
+                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                            }}
+                            updateCount();
+                        }},
+                        cells: function(row, col) {{
+                            var cellProperties = {{}};
+                            var rowData = this.instance.getSourceDataAtRow(row);
+                            if (rowData && rowData.id) {{
+                                cellProperties.title = quoteIdn + '-' + (row + 1);
+                            }}
+                            return cellProperties;
+                        }}
+                    }});
+
+                    updateCount();
+
+                    var btnAdd = document.getElementById('btn-add-row');
+                    if (btnAdd) {{
+                        btnAdd.addEventListener('click', function() {{
+                            hot.alter('insert_row_below', hot.countRows() - 1);
+                        }});
+                    }}
+
+                    var btnFileImport = document.getElementById('btn-import');
+                    var fileInput = document.getElementById('file-import');
+                    if (btnFileImport && fileInput) {{
+                        btnFileImport.addEventListener('click', function() {{
+                            fileInput.click();
+                        }});
+                        fileInput.addEventListener('change', function(e) {{
+                            var file = e.target.files[0];
+                            if (!file) return;
+                            var reader = new FileReader();
+                            reader.onload = function(evt) {{
+                                var data = new Uint8Array(evt.target.result);
+                                var workbook = XLSX.read(data, {{type: 'array'}});
+                                var firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                                var jsonData = XLSX.utils.sheet_to_json(firstSheet, {{header: 1}});
+                                showFileImportModal(jsonData);
+                            }};
+                            reader.readAsArrayBuffer(file);
+                            e.target.value = '';
+                        }});
+                    }}
+
+                    window.switchTab = function(tab) {{
+                        document.querySelectorAll('.tab-btn').forEach(function(btn) {{ btn.classList.remove('active'); }});
+                        var tabBtn = document.getElementById('tab-' + tab);
+                        if (tabBtn) tabBtn.classList.add('active');
+                    }};
+                }}
+
+                function showFileImportModal(jsonData) {{
+                    if (jsonData.length < 2) {{
+                        alert('Файл пустой или содержит только заголовки');
+                        return;
+                    }}
+                    var headers = jsonData[0];
+                    var preview = jsonData.slice(1, 6);
+
+                    function buildOptions(defaultText) {{
+                        var opts = '<option value="">' + defaultText + '</option>';
+                        for (var i = 0; i < headers.length; i++) {{
+                            opts += '<option value="' + i + '">' + (headers[i] || 'Колонка ' + (i+1)) + '</option>';
+                        }}
+                        return opts;
+                    }}
+
+                    function buildPreviewTable() {{
+                        var html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;"><thead><tr style="background:#f3f4f6;">';
+                        for (var i = 0; i < headers.length; i++) {{
+                            html += '<th style="padding:0.5rem;border:1px solid #e5e7eb;text-align:left;">' + (headers[i] || '—') + '</th>';
+                        }}
+                        html += '</tr></thead><tbody>';
+                        for (var r = 0; r < preview.length; r++) {{
+                            html += '<tr>';
+                            for (var c = 0; c < headers.length; c++) {{
+                                html += '<td style="padding:0.5rem;border:1px solid #e5e7eb;">' + (preview[r][c] || '') + '</td>';
+                            }}
+                            html += '</tr>';
+                        }}
+                        html += '</tbody></table>';
+                        return html;
+                    }}
+
+                    var modal = document.createElement('div');
+                    modal.id = 'file-import-modal';
+                    modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;">' +
+                        '<div style="background:white;padding:2rem;border-radius:12px;max-width:800px;width:90%;max-height:80vh;overflow:auto;">' +
+                        '<h3 style="margin-top:0;">Импорт из файла</h3>' +
+                        '<p>Найдено строк: ' + (jsonData.length - 1) + '</p>' +
+                        '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;margin-bottom:1.5rem;">' +
+                        '<div><label>Наименование *</label><select id="map-name" style="width:100%;padding:0.5rem;">' + buildOptions('-- Выберите колонку --') + '</select></div>' +
+                        '<div><label>Артикул</label><select id="map-code" style="width:100%;padding:0.5rem;">' + buildOptions('-- Не выбрано --') + '</select></div>' +
+                        '<div><label>Бренд</label><select id="map-brand" style="width:100%;padding:0.5rem;">' + buildOptions('-- Не выбрано --') + '</select></div>' +
+                        '<div><label>Количество</label><select id="map-qty" style="width:100%;padding:0.5rem;">' + buildOptions('-- По умолчанию 1 --') + '</select></div>' +
+                        '</div>' +
+                        '<h4>Превью данных:</h4>' +
+                        '<div style="overflow-x:auto;margin-bottom:1.5rem;">' + buildPreviewTable() + '</div>' +
+                        '<div style="display:flex;gap:1rem;justify-content:flex-end;">' +
+                        '<button onclick="closeFileImportModal()" style="padding:0.75rem 1.5rem;border:1px solid #d1d5db;background:white;border-radius:8px;cursor:pointer;">Отмена</button>' +
+                        '<button onclick="runFileImport()" style="padding:0.75rem 1.5rem;background:#6366f1;color:white;border:none;border-radius:8px;cursor:pointer;">Импортировать</button>' +
+                        '</div></div></div>';
+                    document.body.appendChild(modal);
+
+                    headers.forEach(function(h, i) {{
+                        var lower = (h || '').toString().toLowerCase();
+                        if (lower.indexOf('наименование') >= 0 || lower.indexOf('название') >= 0 || lower.indexOf('name') >= 0) {{
+                            document.getElementById('map-name').value = i;
+                        }}
+                        if (lower.indexOf('артикул') >= 0 || lower.indexOf('код') >= 0 || lower.indexOf('sku') >= 0) {{
+                            document.getElementById('map-code').value = i;
+                        }}
+                        if (lower.indexOf('бренд') >= 0 || lower.indexOf('brand') >= 0) {{
+                            document.getElementById('map-brand').value = i;
+                        }}
+                        if (lower.indexOf('кол') >= 0 || lower.indexOf('qty') >= 0 || lower.indexOf('quantity') >= 0) {{
+                            document.getElementById('map-qty').value = i;
+                        }}
+                    }});
+
+                    window.closeFileImportModal = function() {{
+                        var m = document.getElementById('file-import-modal');
+                        if (m) m.remove();
+                    }};
+
+                    window.runFileImport = function() {{
+                        var nameIdx = document.getElementById('map-name').value;
+                        if (nameIdx === '') {{
+                            alert('Выберите колонку для наименования');
+                            return;
+                        }}
+                        var codeIdx = document.getElementById('map-code').value;
+                        var brandIdx = document.getElementById('map-brand').value;
+                        var qtyIdx = document.getElementById('map-qty').value;
+
+                        var newItems = [];
+                        var currentCount = hot.countRows();
+                        for (var i = 1; i < jsonData.length; i++) {{
+                            var row = jsonData[i];
+                            var name = row[nameIdx];
+                            if (!name) continue;
+                            newItems.push({{
+                                row_num: currentCount + newItems.length,
+                                brand: brandIdx !== '' ? (row[brandIdx] || '') : '',
+                                product_code: codeIdx !== '' ? (row[codeIdx] || '') : '',
+                                product_name: name,
+                                quantity: qtyIdx !== '' ? (parseInt(row[qtyIdx]) || 1) : 1,
+                                unit: 'шт'
+                            }});
+                        }}
+
+                        if (newItems.length === 0) {{
+                            alert('Нет данных для импорта');
+                            return;
+                        }}
+
+                        showSaveStatus('saving');
+                        fetch('/quotes/' + quoteId + '/items/bulk', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }},
+                            body: JSON.stringify({{ items: newItems }})
+                        }})
+                        .then(function(r) {{ return r.json(); }})
+                        .then(function(data) {{
+                            if (data.success) {{
+                                data.items.forEach(function(item, idx) {{
+                                    newItems[idx].id = item.id;
+                                }});
+                                var sourceData = hot.getSourceData();
+                                var filtered = sourceData.filter(function(r) {{ return r.id || r.product_name; }});
+                                hot.loadData(filtered.concat(newItems));
+                                for (var i = 0; i < hot.countRows(); i++) {{
+                                    hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
+                                }}
+                                showSaveStatus('saved');
+                                closeFileImportModal();
+                                updateCount();
+                            }} else {{
+                                showSaveStatus('error');
+                                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                            }}
+                        }})
+                        .catch(function(err) {{
+                            showSaveStatus('error');
+                            alert('Ошибка: ' + err.message);
+                        }});
+                    }};
+                }}
+
+                if (document.readyState === 'loading') {{
+                    document.addEventListener('DOMContentLoaded', initTable);
+                }} else {{
+                    initTable();
+                }}
+            }})();
         """),
         # Tab button styles
         Style("""
