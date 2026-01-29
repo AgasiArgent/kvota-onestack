@@ -12180,7 +12180,7 @@ def get(session, quote_id: str):
 
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
-    customer_name = quote.get("customers", {}).get("name", "Unknown")
+    customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
     currency = quote.get("currency", "RUB")
 
     # Check for revision status (returned from quote control)
@@ -13075,7 +13075,7 @@ def get(session, quote_id: str):
 
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
-    customer_name = quote.get("customers", {}).get("name", "Unknown")
+    customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
     currency = quote.get("currency", "RUB")
 
     # Check for revision status (returned from quote control)
