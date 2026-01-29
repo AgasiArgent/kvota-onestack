@@ -7809,7 +7809,7 @@ def delete(quote_id: str, item_id: str, session):
 # ============================================================================
 
 @rt("/quotes/{quote_id}/items/{item_id}", methods=["PATCH"])
-def patch_quote_item(quote_id: str, item_id: str, session, request):
+async def patch_quote_item(quote_id: str, item_id: str, session, request):
     """Update a single quote item field (for Handsontable auto-save)"""
     redirect = require_login(session)
     if redirect:
@@ -7829,8 +7829,7 @@ def patch_quote_item(quote_id: str, item_id: str, session, request):
         return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
 
     # Parse JSON body
-    import asyncio
-    body = asyncio.get_event_loop().run_until_complete(request.body())
+    body = await request.body()
     try:
         data = json.loads(body)
     except:
@@ -7859,7 +7858,7 @@ def patch_quote_item(quote_id: str, item_id: str, session, request):
 
 
 @rt("/quotes/{quote_id}/items/bulk", methods=["POST"])
-def bulk_insert_quote_items(quote_id: str, session, request):
+async def bulk_insert_quote_items(quote_id: str, session, request):
     """Bulk insert quote items (for import functionality)"""
     redirect = require_login(session)
     if redirect:
@@ -7879,8 +7878,7 @@ def bulk_insert_quote_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
 
     # Parse JSON body
-    import asyncio
-    body = asyncio.get_event_loop().run_until_complete(request.body())
+    body = await request.body()
     try:
         data = json.loads(body)
     except:
