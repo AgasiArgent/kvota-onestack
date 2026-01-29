@@ -7346,7 +7346,7 @@ def post(quote_id: str, session, change_type: str = "", client_comment: str = ""
     status_map = {
         "add_item": "pending_procurement",
         "logistics": "pending_logistics",
-        "price": "pending_markup",
+        "price": "pending_sales_review",
         "full": "pending_procurement"
     }
 
