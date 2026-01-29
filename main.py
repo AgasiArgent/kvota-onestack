@@ -5530,7 +5530,7 @@ def get(quote_id: str, session):
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem;"
             ),
-            # Row 2: Delivery City, Country, Method, Terms (CSS grid)
+            # Row 2: Delivery City, Country, Method, Terms (flexbox)
             Div(
                 # Delivery City
                 Div(
@@ -5546,7 +5546,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_city", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="min-width: 100px;"
+                    style="flex: 1 1 120px; min-width: 120px;"
                 ),
                 # Delivery Country
                 Div(
@@ -5562,7 +5562,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_country", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="min-width: 100px;"
+                    style="flex: 1 1 120px; min-width: 120px;"
                 ),
                 # Delivery Method
                 Div(
@@ -5577,7 +5577,7 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_method", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="min-width: 160px;"
+                    style="flex: 1 1 180px; min-width: 180px;"
                 ),
                 # Delivery Terms
                 Div(
@@ -5591,9 +5591,9 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "delivery_terms", value: this.value}',
                         hx_swap="none"
                     ),
-                    style="min-width: 80px;"
+                    style="flex: 1 1 100px; min-width: 100px;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr minmax(160px, 1fr) minmax(80px, 1fr); gap: 1rem;"
+                style="display: flex; flex-wrap: wrap; gap: 1rem;"
             ),
             cls="card", style="padding: 1rem; margin-bottom: 1rem;"
         ),
