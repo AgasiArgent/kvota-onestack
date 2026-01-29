@@ -5759,6 +5759,15 @@ def get(quote_id: str, session):
                     saveTimeout = setTimeout(function() {{ saveCell(row, prop, newVal); }}, 500);
                 }}
 
+                function updateRowNumbers() {{
+                    if (!hot) return;
+                    var data = hot.getSourceData();
+                    for (var i = 0; i < data.length; i++) {{
+                        data[i].row_num = i + 1;
+                    }}
+                    hot.render();
+                }}
+
                 function initTable() {{
                     var container = document.getElementById('items-spreadsheet');
                     if (!container || typeof Handsontable === 'undefined') return;
@@ -5781,7 +5790,7 @@ def get(quote_id: str, session):
                         autoWrapCol: true,
                         contextMenu: ['row_above', 'row_below', 'remove_row', '---------', 'copy', 'cut'],
                         manualColumnResize: true,
-                        minSpareRows: 1,
+                        minSpareRows: 0,
                         afterChange: function(changes, source) {{
                             if (source === 'loadData' || !changes) return;
                             changes.forEach(function(change) {{
@@ -5792,18 +5801,14 @@ def get(quote_id: str, session):
                             }});
                             updateCount();
                         }},
-                        afterCreateRow: function() {{
-                            if (!hot) return;
-                            for (var i = 0; i < hot.countRows(); i++) {{
-                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                            }}
+                        afterCreateRow: function(index, amount, source) {{
+                            if (!hot || source === 'auto') return;
+                            updateRowNumbers();
                             updateCount();
                         }},
                         afterRemoveRow: function() {{
                             if (!hot) return;
-                            for (var i = 0; i < hot.countRows(); i++) {{
-                                hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                            }}
+                            updateRowNumbers();
                             updateCount();
                         }},
                         cells: function(row, col) {{
