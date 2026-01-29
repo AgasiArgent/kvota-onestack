@@ -7498,418 +7498,11 @@ def post(quote_id: str, session, department: str = "", comments: str = ""):
 # QUOTE PRODUCTS
 # ============================================================================
 
-@rt("/quotes/{quote_id}/products")
-def get(quote_id: str, session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    # Get quote
-    quote_result = supabase.table("quotes") \
-        .select("id, idn_quote, currency, organization_id") \
-        .eq("id", quote_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not quote_result.data:
-        return page_layout("Not Found", H1("Quote not found"), session=session)
-
-    quote = quote_result.data[0]
-
-    # Get existing products
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .order("created_at") \
-        .execute()
-
-    items = items_result.data or []
-
-    # Fetch supplier info for items that have supplier_id (UI-016 v3.0)
-    supplier_map = {}
-    supplier_ids = [item.get("supplier_id") for item in items if item.get("supplier_id")]
-    if supplier_ids:
-        try:
-            from services.supplier_service import get_supplier
-            for supplier_id in set(supplier_ids):
-                try:
-                    supplier_map[supplier_id] = get_supplier(supplier_id)
-                except Exception:
-                    pass
-        except ImportError:
-            pass
-
-    # Fetch buyer company info for items that have buyer_company_id (UI-017 v3.0)
-    buyer_company_map = {}
-    buyer_company_ids = [item.get("buyer_company_id") for item in items if item.get("buyer_company_id")]
-    if buyer_company_ids:
-        try:
-            from services.buyer_company_service import get_buyer_company
-            for buyer_company_id in set(buyer_company_ids):
-                try:
-                    buyer_company_map[buyer_company_id] = get_buyer_company(buyer_company_id)
-                except Exception:
-                    pass
-        except ImportError:
-            pass
-
-    # Fetch pickup location info for items that have pickup_location_id (UI-018 v3.0)
-    pickup_location_map = {}
-    pickup_location_ids = [item.get("pickup_location_id") for item in items if item.get("pickup_location_id")]
-    if pickup_location_ids:
-        try:
-            from services.location_service import get_location
-            for pickup_location_id in set(pickup_location_ids):
-                try:
-                    pickup_location_map[pickup_location_id] = get_location(pickup_location_id)
-                except Exception:
-                    pass
-        except ImportError:
-            pass
-
-    # Helper to get supplier info for an item
-    def get_item_supplier(item):
-        return supplier_map.get(item.get("supplier_id"))
-
-    # Helper to get buyer company info for an item (UI-017)
-    def get_item_buyer_company(item):
-        return buyer_company_map.get(item.get("buyer_company_id"))
-
-    # Helper to get pickup location info for an item (UI-018)
-    def get_item_pickup_location(item):
-        return pickup_location_map.get(item.get("pickup_location_id"))
-
-    return page_layout(f"Products - {quote.get('idn_quote', '')}",
-        H1(f"Add Products to {quote.get('idn_quote', '')}"),
-
-        # Existing products table
-        Div(
-            H3(f"Products ({len(items)})"),
-            Div(id="products-list",
-                *[product_row(item, quote["currency"], supplier_info=get_item_supplier(item), buyer_company_info=get_item_buyer_company(item), pickup_location_info=get_item_pickup_location(item)) for item in items]
-            ) if items else Div(P("No products yet. Add your first product below."), id="products-list"),
-            cls="card"
-        ),
-
-        # Add product form - simplified for sales role (2026-01-21: improved validation)
-        Div(
-            H3("Добавить товар"),
-            # Error message container
-            Div(id="form-error", style="display: none; color: #d32f2f; background: #ffebee; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; border-left: 4px solid #d32f2f;"),
-            Form(
-                Div(
-                    Label("Название товара *", Input(name="product_name", id="product_name", required=True, placeholder="Например: Подшипник SKF 6205")),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("SKU / Product Code", Input(name="product_code", id="product_code", placeholder="Например: SKF-6205-2RS")),
-                    Label("Бренд", Input(name="brand", id="brand", placeholder="Например: SKF")),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Количество *", Input(name="quantity", id="quantity", type="number", value="1", min="1", required=True)),
-                    cls="form-row"
-                ),
-                Small("Остальные поля (поставщик, цены, вес, страна) заполняются отделом закупок",
-                      style="display: block; color: #666; margin-top: 0.5rem; margin-bottom: 1rem;"),
-                Input(type="hidden", name="quote_id", value=quote_id),
-                Div(
-                    Button("Добавить товар", type="submit", id="submit-product"),
-                    cls="form-actions"
-                ),
-                method="post",
-                action=f"/quotes/{quote_id}/products",
-                enctype="application/x-www-form-urlencoded",
-                hx_post=f"/quotes/{quote_id}/products",
-                hx_target="#products-list",
-                hx_swap="beforeend",
-                id="add-product-form",
-                onsubmit="return validateProductForm(event)"
-            ),
-            # Validation script
-            Script("""
-function validateProductForm(event) {
-    const form = document.getElementById('add-product-form');
-    const errorDiv = document.getElementById('form-error');
-    const productName = document.getElementById('product_name');
-    const quantity = document.getElementById('quantity');
-
-    // Clear previous errors
-    errorDiv.style.display = 'none';
-    errorDiv.textContent = '';
-    productName.style.borderColor = '';
-    quantity.style.borderColor = '';
-
-    let errors = [];
-
-    // Validate product name
-    if (!productName.value || productName.value.trim() === '') {
-        errors.push('Название товара');
-        productName.style.borderColor = '#d32f2f';
-    }
-
-    // Validate quantity
-    if (!quantity.value || quantity.value < 1) {
-        errors.push('Количество (должно быть больше 0)');
-        quantity.style.borderColor = '#d32f2f';
-    }
-
-    // Show errors if any
-    if (errors.length > 0) {
-        errorDiv.textContent = 'Пожалуйста, заполните обязательные поля: ' + errors.join(', ');
-        errorDiv.style.display = 'block';
-        event.preventDefault();
-        return false;
-    }
-
-    return true;
-}
-            """),
-            cls="card"
-        ),
-
-        # Actions
-        Div(
-            A("← Back to Quote", href=f"/quotes/{quote_id}", role="button", cls="secondary"),
-            A("Calculate Quote", href=f"/quotes/{quote_id}/calculate", role="button", style="margin-left: 1rem;") if items else None,
-            cls="form-actions", style="margin-top: 1rem;"
-        ),
-
-        session=session
-    )
-
-
-def product_row(item, currency="RUB", supplier_info=None, buyer_company_info=None, pickup_location_info=None):
-    """Render a single product row with optional supplier, buyer company, and pickup location info (UI-016, UI-017, UI-018)"""
-    total = (item.get("quantity", 0) * Decimal(str(item.get("base_price_vat", 0)))) if item.get("base_price_vat") else Decimal(0)
-
-    # Build product info with brand badge
-    product_content = [
-        Strong(item.get("product_name", "—")),
-    ]
-
-    # Add SKU if present
-    if item.get('product_code'):
-        product_content.append(Small(f" SKU: {item.get('product_code')}", style="color: #666; margin-left: 0.5rem;"))
-
-    # Add brand if present
-    if item.get('brand'):
-        product_content.append(Small(f" | {item.get('brand')}", style="color: #0066cc; margin-left: 0.5rem;"))
-
-    # Add supplier badge if supplier is assigned (v3.0 - UI-016)
-    if supplier_info:
-        supplier_name = supplier_info.name if hasattr(supplier_info, 'name') else supplier_info.get('name', '')
-        supplier_code = supplier_info.supplier_code if hasattr(supplier_info, 'supplier_code') else supplier_info.get('supplier_code', '')
-        supplier_display = supplier_code or supplier_name[:20]
-        product_content.append(
-            Span(icon("package", size=14), f" {supplier_display}", style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.15rem;",
-                 title=f"Поставщик: {supplier_name}")
-        )
-    elif item.get("supplier_id"):
-        # Supplier ID exists but info not passed - show placeholder
-        product_content.append(
-            Span(icon("package", size=14), style="color: #0066cc; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center;",
-                 title="Поставщик назначен")
-        )
-
-    # Add buyer company badge if buyer company is assigned (v3.0 - UI-017)
-    if buyer_company_info:
-        buyer_name = buyer_company_info.name if hasattr(buyer_company_info, 'name') else buyer_company_info.get('name', '')
-        buyer_code = buyer_company_info.company_code if hasattr(buyer_company_info, 'company_code') else buyer_company_info.get('company_code', '')
-        buyer_display = buyer_code or buyer_name[:20]
-        product_content.append(
-            Span(icon("building-2", size=14), f" {buyer_display}", style="color: #008800; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.15rem;",
-                 title=f"Покупатель: {buyer_name}")
-        )
-    elif item.get("buyer_company_id"):
-        # Buyer company ID exists but info not passed - show placeholder
-        product_content.append(
-            Span(icon("building-2", size=14), style="color: #008800; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center;",
-                 title="Компания-покупатель назначена")
-        )
-
-    # Add pickup location badge if pickup location is assigned (v3.0 - UI-018)
-    if pickup_location_info:
-        location_code = pickup_location_info.code if hasattr(pickup_location_info, 'code') else pickup_location_info.get('code', '')
-        location_city = pickup_location_info.city if hasattr(pickup_location_info, 'city') else pickup_location_info.get('city', '')
-        location_country = pickup_location_info.country if hasattr(pickup_location_info, 'country') else pickup_location_info.get('country', '')
-        location_display = location_code or location_city[:15] or "—"
-        location_full = f"{location_city}, {location_country}" if location_city else location_country
-        product_content.append(
-            Span(icon("map-pin", size=14), f" {location_display}", style="color: #cc6600; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.15rem;",
-                 title=f"Точка отгрузки: {location_full}")
-        )
-    elif item.get("pickup_location_id"):
-        # Pickup location ID exists but info not passed - show placeholder
-        product_content.append(
-            Span(icon("map-pin", size=14), style="color: #cc6600; font-size: 0.85em; margin-left: 0.5rem; display: inline-flex; align-items: center;",
-                 title="Точка отгрузки назначена")
-        )
-
-    # Show price or "not specified" message
-    price_display = format_money(item.get("base_price_vat"), currency) if item.get("base_price_vat") else Span("Не указана", style="color: #999; font-style: italic;")
-    total_display = format_money(total, currency) if item.get("base_price_vat") else Span("—", style="color: #999;")
-
-    return Div(
-        Div(*product_content, style="flex: 2;"),
-        Div(f"Кол-во: {item.get('quantity', 0)}", style="flex: 1;"),
-        Div(price_display, style="flex: 1;"),
-        Div(total_display, style="flex: 1; font-weight: bold;" if item.get("base_price_vat") else "flex: 1;"),
-        Div(
-            Button("×",
-                hx_delete=f"/quotes/{item['quote_id']}/products/{item['id']}",
-                hx_target=f"#product-{item['id']}",
-                hx_swap="outerHTML",
-                cls="danger",
-                style="padding: 0.25rem 0.5rem; font-size: 1rem;"
-            ),
-            style="flex: 0;"
-        ),
-        id=f"product-{item['id']}",
-        style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem; border-bottom: 1px solid #eee;"
-    )
-
-
-@rt("/quotes/{quote_id}/products")
-def post(quote_id: str, product_name: str, quantity: str,
-         product_code: str = "", brand: str = "",
-         base_price_vat: str = "", idn_sku: str = "", weight_in_kg: str = "",
-         supplier_country: str = "", customs_code: str = "",
-         supplier_id: str = "", buyer_company_id: str = "", pickup_location_id: str = "", session=None):
-    """
-    Simplified product creation for sales role.
-    Sales manager only provides: product_name, product_code, brand, quantity.
-    Other fields (price, supplier, etc.) are filled by procurement team later.
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    # Convert numeric parameters (handle empty strings from form)
-    try:
-        qty = int(quantity) if quantity else 1
-        price = float(base_price_vat) if base_price_vat else 0.0  # Default to 0 for now
-        weight = float(weight_in_kg) if weight_in_kg else None
-    except (ValueError, TypeError):
-        return Div("Invalid numeric values", cls="alert alert-error")
-
-    # Verify quote belongs to user's org
-    quote_result = supabase.table("quotes") \
-        .select("id, currency") \
-        .eq("id", quote_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not quote_result.data:
-        return Div("Quote not found", cls="alert alert-error")
-
-    quote = quote_result.data[0]
-
-    try:
-        # Build item data with supply chain fields (UI-016)
-        item_data = {
-            "quote_id": quote_id,
-            "product_name": product_name,
-            "product_code": product_code or None,
-            "idn_sku": idn_sku or None,
-            "brand": brand or None,
-            "quantity": qty,
-            "base_price_vat": price,
-            "weight_in_kg": weight,
-            "supplier_country": supplier_country or None,
-            "customs_code": customs_code or None,
-        }
-
-        # Add supplier_id if provided (v3.0 supply chain - UI-016)
-        if supplier_id and supplier_id.strip():
-            item_data["supplier_id"] = supplier_id.strip()
-
-        # Add buyer_company_id if provided (v3.0 supply chain - UI-017)
-        if buyer_company_id and buyer_company_id.strip():
-            item_data["buyer_company_id"] = buyer_company_id.strip()
-
-        # Add pickup_location_id if provided (v3.0 supply chain - UI-018)
-        if pickup_location_id and pickup_location_id.strip():
-            item_data["pickup_location_id"] = pickup_location_id.strip()
-
-        result = supabase.table("quote_items").insert(item_data).execute()
-
-        new_item = result.data[0]
-
-        # Fetch supplier info for display if supplier_id was set (UI-016)
-        supplier_info = None
-        if new_item.get("supplier_id"):
-            try:
-                from services.supplier_service import get_supplier
-                supplier_info = get_supplier(new_item["supplier_id"])
-            except Exception:
-                pass
-
-        # Fetch buyer company info for display if buyer_company_id was set (UI-017)
-        buyer_company_info = None
-        if new_item.get("buyer_company_id"):
-            try:
-                from services.buyer_company_service import get_buyer_company
-                buyer_company_info = get_buyer_company(new_item["buyer_company_id"])
-            except Exception:
-                pass
-
-        # Fetch pickup location info for display if pickup_location_id was set (UI-018)
-        pickup_location_info = None
-        if new_item.get("pickup_location_id"):
-            try:
-                from services.location_service import get_location
-                pickup_location_info = get_location(new_item["pickup_location_id"])
-            except Exception:
-                pass
-
-        # Return just the new row for HTMX to append
-        return product_row(new_item, quote["currency"], supplier_info=supplier_info, buyer_company_info=buyer_company_info, pickup_location_info=pickup_location_info)
-
-    except Exception as e:
-        return Div(f"Error: {str(e)}", cls="alert alert-error")
-
-
-@rt("/quotes/{quote_id}/products/{item_id}")
-def delete(quote_id: str, item_id: str, session):
-    redirect = require_login(session)
-    if redirect:
-        return ""
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    # Verify quote belongs to user's org
-    quote_result = supabase.table("quotes") \
-        .select("id") \
-        .eq("id", quote_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not quote_result.data:
-        return ""
-
-    try:
-        supabase.table("quote_items") \
-            .delete() \
-            .eq("id", item_id) \
-            .eq("quote_id", quote_id) \
-            .execute()
-        # Return empty string to remove the element
-        return ""
-    except Exception as e:
-        return Div(f"Error: {str(e)}", cls="alert alert-error")
-
-
 # ============================================================================
 # QUOTE ITEM API (Handsontable)
 # ============================================================================
+# Note: /quotes/{quote_id}/products page was removed (2026-01-29)
+# Product entry is now done via Handsontable on /quotes/{quote_id} overview page
 
 @rt("/quotes/{quote_id}/items/{item_id}", methods=["PATCH"])
 async def patch_quote_item(quote_id: str, item_id: str, session, request):
@@ -13594,7 +13187,22 @@ def get(session, quote_id: str):
             items_with_customs += 1
         total_customs_cost += item_customs_total
 
-    # Build item cards for v3.0 item-level customs data
+    # Prepare items data for Handsontable (JSON)
+    items_for_handsontable = [
+        {
+            'id': item.get('id'),
+            'row_num': idx + 1,
+            'brand': item.get('brand', ''),
+            'product_name': item.get('product_name', ''),
+            'quantity': item.get('quantity', 1),
+            'supplier_country': item.get('supplier_country', ''),
+            'hs_code': item.get('hs_code') or '',
+            'customs_duty': float(item.get('customs_duty') or 0)
+        } for idx, item in enumerate(items)
+    ]
+    items_json = json.dumps(items_for_handsontable)
+
+    # Build item cards for v3.0 item-level customs data (DEPRECATED - replaced by Handsontable)
     def customs_item_card(item, idx):
         item_id = item.get("id")
         pickup_info = pickup_location_map.get(item.get("pickup_location_id"))
@@ -13699,12 +13307,27 @@ def get(session, quote_id: str):
             style="margin-bottom: 1rem; border-left: 3px solid " + (status_color if has_customs else "#e5e7eb") + ";"
         )
 
-    # Build the item-level customs section
+    # Build the item-level customs section with Handsontable
     item_customs_section = Div(
-        H3(icon("package", size=20), " Таможня по позициям (v3.0)", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
-        P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Дополнительные расходы включают СВХ, сертификацию, брокерские услуги.",
-          style="color: #666; margin-bottom: 1rem;"),
-        *[customs_item_card(item, idx) for idx, item in enumerate(items)],
+        # Header
+        Div(
+            Div(
+                H3(icon("package", size=20), " Таможня по позициям", style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+                Span(id="customs-items-count", style="margin-left: 0.5rem; color: #666;"),
+                style="display: flex; align-items: center;"
+            ),
+            Div(
+                Span(id="customs-save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
+                style="display: flex; align-items: center;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+        ),
+        P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Можно копировать из Excel.",
+          style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
+        # Handsontable container
+        Div(id="customs-spreadsheet", style="width: 100%; height: 350px; overflow: hidden;"),
+        cls="card" if items else None,
+        style="margin-bottom: 1rem;"
     ) if items else Div(
         P("Нет позиций в КП для таможенного оформления.", style="color: #666;"),
         cls="card"
@@ -13870,11 +13493,8 @@ def get(session, quote_id: str):
         cls="card"
     )
 
-    # Form wrapper
+    # Form wrapper (only for quote-level costs - items saved via Handsontable)
     customs_form = Form(
-        # Item-level customs (v3.0)
-        item_customs_section,
-
         # Quote-level costs (brokerage, SVH, documentation)
         quote_level_costs_section,
 
@@ -13883,7 +13503,7 @@ def get(session, quote_id: str):
 
         # Action buttons
         Div(
-            Button(icon("save", size=16), " Сохранить данные", type="submit", name="action", value="save",
+            Button(icon("save", size=16), " Сохранить расходы", type="submit", name="action", value="save",
                    style="margin-right: 0.5rem;") if is_editable else None,
             Button(icon("check", size=16), " Завершить таможню", type="submit", name="action", value="complete",
                    cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
@@ -13995,12 +13615,15 @@ def get(session, quote_id: str):
         # Instructions
         Div(
             H3(icon("info", size=20), " Инструкция", cls="card-header"),
-            P("Для каждой позиции укажите код ТН ВЭД и процент пошлины. Пошлина рассчитывается от закупочной стоимости.", style="margin-bottom: 0;"),
+            P("Заполните код ТН ВЭД и пошлину в таблице. Данные сохраняются автоматически. Можно копировать из Excel.", style="margin-bottom: 0;"),
             cls="card",
             style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
         ) if is_editable else None,
 
-        # Items form (v3.0)
+        # Items table (Handsontable - auto-save)
+        item_customs_section,
+
+        # Quote-level costs form
         customs_form,
 
         # Transition history (Feature #88)
@@ -14020,6 +13643,151 @@ def get(session, quote_id: str):
                 color: #1f2937;
             }
         """),
+
+        # Handsontable initialization script for customs
+        Script(f"""
+            (function() {{
+                var quoteId = '{quote_id}';
+                var initialData = {items_json};
+                var isEditable = {'true' if is_editable else 'false'};
+                var hot = null;
+
+                function updateCount() {{
+                    var count = hot ? hot.countRows() : 0;
+                    var el = document.getElementById('customs-items-count');
+                    if (el) el.textContent = '(' + count + ' позиций)';
+                }}
+
+                function showSaveStatus(status) {{
+                    var el = document.getElementById('customs-save-status');
+                    if (!el) return;
+                    if (status === 'saving') {{
+                        el.textContent = 'Сохранение...';
+                        el.style.color = '#f59e0b';
+                    }} else if (status === 'saved') {{
+                        el.textContent = 'Сохранено';
+                        el.style.color = '#10b981';
+                        setTimeout(function() {{ el.textContent = ''; }}, 2000);
+                    }} else if (status === 'error') {{
+                        el.textContent = 'Ошибка сохранения';
+                        el.style.color = '#ef4444';
+                    }}
+                }}
+
+                function saveCell(row, prop, newVal) {{
+                    var rowData = hot.getSourceDataAtRow(row);
+                    if (!rowData || !rowData.id) return;
+
+                    showSaveStatus('saving');
+                    var body = {{}};
+                    body[prop] = newVal;
+
+                    fetch('/customs/' + quoteId + '/items/' + rowData.id, {{
+                        method: 'PATCH',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify(body)
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(data) {{
+                        if (data.success) {{
+                            showSaveStatus('saved');
+                        }} else {{
+                            showSaveStatus('error');
+                        }}
+                    }})
+                    .catch(function() {{ showSaveStatus('error'); }});
+                }}
+
+                var saveTimeout = null;
+                function debouncedSave(row, prop, newVal) {{
+                    clearTimeout(saveTimeout);
+                    saveTimeout = setTimeout(function() {{ saveCell(row, prop, newVal); }}, 500);
+                }}
+
+                function initTable() {{
+                    var container = document.getElementById('customs-spreadsheet');
+                    if (!container || typeof Handsontable === 'undefined') return;
+
+                    hot = new Handsontable(container, {{
+                        licenseKey: 'non-commercial-and-evaluation',
+                        data: initialData,
+                        colHeaders: ['№', 'Бренд', 'Наименование', 'Кол-во', 'Страна', 'Код ТН ВЭД', 'Пошлина %'],
+                        columns: [
+                            {{data: 'row_num', readOnly: true, type: 'numeric', width: 40,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = row + 1;
+                                  td.style.textAlign = 'center';
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'brand', readOnly: true, type: 'text', width: 100,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = value || '—';
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'product_name', readOnly: true, type: 'text', width: 250,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = (value || '—').substring(0, 50);
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'quantity', readOnly: true, type: 'numeric', width: 60,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = value || 0;
+                                  td.style.textAlign = 'center';
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'supplier_country', readOnly: true, type: 'text', width: 80,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = value || '—';
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'hs_code', type: 'text', width: 120, readOnly: !isEditable}},
+                            {{data: 'customs_duty', type: 'numeric', width: 80, readOnly: !isEditable,
+                              numericFormat: {{pattern: '0.00'}}
+                            }}
+                        ],
+                        rowHeaders: false,
+                        stretchH: 'all',
+                        autoWrapRow: true,
+                        autoWrapCol: true,
+                        contextMenu: isEditable ? ['copy', 'cut'] : ['copy'],
+                        manualColumnResize: true,
+                        afterChange: function(changes, source) {{
+                            if (source === 'loadData' || !changes) return;
+                            changes.forEach(function(change) {{
+                                var row = change[0], prop = change[1], oldVal = change[2], newVal = change[3];
+                                if (oldVal !== newVal && (prop === 'hs_code' || prop === 'customs_duty')) {{
+                                    debouncedSave(row, prop, newVal);
+                                }}
+                            }});
+                        }}
+                    }});
+
+                    updateCount();
+                    window.customsHot = hot;
+                }}
+
+                if (document.readyState === 'loading') {{
+                    document.addEventListener('DOMContentLoaded', initTable);
+                }} else {{
+                    initTable();
+                }}
+            }})();
+        """) if items else None,
 
         session=session
     )
@@ -14183,6 +13951,86 @@ async def post(session, quote_id: str, request):
             print(f"Error completing customs: {result.error_message}")
 
     return RedirectResponse(f"/customs/{quote_id}", status_code=303)
+
+
+# ============================================================================
+# CUSTOMS ITEM API (Handsontable auto-save)
+# ============================================================================
+
+@rt("/customs/{quote_id}/items/{item_id}")
+async def patch(session, quote_id: str, item_id: str, request):
+    """Update a single customs item field (for Handsontable auto-save)"""
+    redirect = require_login(session)
+    if redirect:
+        return {"success": False, "error": "Not authenticated"}
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
+        return {"success": False, "error": "Unauthorized"}
+
+    try:
+        body = await request.json()
+    except:
+        return {"success": False, "error": "Invalid JSON"}
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to org
+    quote_result = supabase.table("quotes") \
+        .select("id, workflow_status, customs_completed_at") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return {"success": False, "error": "Quote not found"}
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if editable
+    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
+    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
+        return {"success": False, "error": "Quote not editable"}
+
+    # Verify item belongs to quote
+    item_result = supabase.table("quote_items") \
+        .select("id") \
+        .eq("id", item_id) \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    if not item_result.data:
+        return {"success": False, "error": "Item not found"}
+
+    # Build update dict for allowed fields only
+    allowed_fields = ["hs_code", "customs_duty"]
+    update_data = {}
+
+    for field in allowed_fields:
+        if field in body:
+            val = body[field]
+            if field == "customs_duty":
+                try:
+                    update_data[field] = float(val) if val is not None else 0
+                except:
+                    update_data[field] = 0
+            else:
+                update_data[field] = val if val else None
+
+    if not update_data:
+        return {"success": False, "error": "No valid fields to update"}
+
+    # Update item
+    supabase.table("quote_items") \
+        .update(update_data) \
+        .eq("id", item_id) \
+        .execute()
+
+    return {"success": True}
 
 
 # ============================================================================
