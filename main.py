@@ -4743,7 +4743,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
                 Div(
                     # Avatar placeholder
                     Div(
-                        icon("user", size=48, cls="", style="color: #9ca3af;"),
+                        Span(icon("user", size=48), style="color: #9ca3af;"),
                         style="width: 80px; height: 80px; background: #f3f4f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;"
                     ),
                     # Name
@@ -4758,13 +4758,13 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
                     ),
                     # Phone
                     P(
-                        icon("phone", size=14, style="margin-right: 0.375rem;"),
+                        Span(icon("phone", size=14), style="margin-right: 0.375rem;"),
                         profile.get("phone") or "—",
                         style="text-align: center; color: #374151; margin: 0 0 0.5rem 0; font-size: 0.875rem; display: flex; align-items: center; justify-content: center;"
                     ) if profile and profile.get("phone") else None,
                     # Organization
                     P(
-                        icon("building-2", size=14, style="margin-right: 0.375rem;"),
+                        Span(icon("building-2", size=14), style="margin-right: 0.375rem;"),
                         org_name,
                         style="text-align: center; color: #374151; margin: 0; font-size: 0.875rem; display: flex; align-items: center; justify-content: center;"
                     ),
