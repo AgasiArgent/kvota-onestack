@@ -13274,7 +13274,7 @@ def render_offers_badge(offers_count: int, has_selected: bool):
     )
 
 
-@rt("/quote-items/{item_id}/offers")
+@app.get("/quote-items/{item_id}/offers")
 def get_offers_list(item_id: str, session):
     """GET: Fetch and render offers list for an item."""
     redirect = require_login(session)
