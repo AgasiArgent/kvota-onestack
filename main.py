@@ -7409,7 +7409,7 @@ def post(quote_id: str, session, comment: str = ""):
         return page_layout("Успешно",
             H1(icon("check", size=28), " КП возвращено на проверку"),
             P("КП отправлено контроллёру КП для повторной проверки."),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -7668,7 +7668,7 @@ def post(session, quote_id: str, justification: str = ""):
         P(f"КП {idn_quote} с вашим обоснованием отправлено на согласование топ-менеджеру."),
         *details,
         P("Вы получите уведомление о решении.", style="color: #666;"),
-        A("← К задачам", href="/tasks", role="button"),
+        btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
         session=session
     )
 
@@ -7916,7 +7916,7 @@ def post(session, quote_id: str, department: str = "quote_control", comment: str
             H1(icon("check", size=28), " КП возвращено на доработку"),
             P(f"КП отправлено в отдел «{department_name}» для доработки."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -10426,9 +10426,9 @@ def get(quote_id: str, version_num: int, session):
         ),
 
         Div(
-            A("← Version History", href=f"/quotes/{quote_id}/versions", role="button"),
-            A("Back to Quote", href=f"/quotes/{quote_id}", role="button", cls="secondary", style="margin-left: 0.5rem;"),
-            style="margin-top: 1rem;"
+            btn_link("Version History", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="arrow-left"),
+            btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="file-text"),
+            style="margin-top: 1rem; display: flex; gap: 0.5rem;"
         ),
 
         session=session
@@ -10571,8 +10571,8 @@ def get(session):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Настройки доступны только администраторам. Используйте раздел 'Профиль' для управления своими данными."),
-            A("← На главную", href="/dashboard", role="button"),
-            A("Мой профиль", href="/profile", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            btn_link("Мой профиль", href="/profile", variant="primary", icon_name="user"),
             session=session
         )
 
@@ -11561,7 +11561,7 @@ def post(session, full_name: str, phone: str = "", date_of_birth: str = "",
     else:
         return page_layout("Ошибка",
             Div(Div("Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
-                A("← Назад к профилю", href="/profile", role="button")),
+                btn_link("Назад к профилю", href="/profile", variant="secondary", icon_name="arrow-left")),
             session=session)
 
 
@@ -11577,7 +11577,7 @@ def get(session, user_id: str):
     if "admin" not in roles:
         return page_layout("Доступ запрещён", H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"), session=session)
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"), session=session)
 
     supabase = get_supabase()
     from services.user_profile_service import get_departments, get_sales_groups, get_organization_users
@@ -11675,7 +11675,7 @@ def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: 
     if "admin" not in roles:
         return page_layout("Доступ запрещён", H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"), session=session)
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"), session=session)
 
     from services.user_profile_service import update_user_profile
 
@@ -11703,7 +11703,7 @@ def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: 
     else:
         return page_layout("Ошибка",
             Div(Div("Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
-                A("← Назад к профилю", href=f"/profile/{user_id}", role="button")),
+                btn_link("Назад к профилю", href=f"/profile/{user_id}", variant="secondary", icon_name="arrow-left")),
             session=session)
 
 @rt("/procurement")
@@ -11760,7 +11760,7 @@ def get(quote_id: str, session):
             Div(
                 H1("КП не найдено"),
                 P("КП не существует или у вас нет доступа."),
-                A("Назад к задачам", href="/tasks", role="button"),
+                btn_link("Назад к задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -12081,8 +12081,7 @@ def get(quote_id: str, session):
         Div(
             Div(
                 H3("Мой прогресс", style="margin: 0;"),
-                A("📥 Скачать Excel", href=f"/procurement/{quote_id}/export", role="button",
-                  cls="secondary", style="font-size: 0.875rem;") if total_items > 0 else None,
+                btn_link("Скачать Excel", href=f"/procurement/{quote_id}/export", variant="secondary", size="sm", icon_name="download") if total_items > 0 else None,
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
             ),
             Div(
@@ -12384,7 +12383,7 @@ def get(quote_id: str, session):
         return page_layout("Инвойсы",
             H1("Нет товаров для группировки"),
             P("У вас нет товаров в этом КП."),
-            A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button")
+            btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="secondary", icon_name="arrow-left")
         )
 
     # Group items into invoices by (supplier + buyer_company + pickup_location + currency)
@@ -12408,7 +12407,7 @@ def get(quote_id: str, session):
         return page_layout("Инвойсы",
             H1("Нет товаров для группировки"),
             P("Товары не заполнены полностью (поставщик, компания-покупатель)."),
-            A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button")
+            btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="secondary", icon_name="arrow-left")
         )
 
     # Fetch supplier and buyer company names for display
@@ -12911,7 +12910,7 @@ def post(quote_id: str, session, comment: str = ""):
         return page_layout("Успешно",
             H1(icon("check", size=28), " КП возвращено на проверку"),
             P("КП отправлено контроллёру КП для повторной проверки."),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -13878,7 +13877,7 @@ def post(quote_id: str, session, comment: str = ""):
         return page_layout("Успешно",
             H1(icon("check", size=28), " КП возвращено на проверку"),
             P("КП отправлено контроллёру КП для повторной проверки."),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -15065,7 +15064,7 @@ def post(quote_id: str, session, comment: str = ""):
         return page_layout("Успешно",
             H1(icon("check", size=28), " КП возвращено на проверку"),
             P("КП отправлено контроллёру КП для повторной проверки."),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -16570,7 +16569,7 @@ def post(session, quote_id: str, comment: str = "", department: str = "sales"):
             H1(icon("check", size=28), " КП возвращено на доработку", cls="page-header"),
             P(f"КП было успешно возвращено {department_name}."),
             P(f"Комментарий: {comment.strip()}", style="color: #666; font-style: italic;"),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -16828,7 +16827,7 @@ def post(session, quote_id: str, comment: str = ""):
             P(f"КП {idn_quote} отправлено менеджеру продаж для обоснования."),
             P(f"Причина согласования: {comment.strip()}", style="color: #666; font-style: italic;"),
             P("После того как менеджер продаж предоставит обоснование, КП будет отправлено на согласование топ-менеджеру.", style="color: #666;"),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -17069,7 +17068,7 @@ def post(session, quote_id: str, comment: str = ""):
             H1(icon("check-circle", size=28), " КП одобрено", cls="page-header"),
             P(f"КП {idn_quote} было успешно одобрено."),
             P("Теперь менеджер по продажам может отправить его клиенту.", style="color: #666;"),
-            A("← К задачам", href="/tasks", role="button"),
+            btn_link("К задачам", href="/tasks", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
@@ -19175,11 +19174,9 @@ def post(session, spec_id: str):
                 style="background: #d4edda; border-left: 4px solid #28a745; padding: 1rem;"
             ),
             Div(
-                A("→ К спецификации", href=f"/spec-control/{spec_id}", role="button",
-                  style="background: #007bff; border-color: #007bff; margin-right: 1rem;"),
-                A("← Назад к списку", href="/spec-control", role="button",
-                  style="background: #6c757d; border-color: #6c757d;"),
-                style="margin-top: 1rem;"
+                btn_link("К спецификации", href=f"/spec-control/{spec_id}", variant="primary", icon_name="arrow-right"),
+                btn_link("Назад к списку", href="/spec-control", variant="secondary", icon_name="arrow-left"),
+                style="margin-top: 1rem; display: flex; gap: 0.5rem;"
             ),
             session=session
         )
@@ -19492,19 +19489,11 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
 
     # Build filter buttons
     filter_buttons = Div(
-        A("Все", href="/finance", role="button",
-          cls="secondary" if status_filter and status_filter != "all" else "",
-          style="margin-right: 0.5rem;"),
-        A("В работе", href="/finance?status_filter=active", role="button",
-          cls="secondary" if status_filter != "active" else "",
-          style="margin-right: 0.5rem; background: #10b981;" if status_filter == "active" else "margin-right: 0.5rem;"),
-        A("Завершённые", href="/finance?status_filter=completed", role="button",
-          cls="secondary" if status_filter != "completed" else "",
-          style="margin-right: 0.5rem; background: #3b82f6;" if status_filter == "completed" else "margin-right: 0.5rem;"),
-        A("Отменённые", href="/finance?status_filter=cancelled", role="button",
-          cls="secondary" if status_filter != "cancelled" else "",
-          style="background: #ef4444;" if status_filter == "cancelled" else ""),
-        style="margin-bottom: 1.5rem;"
+        btn_link("Все", href="/finance", variant="primary" if not status_filter or status_filter == "all" else "secondary"),
+        btn_link("В работе", href="/finance?status_filter=active", variant="success" if status_filter == "active" else "secondary"),
+        btn_link("Завершённые", href="/finance?status_filter=completed", variant="primary" if status_filter == "completed" else "secondary"),
+        btn_link("Отменённые", href="/finance?status_filter=cancelled", variant="danger" if status_filter == "cancelled" else "secondary"),
+        style="margin-bottom: 1.5rem; display: flex; gap: 0.5rem;"
     )
 
     # Show appropriate table based on filter
@@ -20219,7 +20208,7 @@ def get(session, deal_id: str):
             return page_layout("Ошибка",
                 H1("Сделка не найдена"),
                 P(f"Сделка с ID {deal_id} не найдена или у вас нет доступа."),
-                A("← Назад к списку сделок", href="/finance", role="button"),
+                btn_link("Назад к списку сделок", href="/finance", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     except Exception as e:
@@ -20227,7 +20216,7 @@ def get(session, deal_id: str):
         return page_layout("Ошибка",
             H1("Ошибка загрузки"),
             P(f"Не удалось загрузить сделку: {str(e)}"),
-            A("← Назад к списку сделок", href="/finance", role="button"),
+            btn_link("Назад к списку сделок", href="/finance", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -20368,8 +20357,7 @@ def get(session, deal_id: str):
             Td(variance_str, style=f"text-align: right; color: {variance_color}; font-weight: 500;"),
             Td(payment_status),
             Td(
-                A("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", role="button",
-                  style="font-size: 0.75rem; padding: 0.2rem 0.5rem; background: #6b7280;") if actual_amount is None else "",
+                btn_link("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", variant="primary", size="sm") if actual_amount is None else "",
             ),
         )
 
@@ -20395,10 +20383,9 @@ def get(session, deal_id: str):
         plan_fact_table = Div(
             P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic; margin-bottom: 1rem;"),
             Div(
-                A(icon("refresh-cw", size=16), " Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
-                  style="background: #3b82f6; margin-right: 0.5rem;"),
-                A("+ Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", role="button",
-                  style="background: #10b981;"),
+                btn_link("Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", variant="primary", icon_name="refresh-cw"),
+                btn_link("Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", variant="success", icon_name="plus"),
+                style="display: flex; gap: 0.5rem; justify-content: center;"
             ),
             style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 8px;"
         )
@@ -20479,10 +20466,9 @@ def get(session, deal_id: str):
             Div(
                 H2("План-факт платежей", style="display: inline-block; margin-right: 1rem;"),
                 Div(
-                    A("+ Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", role="button",
-                      style="background: #10b981; font-size: 0.875rem; margin-right: 0.5rem;"),
-                    A(icon("refresh-cw", size=16), " Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", role="button",
-                      style="background: #6b7280; font-size: 0.875rem;"),
+                    btn_link("Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", variant="success", size="sm", icon_name="plus"),
+                    btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
+                    style="display: flex; gap: 0.5rem;"
                 ) if plan_fact_items else "",
                 style="display: flex; align-items: center; margin-bottom: 1rem;"
             ),
@@ -20529,7 +20515,7 @@ def get(session, deal_id: str):
         return page_layout("Ошибка",
             H1("Ошибка генерации"),
             P(f"Не удалось подготовить предпросмотр: {preview.get('error')}"),
-            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -20689,7 +20675,7 @@ def post(session, deal_id: str):
         return page_layout("Ошибка генерации",
             H1("Ошибка"),
             P(f"Не удалось сгенерировать плановые платежи: {result.error}"),
-            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -20739,7 +20725,7 @@ def get(session, deal_id: str, item_id: str):
             return page_layout("Ошибка",
                 H1("Платёж не найден"),
                 P(f"Запись план-факта с ID {item_id} не найдена."),
-                A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+                btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     except Exception as e:
@@ -20747,7 +20733,7 @@ def get(session, deal_id: str, item_id: str):
         return page_layout("Ошибка",
             H1("Ошибка загрузки"),
             P(f"Не удалось загрузить запись: {str(e)}"),
-            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -20756,7 +20742,7 @@ def get(session, deal_id: str, item_id: str):
         return page_layout("Ошибка",
             H1("Неверный запрос"),
             P("Запись план-факта не относится к указанной сделке."),
-            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -20771,7 +20757,7 @@ def get(session, deal_id: str, item_id: str):
             return page_layout("Ошибка",
                 H1("Сделка не найдена"),
                 P("Сделка не найдена или у вас нет доступа."),
-                A("← Назад к финансам", href="/finance", role="button"),
+                btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     except Exception as e:
@@ -20779,7 +20765,7 @@ def get(session, deal_id: str, item_id: str):
         return page_layout("Ошибка",
             H1("Ошибка загрузки"),
             P(f"Не удалось загрузить сделку: {str(e)}"),
-            A("← Назад к финансам", href="/finance", role="button"),
+            btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21004,7 +20990,7 @@ def post(session, deal_id: str, item_id: str,
         return page_layout("Ошибка",
             H1("Ошибка валидации"),
             P("Сумма и дата платежа обязательны для заполнения."),
-            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            btn_link("Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21019,7 +21005,7 @@ def post(session, deal_id: str, item_id: str,
             return page_layout("Ошибка",
                 H1("Доступ запрещён"),
                 P("Сделка не найдена или у вас нет доступа."),
-                A("← Назад к финансам", href="/finance", role="button"),
+                btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
 
@@ -21032,7 +21018,7 @@ def post(session, deal_id: str, item_id: str,
             return page_layout("Ошибка",
                 H1("Запись не найдена"),
                 P("Запись план-факта не найдена или не относится к указанной сделке."),
-                A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+                btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     except Exception as e:
@@ -21040,7 +21026,7 @@ def post(session, deal_id: str, item_id: str,
         return page_layout("Ошибка",
             H1("Ошибка"),
             P(f"Не удалось проверить запись: {str(e)}"),
-            A("← Назад к сделке", href=f"/finance/{deal_id}", role="button"),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21051,7 +21037,7 @@ def post(session, deal_id: str, item_id: str,
         return page_layout("Ошибка",
             H1("Ошибка валидации"),
             P("Некорректное значение суммы."),
-            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            btn_link("Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21071,7 +21057,7 @@ def post(session, deal_id: str, item_id: str,
             return page_layout("Ошибка",
                 H1("Ошибка валидации"),
                 P("Некорректное значение курса валюты."),
-                A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+                btn_link("Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     else:
@@ -21096,7 +21082,7 @@ def post(session, deal_id: str, item_id: str,
         return page_layout("Ошибка",
             H1("Ошибка сохранения"),
             P(f"Не удалось сохранить платёж: {str(e)}"),
-            A("← Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", role="button"),
+            btn_link("Назад к форме", href=f"/finance/{deal_id}/plan-fact/{item_id}", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21135,7 +21121,7 @@ def get(session, tab: str = "users"):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21301,8 +21287,8 @@ def get(session, tab: str = "users"):
 
             # Navigation
             Div(
-                A("← На главную", href="/dashboard", role="button", cls="secondary"),
-                A("Назначение брендов →", href="/admin/brands", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+                btn_link("Назначение брендов", href="/admin/brands", variant="primary", icon_name="arrow-right"),
                 style="margin-top: 24px; display: flex; gap: 12px;"
             ),
             id="tab-content"
@@ -21346,7 +21332,7 @@ def get(session, tab: str = "users"):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                A("+ Добавить компанию-продавца", href="/seller-companies/new", role="button", cls="outline"),
+                btn_link("Добавить компанию-продавца", href="/seller-companies/new", variant="success", icon_name="plus"),
                 style="margin-bottom: 1rem;"
             ),
             Table(
@@ -21407,7 +21393,7 @@ def get(session, tab: str = "users"):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                A("+ Добавить компанию-покупателя", href="/buyer-companies/new", role="button", cls="outline"),
+                btn_link("Добавить компанию-покупателя", href="/buyer-companies/new", variant="success", icon_name="plus"),
                 style="margin-bottom: 1rem;"
             ),
             Table(
@@ -21696,7 +21682,7 @@ def get(user_id: str, session):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21792,7 +21778,7 @@ def post(user_id: str, session, roles: list = None):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -21841,7 +21827,7 @@ def post(user_id: str, session, roles: list = None):
             style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-top: 16px;"
         ),
         Div(
-            A("← Назад к списку", href="/admin/users", role="button"),
+            btn_link("Назад к списку", href="/admin/users", variant="secondary", icon_name="arrow-left"),
             style="margin-top: 24px;"
         ),
         session=session
@@ -21877,7 +21863,7 @@ def get(session):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22010,7 +21996,7 @@ def get(session):
 
         # Add new assignment button
         Div(
-            A("+ Добавить назначение", href="/admin/brands/new", role="button"),
+            btn_link("Добавить назначение", href="/admin/brands/new", variant="success", icon_name="plus"),
             style="margin-bottom: 24px;"
         ),
 
@@ -22035,8 +22021,8 @@ def get(session):
 
         # Navigation
         Div(
-            A("← Управление пользователями", href="/admin/users", role="button", cls="secondary"),
-            A("На главную", href="/dashboard", role="button", cls="secondary"),
+            btn_link("Управление пользователями", href="/admin/users", variant="secondary", icon_name="arrow-left"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="home"),
             style="margin-top: 24px; display: flex; gap: 12px;"
         ),
 
@@ -22058,7 +22044,7 @@ def get(session, brand: str = None):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22139,7 +22125,7 @@ def post(session, brand: str, user_id: str):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22155,7 +22141,7 @@ def post(session, brand: str, user_id: str):
             H1(icon("alert-triangle", size=28), " Бренд уже назначен", cls="page-header"),
             P(f"Бренд '{brand}' уже назначен другому менеджеру."),
             P("Используйте функцию редактирования для изменения назначения."),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22177,14 +22163,14 @@ def post(session, brand: str, user_id: str):
                 Span(user_id[:8] + "...", style="color: #6b7280;"),
                 style="margin: 16px 0;"
             ),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
         return page_layout("Ошибка",
             H1(icon("x-circle", size=28), " Ошибка создания", cls="page-header"),
             P("Не удалось создать назначение. Попробуйте ещё раз."),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22203,7 +22189,7 @@ def get(assignment_id: str, session):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22213,7 +22199,7 @@ def get(assignment_id: str, session):
     if not assignment:
         return page_layout("Не найдено",
             H1("Назначение не найдено"),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22290,7 +22276,7 @@ def post(assignment_id: str, session, user_id: str, brand: str = None):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22300,7 +22286,7 @@ def post(assignment_id: str, session, user_id: str, brand: str = None):
     if not assignment:
         return page_layout("Не найдено",
             H1("Назначение не найдено"),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22317,14 +22303,14 @@ def post(assignment_id: str, session, user_id: str, brand: str = None):
                 Span(user_id[:8] + "...", style="color: #6b7280;"),
                 style="margin: 16px 0;"
             ),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
         return page_layout("Ошибка",
             H1(icon("x-circle", size=28), " Ошибка обновления", cls="page-header"),
             P("Не удалось обновить назначение. Попробуйте ещё раз."),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22343,7 +22329,7 @@ def post(assignment_id: str, session):
         return page_layout("Доступ запрещён",
             H1("Доступ запрещён"),
             P("Эта страница доступна только администраторам."),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -22359,14 +22345,14 @@ def post(assignment_id: str, session):
             H1("✓ Назначение удалено"),
             P(f"Бренд '{brand_name}' больше не назначен менеджеру."),
             P("Бренд вернулся в список неназначенных.", style="color: #6b7280;"),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
     else:
         return page_layout("Ошибка",
             H1(icon("x-circle", size=28), " Ошибка удаления", cls="page-header"),
             P("Не удалось удалить назначение. Попробуйте ещё раз."),
-            A("← Назад к списку", href="/admin/brands", role="button"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -23318,7 +23304,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника поставщиков."),
                 P("Требуется роль: admin или procurement"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -23609,7 +23595,7 @@ def get(supplier_id: str, session):
             Div(
                 H1(icon("x-circle", size=28), " Поставщик не найден", cls="page-header"),
                 P("Запрашиваемый поставщик не существует."),
-                A("← К списку поставщиков", href="/suppliers", role="button"),
+                btn_link("К списку поставщиков", href="/suppliers", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -23624,7 +23610,7 @@ def get(supplier_id: str, session):
             H1(icon("package", size=28), f" {supplier.name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
-                A("← К списку", href="/suppliers", role="button", cls="secondary"),
+                btn_link("К списку", href="/suppliers", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; gap: 0.5rem;"
             ),
             style="display: flex; justify-content: space-between; align-items: center;"
@@ -23861,8 +23847,8 @@ def _supplier_form(supplier=None, error=None, session=None):
                 # Form actions
                 Div(
                     btn("Сохранить", variant="primary", icon_name="save", type="submit"),
-                    A("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", role="button", cls="secondary"),
-                    cls="form-actions", style="margin-top: 1.5rem;"
+                    btn_link("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", variant="secondary", icon_name="x"),
+                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
                 ),
 
                 method="post",
@@ -23895,7 +23881,7 @@ def get(supplier_id: str, session):
     if not supplier:
         return page_layout("Поставщик не найден",
             Div("Запрашиваемый поставщик не существует.", cls="alert alert-error"),
-            A("← К списку поставщиков", href="/suppliers", role="button"),
+            btn_link("К списку поставщиков", href="/suppliers", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -24009,7 +23995,7 @@ def post(supplier_id: str, session):
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать поставщика.", cls="alert alert-error"),
-            A("← К списку поставщиков", href="/suppliers", role="button"),
+            btn_link("К списку поставщиков", href="/suppliers", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -24041,7 +24027,7 @@ def get(session, q: str = "", status: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника компаний-покупателей."),
                 P("Требуется роль: admin"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -24118,7 +24104,7 @@ def get(session, q: str = "", status: str = ""):
         # Header
         Div(
             H1(icon("building-2", size=28), " Компании-покупатели (закупки)", cls="page-header"),
-            A("+ Добавить компанию", href="/buyer-companies/new", role="button"),
+            btn_link("Добавить компанию", href="/buyer-companies/new", variant="success", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -24156,7 +24142,7 @@ def get(session, q: str = "", status: str = ""):
                     Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
                     btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    A("Сбросить", href="/buyer-companies", role="button", cls="secondary"),
+                    btn_link("Сбросить", href="/buyer-companies", variant="secondary", icon_name="x"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
                 method="get",
@@ -24338,7 +24324,7 @@ def get(company_id: str, session):
             Div(
                 H1(icon("x-circle", size=28), " Компания не найдена", cls="page-header"),
                 P("Запрашиваемая компания-покупатель не существует."),
-                A("← К списку компаний", href="/buyer-companies", role="button"),
+                btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -24353,7 +24339,7 @@ def get(company_id: str, session):
             H1(icon("building-2", size=28), f" {company.name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
-                A("← К списку", href="/buyer-companies", role="button", cls="secondary"),
+                btn_link("К списку", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; gap: 0.5rem;"
             ),
             style="display: flex; justify-content: space-between; align-items: center;"
@@ -24576,8 +24562,8 @@ def _buyer_company_form(company=None, error=None, session=None):
                 # Form actions
                 Div(
                     btn("Сохранить", variant="primary", icon_name="save", type="submit"),
-                    A("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", role="button", cls="secondary"),
-                    cls="form-actions", style="margin-top: 1.5rem;"
+                    btn_link("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", variant="secondary", icon_name="x"),
+                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
                 ),
 
                 method="post",
@@ -24610,7 +24596,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
-            A("← К списку компаний", href="/buyer-companies", role="button"),
+            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -24653,7 +24639,7 @@ def post(
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
-            A("← К списку компаний", href="/buyer-companies", role="button"),
+            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -24758,7 +24744,7 @@ def post(company_id: str, session):
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
-            A("← К списку компаний", href="/buyer-companies", role="button"),
+            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -24790,7 +24776,7 @@ def get(session, q: str = "", status: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника компаний-продавцов."),
                 P("Требуется роль: admin"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -24868,7 +24854,7 @@ def get(session, q: str = "", status: str = ""):
         # Header
         Div(
             H1(icon("building-2", size=28), " Компании-продавцы (наши юрлица)", cls="page-header"),
-            A("+ Добавить компанию", href="/seller-companies/new", role="button"),
+            btn_link("Добавить компанию", href="/seller-companies/new", variant="success", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -25082,7 +25068,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Не найдено",
             Div("Компания-продавец не найдена.", cls="alert alert-error"),
-            A("← К списку компаний", href="/seller-companies", role="button"),
+            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -25097,7 +25083,7 @@ def get(company_id: str, session):
                 Div(
                     A(icon("edit", size=16), " Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
                     " ",
-                    A("← К списку", href="/seller-companies", role="button", cls="secondary"),
+                    btn_link("К списку", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
                     style="display: flex; gap: 0.5rem;"
                 ),
                 style="display: flex; justify-content: space-between; align-items: center;"
@@ -25344,8 +25330,8 @@ def _seller_company_form(
                 # Form actions
                 Div(
                     btn("Сохранить", variant="primary", icon_name="save", type="submit"),
-                    A("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", role="button", cls="secondary"),
-                    cls="form-actions", style="margin-top: 1.5rem;"
+                    btn_link("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", variant="secondary", icon_name="x"),
+                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
                 ),
 
                 method="post",
@@ -25378,7 +25364,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
-            A("← К списку компаний", href="/seller-companies", role="button"),
+            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -25421,7 +25407,7 @@ def post(
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
-            A("← К списку компаний", href="/seller-companies", role="button"),
+            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -25520,7 +25506,7 @@ def post(company_id: str, session):
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
-            A("← К списку компаний", href="/seller-companies", role="button"),
+            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -25553,7 +25539,7 @@ def get(session, q: str = "", status: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника клиентов."),
                 P("Требуется одна из ролей: admin, sales, top_manager"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -25785,7 +25771,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
     if not customer:
         return page_layout("Не найдено",
             Div("Клиент не найден.", cls="alert alert-error"),
-            A("← К списку клиентов", href="/customers", role="button"),
+            btn_link("К списку клиентов", href="/customers", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -27447,7 +27433,7 @@ def get(user_id: str, session, tab: str = "general"):
     if user_id != current_user_id and not is_admin:
         return page_layout("Access Denied",
             Div("У вас нет прав для просмотра данного профиля.", cls="alert alert-error"),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -27463,7 +27449,7 @@ def get(user_id: str, session, tab: str = "general"):
     if not profile:
         return page_layout("Не найдено",
             Div("Пользователь не найден.", cls="alert alert-error"),
-            A("← На главную", href="/dashboard", role="button"),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -28002,7 +27988,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра договоров."),
                 P("Требуется одна из ролей: admin, sales, top_manager"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -28118,7 +28104,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         # Header
         Div(
             H1(icon("file-text", size=28), f" {page_title}", cls="page-header"),
-            A("+ Добавить договор", href="/customer-contracts/new", role="button"),
+            btn_link("Добавить договор", href="/customer-contracts/new", variant="success", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -28226,7 +28212,7 @@ def get(contract_id: str, session):
     if not contract:
         return page_layout("Не найдено",
             Div("Договор не найден.", cls="alert alert-error"),
-            A("← К списку договоров", href="/customer-contracts", role="button"),
+            btn_link("К списку договоров", href="/customer-contracts", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -28245,7 +28231,7 @@ def get(contract_id: str, session):
             H1(icon("file-text", size=28), f" {contract.contract_number}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
-                A("← К списку", href="/customer-contracts", role="button", cls="secondary"),
+                btn_link("К списку", href="/customer-contracts", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; gap: 0.5rem;"
             ),
             style="display: flex; justify-content: space-between; align-items: center;"
@@ -28300,7 +28286,7 @@ def get(contract_id: str, session):
             H3("📑 Спецификации по договору"),
             P(f"По данному договору создано {specs_count} спецификаций."),
             P("Следующий номер спецификации: ", Strong(f"№{contract.next_specification_number}")),
-            A("Смотреть спецификации →", href=f"/specifications?contract_id={contract_id}", role="button", cls="outline"),
+            btn_link("Смотреть спецификации", href=f"/specifications?contract_id={contract_id}", variant="secondary", icon_name="arrow-right"),
             cls="card"
         ),
 
@@ -28337,7 +28323,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника локаций."),
                 P("Требуется одна из ролей: admin, logistics, customs, procurement"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -28455,7 +28441,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
         # Header
         Div(
             H1(icon("map-pin", size=28), " Справочник локаций", cls="page-header"),
-            A("+ Добавить локацию", href="/locations/new", role="button"),
+            btn_link("Добавить локацию", href="/locations/new", variant="success", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -28566,7 +28552,7 @@ def get(location_id: str, session):
     if not location:
         return page_layout("Не найдено",
             Div("Локация не найдена.", cls="alert alert-error"),
-            A("← К списку локаций", href="/locations", role="button"),
+            btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -28588,7 +28574,7 @@ def get(location_id: str, session):
             H1(icon("map-pin", size=28), f" {display_name}", cls="page-header"),
             Div(
                 A(icon("edit", size=16), " Редактировать", href=f"/locations/{location_id}/edit", role="button"),
-                A("← К списку", href="/locations", role="button", cls="secondary"),
+                btn_link("К списку", href="/locations", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; gap: 0.5rem;"
             ),
             style="display: flex; justify-content: space-between; align-items: center;"
@@ -28798,9 +28784,8 @@ def _location_form(location=None, error=None, session=None):
                 # Submit buttons
                 Div(
                     btn("Сохранить", variant="primary", icon_name="save", type="submit"),
-                    " ",
-                    A("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", role="button", cls="secondary"),
-                    cls="form-actions", style="margin-top: 1.5rem;"
+                    btn_link("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", variant="secondary", icon_name="x"),
+                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
                 ),
 
                 method="post",
@@ -28922,7 +28907,7 @@ def get(location_id: str, session):
     if not location:
         return page_layout("Локация не найдена",
             Div("Запрашиваемая локация не существует.", cls="alert alert-error"),
-            A("← К списку локаций", href="/locations", role="button"),
+            btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -28962,7 +28947,7 @@ def post(
     if not location:
         return page_layout("Локация не найдена",
             Div("Запрашиваемая локация не существует.", cls="alert alert-error"),
-            A("← К списку локаций", href="/locations", role="button"),
+            btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29033,7 +29018,7 @@ def post(location_id: str, session):
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать локацию.", cls="alert alert-error"),
-            A("← К списку локаций", href="/locations", role="button"),
+            btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29066,7 +29051,7 @@ def get(session):
                 H1(icon("check-circle", size=28), " Стандартные локации загружены", cls="page-header"),
                 P(f"Создано локаций: {count}"),
                 P("Локации включают основные города Китая, России, Казахстана, Турции и Европы."),
-                A("← К списку локаций", href="/locations", role="button"),
+                btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -29076,7 +29061,7 @@ def get(session):
         print(f"Error seeding locations: {e}")
         return page_layout("Ошибка",
             Div(f"Ошибка при загрузке локаций: {e}", cls="alert alert-error"),
-            A("← К списку локаций", href="/locations", role="button"),
+            btn_link("К списку локаций", href="/locations", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29106,7 +29091,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра реестра инвойсов поставщиков."),
                 P("Требуется роль: admin, procurement или finance"),
-                A("← На главную", href="/dashboard", role="button"),
+                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -29223,7 +29208,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
         # Header
         Div(
             H1(icon("file-text", size=28), " Реестр инвойсов поставщиков", cls="page-header"),
-            A("+ Добавить инвойс", href="/supplier-invoices/new", role="button"),
+            btn_link("Добавить инвойс", href="/supplier-invoices/new", variant="success", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -29287,7 +29272,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                     Select(*supplier_options, name="supplier_id", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
                     btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    A("Сбросить", href="/supplier-invoices", role="button", cls="secondary"),
+                    btn_link("Сбросить", href="/supplier-invoices", variant="secondary", icon_name="x"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
                 method="get",
@@ -29352,7 +29337,7 @@ def get(invoice_id: str, session):
         if not invoice:
             return page_layout("Не найдено",
                 Div("Инвойс не найден.", cls="alert alert-error"),
-                A("← К реестру инвойсов", href="/supplier-invoices", role="button"),
+                btn_link("К реестру инвойсов", href="/supplier-invoices", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
 
@@ -29370,7 +29355,7 @@ def get(invoice_id: str, session):
         print(f"Error loading invoice: {e}")
         return page_layout("Ошибка",
             Div(f"Ошибка при загрузке инвойса: {e}", cls="alert alert-error"),
-            A("← К реестру инвойсов", href="/supplier-invoices", role="button"),
+            btn_link("К реестру инвойсов", href="/supplier-invoices", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29442,7 +29427,7 @@ def get(invoice_id: str, session):
     payments_section = [
         Div(
             H3(icon("credit-card", size=20), " Платежи", style="display: inline-flex; align-items: center; gap: 0.5rem;"),
-            A("+ Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline", style="float: right;"),
+            btn_link("Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", variant="success", size="sm", icon_name="plus"),
             style="margin-bottom: 1rem;"
         ),
     ]
@@ -29730,8 +29715,8 @@ def _invoice_payment_form(invoice, payment=None, error=None, session=None):
                 # Buttons
                 Div(
                     btn("Сохранить", variant="primary", icon_name="save", type="submit"),
-                    A("Отмена", href=f"/supplier-invoices/{invoice.id}", role="button", cls="secondary"),
-                    style="display: flex; gap: 1rem; margin-top: 1.5rem;"
+                    btn_link("Отмена", href=f"/supplier-invoices/{invoice.id}", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 0.5rem; margin-top: 1.5rem;"
                 ),
 
                 method="POST",
