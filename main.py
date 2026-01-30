@@ -4072,10 +4072,9 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
             Td(format_money(q.get("total_amount"))),
             Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
             Td(
-                A("Открыть", href=f"/procurement/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                btn_link("Открыть", href=f"/procurement/{q['id']}", variant="primary", size="sm")
                 if show_work_button and workflow_status == "pending_procurement" else
-                A("Просмотр", href=f"/quotes/{q['id']}", style="font-size: 0.875rem;")
+                btn_link("Просмотр", href=f"/quotes/{q['id']}", variant="ghost", size="sm")
             )
         )
 
@@ -4300,10 +4299,9 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
             Td(format_money(q.get("total_amount"))),
             Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
             Td(
-                A("Работать", href=f"/logistics/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                btn_link("Работать", href=f"/logistics/{q['id']}", variant="primary", size="sm")
                 if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"] else
-                A("Просмотр", href=f"/logistics/{q['id']}", style="font-size: 0.875rem;")
+                btn_link("Просмотр", href=f"/logistics/{q['id']}", variant="ghost", size="sm")
             )
         )
 
@@ -4504,10 +4502,9 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
             Td(format_money(q.get("total_amount"))),
             Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
             Td(
-                A("Работать", href=f"/customs/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                btn_link("Работать", href=f"/customs/{q['id']}", variant="primary", size="sm")
                 if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"] else
-                A("Просмотр", href=f"/customs/{q['id']}", style="font-size: 0.875rem;")
+                btn_link("Просмотр", href=f"/customs/{q['id']}", variant="ghost", size="sm")
             )
         )
 
@@ -4701,10 +4698,9 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
             Td(format_money(q.get("total_amount"))),
             Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
             Td(
-                A("Проверить", href=f"/quote-control/{q['id']}", role="button",
-                  style="font-size: 0.875rem; padding: 0.25rem 0.75rem;")
+                btn_link("Проверить", href=f"/quote-control/{q['id']}", variant="primary", size="sm")
                 if show_work_button and q.get("needs_review") else
-                A("Просмотр", href=f"/quote-control/{q['id']}", style="font-size: 0.875rem;")
+                btn_link("Просмотр", href=f"/quote-control/{q['id']}", variant="ghost", size="sm")
             )
         )
 
@@ -4935,8 +4931,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
             Td(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
             Td(quote.get("created_at", "")[:10] if quote.get("created_at") else "-"),
             Td(
-                A("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", role="button",
-                  style="background: #28a745; border-color: #28a745; font-size: 0.875rem; padding: 0.25rem 0.5rem;"),
+                btn_link("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", variant="success", size="sm"),
             ),
         )
 
@@ -4953,9 +4948,8 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
             Td(spec.get("specification_currency", "-")),
             Td(spec.get("created_at", "")[:10] if spec.get("created_at") else "-"),
             Td(
-                A("Редактировать", href=f"/spec-control/{spec['id']}", role="button",
-                  style="background: #007bff; border-color: #007bff; font-size: 0.875rem; padding: 0.25rem 0.5rem;") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
-                A("Просмотр", href=f"/spec-control/{spec['id']}", style="color: #666; font-size: 0.875rem;"),
+                btn_link("Редактировать", href=f"/spec-control/{spec['id']}", variant="primary", size="sm") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
+                btn_link("Просмотр", href=f"/spec-control/{spec['id']}", variant="ghost", size="sm"),
             ),
         )
 
@@ -5131,7 +5125,7 @@ def _dashboard_finance_content(user_id: str, org_id: str, supabase) -> list:
         H1(icon("wallet", size=28), " Финансы", cls="page-header"),
         P("Финансовый раздел имеет собственные табы для детальной работы."),
         Div(
-            A("Открыть полный раздел Финансы →", href="/finance", role="button"),
+            btn_link("Открыть полный раздел Финансы →", href="/finance", variant="primary", icon_name="arrow-right", icon_right=True),
             style="margin-top: 1rem;"
         ),
     ]
@@ -5859,7 +5853,7 @@ def get(session):
     return page_layout("Customers",
         Div(
             H1("Customers"),
-            A("+ Add Customer", href="/customers/new", role="button"),
+            btn_link("Add Customer", href="/customers/new", variant="primary", icon_name="plus"),
             style="display: flex; justify-content: space-between; align-items: center;"
         ),
 
@@ -6038,7 +6032,7 @@ def get(session):
     except Exception as e:
         return page_layout("Ошибка",
             Div(f"Ошибка создания КП: {str(e)}", cls="alert alert-error"),
-            A("← Назад к списку КП", href="/quotes"),
+            btn_link("Назад к списку КП", href="/quotes", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -6963,8 +6957,7 @@ def get(quote_id: str, session):
             H3("Workflow"),
             # Justification flow: Submit justification for approval (Feature: approval justification workflow)
             Div(
-                A(icon("check", size=16), " Отправить обоснование", href=f"/quotes/{quote_id}/submit-justification",
-                  role="button", style="background: #3b82f6; border-color: #3b82f6; font-size: 1rem; padding: 0.75rem 1.5rem; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                btn_link("Отправить обоснование", href=f"/quotes/{quote_id}/submit-justification", variant="primary", icon_name="check", size="lg"),
                 P("Заполнить обоснование и отправить на согласование топ-менеджеру.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
             ) if is_justification_needed else None,
             # Normal flow: Submit for Quote Control
@@ -6976,8 +6969,7 @@ def get(quote_id: str, session):
             ) if not is_revision and not is_justification_needed else None,
             # Revision flow: Return to Quote Control with comment
             Div(
-                A("✓ Вернуть на проверку", href=f"/quotes/{quote_id}/return-to-control",
-                  role="button", style="background: #22c55e; border-color: #22c55e; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                btn_link("Вернуть на проверку", href=f"/quotes/{quote_id}/return-to-control", variant="success", icon_name="check", size="lg"),
                 P("Отправить КП контроллёру после исправлений.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
             ) if is_revision else None,
             cls="card", style="border-left: 4px solid #3b82f6;" if is_justification_needed else ("border-left: 4px solid #ec4899;" if not is_revision else "border-left: 4px solid #22c55e;")
@@ -7128,14 +7120,16 @@ def get(quote_id: str, session):
         Div(
             H3("Actions"),
             Div(
-                A("Calculate", href=f"/quotes/{quote_id}/calculate", role="button"),
-                A("Version History", href=f"/quotes/{quote_id}/versions", role="button", cls="secondary", style="margin-left: 0.5rem;"),
+                btn_link("Calculate", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                btn_link("Version History", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+                style="display: flex; gap: 0.5rem;"
             ),
             H4("Export", style="margin-top: 1rem;"),
             Div(
-                A("Specification PDF", href=f"/quotes/{quote_id}/export/specification", role="button", cls="secondary"),
-                A("Invoice PDF", href=f"/quotes/{quote_id}/export/invoice", role="button", cls="secondary", style="margin-left: 0.5rem;"),
-                A("Validation Excel", href=f"/quotes/{quote_id}/export/validation", role="button", cls="secondary", style="margin-left: 0.5rem;"),
+                btn_link("Specification PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
+                btn_link("Invoice PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
+                btn_link("Validation Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
+                style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
             ),
             cls="card"
         ) if workflow_status != "draft" else None,
@@ -10082,8 +10076,8 @@ def post(
 
             # Actions
             Div(
-                A("← Back to Quote", href=f"/quotes/{quote_id}", role="button"),
-                A("Recalculate", href=f"/quotes/{quote_id}/calculate", role="button", cls="secondary", style="margin-left: 1rem;"),
+                btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="arrow-left"),
+                btn_link("Recalculate", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
                 cls="form-actions"
             ),
 
@@ -10095,7 +10089,7 @@ def post(
         traceback.print_exc()
         return page_layout("Calculation Error",
             Div(f"Error: {str(e)}", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}/calculate"),
+            btn_link("Back", href=f"/quotes/{quote_id}/calculate", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -10335,9 +10329,9 @@ def get(quote_id: str, session):
         ),
 
         Div(
-            A("← Back to Quote", href=f"/quotes/{quote_id}", role="button"),
-            A("Calculate New Version", href=f"/quotes/{quote_id}/calculate", role="button", cls="secondary", style="margin-left: 0.5rem;"),
-            style="margin-top: 1rem;"
+            btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="arrow-left"),
+            btn_link("Calculate New Version", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+            style="margin-top: 1rem; display: flex; gap: 0.5rem;"
         ),
 
         session=session
