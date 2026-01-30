@@ -29687,23 +29687,22 @@ def _quote_documents_section(
                 Td(format_file_size(doc.file_size_bytes) or "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Upload date
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
-                # Actions
+                # Actions - small square icon buttons
                 Td(
-                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem;"), "Скачать",
+                    A(I(cls="fa-solid fa-download"),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      cls="btn-outline",
-                      style="display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.5rem; text-decoration: none;"),
-                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
-                           hx_delete=f"/documents/{doc.id}",
-                           hx_confirm="Удалить документ?",
-                           hx_target=f"#doc-row-{doc.id}",
-                           hx_swap="outerHTML",
-                           cls="btn-danger",
-                           style="background: white !important; background-color: white !important; background-image: none !important; color: #dc3545 !important; border: 1px solid #e5e7eb !important; display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem;",
-                           title="Удалить") if can_delete else None,
-                    style="white-space: nowrap;"
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;"),
+                    A(I(cls="fa-solid fa-trash"),
+                      href="#",
+                      hx_delete=f"/documents/{doc.id}",
+                      hx_confirm="Удалить документ?",
+                      hx_target=f"#doc-row-{doc.id}",
+                      hx_swap="outerHTML",
+                      title="Удалить",
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;") if can_delete else None,
+                    style="white-space: nowrap; display: flex; gap: 0.25rem;"
                 ),
                 id=f"doc-row-{doc.id}"
             )
@@ -29768,96 +29767,152 @@ def _quote_documents_section(
     });
     """)
 
+    # JavaScript for drag-and-drop
+    drag_drop_js = Script("""
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('doc_file');
+        const fileNameSpan = document.getElementById('file-name');
+
+        if (!dropZone || !fileInput) return;
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#6366f1';
+                dropZone.style.background = '#eef2ff';
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#d1d5db';
+                dropZone.style.background = '#fafafa';
+            }, false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                fileInput.files = files;
+                updateFileName(files[0].name);
+            }
+        }, false);
+
+        // Handle file input change
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                updateFileName(fileInput.files[0].name);
+            }
+        });
+
+        // Click to select
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        function updateFileName(name) {
+            if (fileNameSpan) {
+                fileNameSpan.textContent = name;
+                fileNameSpan.style.color = '#111827';
+            }
+        }
+    });
+    """)
+
     return Div(
         js_script,
+        drag_drop_js,
 
-        # Upload form with dynamic selectors
+        # Compact upload form
         Div(
-            H4(I(cls="fa-solid fa-cloud-upload-alt", style="margin-right: 0.5rem;"), "Загрузить документ"),
             Form(
-                # Row 1: File and document type
                 Div(
+                    # Left side: Drop zone
                     Div(
-                        Label("Файл", For="doc_file"),
-                        Input(type="file", name="file", id="doc_file", required=True,
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv"),
-                        cls="form-group",
-                        style="flex: 2;"
-                    ),
-                    Div(
-                        Label("Тип документа", For="doc_type"),
-                        Select(
-                            Option("Выберите тип", value=""),
-                            *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
-                            name="document_type",
-                            id="doc_type"
+                        Div(
+                            I(cls="fa-solid fa-cloud-arrow-up", style="font-size: 1.5rem; color: #9ca3af; margin-bottom: 0.5rem;"),
+                            Div(
+                                Span("Перетащите файл или ", style="color: #6b7280;"),
+                                Span("выберите", style="color: #6366f1; cursor: pointer;"),
+                                style="font-size: 0.875rem;"
+                            ),
+                            Span("", id="file-name", style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.25rem;"),
+                            style="display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;"
                         ),
-                        cls="form-group",
-                        style="flex: 1;"
+                        Input(type="file", name="file", id="doc_file", required=True,
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
+                              style="display: none;"),
+                        id="drop-zone",
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; min-height: 80px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
-                    style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;"
+                    style="flex: 1; min-width: 200px;"
                 ),
 
-                # Row 2: Dynamic sub-entity selectors
+                # Right side: Type, description, save
                 Div(
-                    # Invoice selector (hidden by default)
+                    # Document type
                     Div(
-                        Label("Привязать к инвойсу", For="sub_entity_invoice",
-                              style="color: #92400e; font-weight: 500;"),
+                        Select(
+                            Option("Тип документа", value=""),
+                            *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
+                            name="document_type",
+                            id="doc_type",
+                            style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white;"
+                        ),
+                        style="margin-bottom: 0.5rem;"
+                    ),
+
+                    # Dynamic sub-entity selectors (hidden by default)
+                    Div(
                         Select(
                             *invoice_options,
                             name="sub_entity_invoice",
-                            id="sub_entity_invoice"
+                            id="sub_entity_invoice",
+                            style="width: 100%; padding: 0.4rem; border: 1px solid #fcd34d; border-radius: 4px; font-size: 0.8rem; background: #fffbeb;"
                         ),
                         id="invoice-selector-div",
-                        cls="form-group",
-                        style="display: none; flex: 1; background: #fffbeb; padding: 0.5rem; border-radius: 4px; border: 1px solid #fcd34d;"
-                    ) if invoices else Div(
-                        P("Нет инвойсов для привязки. Документ будет привязан к КП.",
-                          style="color: #92400e; font-size: 0.85rem; margin: 0;"),
-                        id="invoice-selector-div",
-                        style="display: none; background: #fffbeb; padding: 0.5rem; border-radius: 4px;"
-                    ),
+                        style="display: none; margin-bottom: 0.5rem;"
+                    ) if invoices else Div(id="invoice-selector-div", style="display: none;"),
 
-                    # Item selector (hidden by default)
                     Div(
-                        Label("Привязать к товару", For="sub_entity_item",
-                              style="color: #065f46; font-weight: 500;"),
                         Select(
                             *item_options,
                             name="sub_entity_item",
-                            id="sub_entity_item"
+                            id="sub_entity_item",
+                            style="width: 100%; padding: 0.4rem; border: 1px solid #6ee7b7; border-radius: 4px; font-size: 0.8rem; background: #ecfdf5;"
                         ),
                         id="item-selector-div",
-                        cls="form-group",
-                        style="display: none; flex: 1; background: #ecfdf5; padding: 0.5rem; border-radius: 4px; border: 1px solid #6ee7b7;"
-                    ) if items else Div(
-                        P("Нет товаров для привязки. Документ будет привязан к КП.",
-                          style="color: #065f46; font-size: 0.85rem; margin: 0;"),
-                        id="item-selector-div",
-                        style="display: none; background: #ecfdf5; padding: 0.5rem; border-radius: 4px;"
+                        style="display: none; margin-bottom: 0.5rem;"
+                    ) if items else Div(id="item-selector-div", style="display: none;"),
+
+                    # Description
+                    Div(
+                        Input(type="text", name="description", id="doc_desc",
+                              placeholder="Описание (опционально)",
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;"),
+                        style="margin-bottom: 0.5rem;"
                     ),
 
-                    style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;"
-                ),
+                    # Save button
+                    Button(
+                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem;"),
+                        "Сохранить",
+                        type="submit",
+                        style="width: 100%; padding: 0.5rem 1rem; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;"
+                    ),
 
-                # Row 3: Description and submit
-                Div(
-                    Div(
-                        Label("Описание (опционально)", For="doc_desc"),
-                        Input(type="text", name="description", id="doc_desc", placeholder="Краткое описание"),
-                        cls="form-group",
-                        style="flex: 2;"
-                    ),
-                    Div(
-                        Label(" ", style="visibility: hidden;"),
-                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem; color: var(--accent);"), "Загрузить",
-                               type="submit",
-                               cls="btn-outline",
-                               style="background: white !important; background-color: white !important; background-image: none !important; color: var(--accent) !important; border: 1px solid #e5e7eb !important;"),
-                        cls="form-group"
-                    ),
-                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+                    style="flex: 1; min-width: 180px;"
                 ),
 
                 # Hidden field for parent quote
@@ -29866,9 +29921,10 @@ def _quote_documents_section(
                 action=f"/documents/upload/quote/{quote_id}",
                 method="POST",
                 enctype="multipart/form-data",
-                id="doc-upload-form"
+                id="doc-upload-form",
+                style="display: flex; gap: 1rem; align-items: stretch; flex-wrap: wrap;"
             ),
-            style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg-page-alt); border-radius: 8px;"
+            style="margin-bottom: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"
         ) if can_upload else None,
 
         # Documents table
@@ -29941,23 +29997,22 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(doc.created_at.strftime("%d.%m.%Y %H:%M") if doc.created_at else "-", style="color: var(--text-secondary);"),
                 # Description
                 Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
-                # Actions
+                # Actions - small square icon buttons
                 Td(
-                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem;"), "Скачать",
+                    A(I(cls="fa-solid fa-download"),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      cls="btn-outline",
-                      style="display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.5rem; text-decoration: none;"),
-                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
-                           hx_delete=f"/documents/{doc.id}",
-                           hx_confirm="Удалить документ?",
-                           hx_target=f"#doc-row-{doc.id}",
-                           hx_swap="outerHTML",
-                           cls="btn-danger",
-                           style="background: white !important; background-color: white !important; background-image: none !important; color: #dc3545 !important; border: 1px solid #e5e7eb !important; display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem;",
-                           title="Удалить") if can_delete else None,
-                    style="white-space: nowrap;"
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;"),
+                    A(I(cls="fa-solid fa-trash"),
+                      href="#",
+                      hx_delete=f"/documents/{doc.id}",
+                      hx_confirm="Удалить документ?",
+                      hx_target=f"#doc-row-{doc.id}",
+                      hx_swap="outerHTML",
+                      title="Удалить",
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;") if can_delete else None,
+                    style="white-space: nowrap; display: flex; gap: 0.25rem;"
                 ),
                 id=f"doc-row-{doc.id}"
             )
@@ -29971,51 +30026,123 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
             )
         )
 
+    # JavaScript for drag-and-drop
+    drag_drop_js = Script("""
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('doc_file');
+        const fileNameSpan = document.getElementById('file-name');
+
+        if (!dropZone || !fileInput) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#6366f1';
+                dropZone.style.background = '#eef2ff';
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.style.borderColor = '#d1d5db';
+                dropZone.style.background = '#fafafa';
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                fileInput.files = files;
+                if (fileNameSpan) {
+                    fileNameSpan.textContent = files[0].name;
+                    fileNameSpan.style.color = '#111827';
+                }
+            }
+        }, false);
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length && fileNameSpan) {
+                fileNameSpan.textContent = fileInput.files[0].name;
+                fileNameSpan.style.color = '#111827';
+            }
+        });
+
+        dropZone.addEventListener('click', () => fileInput.click());
+    });
+    """)
+
     return Div(
-        # Upload form
+        drag_drop_js,
+
+        # Compact upload form
         Div(
-            H4(I(cls="fa-solid fa-cloud-upload-alt", style="margin-right: 0.5rem;"), "Загрузить документ"),
             Form(
                 Div(
+                    # Left side: Drop zone
                     Div(
-                        Label("Файл", For="doc_file"),
+                        Div(
+                            I(cls="fa-solid fa-cloud-arrow-up", style="font-size: 1.5rem; color: #9ca3af; margin-bottom: 0.5rem;"),
+                            Div(
+                                Span("Перетащите файл или ", style="color: #6b7280;"),
+                                Span("выберите", style="color: #6366f1; cursor: pointer;"),
+                                style="font-size: 0.875rem;"
+                            ),
+                            Span("", id="file-name", style="font-size: 0.75rem; color: #9ca3af; margin-top: 0.25rem;"),
+                            style="display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;"
+                        ),
                         Input(type="file", name="file", id="doc_file", required=True,
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv"),
-                        cls="form-group",
-                        style="flex: 2;"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
+                              style="display: none;"),
+                        id="drop-zone",
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; min-height: 80px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
+                    style="flex: 1; min-width: 200px;"
+                ),
+
+                # Right side: Type, description, save
+                Div(
+                    # Document type
                     Div(
-                        Label("Тип документа", For="doc_type"),
                         Select(
-                            Option("Выберите тип", value=""),
+                            Option("Тип документа", value=""),
                             *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
                             name="document_type",
-                            id="doc_type"
+                            id="doc_type",
+                            style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white;"
                         ),
-                        cls="form-group",
-                        style="flex: 1;"
+                        style="margin-bottom: 0.5rem;"
                     ),
+
+                    # Description
                     Div(
-                        Label("Описание (опционально)", For="doc_desc"),
-                        Input(type="text", name="description", id="doc_desc", placeholder="Краткое описание"),
-                        cls="form-group",
-                        style="flex: 2;"
+                        Input(type="text", name="description", id="doc_desc",
+                              placeholder="Описание (опционально)",
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;"),
+                        style="margin-bottom: 0.5rem;"
                     ),
-                    Div(
-                        Label(" ", style="visibility: hidden;"),  # Spacer for alignment
-                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
-                               type="submit",
-                               style="background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"),
-                        cls="form-group"
+
+                    # Save button
+                    Button(
+                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem;"),
+                        "Сохранить",
+                        type="submit",
+                        style="width: 100%; padding: 0.5rem 1rem; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;"
                     ),
-                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+
+                    style="flex: 1; min-width: 180px;"
                 ),
+
                 action=f"/documents/upload/{entity_type}/{entity_id}",
                 method="POST",
                 enctype="multipart/form-data",
-                id="doc-upload-form"
+                id="doc-upload-form",
+                style="display: flex; gap: 1rem; align-items: stretch; flex-wrap: wrap;"
             ),
-            style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg-page-alt); border-radius: 8px;"
+            style="margin-bottom: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"
         ) if can_upload else None,
 
         # Documents table
