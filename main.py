@@ -29690,20 +29690,20 @@ def _quote_documents_section(
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Actions - small square icon buttons
                 Td(
-                    A(I(cls="fa-solid fa-download"),
+                    A(I(cls="fa-solid fa-download", style="font-size: 14px;"),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;"),
-                    A(I(cls="fa-solid fa-trash"),
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none;"),
+                    A(I(cls="fa-solid fa-trash", style="font-size: 14px;"),
                       href="#",
                       hx_delete=f"/documents/{doc.id}",
                       hx_confirm="Удалить документ?",
                       hx_target=f"#doc-row-{doc.id}",
                       hx_swap="outerHTML",
                       title="Удалить",
-                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;") if can_delete else None,
-                    style="white-space: nowrap; display: flex; gap: 0.25rem;"
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none;") if can_delete else None,
+                    style="white-space: nowrap; display: flex; gap: 0.5rem;"
                 ),
                 id=f"doc-row-{doc.id}"
             )
@@ -29905,12 +29905,13 @@ def _quote_documents_section(
                         style="margin-bottom: 0.5rem;"
                     ),
 
-                    # Save button
+                    # Save button - grey style
                     Button(
-                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem;"),
+                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem; color: #374151;"),
                         "Сохранить",
                         type="submit",
-                        style="width: 100%; padding: 0.5rem 1rem; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;"
+                        cls="btn-outline",
+                        style="width: 100% !important; padding: 0.5rem 1rem !important; background: #f3f4f6 !important; background-color: #f3f4f6 !important; background-image: none !important; border: 1px solid #e5e7eb !important; border-radius: 6px !important; color: #374151 !important; font-size: 0.875rem !important; cursor: pointer; display: flex !important; align-items: center; justify-content: center;"
                     ),
 
                     style="flex: 1; min-width: 180px;"
@@ -30000,20 +30001,20 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
                 # Actions - small square icon buttons
                 Td(
-                    A(I(cls="fa-solid fa-download"),
+                    A(I(cls="fa-solid fa-download", style="font-size: 14px;"),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;"),
-                    A(I(cls="fa-solid fa-trash"),
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none;"),
+                    A(I(cls="fa-solid fa-trash", style="font-size: 14px;"),
                       href="#",
                       hx_delete=f"/documents/{doc.id}",
                       hx_confirm="Удалить документ?",
                       hx_target=f"#doc-row-{doc.id}",
                       hx_swap="outerHTML",
                       title="Удалить",
-                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none; transition: all 0.15s;") if can_delete else None,
-                    style="white-space: nowrap; display: flex; gap: 0.25rem;"
+                      style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #6b7280; text-decoration: none;") if can_delete else None,
+                    style="white-space: nowrap; display: flex; gap: 0.5rem;"
                 ),
                 id=f"doc-row-{doc.id}"
             )
@@ -30126,12 +30127,13 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                         style="margin-bottom: 0.5rem;"
                     ),
 
-                    # Save button
+                    # Save button - grey style
                     Button(
-                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem;"),
+                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem; color: #374151;"),
                         "Сохранить",
                         type="submit",
-                        style="width: 100%; padding: 0.5rem 1rem; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; color: #374151; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s;"
+                        cls="btn-outline",
+                        style="width: 100% !important; padding: 0.5rem 1rem !important; background: #f3f4f6 !important; background-color: #f3f4f6 !important; background-image: none !important; border: 1px solid #e5e7eb !important; border-radius: 6px !important; color: #374151 !important; font-size: 0.875rem !important; cursor: pointer; display: flex !important; align-items: center; justify-content: center;"
                     ),
 
                     style="flex: 1; min-width: 180px;"
