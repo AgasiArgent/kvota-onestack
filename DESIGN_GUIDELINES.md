@@ -1229,6 +1229,288 @@ table_container(
 
 ---
 
+---
+
+## Phase 6: Button Standardization ✅ COMPLETED (2026-01-30)
+
+**Goal:** Standardize all buttons using BEM methodology and CSS variables for consistent styling across the application.
+
+**Status:** ✅ Deployed | 🟢 Live at https://kvotaflow.ru
+
+---
+
+### Problem Solved
+
+Before standardization:
+- **104 button instances** with **9 different approaches** to styling
+- **12+ different colors** used inconsistently
+- **~30 inline styles** on buttons
+- **104 !important rules** causing specificity wars
+- Changing one button style would break others elsewhere
+
+### Solution: BEM + CSS Variables + Python Helpers
+
+#### Button Variants
+
+| Variant | CSS Class | Use Case | Appearance |
+|---------|-----------|----------|------------|
+| **Primary** | `.btn.btn--primary` | Main actions (Сохранить, Передать) | Gray fill (#6b7280) |
+| **Secondary** | `.btn.btn--secondary` | Secondary actions (Отмена, Назад) | White + gray border |
+| **Success** | `.btn.btn--success` | Confirmations (Одобрить, Завершить) | White + green border → green fill on hover |
+| **Danger** | `.btn.btn--danger` | Destructive (Удалить, Отклонить) | White + red border → red fill on hover |
+| **Ghost** | `.btn.btn--ghost` | Toolbar (Добавить, Загрузить) | Transparent background |
+
+#### Size Modifiers
+
+| Size | CSS Class | Padding |
+|------|-----------|---------|
+| Small | `.btn.btn--sm` | 0.4rem 0.875rem |
+| Default | `.btn` | 0.625rem 1.25rem |
+| Large | `.btn.btn--lg` | 0.875rem 1.75rem |
+
+#### Additional Modifiers
+
+- `.btn--full` - Full width button
+- `.btn--icon-only` - Square button for icons only
+- `.btn--disabled` - Disabled state
+- `.btn--loading` - Loading spinner state
+
+---
+
+### CSS Variables
+
+```css
+:root {
+  /* Primary (gray - main action) */
+  --btn-primary-bg: #6b7280;
+  --btn-primary-hover: #4b5563;
+  --btn-primary-text: white;
+
+  /* Secondary (white + gray border) */
+  --btn-secondary-bg: white;
+  --btn-secondary-border: #d1d5db;
+  --btn-secondary-text: #374151;
+  --btn-secondary-hover-bg: #f9fafb;
+
+  /* Success (outline: white + green border, green fill on hover) */
+  --btn-success-bg: white;
+  --btn-success-border: #10b981;
+  --btn-success-text: #059669;
+  --btn-success-hover-bg: #10b981;
+  --btn-success-hover-text: white;
+
+  /* Danger (outline: white + red border, red fill on hover) */
+  --btn-danger-bg: white;
+  --btn-danger-border: #ef4444;
+  --btn-danger-text: #dc2626;
+  --btn-danger-hover-bg: #ef4444;
+  --btn-danger-hover-text: white;
+
+  /* Ghost (transparent) */
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: #374151;
+  --btn-ghost-hover-bg: #f3f4f6;
+
+  /* Sizing */
+  --btn-padding: 0.625rem 1.25rem;
+  --btn-padding-sm: 0.4rem 0.875rem;
+  --btn-padding-lg: 0.875rem 1.75rem;
+  --btn-radius: 0.5rem;
+  --btn-gap: 0.5rem;
+}
+```
+
+---
+
+### Python Helper Functions
+
+Located in `main.py` after the `icon()` function.
+
+#### `btn()` - Standard Button
+
+```python
+btn(
+    label: str,                    # Button text
+    variant: str = "primary",      # primary, secondary, success, danger, ghost
+    size: str = None,              # None (default), "sm", "lg"
+    icon_name: str = None,         # Lucide icon name (e.g., "check", "save")
+    icon_right: bool = False,      # Place icon on right side
+    full_width: bool = False,      # Make button full width
+    disabled: bool = False,        # Disable the button
+    loading: bool = False,         # Show loading spinner
+    **kwargs                       # Additional attrs (type, onclick, name, value)
+)
+```
+
+**Examples:**
+```python
+btn("Сохранить", variant="primary", icon_name="save", type="submit")
+btn("Одобрить", variant="success", icon_name="check", type="submit")
+btn("Удалить", variant="danger", icon_name="trash-2", size="sm")
+btn("Добавить строку", variant="ghost", icon_name="plus")
+btn("Завершить", variant="success", icon_name="check", size="lg", type="submit")
+```
+
+#### `btn_link()` - Link Styled as Button
+
+```python
+btn_link(
+    label: str,                    # Link text
+    href: str,                     # URL to navigate to
+    variant: str = "primary",      # Same variants as btn()
+    size: str = None,
+    icon_name: str = None,
+    icon_right: bool = False,
+    full_width: bool = False,
+    disabled: bool = False,
+    **kwargs                       # Additional attrs (target, role)
+)
+```
+
+**Examples:**
+```python
+btn_link("Новый КП", href="/quotes/new", icon_name="plus")
+btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left")
+btn_link("Предпросмотр PDF", href=f"/spec/{id}/preview", variant="ghost", icon_name="file-text", target="_blank")
+```
+
+#### `btn_icon()` - Icon-Only Button
+
+```python
+btn_icon(
+    icon_name: str,                # Lucide icon name
+    variant: str = "ghost",        # Default ghost for toolbar icons
+    size: str = None,              # None (2.25rem) or "sm" (1.75rem)
+    title: str = None,             # Tooltip text
+    disabled: bool = False,
+    **kwargs
+)
+```
+
+**Examples:**
+```python
+btn_icon("trash-2", variant="danger", title="Удалить")
+btn_icon("edit", title="Редактировать")
+btn_icon("eye", title="Просмотр", size="sm")
+```
+
+---
+
+### Migration Examples
+
+#### Before (Inline Styles)
+```python
+Button(
+    I(cls="fa-solid fa-check", style="margin-right: 0.5rem;"),
+    "Сохранить",
+    type="submit",
+    style="width: 100% !important; padding: 0.5rem 1rem !important; background: #16a34a !important; color: white !important;"
+)
+```
+
+#### After (BEM System)
+```python
+btn("Сохранить", variant="success", icon_name="check", type="submit", full_width=True)
+```
+
+---
+
+#### Before (Multiple Buttons)
+```python
+Button(icon("check", size=16), " Одобрить", type="submit",
+       style="background: #16a34a; color: white; margin-right: 1rem;"),
+Button(icon("x", size=16), " Отклонить", type="submit",
+       style="background: #dc2626; color: white; margin-right: 1rem;"),
+A(icon("arrow-left", size=16), " На доработку", href=f"/quotes/{id}/return",
+  role="button", style="background: #f59e0b; color: white;"),
+```
+
+#### After (BEM System)
+```python
+Div(
+    btn("Одобрить", variant="success", icon_name="check", type="submit"),
+    btn("Отклонить", variant="danger", icon_name="x", type="submit"),
+    btn_link("На доработку", href=f"/quotes/{id}/return", variant="secondary", icon_name="arrow-left"),
+    style="display: flex; gap: 0.75rem;"
+)
+```
+
+---
+
+### Visual Design
+
+**Normal State:**
+```
+┌─────────────────┐
+│  ✓ Одобрить     │  ← White background, green border, green text
+└─────────────────┘
+```
+
+**Hover State:**
+```
+┌─────────────────┐
+│  ✓ Одобрить     │  ← Green background, white text
+└─────────────────┘
+```
+
+---
+
+### What NOT to Do
+
+❌ **Never use inline styles on buttons:**
+```python
+# BAD
+Button("Save", style="background: #16a34a; color: white; padding: 1rem;")
+```
+
+❌ **Never use !important:**
+```python
+# BAD
+style="background: #16a34a !important;"
+```
+
+❌ **Never use raw color codes:**
+```python
+# BAD
+Button("Save", cls="btn", style="background: #10b981;")
+```
+
+✅ **Always use the helper functions:**
+```python
+# GOOD
+btn("Save", variant="success", icon_name="save")
+```
+
+---
+
+### Dark Theme Support
+
+All button variables have dark theme variants defined in `[data-theme="dark"]`. Colors automatically adjust:
+
+- Primary: Slightly lighter gray
+- Success/Danger borders: Same colors, text becomes lighter
+- Ghost: Transparent with light text, hover shows subtle highlight
+
+---
+
+### Files Modified
+
+- `main.py` (CSS section): Added button CSS variables and BEM classes (~150 lines)
+- `main.py` (helpers section): Added `btn()`, `btn_link()`, `btn_icon()` functions (~150 lines)
+- `main.py` (routes): Migrated ~50 buttons to new system
+
+---
+
+### Benefits
+
+1. **Global changes** - Change CSS variable, all buttons of that type update
+2. **Consistency** - Every button looks the same across the app
+3. **Maintainability** - No inline styles to track down
+4. **Readability** - `btn("Save", variant="success")` is clearer than 5 lines of style
+5. **Dark theme ready** - Automatic color switching
+
+---
+
 ## Summary
 
 **Phase 1 (✅ DONE):** PicoCSS foundation - instant visual upgrade
@@ -1236,6 +1518,7 @@ table_container(
 **Phase 3 (✅ DONE):** Lucide Icons - all emoji replaced with SVG icons
 **Phase 4 (✅ DONE):** Searchable dropdowns - datalist pattern
 **Phase 5 (✅ MOSTLY DONE):** Unified table design - 8 tables migrated
+**Phase 6 (✅ DONE):** Button Standardization - BEM + CSS Variables + Python Helpers
 
-**Total Effort:** ~12-14 hours for all phases
-**Result:** Modern, professional, production-ready UI
+**Total Effort:** ~14-16 hours for all phases
+**Result:** Modern, professional, production-ready UI with consistent button system

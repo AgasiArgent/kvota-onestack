@@ -171,6 +171,47 @@ APP_STYLES = """
     --input-border: #d1d5db;
     --input-focus-border: #3b82f6;
     --input-focus-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+
+    /* ========== Button System Variables ========== */
+    /* Primary (gray - main action) */
+    --btn-primary-bg: #6b7280;
+    --btn-primary-hover: #4b5563;
+    --btn-primary-text: white;
+
+    /* Secondary (white + gray border) */
+    --btn-secondary-bg: white;
+    --btn-secondary-border: #d1d5db;
+    --btn-secondary-text: #374151;
+    --btn-secondary-hover-bg: #f9fafb;
+
+    /* Success (outline: white + green border, green fill on hover) */
+    --btn-success-bg: white;
+    --btn-success-border: #10b981;
+    --btn-success-text: #059669;
+    --btn-success-hover-bg: #10b981;
+    --btn-success-hover-text: white;
+
+    /* Danger (outline: white + red border, red fill on hover) */
+    --btn-danger-bg: white;
+    --btn-danger-border: #ef4444;
+    --btn-danger-text: #dc2626;
+    --btn-danger-hover-bg: #ef4444;
+    --btn-danger-hover-text: white;
+
+    /* Ghost (transparent background) */
+    --btn-ghost-bg: transparent;
+    --btn-ghost-text: #374151;
+    --btn-ghost-hover-bg: #f3f4f6;
+
+    /* Button sizing */
+    --btn-padding: 0.625rem 1.25rem;
+    --btn-padding-sm: 0.4rem 0.875rem;
+    --btn-padding-lg: 0.875rem 1.75rem;
+    --btn-radius: 0.5rem;
+    --btn-gap: 0.5rem;
+    --btn-font-size: 0.875rem;
+    --btn-font-size-sm: 0.8125rem;
+    --btn-font-size-lg: 1rem;
 }
 
 /* Dark theme */
@@ -225,6 +266,37 @@ APP_STYLES = """
     --input-border: rgba(255, 255, 255, 0.15);
     --input-focus-border: #6366f1;
     --input-focus-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+
+    /* ========== Button System Variables (Dark Theme) ========== */
+    /* Primary (gray - main action) */
+    --btn-primary-bg: #6b7280;
+    --btn-primary-hover: #9ca3af;
+    --btn-primary-text: white;
+
+    /* Secondary (dark + lighter border) */
+    --btn-secondary-bg: #2d2d44;
+    --btn-secondary-border: rgba(255, 255, 255, 0.15);
+    --btn-secondary-text: #e5e7eb;
+    --btn-secondary-hover-bg: #3d3d5c;
+
+    /* Success (outline: dark + green border, green fill on hover) */
+    --btn-success-bg: #2d2d44;
+    --btn-success-border: #10b981;
+    --btn-success-text: #34d399;
+    --btn-success-hover-bg: #10b981;
+    --btn-success-hover-text: white;
+
+    /* Danger (outline: dark + red border, red fill on hover) */
+    --btn-danger-bg: #2d2d44;
+    --btn-danger-border: #ef4444;
+    --btn-danger-text: #f87171;
+    --btn-danger-hover-bg: #ef4444;
+    --btn-danger-hover-text: white;
+
+    /* Ghost (transparent background) */
+    --btn-ghost-bg: transparent;
+    --btn-ghost-text: #e5e7eb;
+    --btn-ghost-hover-bg: rgba(255, 255, 255, 0.1);
 }
 
 /* ========== Global Enhancements ========== */
@@ -570,6 +642,179 @@ button.btn-sm,
 [role="button"].btn-sm {
     padding: 0.4rem 0.875rem;
     font-size: 0.875rem;
+}
+
+/* ========== BEM Button System ========== */
+/*
+ * Standardized button classes using BEM methodology.
+ * Use Python helpers: btn(), btn_link(), btn_icon()
+ *
+ * Variants:
+ *   .btn--primary   - Gray fill, main actions (Передать, Сохранить)
+ *   .btn--secondary - White + gray border, secondary actions
+ *   .btn--success   - White + green border, confirmations (Одобрить)
+ *   .btn--danger    - White + red border, destructive (Удалить, Отклонить)
+ *   .btn--ghost     - Transparent, toolbar buttons (Добавить, Загрузить)
+ *
+ * Modifiers:
+ *   .btn--sm        - Small size
+ *   .btn--lg        - Large size
+ *   .btn--full      - Full width
+ *   .btn--icon-only - Square button for icons only
+ */
+
+/* Base button reset - highest specificity with .btn class */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--btn-gap);
+    padding: var(--btn-padding);
+    border-radius: var(--btn-radius);
+    font-size: var(--btn-font-size);
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    text-decoration: none;
+    background: none;
+    box-shadow: none;
+}
+
+/* Primary - Gray fill (main actions) */
+.btn.btn--primary {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-text);
+    border-color: var(--btn-primary-bg);
+}
+
+.btn.btn--primary:hover {
+    background: var(--btn-primary-hover);
+    border-color: var(--btn-primary-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(107, 114, 128, 0.25);
+}
+
+/* Secondary - White/gray outline */
+.btn.btn--secondary {
+    background: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text);
+    border-color: var(--btn-secondary-border);
+}
+
+.btn.btn--secondary:hover {
+    background: var(--btn-secondary-hover-bg);
+    border-color: var(--btn-secondary-text);
+}
+
+/* Success - White + green border, green fill on hover */
+.btn.btn--success {
+    background: var(--btn-success-bg);
+    color: var(--btn-success-text);
+    border-color: var(--btn-success-border);
+}
+
+.btn.btn--success:hover {
+    background: var(--btn-success-hover-bg);
+    color: var(--btn-success-hover-text);
+    border-color: var(--btn-success-hover-bg);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* Danger - White + red border, red fill on hover */
+.btn.btn--danger {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-text);
+    border-color: var(--btn-danger-border);
+}
+
+.btn.btn--danger:hover {
+    background: var(--btn-danger-hover-bg);
+    color: var(--btn-danger-hover-text);
+    border-color: var(--btn-danger-hover-bg);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+/* Ghost - Transparent, for toolbar actions */
+.btn.btn--ghost {
+    background: var(--btn-ghost-bg);
+    color: var(--btn-ghost-text);
+    border-color: transparent;
+}
+
+.btn.btn--ghost:hover {
+    background: var(--btn-ghost-hover-bg);
+}
+
+/* Size modifiers */
+.btn.btn--sm {
+    padding: var(--btn-padding-sm);
+    font-size: var(--btn-font-size-sm);
+}
+
+.btn.btn--lg {
+    padding: var(--btn-padding-lg);
+    font-size: var(--btn-font-size-lg);
+}
+
+/* Full width */
+.btn.btn--full {
+    width: 100%;
+}
+
+/* Icon only (square) */
+.btn.btn--icon-only {
+    padding: 0.5rem;
+    width: 2.25rem;
+    height: 2.25rem;
+}
+
+.btn.btn--icon-only.btn--sm {
+    padding: 0.375rem;
+    width: 1.75rem;
+    height: 1.75rem;
+}
+
+/* Disabled state */
+.btn:disabled,
+.btn[disabled],
+.btn.btn--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none;
+}
+
+/* Focus state for accessibility */
+.btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Loading state */
+.btn.btn--loading {
+    position: relative;
+    color: transparent;
+    pointer-events: none;
+}
+
+.btn.btn--loading::after {
+    content: '';
+    position: absolute;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
 }
 
 /* ========== Enhanced Status Badges ========== */
@@ -1265,129 +1510,74 @@ form[method="get"] button {
     flex-shrink: 0;
 }
 
-/* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
-/* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle):not(.btn-outline):not(.btn-danger),
-[role="button"]:not(.btn-outline):not(.btn-danger),
-.button:not(.btn-outline):not(.btn-danger),
-button[type="submit"]:not(.btn-outline):not(.btn-danger),
-button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle):not(.btn-outline):not(.btn-danger),
-input[type="submit"]:not(.btn-outline):not(.btn-danger),
-input[type="button"]:not(.btn-outline):not(.btn-danger),
-a[href*="/new"]:not(.sidebar-item):not(.btn-outline),
-a[href*="/create"]:not(.sidebar-item):not(.btn-outline) {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
-    background-color: #6366f1 !important;
-    color: white !important;
-    border: none !important;
-    border-color: transparent !important;
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
-    padding: 0.625rem 1.25rem !important;
-    border-radius: 0.5rem !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease !important;
-    text-decoration: none !important;
-    display: inline-block !important;
-    cursor: pointer !important;
+/* ========== Legacy Button Overrides ========== */
+/*
+ * NOTE: These overrides exist for backward compatibility with old button styles.
+ * For NEW buttons, use the BEM system: .btn, .btn--primary, .btn--success, etc.
+ * See Python helpers: btn(), btn_link(), btn_icon()
+ *
+ * Legacy classes being phased out:
+ * - .btn-outline → use .btn.btn--secondary
+ * - .btn-danger → use .btn.btn--danger
+ * - .secondary, .ghost, .success, .danger → use .btn.btn--{variant}
+ */
+
+/* Legacy .btn-outline - map to secondary style */
+button.btn-outline:not(.btn),
+a.btn-outline:not(.btn) {
+    background: var(--btn-secondary-bg);
+    color: var(--btn-secondary-text);
+    border: 1px solid var(--btn-secondary-border);
+    box-shadow: none;
+    padding: 0.5rem 1rem;
+}
+button.btn-outline:not(.btn):hover,
+a.btn-outline:not(.btn):hover {
+    background: var(--btn-secondary-hover-bg);
+    border-color: var(--btn-secondary-text);
 }
 
-/* Outline button style - transparent with colored border (high specificity) */
-button.btn-outline,
-button[type="submit"].btn-outline,
-button[type="button"].btn-outline,
-a.btn-outline,
-.btn-outline.btn-outline {
-    background: white !important;
-    background-color: white !important;
-    background-image: none !important;
-    color: var(--accent) !important;
-    border: 1px solid #e5e7eb !important;
-    box-shadow: none !important;
-    padding: 0.5rem 1rem !important;
+/* Legacy .btn-danger (old style) - map to danger style */
+button.btn-danger:not(.btn) {
+    background: var(--btn-danger-bg);
+    color: var(--btn-danger-text);
+    border: 1px solid var(--btn-danger-border);
+    box-shadow: none;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
 }
-button.btn-outline:hover,
-button[type="submit"].btn-outline:hover,
-a.btn-outline:hover,
-.btn-outline.btn-outline:hover {
-    background: #f9fafb !important;
-    background-color: #f9fafb !important;
-    border-color: var(--accent) !important;
+button.btn-danger:not(.btn):hover {
+    background: var(--btn-danger-hover-bg);
+    color: var(--btn-danger-hover-text);
+    border-color: var(--btn-danger-hover-bg);
 }
 
-/* Danger button style - for delete actions (high specificity) */
-button.btn-danger,
-button[type="submit"].btn-danger,
-button[type="button"].btn-danger,
-.btn-danger.btn-danger {
-    background: white !important;
-    background-color: white !important;
-    background-image: none !important;
-    color: #dc3545 !important;
-    border: 1px solid #e5e7eb !important;
-    box-shadow: none !important;
-    padding: 0.25rem 0.5rem !important;
-    font-size: 0.8rem !important;
-}
-button.btn-danger:hover,
-.btn-danger.btn-danger:hover {
-    background: #fee2e2 !important;
-    background-color: #fee2e2 !important;
-    border-color: #dc3545 !important;
+/* Legacy old-style variants (without .btn class) */
+button.secondary:not(.btn),
+[role="button"].secondary:not(.btn) {
+    background: var(--btn-secondary-bg);
+    color: var(--accent);
+    border: 1.5px solid var(--accent);
 }
 
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle):hover,
-[role="button"]:hover,
-.button:hover,
-button[type="submit"]:hover,
-button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle):hover,
-input[type="submit"]:hover,
-input[type="button"]:hover,
-a[href*="/new"]:not(.sidebar-item):hover,
-a[href*="/create"]:not(.sidebar-item):hover {
-    background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%) !important;
-    background-color: #4f46e5 !important;
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.35) !important;
-    transform: translateY(-2px) !important;
+button.ghost:not(.btn),
+[role="button"].ghost:not(.btn) {
+    background: transparent;
+    color: var(--accent);
+    border: none;
+    box-shadow: none;
 }
 
-/* Exception: Keep secondary, ghost, success, danger variants */
-button.secondary,
-[role="button"].secondary,
-.button.secondary {
-    background: white !important;
-    background-color: white !important;
-    color: #4f46e5 !important;
-    border: 1.5px solid #6366f1 !important;
+button.success:not(.btn),
+[role="button"].success:not(.btn) {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
 }
 
-button.ghost,
-[role="button"].ghost,
-.button.ghost {
-    background: transparent !important;
-    background-color: transparent !important;
-    color: #6366f1 !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-button.success,
-[role="button"].success {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-    background-color: #10b981 !important;
-}
-
-button.danger,
-[role="button"].danger {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-    background-color: #ef4444 !important;
-}
-
-/* Override old cyan/teal colors specifically */
-button[style*="#0891b2"],
-button[style*="rgb(1, 114, 173)"],
-button[style*="#0172AD"] {
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
-    background-color: #6366f1 !important;
+button.danger:not(.btn),
+[role="button"].danger:not(.btn) {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
 }
 
 /* Selection styling */
@@ -2669,6 +2859,192 @@ def icon(name: str, size: int = 20, cls: str = ""):
         data_lucide=name,
         cls=f"lucide-icon {cls}".strip(),
         style=f"width: {size}px; height: {size}px;"
+    )
+
+
+# ============================================================================
+# BUTTON HELPERS (BEM System)
+# ============================================================================
+
+def btn(
+    label: str,
+    variant: str = "primary",
+    size: str = None,
+    icon_name: str = None,
+    icon_right: bool = False,
+    full_width: bool = False,
+    disabled: bool = False,
+    loading: bool = False,
+    **kwargs
+):
+    """
+    Standardized button helper using BEM classes.
+
+    Args:
+        label: Button text
+        variant: 'primary' (gray), 'secondary' (outline), 'success' (green outline),
+                 'danger' (red outline), 'ghost' (transparent)
+        size: None (default), 'sm' (small), 'lg' (large)
+        icon_name: Lucide icon name (e.g., 'check', 'x', 'send')
+        icon_right: Place icon on the right side
+        full_width: Make button full width
+        disabled: Disable the button
+        loading: Show loading spinner
+        **kwargs: Additional attributes (type, onclick, name, value, etc.)
+
+    Examples:
+        btn("Сохранить", variant="primary", icon_name="save")
+        btn("Одобрить", variant="success", icon_name="check")
+        btn("Удалить", variant="danger", icon_name="trash-2", size="sm")
+        btn("Добавить строку", variant="ghost", icon_name="plus")
+    """
+    # Build class list
+    classes = ["btn", f"btn--{variant}"]
+
+    if size:
+        classes.append(f"btn--{size}")
+    if full_width:
+        classes.append("btn--full")
+    if disabled:
+        classes.append("btn--disabled")
+    if loading:
+        classes.append("btn--loading")
+
+    # Add any extra classes from kwargs
+    if "cls" in kwargs:
+        classes.append(kwargs.pop("cls"))
+
+    # Build content
+    content = []
+    icon_size = 14 if size == "sm" else (18 if size == "lg" else 16)
+
+    if icon_name and not icon_right:
+        content.append(icon(icon_name, size=icon_size))
+
+    if label:
+        content.append(label)
+
+    if icon_name and icon_right:
+        content.append(icon(icon_name, size=icon_size))
+
+    return Button(
+        *content,
+        cls=" ".join(classes),
+        disabled=disabled or loading,
+        **kwargs
+    )
+
+
+def btn_link(
+    label: str,
+    href: str,
+    variant: str = "primary",
+    size: str = None,
+    icon_name: str = None,
+    icon_right: bool = False,
+    full_width: bool = False,
+    disabled: bool = False,
+    **kwargs
+):
+    """
+    Standardized link styled as button.
+
+    Args:
+        label: Link text
+        href: URL to navigate to
+        variant: Same as btn()
+        size: Same as btn()
+        icon_name: Lucide icon name
+        icon_right: Place icon on the right side
+        full_width: Make button full width
+        disabled: Disable the link (adds visual disabled state)
+        **kwargs: Additional attributes (target, role, etc.)
+
+    Examples:
+        btn_link("Новый КП", href="/quotes/new", icon_name="plus")
+        btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left")
+    """
+    # Build class list
+    classes = ["btn", f"btn--{variant}"]
+
+    if size:
+        classes.append(f"btn--{size}")
+    if full_width:
+        classes.append("btn--full")
+    if disabled:
+        classes.append("btn--disabled")
+
+    # Add any extra classes from kwargs
+    if "cls" in kwargs:
+        classes.append(kwargs.pop("cls"))
+
+    # Build content
+    content = []
+    icon_size = 14 if size == "sm" else (18 if size == "lg" else 16)
+
+    if icon_name and not icon_right:
+        content.append(icon(icon_name, size=icon_size))
+
+    if label:
+        content.append(label)
+
+    if icon_name and icon_right:
+        content.append(icon(icon_name, size=icon_size))
+
+    # Set role="button" for proper styling
+    return A(
+        *content,
+        href=href if not disabled else None,
+        cls=" ".join(classes),
+        role="button",
+        **kwargs
+    )
+
+
+def btn_icon(
+    icon_name: str,
+    variant: str = "ghost",
+    size: str = None,
+    title: str = None,
+    disabled: bool = False,
+    **kwargs
+):
+    """
+    Icon-only button (square).
+
+    Args:
+        icon_name: Lucide icon name
+        variant: Same as btn() (default 'ghost' for toolbar icons)
+        size: None (default 2.25rem) or 'sm' (1.75rem)
+        title: Tooltip text
+        disabled: Disable the button
+        **kwargs: Additional attributes
+
+    Examples:
+        btn_icon("trash-2", variant="danger", title="Удалить")
+        btn_icon("edit", title="Редактировать")
+        btn_icon("eye", title="Просмотр", size="sm")
+    """
+    # Build class list
+    classes = ["btn", f"btn--{variant}", "btn--icon-only"]
+
+    if size:
+        classes.append(f"btn--{size}")
+    if disabled:
+        classes.append("btn--disabled")
+
+    # Add any extra classes from kwargs
+    if "cls" in kwargs:
+        classes.append(kwargs.pop("cls"))
+
+    icon_size = 14 if size == "sm" else 18
+
+    return Button(
+        icon(icon_name, size=icon_size),
+        cls=" ".join(classes),
+        title=title,
+        disabled=disabled,
+        **kwargs
     )
 
 
@@ -6348,7 +6724,7 @@ def get(quote_id: str, session):
                                 placeholder="Комментарий (необязательно)",
                                 style="width: 100%; margin-bottom: 0.5rem; min-height: 60px;"
                             ),
-                            Button(icon("check", size=16), " Одобрить", type="submit", style="background: #16a34a; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                            btn("Одобрить", variant="success", icon_name="check", type="submit"),
                             action=f"/quotes/{quote_id}/approve-department",
                             method="POST"
                         ),
@@ -6593,8 +6969,7 @@ def get(quote_id: str, session):
             ) if is_justification_needed else None,
             # Normal flow: Submit for Quote Control
             Form(
-                Button(icon("file-text", size=16), " Submit for Quote Control", type="submit",
-                       style="background: #ec4899; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                btn("Submit for Quote Control", variant="primary", icon_name="file-text", size="lg", type="submit"),
                 P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/submit-quote-control"
@@ -6635,12 +7010,10 @@ def get(quote_id: str, session):
                           placeholder="Ваш комментарий...", style="width: 100%; margin-bottom: 1rem;"),
                 ),
                 Div(
-                    Button(icon("check", size=16), " Одобрить", type="submit", name="action", value="approve",
-                           style="background: #16a34a; color: white; margin-right: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                    Button(icon("x", size=16), " Отклонить", type="submit", name="action", value="reject",
-                           style="background: #dc2626; color: white; margin-right: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                    A(icon("arrow-left", size=16), " На доработку", href=f"/quotes/{quote_id}/approval-return",
-                      role="button", style="background: #f59e0b; border-color: #f59e0b; color: white; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                    btn("Одобрить", variant="success", icon_name="check", type="submit", name="action", value="approve"),
+                    btn("Отклонить", variant="danger", icon_name="x", type="submit", name="action", value="reject", cls="ml-3"),
+                    btn_link("На доработку", href=f"/quotes/{quote_id}/approval-return", variant="secondary", icon_name="arrow-left", cls="ml-3"),
+                    style="display: flex; gap: 0.75rem; flex-wrap: wrap;"
                 ),
                 method="post",
                 action=f"/quotes/{quote_id}/manager-decision"
@@ -6664,8 +7037,7 @@ def get(quote_id: str, session):
                     ),
                     style="margin-bottom: 1rem;"
                 ),
-                Button(icon("send", size=16), " Отправлено клиенту", type="submit",
-                       style="background: #0891b2; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                btn("Отправлено клиенту", variant="primary", icon_name="send", size="lg", type="submit"),
                 P("Отметить КП как отправленное клиенту.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/send-to-client"
@@ -6679,18 +7051,16 @@ def get(quote_id: str, session):
             P("Client has received the quote. What's next?", style="margin-bottom: 1rem;"),
             Div(
                 Form(
-                    Button(icon("handshake", size=16), " Start Negotiation", type="submit",
-                           style="background: #14b8a6; color: white; margin-right: 1rem;"),
+                    btn("Start Negotiation", variant="secondary", icon_name="handshake", type="submit"),
                     method="post",
                     action=f"/quotes/{quote_id}/start-negotiation",
                     style="display: inline;"
                 ),
                 Form(
-                    Button(icon("check", size=16), " Client Accepted - Submit for Spec", type="submit",
-                           style="background: #16a34a; color: white;"),
+                    btn("Client Accepted - Submit for Spec", variant="success", icon_name="check", type="submit"),
                     method="post",
                     action=f"/quotes/{quote_id}/submit-spec-control",
-                    style="display: inline;"
+                    style="display: inline; margin-left: 0.75rem;"
                 ),
             ),
             cls="card", style="border-left: 4px solid #14b8a6;"
@@ -6701,8 +7071,7 @@ def get(quote_id: str, session):
             H3("Workflow"),
             P("Negotiation in progress. When client accepts a version:", style="margin-bottom: 1rem;"),
             Form(
-                Button(icon("check", size=16), " Client Accepted Version - Submit for Spec", type="submit",
-                       style="background: #16a34a; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                btn("Client Accepted Version - Submit for Spec", variant="success", icon_name="check", size="lg", type="submit"),
                 P("Proceed to specification preparation.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/submit-spec-control"
@@ -6747,8 +7116,7 @@ def get(quote_id: str, session):
                     style="margin-bottom: 1rem;"
                 ),
                 Div(
-                    Button(icon("rotate-ccw", size=16), " Отправить на доработку", type="submit",
-                           style="background: #f59e0b; color: white; font-size: 1rem; padding: 0.75rem 1.5rem;"),
+                    btn("Отправить на доработку", variant="secondary", icon_name="rotate-ccw", size="lg", type="submit"),
                 ),
                 method="post",
                 action=f"/quotes/{quote_id}/client-change-request"
@@ -6775,10 +7143,8 @@ def get(quote_id: str, session):
         # Delete quote button (soft delete)
         Div(
             Div(
-                A("← Назад", href="/quotes", role="button", cls="secondary"),
-                Button(icon("trash-2", size=16), " Удалить КП", id="btn-delete-quote",
-                       style="background: #dc2626; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; margin-left: auto;",
-                       onclick="showDeleteModal()"),
+                btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
+                btn("Удалить КП", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()", cls="ml-auto"),
                 style="display: flex; align-items: center; gap: 1rem;"
             ),
             style="margin-top: 1rem;"
@@ -6969,11 +7335,9 @@ def get(quote_id: str, session):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                Button("✓ Вернуть на проверку", type="submit",
-                       style="background: #22c55e; border-color: #22c55e;"),
-                A("Отмена", href=f"/quotes/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 0.75rem;"
             ),
             action=f"/quotes/{quote_id}/return-to-control",
             method="post",
@@ -11179,8 +11543,8 @@ def get(session):
             Div(H3("О себе"),
                 Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
                 cls="card"),
-            Div(Button(icon("save", size=16), " Сохранить изменения", type="submit", cls="primary"),
-                A("← Назад", href="/dashboard", role="button", cls="secondary"),
+            Div(btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
+                btn_link("Назад", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="form-actions"),
             method="post", action="/profile"),
         session=session)
@@ -11315,8 +11679,8 @@ def get(session, user_id: str):
             Div(H3("О себе"),
                 Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
                 cls="card"),
-            Div(Button(icon("save", size=16), " Сохранить изменения", type="submit", cls="primary"),
-                A("← К списку пользователей", href="/admin?tab=users", role="button", cls="secondary"),
+            Div(btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
+                btn_link("К списку пользователей", href="/admin?tab=users", variant="secondary", icon_name="arrow-left"),
                 cls="form-actions"),
             method="post", action=f"/profile/{user_id}"),
         session=session)
@@ -12231,13 +12595,10 @@ def get(quote_id: str, session):
             hidden_invoice_count,
 
             Div(
-                Button(icon("save", size=16), " Сохранить инвойсы", type="submit", name="action", value="save",
-                       style="margin-right: 1rem;"),
-                Button(icon("check", size=16), " Завершить оценку", type="submit", name="action", value="complete",
-                       style="margin-right: 1rem; background: #16a34a;"),
-                A("← Назад к товарам", href=f"/procurement/{quote_id}", role="button", cls="secondary",
-                  style="margin-left: auto;"),
-                style="display: flex; align-items: center; margin-top: 2rem;"
+                btn("Сохранить инвойсы", variant="secondary", icon_name="save", type="submit", name="action", value="save"),
+                btn("Завершить оценку", variant="success", icon_name="check", type="submit", name="action", value="complete"),
+                btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="ghost", icon_name="arrow-left", cls="ml-auto"),
+                style="display: flex; align-items: center; gap: 0.75rem; margin-top: 2rem;"
             ),
 
             method="post",
@@ -12498,11 +12859,9 @@ def get(quote_id: str, session):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                Button("✓ Вернуть на проверку", type="submit",
-                       style="background: #22c55e; border-color: #22c55e;"),
-                A("Отмена", href=f"/procurement/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/procurement/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 0.75rem;"
             ),
             action=f"/procurement/{quote_id}/return-to-control",
             method="post",
@@ -13079,12 +13438,10 @@ def get(session, quote_id: str):
 
         # Action buttons
         Div(
-            Button(icon("save", size=16), " Сохранить данные", type="submit", name="action", value="save",
-                   style="margin-right: 0.5rem;") if is_editable else None,
-            Button(icon("check", size=16), " Завершить логистику", type="submit", name="action", value="complete",
-                   cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
+            btn("Сохранить данные", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
+            btn("Завершить логистику", variant="success", icon_name="check", type="submit", name="action", value="complete") if is_editable else None,
             Span(icon("check-circle", size=16), " Логистика завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if logistics_done else None,
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; display: flex; gap: 0.75rem;"
         ) if is_editable or logistics_done else None,
 
         method="post",
@@ -13472,11 +13829,9 @@ def get(quote_id: str, session):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                Button("✓ Вернуть на проверку", type="submit",
-                       style="background: #22c55e; border-color: #22c55e;"),
-                A("Отмена", href=f"/logistics/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/logistics/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 0.75rem;"
             ),
             action=f"/logistics/{quote_id}/return-to-control",
             method="post",
@@ -14057,12 +14412,10 @@ def get(session, quote_id: str):
 
         # Action buttons
         Div(
-            Button(icon("save", size=16), " Сохранить расходы", type="submit", name="action", value="save",
-                   style="margin-right: 0.5rem;") if is_editable else None,
-            Button(icon("check", size=16), " Завершить таможню", type="submit", name="action", value="complete",
-                   cls="btn-success", style="background-color: #22c55e;") if is_editable else None,
+            btn("Сохранить расходы", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
+            btn("Завершить таможню", variant="success", icon_name="check", type="submit", name="action", value="complete") if is_editable else None,
             Span(icon("check-circle", size=16), " Таможня завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if customs_done else None,
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; display: flex; gap: 0.75rem;"
         ) if is_editable or customs_done else None,
 
         method="post",
@@ -14663,11 +15016,9 @@ def get(quote_id: str, session):
                 style="margin-bottom: 1rem;"
             ),
             Div(
-                Button("✓ Вернуть на проверку", type="submit",
-                       style="background: #22c55e; border-color: #22c55e;"),
-                A("Отмена", href=f"/customs/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/customs/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 0.75rem;"
             ),
             action=f"/customs/{quote_id}/return-to-control",
             method="post",
@@ -17418,11 +17769,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(icon("save", size=16), " Создать спецификацию", type="submit", name="action", value="create",
-                       style="background: #28a745; border-color: #28a745;"),
-                A("Отмена", href="/spec-control", role="button",
-                  style="background: #6c757d; border-color: #6c757d; margin-left: 1rem;"),
-                style="margin-top: 1rem;"
+                btn("Создать спецификацию", variant="success", icon_name="save", type="submit", name="action", value="create"),
+                btn_link("Отмена", href="/spec-control", variant="secondary"),
+                style="margin-top: 1rem; display: flex; gap: 0.75rem;"
             ),
 
             action=f"/spec-control/create/{quote_id}",
@@ -17773,34 +18122,31 @@ def get(session, spec_id: str):
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="pending_review"),
-                    Button(icon("search", size=16), " На проверке", type="submit",
-                           style="background: #f59e0b; border-color: #f59e0b;",
-                           disabled=(status == "pending_review")),
+                    btn("На проверке", variant="secondary", icon_name="search", type="submit", size="sm",
+                        disabled=(status == "pending_review")),
                     action=f"/spec-control/{spec_id}",
                     method="POST",
-                    style="display: inline; margin-left: 0.5rem;"
+                    style="display: inline;"
                 ),
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="approved"),
-                    Button(icon("check", size=16), " Утверждена", type="submit",
-                           style="background: #3b82f6; border-color: #3b82f6;",
-                           disabled=(status == "approved")),
+                    btn("Утверждена", variant="primary", icon_name="check", type="submit", size="sm",
+                        disabled=(status == "approved")),
                     action=f"/spec-control/{spec_id}",
                     method="POST",
-                    style="display: inline; margin-left: 0.5rem;"
+                    style="display: inline;"
                 ),
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="signed"),
-                    Button(icon("pen-tool", size=16), " Подписана", type="submit",
-                           style="background: #22c55e; border-color: #22c55e;",
-                           disabled=(status == "signed")),
+                    btn("Подписана", variant="success", icon_name="pen-tool", type="submit", size="sm",
+                        disabled=(status == "signed")),
                     action=f"/spec-control/{spec_id}",
                     method="POST",
-                    style="display: inline; margin-left: 0.5rem;"
+                    style="display: inline;"
                 ),
-                style="display: flex; flex-wrap: wrap; align-items: center;"
+                style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;"
             ),
             P(icon("alert-triangle", size=16), " Внимание: это админ-функция для тестирования и исправления ошибок. Используйте осторожно!",
               style="margin-top: 1rem; font-size: 0.875rem; color: #ef4444;"),
@@ -17868,8 +18214,7 @@ def get(session, spec_id: str):
                                         rows="2", style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;"),
                                 style="margin-bottom: 0.5rem;"
                             ),
-                            Button(icon("check", size=16), " Одобрить", type="submit",
-                                   style="background: #10b981; border-color: #10b981; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
+                            btn("Одобрить", variant="success", icon_name="check", type="submit"),
                             action=f"/spec-control/{spec_id}",
                             method="POST"
                         ),
@@ -18236,8 +18581,7 @@ def get(session, spec_id: str):
                         style="margin-bottom: 0.75rem; color: #155724; font-weight: 500;"
                     ),
                     Form(
-                        Button(icon("check", size=16), " Подтвердить подпись и создать сделку", type="submit",
-                               style="background: #28a745; border-color: #28a745; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;"),
+                        btn("Подтвердить подпись и создать сделку", variant="success", icon_name="check", type="submit", full_width=True),
                         action=f"/spec-control/{spec_id}/confirm-signature",
                         method="POST"
                     ),
@@ -18258,22 +18602,16 @@ def get(session, spec_id: str):
 
             # Action buttons
             Div(
-                Button("💾 Сохранить", type="submit", name="action", value="save",
-                       style="background: #28a745; border-color: #28a745;",
-                       disabled=not is_editable) if is_editable else None,
-                Button("📤 Отправить на проверку", type="submit", name="action", value="submit_review",
-                       style="background: #007bff; border-color: #007bff; margin-left: 1rem;",
-                       disabled=not is_editable) if is_editable and status == "draft" else None,
-                Button(icon("check", size=16), " Утвердить", type="submit", name="action", value="approve",
-                       style="background: #28a745; border-color: #28a745; margin-left: 1rem; display: inline-flex; align-items: center; gap: 0.25rem;",
-                       disabled=not is_editable) if is_editable and status == "pending_review" else None,
+                btn("Сохранить", variant="primary", icon_name="save", type="submit", name="action", value="save",
+                    disabled=not is_editable) if is_editable else None,
+                btn("Отправить на проверку", variant="secondary", icon_name="send", type="submit", name="action", value="submit_review",
+                    disabled=not is_editable) if is_editable and status == "draft" else None,
+                btn("Утвердить", variant="success", icon_name="check", type="submit", name="action", value="approve",
+                    disabled=not is_editable) if is_editable and status == "pending_review" else None,
                 # Feature #70: PDF Preview button
-                A(icon("file-text", size=16), " Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf",
-                  target="_blank", role="button",
-                  style="background: #17a2b8; border-color: #17a2b8; margin-left: 1rem; text-decoration: none;"),
-                A("← Назад к спецификациям", href="/spec-control", role="button",
-                  style="background: #6c757d; border-color: #6c757d; margin-left: 1rem;"),
-                style="margin-top: 1rem;"
+                btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
+                btn_link("Назад к спецификациям", href="/spec-control", variant="ghost", icon_name="arrow-left"),
+                style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;"
             ),
 
             action=f"/spec-control/{spec_id}",
@@ -20349,10 +20687,11 @@ def get(session, deal_id: str):
         # Action buttons
         Div(
             Form(
-                Button(icon("check", size=16), " Сгенерировать платежи", type="submit", style="background: #10b981; margin-right: 1rem;") if preview_rows else "",
-                A("Отмена", href=f"/finance/{deal_id}", role="button", style="background: #6b7280;"),
+                btn("Сгенерировать платежи", variant="success", icon_name="check", type="submit") if preview_rows else "",
+                btn_link("Отмена", href=f"/finance/{deal_id}", variant="secondary"),
                 method="POST",
                 action=f"/finance/{deal_id}/generate-plan-fact",
+                style="display: flex; gap: 0.75rem;"
             ),
             style="margin-top: 1.5rem;"
         ),
@@ -23581,7 +23920,7 @@ def _supplier_form(supplier=None, error=None, session=None):
 
                 # Form actions
                 Div(
-                    Button(icon("save", size=16), " Сохранить", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
                     A("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -23876,7 +24215,7 @@ def get(session, q: str = "", status: str = ""):
                 Div(
                     Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
-                    Button(icon("search", size=16), " Поиск", type="submit"),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
                     A("Сбросить", href="/buyer-companies", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
@@ -24296,7 +24635,7 @@ def _buyer_company_form(company=None, error=None, session=None):
 
                 # Form actions
                 Div(
-                    Button(icon("save", size=16), " Сохранить", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
                     A("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -25064,7 +25403,7 @@ def _seller_company_form(
 
                 # Form actions
                 Div(
-                    Button(icon("save", size=16), " Сохранить", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
                     A("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
                 ),
@@ -28528,7 +28867,7 @@ def _location_form(location=None, error=None, session=None):
 
                 # Submit buttons
                 Div(
-                    Button(icon("save", size=16), " Сохранить", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
                     " ",
                     A("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", role="button", cls="secondary"),
                     cls="form-actions", style="margin-top: 1.5rem;"
@@ -29017,7 +29356,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                     Input(name="q", value=q, placeholder="Поиск по номеру инвойса...", style="flex: 2;"),
                     Select(*supplier_options, name="supplier_id", style="flex: 2;"),
                     Select(*status_options, name="status", style="flex: 1;"),
-                    Button(icon("search", size=16), " Поиск", type="submit"),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
                     A("Сбросить", href="/supplier-invoices", role="button", cls="secondary"),
                     style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
@@ -29460,7 +29799,7 @@ def _invoice_payment_form(invoice, payment=None, error=None, session=None):
 
                 # Buttons
                 Div(
-                    Button(icon("save", size=16), " Сохранить", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
                     A("Отмена", href=f"/supplier-invoices/{invoice.id}", role="button", cls="secondary"),
                     style="display: flex; gap: 1rem; margin-top: 1.5rem;"
                 ),
