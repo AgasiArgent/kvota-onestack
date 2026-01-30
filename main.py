@@ -29866,7 +29866,7 @@ def _quote_documents_section(
                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
                               style="display: none;"),
                         id="drop-zone",
-                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
                     style="flex: 1; display: flex;"
                 ),
@@ -30114,7 +30114,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
                               style="display: none;"),
                         id="drop-zone",
-                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
                     style="flex: 1; display: flex;"
                 ),
