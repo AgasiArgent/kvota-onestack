@@ -13323,7 +13323,11 @@ async def post_create_offer(item_id: str, session, request):
             notes=form.get("notes"),
             user_id=user_id,
         )
-    except ValueError as e:
+    except Exception as e:
+        # Log error for debugging
+        print(f"Error creating offer: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         # Return error in the panel
         offers = get_offers_for_item(item_id)
         from services.supplier_service import get_active_suppliers
