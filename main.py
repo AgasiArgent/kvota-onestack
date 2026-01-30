@@ -29764,21 +29764,36 @@ def _quote_documents_section(
         const docTypeSelect = document.getElementById('doc_type');
         const invoiceDiv = document.getElementById('invoice-selector-div');
         const itemDiv = document.getElementById('item-selector-div');
+        const invoiceSelect = document.getElementById('sub_entity_invoice');
+        const itemSelect = document.getElementById('sub_entity_item');
 
         const invoiceTypes = ['invoice_scan', 'proforma_scan', 'payment_order'];
         const itemTypes = ['certificate'];
 
         function updateSelectors() {
             const selectedType = docTypeSelect.value;
-            invoiceDiv.style.display = invoiceTypes.includes(selectedType) ? 'block' : 'none';
-            itemDiv.style.display = itemTypes.includes(selectedType) ? 'block' : 'none';
+
+            // Update select color: grey for placeholder, black for real selection
+            if (selectedType && selectedType !== '') {
+                docTypeSelect.style.color = '#111827';
+            } else {
+                docTypeSelect.style.color = '#9ca3af';
+            }
+
+            // Show/hide sub-selectors
+            if (invoiceDiv) {
+                invoiceDiv.style.display = invoiceTypes.includes(selectedType) ? 'block' : 'none';
+            }
+            if (itemDiv) {
+                itemDiv.style.display = itemTypes.includes(selectedType) ? 'block' : 'none';
+            }
 
             // Clear non-visible selectors
-            if (!invoiceTypes.includes(selectedType)) {
-                document.getElementById('sub_entity_invoice').value = '';
+            if (!invoiceTypes.includes(selectedType) && invoiceSelect) {
+                invoiceSelect.value = '';
             }
-            if (!itemTypes.includes(selectedType)) {
-                document.getElementById('sub_entity_item').value = '';
+            if (!itemTypes.includes(selectedType) && itemSelect) {
+                itemSelect.value = '';
             }
         }
 
@@ -30104,6 +30119,18 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
         });
 
         dropZone.addEventListener('click', () => fileInput.click());
+
+        // Handle document type select color
+        const docTypeSelect = document.getElementById('doc_type');
+        if (docTypeSelect) {
+            docTypeSelect.addEventListener('change', function() {
+                if (this.value && this.value !== '') {
+                    this.style.color = '#111827';
+                } else {
+                    this.style.color = '#9ca3af';
+                }
+            });
+        }
     });
     """)
 
