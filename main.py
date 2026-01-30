@@ -29850,7 +29850,7 @@ def _quote_documents_section(
         Div(
             Form(
                 Div(
-                    # Left side: Drop zone
+                    # Left side: Drop zone (wider)
                     Div(
                         Div(
                             I(cls="fa-solid fa-cloud-arrow-up", style="font-size: 1.5rem; color: #9ca3af; margin-bottom: 0.5rem;"),
@@ -29868,21 +29868,21 @@ def _quote_documents_section(
                         id="drop-zone",
                         style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
-                    style="flex: 1; min-width: 200px; display: flex;"
+                    style="flex: 2; min-width: 250px; display: flex;"
                 ),
 
                 # Right side: Type, description, save
                 Div(
-                    # Document type
+                    # Document type with custom styled select
                     Div(
                         Select(
-                            Option("Тип документа", value=""),
+                            Option("Тип документа", value="", disabled=True, selected=True, style="color: #9ca3af;"),
                             *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
                             name="document_type",
                             id="doc_type",
-                            style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white;"
+                            style="width: 100%; padding: 0.5rem 2rem 0.5rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white; color: #9ca3af; appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.5rem center; cursor: pointer;"
                         ),
-                        style="margin-bottom: 0.5rem;"
+                        style="margin-bottom: 0.5rem; position: relative;"
                     ),
 
                     # Dynamic sub-entity selectors (hidden by default)
@@ -30016,7 +30016,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                     A(
                       icon("download", size=16),
                       href=f"/documents/{doc.id}/download",
-                      target="_blank",
+                      download=doc.original_filename,
                       title="Скачать",
                       style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
                     A(
@@ -30098,7 +30098,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
         Div(
             Form(
                 Div(
-                    # Left side: Drop zone
+                    # Left side: Drop zone (wider)
                     Div(
                         Div(
                             I(cls="fa-solid fa-cloud-arrow-up", style="font-size: 1.5rem; color: #9ca3af; margin-bottom: 0.5rem;"),
@@ -30116,21 +30116,21 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                         id="drop-zone",
                         style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
-                    style="flex: 1; min-width: 200px; display: flex;"
+                    style="flex: 2; min-width: 250px; display: flex;"
                 ),
 
                 # Right side: Type, description, save
                 Div(
-                    # Document type
+                    # Document type with custom styled select
                     Div(
                         Select(
-                            Option("Тип документа", value=""),
+                            Option("Тип документа", value="", disabled=True, selected=True, style="color: #9ca3af;"),
                             *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
                             name="document_type",
                             id="doc_type",
-                            style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white;"
+                            style="width: 100%; padding: 0.5rem 2rem 0.5rem 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; background: white; color: #9ca3af; appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\"); background-repeat: no-repeat; background-position: right 0.5rem center; cursor: pointer;"
                         ),
-                        style="margin-bottom: 0.5rem;"
+                        style="margin-bottom: 0.5rem; position: relative;"
                     ),
 
                     # Description
