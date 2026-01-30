@@ -9736,38 +9736,47 @@ def get(quote_id: str, session):
     # Get supplier invoices for this quote (for invoice binding dropdown)
     invoices = []
     try:
-        # Get invoice items linked to this quote's items
-        invoice_items_result = supabase.table("supplier_invoice_items") \
-            .select("invoice_id") \
-            .in_("quote_item_id", supabase.table("quote_items").select("id").eq("quote_id", quote_id).execute().data or []) \
+        # First get quote item IDs
+        quote_items_result = supabase.table("quote_items") \
+            .select("id") \
+            .eq("quote_id", quote_id) \
             .execute()
 
-        if invoice_items_result.data:
-            invoice_ids = list(set(item["invoice_id"] for item in invoice_items_result.data if item.get("invoice_id")))
-            if invoice_ids:
-                invoices_result = supabase.table("supplier_invoices") \
-                    .select("id, invoice_number, supplier_id") \
-                    .in_("id", invoice_ids) \
-                    .order("invoice_date", desc=True) \
-                    .execute()
+        quote_item_ids = [item["id"] for item in (quote_items_result.data or [])]
 
-                if invoices_result.data:
-                    # Get supplier names
-                    supplier_ids = list(set(inv["supplier_id"] for inv in invoices_result.data if inv.get("supplier_id")))
-                    suppliers_map = {}
-                    if supplier_ids:
-                        suppliers_result = supabase.table("suppliers") \
-                            .select("id, name") \
-                            .in_("id", supplier_ids) \
-                            .execute()
-                        suppliers_map = {s["id"]: s["name"] for s in (suppliers_result.data or [])}
+        if quote_item_ids:
+            # Get invoice items linked to this quote's items
+            invoice_items_result = supabase.table("supplier_invoice_items") \
+                .select("invoice_id") \
+                .in_("quote_item_id", quote_item_ids) \
+                .execute()
 
-                    for inv in invoices_result.data:
-                        invoices.append({
-                            "id": inv["id"],
-                            "invoice_number": inv.get("invoice_number", ""),
-                            "supplier_name": suppliers_map.get(inv.get("supplier_id"), "")
-                        })
+            if invoice_items_result.data:
+                invoice_ids = list(set(item["invoice_id"] for item in invoice_items_result.data if item.get("invoice_id")))
+                if invoice_ids:
+                    invoices_result = supabase.table("supplier_invoices") \
+                        .select("id, invoice_number, supplier_id") \
+                        .in_("id", invoice_ids) \
+                        .order("invoice_date", desc=True) \
+                        .execute()
+
+                    if invoices_result.data:
+                        # Get supplier names
+                        supplier_ids = list(set(inv["supplier_id"] for inv in invoices_result.data if inv.get("supplier_id")))
+                        suppliers_map = {}
+                        if supplier_ids:
+                            suppliers_result = supabase.table("suppliers") \
+                                .select("id, name") \
+                                .in_("id", supplier_ids) \
+                                .execute()
+                            suppliers_map = {s["id"]: s["name"] for s in (suppliers_result.data or [])}
+
+                        for inv in invoices_result.data:
+                            invoices.append({
+                                "id": inv["id"],
+                                "invoice_number": inv.get("invoice_number", ""),
+                                "supplier_name": suppliers_map.get(inv.get("supplier_id"), "")
+                            })
     except Exception as e:
         print(f"Error fetching invoices for quote documents: {e}")
 
@@ -9775,9 +9784,9 @@ def get(quote_id: str, session):
     items = []
     try:
         items_result = supabase.table("quote_items") \
-            .select("id, product_name, sku, brand") \
+            .select("id, product_name, product_code, brand") \
             .eq("quote_id", quote_id) \
-            .order("row_order") \
+            .order("position") \
             .execute()
 
         if items_result.data:
@@ -9785,7 +9794,7 @@ def get(quote_id: str, session):
                 items.append({
                     "id": item["id"],
                     "name": item.get("product_name", "Товар"),
-                    "sku": item.get("sku", ""),
+                    "sku": item.get("product_code", ""),
                     "brand": item.get("brand", "")
                 })
     except Exception as e:
