@@ -96,7 +96,9 @@ from services.document_service import (
     get_download_url, delete_document, update_document,
     get_document_type_label, get_file_icon, format_file_size,
     get_allowed_document_types_for_entity, count_documents_for_entity,
-    DOCUMENT_TYPE_LABELS
+    get_all_documents_for_quote, count_all_documents_for_quote,
+    get_required_sub_entity_type, get_entity_type_label,
+    DOCUMENT_TYPE_LABELS, INVOICE_DOCUMENT_TYPES, ITEM_DOCUMENT_TYPES
 )
 
 # ============================================================================
@@ -9702,7 +9704,7 @@ def post(
 
 @rt("/quotes/{quote_id}/documents")
 def get(quote_id: str, session):
-    """View documents tab for a quote"""
+    """View documents tab for a quote with hierarchical binding support"""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -9741,12 +9743,70 @@ def get(quote_id: str, session):
         if customer_result.data:
             customer_name = customer_result.data[0].get("name", "—")
 
+    # Get supplier invoices for this quote (for invoice binding dropdown)
+    invoices = []
+    try:
+        # Get invoice items linked to this quote's items
+        invoice_items_result = supabase.table("supplier_invoice_items") \
+            .select("invoice_id") \
+            .in_("quote_item_id", supabase.table("quote_items").select("id").eq("quote_id", quote_id).execute().data or []) \
+            .execute()
+
+        if invoice_items_result.data:
+            invoice_ids = list(set(item["invoice_id"] for item in invoice_items_result.data if item.get("invoice_id")))
+            if invoice_ids:
+                invoices_result = supabase.table("supplier_invoices") \
+                    .select("id, invoice_number, supplier_id") \
+                    .in_("id", invoice_ids) \
+                    .order("invoice_date", desc=True) \
+                    .execute()
+
+                if invoices_result.data:
+                    # Get supplier names
+                    supplier_ids = list(set(inv["supplier_id"] for inv in invoices_result.data if inv.get("supplier_id")))
+                    suppliers_map = {}
+                    if supplier_ids:
+                        suppliers_result = supabase.table("suppliers") \
+                            .select("id, name") \
+                            .in_("id", supplier_ids) \
+                            .execute()
+                        suppliers_map = {s["id"]: s["name"] for s in (suppliers_result.data or [])}
+
+                    for inv in invoices_result.data:
+                        invoices.append({
+                            "id": inv["id"],
+                            "invoice_number": inv.get("invoice_number", ""),
+                            "supplier_name": suppliers_map.get(inv.get("supplier_id"), "")
+                        })
+    except Exception as e:
+        print(f"Error fetching invoices for quote documents: {e}")
+
+    # Get quote items (for certificate binding dropdown)
+    items = []
+    try:
+        items_result = supabase.table("quote_items") \
+            .select("id, product_name, sku, brand") \
+            .eq("quote_id", quote_id) \
+            .order("row_order") \
+            .execute()
+
+        if items_result.data:
+            for item in items_result.data:
+                items.append({
+                    "id": item["id"],
+                    "name": item.get("product_name", "Товар"),
+                    "sku": item.get("sku", ""),
+                    "brand": item.get("brand", "")
+                })
+    except Exception as e:
+        print(f"Error fetching items for quote documents: {e}")
+
     # Determine permissions based on roles
     can_upload = user_has_any_role(session, ["admin", "sales", "sales_manager", "procurement", "quote_controller", "finance", "logistics", "customs"])
     can_delete = user_has_any_role(session, ["admin", "sales_manager", "quote_controller", "finance"])
 
-    # Get documents count
-    doc_count = count_documents_for_entity("quote", quote_id)
+    # Get total documents count (all related to this quote)
+    doc_count = count_all_documents_for_quote(quote_id)
 
     return page_layout(
         f"Документы КП {quote_number}",
@@ -9769,15 +9829,22 @@ def get(quote_id: str, session):
         Div(
             P(
                 icon("info", size=16),
-                " Здесь можно загружать и просматривать документы, связанные с КП: договоры, ТТН, CMR, коносаменты, таможенные декларации и другие.",
+                " Здесь можно загружать и просматривать все документы по КП: документы самого КП, сканы инвойсов и сертификаты на товары.",
                 style="display: flex; align-items: flex-start; gap: 0.5rem; margin: 0; color: var(--text-secondary);"
             ),
             cls="card",
             style="background: var(--accent-light); border-left: 4px solid var(--accent); margin-bottom: 1.5rem;"
         ),
 
-        # Documents section
-        _documents_section("quote", quote_id, session, can_upload=can_upload, can_delete=can_delete),
+        # Documents section with hierarchical binding
+        _quote_documents_section(
+            quote_id=quote_id,
+            session=session,
+            invoices=invoices,
+            items=items,
+            can_upload=can_upload,
+            can_delete=can_delete
+        ),
 
         # Back button
         Div(
@@ -29490,6 +29557,290 @@ def post_new_invoice_payment(session, invoice_id: str, payment_date: str, paymen
 # Files stored in Supabase Storage bucket 'kvota-documents'
 # Metadata stored in kvota.documents table
 
+def _quote_documents_section(
+    quote_id: str,
+    session: dict,
+    invoices: List[Dict],
+    items: List[Dict],
+    can_upload: bool = True,
+    can_delete: bool = True
+):
+    """
+    Documents section for quotes with hierarchical binding support.
+
+    Shows ALL documents related to a quote:
+    - Documents directly attached to the quote
+    - Invoice documents (scans, payment orders)
+    - Item certificates
+
+    Upload form dynamically shows invoice/item selector based on document type.
+
+    Args:
+        quote_id: Quote UUID
+        session: User session
+        invoices: List of supplier invoices for this quote [{id, invoice_number, supplier_name}]
+        items: List of quote items [{id, name, sku, brand}]
+        can_upload: Whether user can upload
+        can_delete: Whether user can delete
+    """
+    documents = get_all_documents_for_quote(quote_id)
+    doc_types = get_allowed_document_types_for_entity("quote")
+
+    # Build document rows with entity binding info
+    doc_rows = []
+    for doc in documents:
+        # Determine binding label
+        if doc.entity_type == "quote":
+            binding_label = "КП"
+            binding_style = "background: #dbeafe; color: #1e40af;"
+        elif doc.entity_type == "supplier_invoice":
+            # Find invoice name
+            invoice_name = next((inv.get("invoice_number", "Инвойс") for inv in invoices if inv.get("id") == doc.entity_id), "Инвойс")
+            binding_label = f"Инв: {invoice_name}"
+            binding_style = "background: #fef3c7; color: #92400e;"
+        elif doc.entity_type == "quote_item":
+            # Find item name
+            item_info = next((f"{it.get('name', 'Товар')[:20]}" for it in items if it.get("id") == doc.entity_id), "Товар")
+            binding_label = f"Поз: {item_info}"
+            binding_style = "background: #d1fae5; color: #065f46;"
+        else:
+            binding_label = get_entity_type_label(doc.entity_type)
+            binding_style = "background: #f3f4f6; color: #374151;"
+
+        doc_rows.append(
+            Tr(
+                # File icon + name
+                Td(
+                    I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent);"),
+                    A(doc.original_filename,
+                      href=f"/documents/{doc.id}/download",
+                      target="_blank",
+                      style="text-decoration: none; color: var(--text-primary);"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Document type
+                Td(
+                    Span(get_document_type_label(doc.document_type),
+                         cls="badge",
+                         style="background: var(--accent-light); color: var(--accent); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;")
+                    if doc.document_type else "-"
+                ),
+                # Binding (NEW column)
+                Td(
+                    Span(binding_label,
+                         style=f"{binding_style}; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;")
+                ),
+                # File size
+                Td(format_file_size(doc.file_size_bytes) or "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
+                # Upload date
+                Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
+                # Actions
+                Td(
+                    A(I(cls="fa-solid fa-download", style="color: #28a745;"),
+                      href=f"/documents/{doc.id}/download",
+                      target="_blank",
+                      title="Скачать",
+                      style="margin-right: 0.5rem;"),
+                    Button(I(cls="fa-solid fa-trash", style="color: #dc3545;"),
+                           hx_delete=f"/documents/{doc.id}",
+                           hx_confirm="Удалить документ?",
+                           hx_target=f"#doc-row-{doc.id}",
+                           hx_swap="outerHTML",
+                           style="background: none; border: none; cursor: pointer; padding: 0.25rem;",
+                           title="Удалить") if can_delete else None,
+                    style="white-space: nowrap;"
+                ),
+                id=f"doc-row-{doc.id}"
+            )
+        )
+
+    # Empty state
+    if not doc_rows:
+        doc_rows.append(
+            Tr(
+                Td("Документы не загружены", colspan="6", style="text-align: center; color: var(--text-muted); padding: 2rem;")
+            )
+        )
+
+    # Build invoice options for dropdown
+    invoice_options = [Option("— Выберите инвойс —", value="")]
+    for inv in invoices:
+        supplier = inv.get("supplier_name", "")
+        label = f"{inv.get('invoice_number', 'Инвойс')} ({supplier})" if supplier else inv.get("invoice_number", "Инвойс")
+        invoice_options.append(Option(label, value=inv.get("id", "")))
+
+    # Build item options for dropdown
+    item_options = [Option("— Выберите товар —", value="")]
+    for item in items:
+        brand = item.get("brand", "")
+        sku = item.get("sku", "")
+        name = item.get("name", "Товар")[:30]
+        label = f"{name}"
+        if brand:
+            label += f" ({brand})"
+        if sku:
+            label += f" [{sku}]"
+        item_options.append(Option(label, value=item.get("id", "")))
+
+    # JavaScript for dynamic sub-entity selector
+    js_script = Script("""
+    document.addEventListener('DOMContentLoaded', function() {
+        const docTypeSelect = document.getElementById('doc_type');
+        const invoiceDiv = document.getElementById('invoice-selector-div');
+        const itemDiv = document.getElementById('item-selector-div');
+
+        const invoiceTypes = ['invoice_scan', 'proforma_scan', 'payment_order'];
+        const itemTypes = ['certificate'];
+
+        function updateSelectors() {
+            const selectedType = docTypeSelect.value;
+            invoiceDiv.style.display = invoiceTypes.includes(selectedType) ? 'block' : 'none';
+            itemDiv.style.display = itemTypes.includes(selectedType) ? 'block' : 'none';
+
+            // Clear non-visible selectors
+            if (!invoiceTypes.includes(selectedType)) {
+                document.getElementById('sub_entity_invoice').value = '';
+            }
+            if (!itemTypes.includes(selectedType)) {
+                document.getElementById('sub_entity_item').value = '';
+            }
+        }
+
+        if (docTypeSelect) {
+            docTypeSelect.addEventListener('change', updateSelectors);
+            updateSelectors(); // Initial state
+        }
+    });
+    """)
+
+    return Div(
+        js_script,
+
+        # Upload form with dynamic selectors
+        Div(
+            H4(I(cls="fa-solid fa-cloud-upload-alt", style="margin-right: 0.5rem;"), "Загрузить документ"),
+            Form(
+                # Row 1: File and document type
+                Div(
+                    Div(
+                        Label("Файл", For="doc_file"),
+                        Input(type="file", name="file", id="doc_file", required=True,
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv"),
+                        cls="form-group",
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label("Тип документа", For="doc_type"),
+                        Select(
+                            Option("Выберите тип", value=""),
+                            *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
+                            name="document_type",
+                            id="doc_type"
+                        ),
+                        cls="form-group",
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;"
+                ),
+
+                # Row 2: Dynamic sub-entity selectors
+                Div(
+                    # Invoice selector (hidden by default)
+                    Div(
+                        Label("Привязать к инвойсу", For="sub_entity_invoice",
+                              style="color: #92400e; font-weight: 500;"),
+                        Select(
+                            *invoice_options,
+                            name="sub_entity_invoice",
+                            id="sub_entity_invoice"
+                        ),
+                        id="invoice-selector-div",
+                        cls="form-group",
+                        style="display: none; flex: 1; background: #fffbeb; padding: 0.5rem; border-radius: 4px; border: 1px solid #fcd34d;"
+                    ) if invoices else Div(
+                        P("Нет инвойсов для привязки. Документ будет привязан к КП.",
+                          style="color: #92400e; font-size: 0.85rem; margin: 0;"),
+                        id="invoice-selector-div",
+                        style="display: none; background: #fffbeb; padding: 0.5rem; border-radius: 4px;"
+                    ),
+
+                    # Item selector (hidden by default)
+                    Div(
+                        Label("Привязать к товару", For="sub_entity_item",
+                              style="color: #065f46; font-weight: 500;"),
+                        Select(
+                            *item_options,
+                            name="sub_entity_item",
+                            id="sub_entity_item"
+                        ),
+                        id="item-selector-div",
+                        cls="form-group",
+                        style="display: none; flex: 1; background: #ecfdf5; padding: 0.5rem; border-radius: 4px; border: 1px solid #6ee7b7;"
+                    ) if items else Div(
+                        P("Нет товаров для привязки. Документ будет привязан к КП.",
+                          style="color: #065f46; font-size: 0.85rem; margin: 0;"),
+                        id="item-selector-div",
+                        style="display: none; background: #ecfdf5; padding: 0.5rem; border-radius: 4px;"
+                    ),
+
+                    style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem;"
+                ),
+
+                # Row 3: Description and submit
+                Div(
+                    Div(
+                        Label("Описание (опционально)", For="doc_desc"),
+                        Input(type="text", name="description", id="doc_desc", placeholder="Краткое описание"),
+                        cls="form-group",
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label(" ", style="visibility: hidden;"),
+                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
+                               type="submit",
+                               style="background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"),
+                        cls="form-group"
+                    ),
+                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+                ),
+
+                # Hidden field for parent quote
+                Input(type="hidden", name="parent_quote_id", value=quote_id),
+
+                action=f"/documents/upload/quote/{quote_id}",
+                method="POST",
+                enctype="multipart/form-data",
+                id="doc-upload-form"
+            ),
+            style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg-page-alt); border-radius: 8px;"
+        ) if can_upload else None,
+
+        # Documents table
+        Div(
+            H4(I(cls="fa-solid fa-folder-open", style="margin-right: 0.5rem;"), f"Документы ({len(documents)})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("Файл", style="width: 28%;"),
+                        Th("Тип", style="width: 15%;"),
+                        Th("Привязка", style="width: 15%;"),
+                        Th("Размер", style="width: 10%;"),
+                        Th("Дата", style="width: 12%;"),
+                        Th("", style="width: 10%;"),
+                    )
+                ),
+                Tbody(*doc_rows, id="documents-tbody"),
+                cls="table",
+                style="width: 100%;"
+            ),
+            style="overflow-x: auto;"
+        ),
+
+        cls="documents-section",
+        id="documents-section"
+    )
+
+
 def _documents_section(entity_type: str, entity_id: str, session: dict, can_upload: bool = True, can_delete: bool = True):
     """
     Reusable documents section component.
@@ -29641,7 +29992,14 @@ async def post(session, entity_type: str, entity_id: str, request):
     Upload a document for an entity.
 
     POST /documents/upload/{entity_type}/{entity_id}
-    Form data: file, document_type (optional), description (optional)
+    Form data: file, document_type (optional), description (optional),
+               sub_entity_invoice (optional), sub_entity_item (optional),
+               parent_quote_id (optional)
+
+    Hierarchical binding:
+    - For invoice docs (invoice_scan, proforma_scan, payment_order): binds to supplier_invoice
+    - For certificates: binds to quote_item
+    - parent_quote_id tracks the parent quote for aggregated document views
     """
     redirect = require_login(session)
     if redirect:
@@ -29663,6 +30021,11 @@ async def post(session, entity_type: str, entity_id: str, request):
         document_type = form.get("document_type") or None
         description = form.get("description") or None
 
+        # Hierarchical binding fields
+        sub_entity_invoice = form.get("sub_entity_invoice") or None
+        sub_entity_item = form.get("sub_entity_item") or None
+        parent_quote_id = form.get("parent_quote_id") or None
+
         if not uploaded_file or not uploaded_file.filename:
             # Redirect back with error
             return page_layout("Ошибка загрузки",
@@ -29680,16 +30043,31 @@ async def post(session, entity_type: str, entity_id: str, request):
         file_content = await uploaded_file.read()
         filename = uploaded_file.filename
 
+        # Determine actual entity binding based on document type
+        actual_entity_type = entity_type
+        actual_entity_id = entity_id
+
+        if document_type:
+            if document_type in INVOICE_DOCUMENT_TYPES and sub_entity_invoice:
+                # Bind to supplier invoice
+                actual_entity_type = "supplier_invoice"
+                actual_entity_id = sub_entity_invoice
+            elif document_type in ITEM_DOCUMENT_TYPES and sub_entity_item:
+                # Bind to quote item
+                actual_entity_type = "quote_item"
+                actual_entity_id = sub_entity_item
+
         # Upload document using service
         doc, error = upload_document(
             organization_id=org_id,
-            entity_type=entity_type,
-            entity_id=entity_id,
+            entity_type=actual_entity_type,
+            entity_id=actual_entity_id,
             file_content=file_content,
             filename=filename,
             document_type=document_type,
             description=description,
-            uploaded_by=user_id
+            uploaded_by=user_id,
+            parent_quote_id=parent_quote_id
         )
 
         if error:
@@ -29705,17 +30083,21 @@ async def post(session, entity_type: str, entity_id: str, request):
             )
 
         # Determine redirect URL based on entity type
-        redirect_urls = {
-            "quote": f"/quotes/{entity_id}?tab=documents",
-            "specification": f"/spec-control/{entity_id}",
-            "supplier_invoice": f"/supplier-invoices/{entity_id}",
-            "supplier": f"/suppliers/{entity_id}",
-            "customer": f"/customers/{entity_id}?tab=documents",
-            "seller_company": f"/admin?tab=seller_companies",
-            "buyer_company": f"/admin?tab=buyer_companies",
-            "quote_item": f"/quotes/{entity_id}",  # Would need parent quote_id
-        }
-        redirect_url = redirect_urls.get(entity_type, "/")
+        # Use parent_quote_id if available for sub-entity documents
+        if parent_quote_id and actual_entity_type in ("supplier_invoice", "quote_item"):
+            redirect_url = f"/quotes/{parent_quote_id}?tab=documents"
+        else:
+            redirect_urls = {
+                "quote": f"/quotes/{entity_id}?tab=documents",
+                "specification": f"/spec-control/{entity_id}",
+                "supplier_invoice": f"/supplier-invoices/{entity_id}",
+                "supplier": f"/suppliers/{entity_id}",
+                "customer": f"/customers/{entity_id}?tab=documents",
+                "seller_company": f"/admin?tab=seller_companies",
+                "buyer_company": f"/admin?tab=buyer_companies",
+                "quote_item": f"/quotes/{entity_id}",
+            }
+            redirect_url = redirect_urls.get(entity_type, "/")
 
         return RedirectResponse(redirect_url, status_code=303)
 

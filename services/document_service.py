@@ -126,6 +126,10 @@ class Document:
     Represents a document metadata record.
 
     Files are stored in Supabase Storage, this holds metadata.
+
+    Hierarchical binding:
+    - entity_type/entity_id: Direct binding to specific entity (quote, invoice, item)
+    - parent_quote_id: For quick retrieval of ALL documents related to a quote
     """
     id: str
     organization_id: str
@@ -139,6 +143,7 @@ class Document:
     description: Optional[str] = None
     uploaded_by: Optional[str] = None
     created_at: Optional[datetime] = None
+    parent_quote_id: Optional[str] = None  # For hierarchical aggregation
 
 
 def _parse_document(data: dict) -> Document:
@@ -156,6 +161,7 @@ def _parse_document(data: dict) -> Document:
         description=data.get("description"),
         uploaded_by=data.get("uploaded_by"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
+        parent_quote_id=data.get("parent_quote_id"),
     )
 
 
@@ -233,32 +239,47 @@ def upload_document(
     document_type: Optional[str] = None,
     description: Optional[str] = None,
     uploaded_by: Optional[str] = None,
+    parent_quote_id: Optional[str] = None,
 ) -> Tuple[Optional[Document], Optional[str]]:
     """
     Upload a document to storage and create metadata record.
 
     Args:
         organization_id: Organization UUID
-        entity_type: Type of parent entity (quote, supplier_invoice, etc.)
+        entity_type: Type of parent entity (quote, supplier_invoice, quote_item, etc.)
         entity_id: UUID of parent entity
         file_content: File bytes
         filename: Original filename
         document_type: Classification (invoice_scan, contract, etc.)
         description: Optional description
         uploaded_by: User UUID who uploaded
+        parent_quote_id: Parent quote ID for hierarchical aggregation (allows fetching
+                         all documents for a quote including invoice docs and item certs)
 
     Returns:
         Tuple of (Document, None) on success, or (None, error_message) on failure
 
     Example:
+        # Direct quote document
         doc, error = upload_document(
             organization_id="org-uuid",
             entity_type="quote",
             entity_id="quote-uuid",
             file_content=file_bytes,
-            filename="invoice.pdf",
+            filename="contract.pdf",
+            document_type="contract",
+            parent_quote_id="quote-uuid"  # Same as entity_id for direct binding
+        )
+
+        # Invoice document linked to quote
+        doc, error = upload_document(
+            organization_id="org-uuid",
+            entity_type="supplier_invoice",
+            entity_id="invoice-uuid",
+            file_content=file_bytes,
+            filename="invoice_scan.pdf",
             document_type="invoice_scan",
-            uploaded_by="user-uuid"
+            parent_quote_id="quote-uuid"  # Links to parent quote for aggregation
         )
     """
     # Validate entity type
@@ -308,6 +329,7 @@ def upload_document(
             "document_type": document_type,
             "description": description,
             "uploaded_by": uploaded_by,
+            "parent_quote_id": parent_quote_id,
         }
 
         result = supabase.table("documents").insert(insert_data).execute()
@@ -390,6 +412,52 @@ def get_documents_for_entity(
     except Exception as e:
         print(f"Error getting documents for entity: {e}")
         return []
+
+
+def get_all_documents_for_quote(quote_id: str) -> List[Document]:
+    """
+    Get ALL documents related to a quote (hierarchical).
+
+    This includes:
+    - Documents directly attached to the quote (entity_type=quote)
+    - Documents attached to supplier invoices of this quote
+    - Certificates attached to quote items
+
+    All fetched via parent_quote_id for efficiency.
+
+    Args:
+        quote_id: Quote UUID
+
+    Returns:
+        List of Document objects sorted by created_at desc
+    """
+    try:
+        supabase = _get_supabase()
+        result = supabase.table("documents").select("*")\
+            .eq("parent_quote_id", quote_id)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        return [_parse_document(row) for row in result.data] if result.data else []
+
+    except Exception as e:
+        print(f"Error getting all documents for quote: {e}")
+        return []
+
+
+def count_all_documents_for_quote(quote_id: str) -> int:
+    """Count all documents related to a quote (via parent_quote_id)."""
+    try:
+        supabase = _get_supabase()
+        result = supabase.table("documents").select("id", count="exact")\
+            .eq("parent_quote_id", quote_id)\
+            .execute()
+
+        return result.count if result.count else 0
+
+    except Exception as e:
+        print(f"Error counting documents for quote: {e}")
+        return 0
 
 
 def get_documents_by_organization(
@@ -698,11 +766,20 @@ def get_allowed_document_types_for_entity(entity_type: str) -> List[Dict[str, st
     Get list of relevant document types for an entity type.
 
     Returns list of dicts with 'value' and 'label' for dropdown.
+
+    Note: For 'quote' entity type, ALL document types are shown because
+    the quote documents page aggregates docs from invoices and items too.
     """
     # Define relevant document types per entity
     entity_document_types = {
         "supplier_invoice": ["invoice_scan", "proforma_scan", "payment_order", "other"],
-        "quote": ["contract", "ttn", "cmr", "bill_of_lading", "customs_declaration", "other"],
+        # Quote shows ALL types because it aggregates from invoices and items
+        "quote": [
+            "invoice_scan", "proforma_scan", "payment_order",  # Invoice-related
+            "certificate",  # Item-related
+            "contract", "ttn", "cmr", "bill_of_lading", "customs_declaration",  # Quote-related
+            "founding_docs", "license", "other"  # Other
+        ],
         "specification": ["contract", "ttn", "cmr", "bill_of_lading", "customs_declaration", "other"],
         "quote_item": ["certificate", "other"],
         "supplier": ["contract", "license", "certificate", "other"],
@@ -717,3 +794,44 @@ def get_allowed_document_types_for_entity(entity_type: str) -> List[Dict[str, st
         {"value": t, "label": DOCUMENT_TYPE_LABELS.get(t, t)}
         for t in types
     ]
+
+
+# Document types that require binding to a supplier invoice
+INVOICE_DOCUMENT_TYPES = {"invoice_scan", "proforma_scan", "payment_order"}
+
+# Document types that require binding to a quote item
+ITEM_DOCUMENT_TYPES = {"certificate"}
+
+
+def get_required_sub_entity_type(document_type: Optional[str]) -> Optional[str]:
+    """
+    Determine if a document type requires binding to a sub-entity.
+
+    Args:
+        document_type: The document type
+
+    Returns:
+        'supplier_invoice' if needs invoice binding,
+        'quote_item' if needs item binding,
+        None if binds directly to quote
+    """
+    if document_type in INVOICE_DOCUMENT_TYPES:
+        return "supplier_invoice"
+    elif document_type in ITEM_DOCUMENT_TYPES:
+        return "quote_item"
+    return None
+
+
+def get_entity_type_label(entity_type: str) -> str:
+    """Get Russian label for entity type."""
+    labels = {
+        "quote": "КП",
+        "supplier_invoice": "Инвойс",
+        "quote_item": "Товар",
+        "specification": "Спецификация",
+        "supplier": "Поставщик",
+        "customer": "Клиент",
+        "seller_company": "Компания-продавец",
+        "buyer_company": "Компания-покупатель",
+    }
+    return labels.get(entity_type, entity_type)
