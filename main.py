@@ -29688,21 +29688,23 @@ def _quote_documents_section(
                 Td(format_file_size(doc.file_size_bytes) or "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Upload date
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
-                # Actions - small square icon buttons
+                # Actions - small square icon buttons (using Lucide icons)
                 Td(
-                    A(I(cls="fa-solid fa-download", style="font-size: 14px; color: #6b7280;"),
+                    A(
+                      icon("download", size=16),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #6b7280 !important; text-decoration: none !important;"),
-                    A(I(cls="fa-solid fa-trash", style="font-size: 14px; color: #6b7280;"),
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
+                    A(
+                      icon("trash-2", size=16),
                       href="#",
                       hx_delete=f"/documents/{doc.id}",
                       hx_confirm="Удалить документ?",
                       hx_target=f"#doc-row-{doc.id}",
                       hx_swap="outerHTML",
                       title="Удалить",
-                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #6b7280 !important; text-decoration: none !important;") if can_delete else None,
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;") if can_delete else None,
                     style="white-space: nowrap; display: flex; gap: 0.5rem;"
                 ),
                 id=f"doc-row-{doc.id}"
@@ -29999,21 +30001,23 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(doc.created_at.strftime("%d.%m.%Y %H:%M") if doc.created_at else "-", style="color: var(--text-secondary);"),
                 # Description
                 Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
-                # Actions - small square icon buttons
+                # Actions - small square icon buttons (using Lucide icons)
                 Td(
-                    A(I(cls="fa-solid fa-download", style="font-size: 14px; color: #6b7280;"),
+                    A(
+                      icon("download", size=16),
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #6b7280 !important; text-decoration: none !important;"),
-                    A(I(cls="fa-solid fa-trash", style="font-size: 14px; color: #6b7280;"),
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
+                    A(
+                      icon("trash-2", size=16),
                       href="#",
                       hx_delete=f"/documents/{doc.id}",
                       hx_confirm="Удалить документ?",
                       hx_target=f"#doc-row-{doc.id}",
                       hx_swap="outerHTML",
                       title="Удалить",
-                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #6b7280 !important; text-decoration: none !important;") if can_delete else None,
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;") if can_delete else None,
                     style="white-space: nowrap; display: flex; gap: 0.5rem;"
                 ),
                 id=f"doc-row-{doc.id}"
