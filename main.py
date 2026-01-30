@@ -13297,7 +13297,7 @@ def get_offers_list(item_id: str, session):
     return render_offers_panel(item_id, offers, suppliers)
 
 
-@rt("/quote-items/{item_id}/offers")
+@app.post("/quote-items/{item_id}/offers")
 async def post_create_offer(item_id: str, session, request):
     """POST: Create a new price offer for an item."""
     import logging
