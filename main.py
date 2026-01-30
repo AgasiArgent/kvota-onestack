@@ -90,6 +90,15 @@ from calculation_models import (
 # Import currency service for multi-currency logistics
 from services.currency_service import convert_to_usd
 
+# Import document service for file uploads
+from services.document_service import (
+    upload_document, get_document, get_documents_for_entity,
+    get_download_url, delete_document, update_document,
+    get_document_type_label, get_file_icon, format_file_size,
+    get_allowed_document_types_for_entity, count_documents_for_entity,
+    DOCUMENT_TYPE_LABELS
+)
+
 # ============================================================================
 # APP SETUP
 # ============================================================================
@@ -9508,6 +9517,100 @@ def post(
 
 
 # ============================================================================
+# QUOTE DOCUMENTS TAB
+# ============================================================================
+
+@rt("/quotes/{quote_id}/documents")
+def get(quote_id: str, session):
+    """View documents tab for a quote"""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+    user_roles = get_session_user_roles(session)
+
+    supabase = get_supabase()
+
+    # Get quote details
+    quote_result = supabase.table("quotes") \
+        .select("id, quote_number, customer_id, status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            Div("Запрошенное КП не существует или у вас нет доступа.", cls="card"),
+            A("← К списку КП", href="/quotes"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    quote_number = quote.get("quote_number") or quote_id[:8]
+
+    # Get customer name
+    customer_name = "—"
+    if quote.get("customer_id"):
+        customer_result = supabase.table("customers") \
+            .select("company_name") \
+            .eq("id", quote["customer_id"]) \
+            .execute()
+        if customer_result.data:
+            customer_name = customer_result.data[0].get("company_name", "—")
+
+    # Determine permissions based on roles
+    can_upload = user_has_any_role(session, ["admin", "sales", "sales_manager", "procurement", "quote_controller", "finance", "logistics", "customs"])
+    can_delete = user_has_any_role(session, ["admin", "sales_manager", "quote_controller", "finance"])
+
+    # Get documents count
+    doc_count = count_documents_for_entity("quote", quote_id)
+
+    return page_layout(
+        f"Документы КП {quote_number}",
+
+        # Role-based tabs for quote detail navigation
+        quote_detail_tabs(quote_id, "documents", user_roles),
+
+        # Header
+        Div(
+            H1(
+                icon("folder", size=24),
+                f" Документы КП {quote_number}",
+                style="display: flex; align-items: center; gap: 0.5rem;"
+            ),
+            P(f"Клиент: {customer_name}", style="color: var(--text-secondary); margin-top: 0.25rem;"),
+            style="margin-bottom: 1.5rem;"
+        ),
+
+        # Info card
+        Div(
+            P(
+                icon("info", size=16),
+                " Здесь можно загружать и просматривать документы, связанные с КП: договоры, ТТН, CMR, коносаменты, таможенные декларации и другие.",
+                style="display: flex; align-items: flex-start; gap: 0.5rem; margin: 0; color: var(--text-secondary);"
+            ),
+            cls="card",
+            style="background: var(--accent-light); border-left: 4px solid var(--accent); margin-bottom: 1.5rem;"
+        ),
+
+        # Documents section
+        _documents_section("quote", quote_id, session, can_upload=can_upload, can_delete=can_delete),
+
+        # Back button
+        Div(
+            A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
+              style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none;"),
+            style="margin-top: 2rem;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # VERSION HISTORY ROUTES
 # ============================================================================
 
@@ -10607,6 +10710,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
             "icon": "check-circle",
             "href": f"/quote-control/{quote_id}",
             "roles": ["quote_controller", "admin"],
+        },
+        {
+            "id": "documents",
+            "label": "Документы",
+            "icon": "folder",
+            "href": f"/quotes/{quote_id}/documents",
+            "roles": None,  # All users with quote access
         },
     ]
 
@@ -29100,6 +29210,357 @@ def post_new_invoice_payment(session, invoice_id: str, payment_date: str, paymen
         return _invoice_payment_form(invoice, error=str(e), session=session)
     except Exception as e:
         return _invoice_payment_form(invoice, error=f"Ошибка при сохранении: {str(e)}", session=session)
+
+
+# ============================================================================
+# DOCUMENT STORAGE ROUTES
+# ============================================================================
+# Universal document upload/download/delete functionality
+# Files stored in Supabase Storage bucket 'kvota-documents'
+# Metadata stored in kvota.documents table
+
+def _documents_section(entity_type: str, entity_id: str, session: dict, can_upload: bool = True, can_delete: bool = True):
+    """
+    Reusable documents section component.
+
+    Args:
+        entity_type: Type of parent entity (quote, supplier_invoice, etc.)
+        entity_id: UUID of parent entity
+        session: User session
+        can_upload: Whether user can upload new documents
+        can_delete: Whether user can delete documents
+
+    Returns:
+        HTML component for documents section
+    """
+    documents = get_documents_for_entity(entity_type, entity_id)
+    doc_types = get_allowed_document_types_for_entity(entity_type)
+
+    # Document list
+    doc_rows = []
+    for doc in documents:
+        doc_rows.append(
+            Tr(
+                # File icon + name
+                Td(
+                    I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent);"),
+                    A(doc.original_filename,
+                      href=f"/documents/{doc.id}/download",
+                      target="_blank",
+                      style="text-decoration: none; color: var(--text-primary);"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Document type
+                Td(
+                    Span(get_document_type_label(doc.document_type),
+                         cls="badge",
+                         style="background: var(--accent-light); color: var(--accent); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;")
+                    if doc.document_type else "-"
+                ),
+                # File size
+                Td(format_file_size(doc.file_size_bytes) or "-", style="color: var(--text-secondary);"),
+                # Upload date
+                Td(doc.created_at.strftime("%d.%m.%Y %H:%M") if doc.created_at else "-", style="color: var(--text-secondary);"),
+                # Description
+                Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
+                # Actions
+                Td(
+                    A(I(cls="fa-solid fa-download", style="color: #28a745;"),
+                      href=f"/documents/{doc.id}/download",
+                      target="_blank",
+                      title="Скачать",
+                      style="margin-right: 0.5rem;"),
+                    Button(I(cls="fa-solid fa-trash", style="color: #dc3545;"),
+                           hx_delete=f"/documents/{doc.id}",
+                           hx_confirm="Удалить документ?",
+                           hx_target=f"#doc-row-{doc.id}",
+                           hx_swap="outerHTML",
+                           style="background: none; border: none; cursor: pointer; padding: 0.25rem;",
+                           title="Удалить") if can_delete else None,
+                    style="white-space: nowrap;"
+                ),
+                id=f"doc-row-{doc.id}"
+            )
+        )
+
+    # Empty state
+    if not doc_rows:
+        doc_rows.append(
+            Tr(
+                Td("Документы не загружены", colspan="6", style="text-align: center; color: var(--text-muted); padding: 2rem;")
+            )
+        )
+
+    return Div(
+        # Upload form
+        Div(
+            H4(I(cls="fa-solid fa-cloud-upload-alt", style="margin-right: 0.5rem;"), "Загрузить документ"),
+            Form(
+                Div(
+                    Div(
+                        Label("Файл", For="doc_file"),
+                        Input(type="file", name="file", id="doc_file", required=True,
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv"),
+                        cls="form-group",
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label("Тип документа", For="doc_type"),
+                        Select(
+                            Option("Выберите тип", value=""),
+                            *[Option(dt["label"], value=dt["value"]) for dt in doc_types],
+                            name="document_type",
+                            id="doc_type"
+                        ),
+                        cls="form-group",
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Описание (опционально)", For="doc_desc"),
+                        Input(type="text", name="description", id="doc_desc", placeholder="Краткое описание"),
+                        cls="form-group",
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label(" ", style="visibility: hidden;"),  # Spacer for alignment
+                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
+                               type="submit",
+                               style="background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"),
+                        cls="form-group"
+                    ),
+                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+                ),
+                action=f"/documents/upload/{entity_type}/{entity_id}",
+                method="POST",
+                enctype="multipart/form-data",
+                id="doc-upload-form"
+            ),
+            style="margin-bottom: 1.5rem; padding: 1rem; background: var(--bg-page-alt); border-radius: 8px;"
+        ) if can_upload else None,
+
+        # Documents table
+        Div(
+            H4(I(cls="fa-solid fa-folder-open", style="margin-right: 0.5rem;"), f"Документы ({len(documents)})"),
+            Table(
+                Thead(
+                    Tr(
+                        Th("Файл", style="width: 30%;"),
+                        Th("Тип", style="width: 15%;"),
+                        Th("Размер", style="width: 10%;"),
+                        Th("Дата", style="width: 15%;"),
+                        Th("Описание", style="width: 20%;"),
+                        Th("", style="width: 10%;"),
+                    )
+                ),
+                Tbody(*doc_rows, id="documents-tbody"),
+                cls="table",
+                style="width: 100%;"
+            ),
+            style="overflow-x: auto;"
+        ),
+
+        cls="documents-section",
+        id="documents-section"
+    )
+
+
+@rt("/documents/upload/{entity_type}/{entity_id}")
+async def post(session, entity_type: str, entity_id: str, request):
+    """
+    Upload a document for an entity.
+
+    POST /documents/upload/{entity_type}/{entity_id}
+    Form data: file, document_type (optional), description (optional)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Validate entity type
+    valid_entity_types = {"quote", "specification", "supplier_invoice", "quote_item", "supplier", "customer", "seller_company", "buyer_company"}
+    if entity_type not in valid_entity_types:
+        return JSONResponse({"error": f"Invalid entity type: {entity_type}"}, status_code=400)
+
+    try:
+        # Get the uploaded file from form data
+        form = await request.form()
+        uploaded_file = form.get("file")
+        document_type = form.get("document_type") or None
+        description = form.get("description") or None
+
+        if not uploaded_file or not uploaded_file.filename:
+            # Redirect back with error
+            return page_layout("Ошибка загрузки",
+                H1("Файл не выбран"),
+                Div(
+                    "Пожалуйста, выберите файл для загрузки.",
+                    cls="card",
+                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                Button("Назад", onclick="history.back()"),
+                session=session
+            )
+
+        # Read file content
+        file_content = await uploaded_file.read()
+        filename = uploaded_file.filename
+
+        # Upload document using service
+        doc, error = upload_document(
+            organization_id=org_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_content=file_content,
+            filename=filename,
+            document_type=document_type,
+            description=description,
+            uploaded_by=user_id
+        )
+
+        if error:
+            return page_layout("Ошибка загрузки",
+                H1("Ошибка загрузки файла"),
+                Div(
+                    error,
+                    cls="card",
+                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
+                ),
+                Button("Назад", onclick="history.back()"),
+                session=session
+            )
+
+        # Determine redirect URL based on entity type
+        redirect_urls = {
+            "quote": f"/quotes/{entity_id}?tab=documents",
+            "specification": f"/spec-control/{entity_id}",
+            "supplier_invoice": f"/supplier-invoices/{entity_id}",
+            "supplier": f"/suppliers/{entity_id}",
+            "customer": f"/customers/{entity_id}?tab=documents",
+            "seller_company": f"/admin?tab=seller_companies",
+            "buyer_company": f"/admin?tab=buyer_companies",
+            "quote_item": f"/quotes/{entity_id}",  # Would need parent quote_id
+        }
+        redirect_url = redirect_urls.get(entity_type, "/")
+
+        return RedirectResponse(redirect_url, status_code=303)
+
+    except Exception as e:
+        print(f"Error uploading document: {e}")
+        import traceback
+        traceback.print_exc()
+
+        return page_layout("Ошибка загрузки",
+            H1("Ошибка загрузки файла"),
+            Div(
+                f"Произошла ошибка: {str(e)}",
+                cls="card",
+                style="background: #fee2e2; border-left: 4px solid #dc2626;"
+            ),
+            Button("Назад", onclick="history.back()"),
+            session=session
+        )
+
+
+@rt("/documents/{document_id}/download")
+async def get(session, document_id: str):
+    """
+    Download a document (redirect to signed URL).
+
+    GET /documents/{document_id}/download
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Get document
+    doc = get_document(document_id)
+    if not doc:
+        return page_layout("Документ не найден",
+            H1("Документ не найден"),
+            Div("Запрошенный документ не существует или был удалён.", cls="card"),
+            session=session
+        )
+
+    # Verify organization access
+    if doc.organization_id != org_id:
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Get signed download URL
+    download_url = get_download_url(document_id, expires_in=3600)  # 1 hour
+
+    if not download_url:
+        return page_layout("Ошибка загрузки",
+            H1("Не удалось получить ссылку"),
+            Div("Не удалось сгенерировать ссылку для скачивания. Попробуйте позже.", cls="card"),
+            session=session
+        )
+
+    # Redirect to signed URL
+    return RedirectResponse(download_url, status_code=302)
+
+
+@rt("/documents/{document_id}")
+async def delete(session, document_id: str):
+    """
+    Delete a document (HTMX DELETE).
+
+    DELETE /documents/{document_id}
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Get document to verify ownership
+    doc = get_document(document_id)
+    if not doc:
+        return ""  # Already deleted
+
+    # Verify organization access
+    if doc.organization_id != org_id:
+        return ""
+
+    # Check role permissions for delete
+    if not user_has_any_role(session, ["admin", "sales_manager", "quote_controller", "finance"]):
+        return Div("Недостаточно прав для удаления", style="color: #dc3545;")
+
+    # Delete document
+    success, error = delete_document(document_id)
+
+    if not success:
+        return Div(f"Ошибка: {error}", style="color: #dc3545;")
+
+    # Return empty to remove row
+    return ""
+
+
+@rt("/documents/{entity_type}/{entity_id}")
+async def get(session, entity_type: str, entity_id: str):
+    """
+    Get documents list for an entity (HTMX partial).
+
+    GET /documents/{entity_type}/{entity_id}
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+
+    # Determine permissions based on roles
+    can_upload = user_has_any_role(session, ["admin", "sales", "sales_manager", "procurement", "quote_controller", "finance", "logistics", "customs"])
+    can_delete = user_has_any_role(session, ["admin", "sales_manager", "quote_controller", "finance"])
+
+    return _documents_section(entity_type, entity_id, session, can_upload=can_upload, can_delete=can_delete)
 
 
 # ============================================================================
