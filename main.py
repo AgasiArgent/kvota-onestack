@@ -2465,23 +2465,35 @@ function openFeedbackModal() {
     }
     preview.innerHTML = previewHtml;
 
-    document.getElementById('feedback-modal').showModal();
+    // Show modal
+    document.getElementById('feedback-backdrop').style.display = 'block';
+    document.getElementById('feedback-modal-box').style.display = 'block';
 }
 
 // Close feedback modal
 function closeFeedbackModal() {
-    document.getElementById('feedback-modal').close();
+    document.getElementById('feedback-backdrop').style.display = 'none';
+    document.getElementById('feedback-modal-box').style.display = 'none';
     // Reset form
-    const form = document.querySelector('#feedback-modal form');
+    const form = document.querySelector('#feedback-modal-box form');
     if (form) form.reset();
-    document.getElementById('feedback-result').innerHTML = '';
+    const result = document.getElementById('feedback-result');
+    if (result) result.innerHTML = '';
 }
 """
 
 
 def feedback_modal():
     """Feedback modal dialog for bug reports and suggestions"""
-    return Dialog(
+    return Div(
+        # Backdrop (semi-transparent, click to close)
+        Div(
+            id="feedback-backdrop",
+            onclick="closeFeedbackModal()",
+            cls="fixed inset-0 bg-black/50 z-[999]",
+            style="display: none;"
+        ),
+        # Modal box (white, centered)
         Div(
             H3("Сообщить о проблеме", cls="font-bold text-lg mb-4"),
             Form(
@@ -2519,10 +2531,11 @@ def feedback_modal():
                 Input(type="hidden", name="page_url", id="feedback-page-url"),
                 Input(type="hidden", name="page_title", id="feedback-page-title"),
                 Input(type="hidden", name="debug_context", id="feedback-debug-context"),
-                # Single submit button (right aligned)
+                # Buttons
                 Div(
-                    Button("Отправить", type="submit", cls="btn btn-primary"),
-                    cls="flex justify-end"
+                    Button("Отправить", type="submit", cls="btn btn-primary w-full mb-2"),
+                    Button("Закрыть", type="button", onclick="closeFeedbackModal()", cls="btn btn-ghost w-full"),
+                    cls="flex flex-col"
                 ),
                 hx_post="/api/feedback",
                 hx_swap="innerHTML",
@@ -2531,14 +2544,11 @@ def feedback_modal():
                 **{"hx-on::after-request": "if(event.detail.successful) setTimeout(() => closeFeedbackModal(), 1500)"}
             ),
             Div(id="feedback-result"),
-            cls="modal-box w-11/12 max-w-xl"  # Wider modal
+            id="feedback-modal-box",
+            cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-2xl",
+            style="display: none;"
         ),
-        # Backdrop - form with method=dialog allows clicking outside to close
-        Form(method="dialog", cls="modal-backdrop")(
-            Button("close", cls="cursor-default")
-        ),
-        id="feedback-modal",
-        cls="modal modal-bottom sm:modal-middle"
+        id="feedback-modal"
     )
 
 
