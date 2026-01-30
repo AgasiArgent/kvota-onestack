@@ -13300,26 +13300,26 @@ def get_offers_list(item_id: str, session):
 @rt("/quote-items/{item_id}/offers")
 async def post_create_offer(item_id: str, session, request):
     """POST: Create a new price offer for an item."""
-    import sys
-    print(f"[DEBUG] post_create_offer called for item_id={item_id}", flush=True)
-    sys.stdout.flush()
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+    logger.warning(f"[OFFER-DEBUG] post_create_offer called for item_id={item_id}")
 
     redirect = require_login(session)
     if redirect:
-        print("[DEBUG] post_create_offer: redirect required", flush=True)
+        logger.warning("[OFFER-DEBUG] post_create_offer: redirect required")
         return Div("Требуется авторизация", style="color: #ef4444;")
 
     user = session["user"]
     user_id = user["id"]
     org_id = user["org_id"]
-    print(f"[DEBUG] post_create_offer: user_id={user_id}, org_id={org_id}", flush=True)
+    logger.warning(f"[OFFER-DEBUG] post_create_offer: user_id={user_id}, org_id={org_id}")
 
     if not user_has_any_role(session, ["procurement", "admin"]):
-        print("[DEBUG] post_create_offer: no access", flush=True)
+        logger.warning("[OFFER-DEBUG] post_create_offer: no access")
         return Div("Нет доступа", style="color: #ef4444;")
 
     form = await request.form()
-    print(f"[DEBUG] post_create_offer: form data = {dict(form)}", flush=True)
+    logger.warning(f"[OFFER-DEBUG] post_create_offer: form data = {dict(form)}")
 
     try:
         create_price_offer(
