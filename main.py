@@ -9557,7 +9557,7 @@ def get(quote_id: str, session):
 
     # Get quote details
     quote_result = supabase.table("quotes") \
-        .select("id, quote_number, customer_id, status") \
+        .select("id, idn_quote, customer_id, status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -9571,7 +9571,7 @@ def get(quote_id: str, session):
         )
 
     quote = quote_result.data[0]
-    quote_number = quote.get("quote_number") or quote_id[:8]
+    quote_number = quote.get("idn_quote") or quote_id[:8]
 
     # Get customer name
     customer_name = "—"
