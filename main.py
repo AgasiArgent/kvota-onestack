@@ -9577,11 +9577,11 @@ def get(quote_id: str, session):
     customer_name = "—"
     if quote.get("customer_id"):
         customer_result = supabase.table("customers") \
-            .select("company_name") \
+            .select("name") \
             .eq("id", quote["customer_id"]) \
             .execute()
         if customer_result.data:
-            customer_name = customer_result.data[0].get("company_name", "—")
+            customer_name = customer_result.data[0].get("name", "—")
 
     # Determine permissions based on roles
     can_upload = user_has_any_role(session, ["admin", "sales", "sales_manager", "procurement", "quote_controller", "finance", "logistics", "customs"])
