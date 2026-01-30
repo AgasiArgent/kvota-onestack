@@ -12155,7 +12155,10 @@ def get(quote_id: str, session):
                         style="margin-bottom: 1rem; font-size: 0.875rem;"
                     ),
                     Div(
-                        Strong(f"Общая сумма закупки: {total_sum:.2f}"),
+                        Strong("Общая сумма закупки: "),
+                        Span(f"{total_sum:.2f}", id=f"total-sum-value-{idx}"),
+                        Span(" "),
+                        Span({"USD": "$", "EUR": "€", "RUB": "₽", "CNY": "¥", "TRY": "₺"}.get(default_currency, default_currency), id=f"total-sum-currency-{idx}"),
                         style="text-align: right; font-size: 1rem; margin-bottom: 1rem; color: #16a34a;"
                     ),
                     P("Для сверки с инвойсом поставщика", style="color: #666; font-size: 0.75rem; text-align: right; margin: 0;")
@@ -12179,7 +12182,8 @@ def get(quote_id: str, session):
                             Option("CNY", value="CNY", selected=default_currency == "CNY"),
                             Option("TRY", value="TRY", selected=default_currency == "TRY"),
                             name=f"currency_{idx}",
-                            required=True
+                            required=True,
+                            onchange=f"document.getElementById('total-sum-currency-{idx}').textContent = {{'USD':'$','EUR':'€','RUB':'₽','CNY':'¥','TRY':'₺'}}[this.value] || this.value"
                         ),
                         Small("Валюта закупки", style="color: #666; display: block; margin-top: 0.25rem;"),
                         style="flex: 1;"
