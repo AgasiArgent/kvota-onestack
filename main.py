@@ -5677,8 +5677,13 @@ def get(quote_id: str, session):
                 function saveCell(row, prop, newVal, retryAttempt) {{
                     retryAttempt = retryAttempt || 0;
                     var rowData = hot.getSourceDataAtRow(row);
-                    if (!rowData || !rowData.id) {{
-                        createNewRow(rowData, 0);
+                    if (!rowData) return;
+
+                    // If row has no ID and is not already being saved, create it
+                    if (!rowData.id) {{
+                        if (!rowData._saving) {{
+                            createNewRow(rowData, 0);
+                        }}
                         return;
                     }}
                     showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
@@ -5717,6 +5722,19 @@ def get(quote_id: str, session):
                 function createNewRow(rowData, retryAttempt) {{
                     retryAttempt = retryAttempt || 0;
                     if (!rowData || !rowData.product_name) return;
+
+                    // Prevent duplicate creation - mark row as "saving"
+                    if (rowData._saving) {{
+                        console.log('Row already being saved, skipping duplicate createNewRow');
+                        return;
+                    }}
+                    rowData._saving = true;
+
+                    // Generate temp ID if not exists (for matching after save)
+                    if (!rowData._tempId) {{
+                        rowData._tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    }}
+
                     showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
 
                     var controller = new AbortController();
@@ -5732,24 +5750,29 @@ def get(quote_id: str, session):
                     .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
                     .then(function(data) {{
                         if (data.success && data.item) {{
-                            // Find the row in source data and set its ID
+                            // Find the row by temp ID (unique) instead of product_name
                             var sourceData = hot.getSourceData();
                             for (var i = 0; i < sourceData.length; i++) {{
-                                if (!sourceData[i].id && sourceData[i].product_name === rowData.product_name) {{
+                                if (sourceData[i]._tempId === rowData._tempId) {{
                                     sourceData[i].id = data.item.id;
+                                    delete sourceData[i]._saving;
+                                    delete sourceData[i]._tempId;
                                     break;
                                 }}
                             }}
                             showSaveStatus('saved');
                         }} else if (retryAttempt < maxRetries) {{
+                            rowData._saving = false; // Allow retry
                             setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
                         }} else {{
+                            rowData._saving = false;
                             showSaveStatus('error');
                             console.error('Create row failed:', data.error);
                         }}
                     }})
                     .catch(function(e) {{
                         clearTimeout(timeoutId);
+                        rowData._saving = false; // Allow retry
                         if (retryAttempt < maxRetries) {{
                             setTimeout(function() {{ createNewRow(rowData, retryAttempt + 1); }}, 1000);
                         }} else {{
@@ -7748,6 +7771,9 @@ async def inline_update_quote(quote_id: str, session, request):
     field = form.get("field")
     value = form.get("value")
 
+    # Debug logging to track "undefined" issue
+    print(f"[INLINE UPDATE] quote_id={quote_id}, field={field}, value={repr(value)}")
+
     if not field:
         return ""
 
@@ -7761,8 +7787,8 @@ async def inline_update_quote(quote_id: str, session, request):
     if field not in allowed_fields:
         return ""
 
-    # Handle empty values
-    if value == "" or value is None:
+    # Handle empty values and the string "undefined" (JavaScript serialization bug)
+    if value == "" or value is None or value == "undefined":
         value = None
 
     try:

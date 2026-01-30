@@ -1,0 +1,123 @@
+{
+  "test_id": "test-20260129-151955",
+  "url": "https://kvotaflow.ru/quotes/new",
+  "depth": "quick",
+  "timestamp": "2026-01-29T15:19:55Z",
+  "duration_seconds": 45,
+  "status": "passed",
+  "summary": {
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scenarios": [
+    {
+      "name": "Page loads successfully",
+      "status": "passed",
+      "details": "Page loaded and redirected to draft quote Q-202601-0031 (expected behavior - auto-creates draft)"
+    },
+    {
+      "name": "No console errors",
+      "status": "passed",
+      "details": "No JavaScript errors, exceptions, or failed requests detected in console"
+    },
+    {
+      "name": "Customer dropdown exists",
+      "status": "passed",
+      "details": "Customer combobox (ref_27) present with 5 customer options available"
+    },
+    {
+      "name": "Seller company dropdown exists",
+      "status": "passed",
+      "details": "Seller company combobox (ref_28) present with 1 seller company option (MBR)"
+    },
+    {
+      "name": "Form action buttons exist",
+      "status": "passed",
+      "details": "All key buttons present: Add row (ref_33), Upload from file (ref_34), Save (ref_35), Submit to procurement (ref_36)"
+    }
+  ],
+  "console_errors": [],
+  "screenshots": [
+    "01-initial.png"
+  ],
+  "bugs": [],
+  "form_elements_found": {
+    "dropdowns": [
+      {
+        "name": "Customer selector",
+        "ref": "ref_27",
+        "options_count": 5
+      },
+      {
+        "name": "Seller company selector",
+        "ref": "ref_28",
+        "options_count": 1
+      },
+      {
+        "name": "Delivery method",
+        "ref": "ref_31",
+        "options": ["air", "auto", "sea", "multimodal"]
+      },
+      {
+        "name": "Delivery terms (Incoterms)",
+        "ref": "ref_32",
+        "options": ["DDP", "DAP", "EXW", "FCA", "CPT", "CIP", "FOB", "CIF"]
+      }
+    ],
+    "text_inputs": [
+      {
+        "name": "Delivery city",
+        "ref": "ref_29",
+        "default_value": "Москва"
+      },
+      {
+        "name": "Delivery country",
+        "ref": "ref_30",
+        "default_value": "Россия"
+      }
+    ],
+    "buttons": [
+      {
+        "name": "Add row",
+        "ref": "ref_33"
+      },
+      {
+        "name": "Upload from file",
+        "ref": "ref_34"
+      },
+      {
+        "name": "Save",
+        "ref": "ref_35"
+      },
+      {
+        "name": "Submit to procurement",
+        "ref": "ref_36"
+      }
+    ]
+  },
+  "tabs_found": [
+    {
+      "name": "Обзор (Overview)",
+      "ref": "ref_22",
+      "active": true
+    },
+    {
+      "name": "Закупки (Procurement)",
+      "ref": "ref_23"
+    },
+    {
+      "name": "Логистика (Logistics)",
+      "ref": "ref_24"
+    },
+    {
+      "name": "Таможня (Customs)",
+      "ref": "ref_25"
+    },
+    {
+      "name": "Контроль (Control)",
+      "ref": "ref_26"
+    }
+  ],
+  "notes": "The /quotes/new URL automatically creates a draft quote and redirects to the quote detail page with the Overview tab active. This is expected behavior based on the hub-and-spoke navigation model."
+}
