@@ -29868,7 +29868,7 @@ def _quote_documents_section(
                         id="drop-zone",
                         style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
-                    style="flex: 2; min-width: 250px; display: flex;"
+                    style="flex: 1; display: flex;"
                 ),
 
                 # Right side: Type, description, save
@@ -29925,7 +29925,7 @@ def _quote_documents_section(
                         style="width: 100% !important; padding: 0.5rem 1rem !important; background: #f3f4f6 !important; background-color: #f3f4f6 !important; background-image: none !important; border: 1px solid #e5e7eb !important; border-radius: 6px !important; color: #374151 !important; font-size: 0.875rem !important; cursor: pointer; display: flex !important; align-items: center; justify-content: center;"
                     ),
 
-                    style="flex: 1; min-width: 180px;"
+                    style="width: 280px; flex-shrink: 0;"
                 ),
 
                 # Hidden field for parent quote
@@ -29935,7 +29935,7 @@ def _quote_documents_section(
                 method="POST",
                 enctype="multipart/form-data",
                 id="doc-upload-form",
-                style="display: flex; gap: 1rem; align-items: stretch; flex-wrap: wrap;"
+                style="display: flex; gap: 0.75rem; align-items: stretch;"
             ),
             style="margin-bottom: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"
         ) if can_upload else None,
@@ -30116,7 +30116,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                         id="drop-zone",
                         style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; height: 100%; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
                     ),
-                    style="flex: 2; min-width: 250px; display: flex;"
+                    style="flex: 1; display: flex;"
                 ),
 
                 # Right side: Type, description, save
@@ -30157,7 +30157,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 method="POST",
                 enctype="multipart/form-data",
                 id="doc-upload-form",
-                style="display: flex; gap: 1rem; align-items: stretch; flex-wrap: wrap;"
+                style="display: flex; gap: 0.75rem; align-items: stretch;"
             ),
             style="margin-bottom: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"
         ) if can_upload else None,
