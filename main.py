@@ -29673,7 +29673,7 @@ def _quote_documents_section(
                     A(
                         I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent); flex-shrink: 0;"),
                         Span(doc.original_filename, style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
-                        href=f"/documents/{doc.id}/download",
+                        href=f"/documents/{doc.id}/view",
                         target="_blank",
                         title=doc.original_filename,
                         style="text-decoration: none; color: var(--text-primary); display: flex; align-items: center; max-width: 100%; overflow: hidden;"
@@ -29705,9 +29705,14 @@ def _quote_documents_section(
                 # Actions - small square icon buttons
                 Td(
                     A(
+                      icon("eye", size=16),
+                      href=f"/documents/{doc.id}/view",
+                      target="_blank",
+                      title="Просмотр",
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
+                    A(
                       icon("download", size=16),
                       href=f"/documents/{doc.id}/download",
-                      target="_blank",
                       title="Скачать",
                       style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
                     A(
@@ -29998,8 +30003,9 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(
                     I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent);"),
                     A(doc.original_filename,
-                      href=f"/documents/{doc.id}/download",
+                      href=f"/documents/{doc.id}/view",
                       target="_blank",
+                      title="Открыть для просмотра",
                       style="text-decoration: none; color: var(--text-primary);"),
                     style="display: flex; align-items: center;"
                 ),
@@ -30019,9 +30025,14 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 # Actions - small square icon buttons (using Lucide icons)
                 Td(
                     A(
+                      icon("eye", size=16),
+                      href=f"/documents/{doc.id}/view",
+                      target="_blank",
+                      title="Просмотр",
+                      style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
+                    A(
                       icon("download", size=16),
                       href=f"/documents/{doc.id}/download",
-                      download=doc.original_filename,
                       title="Скачать",
                       style="display: inline-flex !important; align-items: center !important; justify-content: center !important; width: 32px !important; height: 32px !important; background: #f3f4f6 !important; border: 1px solid #d1d5db !important; border-radius: 6px !important; color: #374151 !important; text-decoration: none !important;"),
                     A(
@@ -30364,6 +30375,47 @@ async def get(session, document_id: str):
 
     # Redirect to signed URL
     return RedirectResponse(download_url, status_code=302)
+
+
+@rt("/documents/{document_id}/view")
+async def get(session, document_id: str):
+    """
+    View a document in browser (redirect to signed URL without download header).
+
+    GET /documents/{document_id}/view
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Get document
+    doc = get_document(document_id)
+    if not doc:
+        return page_layout("Документ не найден",
+            H1("Документ не найден"),
+            Div("Запрошенный документ не существует или был удалён.", cls="card"),
+            session=session
+        )
+
+    # Verify organization access
+    if doc.organization_id != org_id:
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Get signed URL without force_download (for viewing in browser)
+    view_url = get_download_url(document_id, expires_in=3600, force_download=False)
+
+    if not view_url:
+        return page_layout("Ошибка просмотра",
+            H1("Не удалось получить ссылку"),
+            Div("Не удалось сгенерировать ссылку для просмотра. Попробуйте позже.", cls="card"),
+            session=session
+        )
+
+    # Redirect to signed URL (will display in browser)
+    return RedirectResponse(view_url, status_code=302)
 
 
 @rt("/documents/{document_id}")
