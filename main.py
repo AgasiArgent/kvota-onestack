@@ -5771,6 +5771,9 @@ def get(quote_id: str, session):
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "overview", user.get("roles", [])),
 
+        # Workflow progress bar (same as on procurement/logistics/customs pages)
+        workflow_progress_bar(workflow_status),
+
         # Compact inline-editable details card
         Div(
             # Row 1: Customer and Seller Company
@@ -10980,8 +10983,8 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
     tabs_config = [
         {
             "id": "overview",
-            "label": "Обзор",
-            "icon": "file-text",
+            "label": "Продажи",
+            "icon": "shopping-bag",
             "href": f"/quotes/{quote_id}",
             "roles": None,  # All users with quote access
         },
