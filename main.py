@@ -30348,8 +30348,8 @@ async def get(session, document_id: str):
     if doc.organization_id != org_id:
         return RedirectResponse("/unauthorized", status_code=303)
 
-    # Get signed download URL
-    download_url = get_download_url(document_id, expires_in=3600)  # 1 hour
+    # Get signed download URL with force_download to trigger browser download
+    download_url = get_download_url(document_id, expires_in=3600, force_download=True)
 
     if not download_url:
         return page_layout("Ошибка загрузки",

@@ -521,13 +521,14 @@ def count_documents_for_entity(entity_type: str, entity_id: str) -> int:
 # DOWNLOAD Operations
 # =============================================================================
 
-def get_download_url(document_id: str, expires_in: int = 3600) -> Optional[str]:
+def get_download_url(document_id: str, expires_in: int = 3600, force_download: bool = False) -> Optional[str]:
     """
     Get a signed download URL for a document.
 
     Args:
         document_id: Document UUID
         expires_in: URL expiration time in seconds (default 1 hour)
+        force_download: If True, adds download parameter to force browser download
 
     Returns:
         Signed URL string, or None if document not found
@@ -538,9 +539,17 @@ def get_download_url(document_id: str, expires_in: int = 3600) -> Optional[str]:
 
     try:
         storage_client = _get_storage_client()
+
+        # Build options dict with download parameter if needed
+        options = {}
+        if force_download:
+            # Use original filename for download
+            options["download"] = document.original_filename
+
         result = storage_client.storage.from_(BUCKET_NAME).create_signed_url(
             path=document.storage_path,
-            expires_in=expires_in
+            expires_in=expires_in,
+            options=options
         )
 
         if result and "signedURL" in result:
