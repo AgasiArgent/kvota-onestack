@@ -1291,30 +1291,47 @@ a[href*="/create"]:not(.sidebar-item):not(.btn-outline) {
     cursor: pointer !important;
 }
 
-/* Outline button style - transparent with colored border */
-.btn-outline {
+/* Outline button style - transparent with colored border (high specificity) */
+button.btn-outline,
+button[type="submit"].btn-outline,
+button[type="button"].btn-outline,
+a.btn-outline,
+.btn-outline.btn-outline {
     background: white !important;
+    background-color: white !important;
+    background-image: none !important;
     color: var(--accent) !important;
     border: 1px solid #e5e7eb !important;
     box-shadow: none !important;
     padding: 0.5rem 1rem !important;
 }
-.btn-outline:hover {
+button.btn-outline:hover,
+button[type="submit"].btn-outline:hover,
+a.btn-outline:hover,
+.btn-outline.btn-outline:hover {
     background: #f9fafb !important;
+    background-color: #f9fafb !important;
     border-color: var(--accent) !important;
 }
 
-/* Danger button style - for delete actions */
-.btn-danger {
+/* Danger button style - for delete actions (high specificity) */
+button.btn-danger,
+button[type="submit"].btn-danger,
+button[type="button"].btn-danger,
+.btn-danger.btn-danger {
     background: white !important;
+    background-color: white !important;
+    background-image: none !important;
     color: #dc3545 !important;
     border: 1px solid #e5e7eb !important;
     box-shadow: none !important;
     padding: 0.25rem 0.5rem !important;
     font-size: 0.8rem !important;
 }
-.btn-danger:hover {
+button.btn-danger:hover,
+.btn-danger.btn-danger:hover {
     background: #fee2e2 !important;
+    background-color: #fee2e2 !important;
     border-color: #dc3545 !important;
 }
 
