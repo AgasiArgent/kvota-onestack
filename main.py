@@ -2723,8 +2723,8 @@ def feedback_modal():
                 Input(type="hidden", name="debug_context", id="feedback-debug-context"),
                 # Buttons
                 Div(
-                    Button("Отправить", type="submit", cls="btn btn-primary w-full mb-2"),
-                    Button("Закрыть", type="button", onclick="closeFeedbackModal()", cls="btn btn-ghost w-full"),
+                    btn("Отправить", variant="primary", icon_name="send", type="submit", full_width=True),
+                    btn("Закрыть", variant="ghost", type="button", onclick="closeFeedbackModal()", full_width=True, cls="mt-2"),
                     cls="flex flex-col"
                 ),
                 hx_post="/api/feedback",
@@ -3184,8 +3184,8 @@ def modal_dialog(id: str, title: str, content, actions=None):
             title="Подтвердите удаление",
             content=P("Вы уверены, что хотите удалить этот элемент?"),
             actions=[
-                Button("Отмена", cls="btn", onclick=f"document.getElementById('delete-confirm').close()"),
-                Button("Удалить", cls="btn btn-error")
+                btn("Отмена", variant="secondary", onclick="document.getElementById('delete-confirm').close()"),
+                btn("Удалить", variant="danger", icon_name="trash-2")
             ]
         )
     """
@@ -3324,7 +3324,7 @@ def get(session):
             Form(
                 Label("Email", Input(name="email", type="email", placeholder="your@email.com", required=True)),
                 Label("Password", Input(name="password", type="password", required=True)),
-                Button("Sign In", type="submit"),
+                btn("Sign In", variant="primary", icon_name="log-in", type="submit", full_width=True),
                 method="post",
                 action="/login"
             ),
@@ -3386,7 +3386,7 @@ def post(email: str, password: str, session):
                 Form(
                     Label("Email", Input(name="email", type="email", value=email, required=True)),
                     Label("Password", Input(name="password", type="password", required=True)),
-                    Button("Sign In", type="submit"),
+                    btn("Sign In", variant="primary", icon_name="log-in", type="submit", full_width=True),
                     method="post",
                     action="/login"
                 ),
@@ -5905,8 +5905,8 @@ def get(session):
                 ),
                 Label("Address", Textarea(name="address", placeholder="Delivery address", rows="3")),
                 Div(
-                    Button("Save Customer", type="submit"),
-                    A("Cancel", href="/customers", role="button", cls="secondary"),
+                    btn("Save Customer", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Cancel", href="/customers", variant="secondary"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -5980,8 +5980,8 @@ def post(name: str, inn: str, email: str, phone: str, address: str, session):
                     ),
                     Label("Address", Textarea(name="address", placeholder="Delivery address", rows="3", value=address or "")),
                     Div(
-                        Button("Save Customer", type="submit"),
-                        A("Cancel", href="/customers", role="button", cls="secondary"),
+                        btn("Save Customer", variant="primary", icon_name="check", type="submit"),
+                        btn_link("Cancel", href="/customers", variant="secondary"),
                         cls="form-actions"
                     ),
                     method="post",
@@ -7521,14 +7521,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(
-                    icon("send", size=16), " Отправить на согласование",
-                    type="submit",
-                    style="background: #3b82f6; border-color: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-                ),
-                A("Отмена", href=f"/quotes/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
-                style="display: flex; align-items: center;"
+                btn("Отправить на согласование", variant="primary", icon_name="send", type="submit"),
+                btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 1rem;"
             ),
 
             action=f"/quotes/{quote_id}/submit-justification",
@@ -7844,14 +7839,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(
-                    icon("arrow-left", size=16), " Вернуть на доработку",
-                    type="submit",
-                    style="background: #f59e0b; border-color: #f59e0b; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-                ),
-                A("Отмена", href=f"/quotes/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на доработку", variant="secondary", icon_name="arrow-left", type="submit"),
+                btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 1rem;"
             ),
 
             action=f"/quotes/{quote_id}/approval-return",
@@ -8598,9 +8588,9 @@ def get(quote_id: str, session):
                 ),
                 Label("Notes", Textarea(quote.get("notes", "") or "", name="notes", rows="3")),
                 Div(
-                    Button("Save Changes", type="submit"),
-                    A("Cancel", href=f"/quotes/{quote_id}", role="button", cls="secondary"),
-                    Button("Delete Quote", type="button", cls="danger",
+                    btn("Save Changes", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Cancel", href=f"/quotes/{quote_id}", variant="secondary"),
+                    btn("Delete Quote", variant="danger", icon_name="trash-2", type="button",
                         hx_delete=f"/quotes/{quote_id}",
                         hx_confirm="Are you sure you want to delete this quote?"),
                     cls="form-actions"
@@ -8742,8 +8732,8 @@ def get(customer_id: str, session):
                 ),
                 Label("Address", Textarea(customer.get("address", "") or "", name="address", rows="3")),
                 Div(
-                    Button("Save Changes", type="submit"),
-                    A("Cancel", href=f"/customers/{customer_id}", role="button", cls="secondary"),
+                    btn("Save Changes", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Cancel", href=f"/customers/{customer_id}", variant="secondary"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -9476,11 +9466,10 @@ def get(quote_id: str, session):
                             cls="alert alert-info",
                             id="preview-panel"
                         ),
-                        Button("Update Preview", type="button",
+                        btn("Update Preview", variant="secondary", icon_name="refresh-cw", type="button",
                             hx_post=f"/quotes/{quote_id}/preview",
                             hx_target="#preview-panel",
-                            hx_include="closest form",
-                            style="margin-bottom: 1rem;"
+                            hx_include="closest form"
                         ),
                         cls="card", style="position: sticky; top: 1rem;"
                     ),
@@ -9492,8 +9481,8 @@ def get(quote_id: str, session):
 
             # Actions
             Div(
-                Button("Save Calculation", type="submit", style="font-size: 1.1rem; padding: 1rem 2rem;"),
-                A("Cancel", href=f"/quotes/{quote_id}", role="button", cls="secondary", style="margin-left: 1rem;"),
+                btn("Save Calculation", variant="success", icon_name="check", type="submit", size="lg"),
+                btn_link("Cancel", href=f"/quotes/{quote_id}", variant="secondary"),
                 cls="form-actions", style="margin-top: 1rem; padding: 1rem; background: white; border-radius: 8px;"
             ),
 
@@ -10646,7 +10635,7 @@ def get(session):
                     cls="form-row"
                 ),
                 Div(
-                    Button("Save Settings", type="submit"),
+                    btn("Save Settings", variant="primary", icon_name="check", type="submit"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -10660,8 +10649,7 @@ def get(session):
             H3(icon("message-circle", size=20), " Telegram", cls="card-header"),
             P("Привяжите Telegram для получения уведомлений о задачах и согласованиях.",
               style="color: #666; margin-bottom: 1rem;"),
-            A("Настройки Telegram →", href="/settings/telegram",
-              style="display: inline-block; background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 6px; text-decoration: none;"),
+            btn_link("Настройки Telegram →", href="/settings/telegram", variant="primary", icon_name="message-circle"),
             cls="card"
         ),
 
@@ -10771,8 +10759,7 @@ def get(session):
             P(icon("bell", size=16), " Вы будете получать уведомления о задачах и согласованиях в Telegram.",
               style="color: #166534; background: #dcfce7; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
             Form(
-                Button(icon("unlink", size=16), " Отвязать Telegram", type="submit", name="action", value="unlink",
-                       style="background: #dc2626; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;"),
+                btn("Отвязать Telegram", variant="danger", icon_name="unlink", type="submit", name="action", value="unlink"),
                 P("Внимание: после отвязки вы перестанете получать уведомления.",
                   style="color: #666; font-size: 0.875rem; margin-top: 0.5rem;"),
                 method="post",
@@ -10812,8 +10799,7 @@ def get(session):
                 style="background: #f3f4f6; padding: 1rem; border-radius: 8px; margin-top: 1rem;"
             ),
             Form(
-                Button(icon("refresh-cw", size=16), " Получить новый код", type="submit", name="action", value="new_code",
-                       style="background: #3b82f6; color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;"),
+                btn("Получить новый код", variant="primary", icon_name="refresh-cw", type="submit", name="action", value="new_code"),
                 method="post",
                 action="/settings/telegram",
                 style="margin-top: 1rem; text-align: center;"
@@ -10839,8 +10825,7 @@ def get(session):
                 style="list-style: none; padding: 0; line-height: 1.8;"
             ),
             Form(
-                Button(icon("link", size=16), " Получить код привязки", type="submit", name="action", value="new_code",
-                       style="background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-size: 1rem;"),
+                btn("Получить код привязки", variant="primary", icon_name="link", type="submit", name="action", value="new_code"),
                 method="post",
                 action="/settings/telegram",
                 style="margin-top: 1.5rem; text-align: center;"
@@ -10851,7 +10836,7 @@ def get(session):
 
     return page_layout("Настройки Telegram",
         Div(
-            A("← Настройки", href="/settings", style="color: #3b82f6;"),
+            btn_link("← Настройки", href="/settings", variant="ghost", icon_name="arrow-left"),
             H1("🔗 Привязка Telegram", style="margin: 1rem 0;"),
             P("Получайте уведомления и согласовывайте КП прямо в Telegram",
               style="color: #666; margin-bottom: 2rem;"),
@@ -11287,13 +11272,8 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
         return Div(
             # Toggle button
             Div(
-                Button(
-                    icon("history", size=16), f" История переходов ({len(history)})",
-                    type="button",
-                    cls="secondary",
-                    style="font-size: 0.875rem; padding: 0.5rem 1rem;",
-                    onclick=f"document.getElementById('{container_id}').classList.toggle('hidden');"
-                ),
+                btn(f"История переходов ({len(history)})", variant="secondary", icon_name="history", type="button", size="sm",
+                    onclick=f"document.getElementById('{container_id}').classList.toggle('hidden');"),
                 style="margin-bottom: 0.5rem;"
             ),
             # Hidden history container
@@ -12172,18 +12152,13 @@ def get(quote_id: str, session):
 
             # Action buttons (2026-01-21: Two-screen workflow with invoices)
             Div(
-                Button("→ Далее к инвойсам", type="submit", name="action", value="next_to_invoices",
-                       style="margin-right: 1rem; background: #3b82f6;") if can_edit and not my_items_complete else None,
+                btn("Далее к инвойсам", variant="primary", icon_name="arrow-right", icon_right=True, type="submit", name="action", value="next_to_invoices") if can_edit and not my_items_complete else None,
                 # Show a disabled "already complete" button when user's items are done
-                Button(icon("check", size=16), " Моя оценка завершена", disabled=True,
-                       style="background: #6b7280; cursor: default;") if can_edit and my_items_complete else None,
+                btn("Моя оценка завершена", variant="secondary", icon_name="check", disabled=True) if can_edit and my_items_complete else None,
                 # Return to quote control button (for revision workflow)
-                A("✓ Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control",
-                  role="button", style="background: #22c55e; border-color: #22c55e; margin-right: 1rem;"
-                ) if is_revision else None,
-                A("← К задачам", href="/tasks", role="button", cls="secondary",
-                  style="margin-left: auto;"),
-                style="display: flex; align-items: center; margin-top: 1rem;"
+                btn_link("Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control", variant="success", icon_name="check") if is_revision else None,
+                btn_link("К задачам", href="/tasks", variant="ghost", icon_name="arrow-left"),
+                style="display: flex; align-items: center; gap: 1rem; margin-top: 1rem;"
             ),
 
             method="post",
@@ -16071,21 +16046,18 @@ def get(session, quote_id: str):
 
         # Quick preset buttons
         Div(
-            A("Базовый набор", href=f"/quote-control/{quote_id}/columns/preset/basic",
-              cls="btn btn-sm", style="margin-right: 0.5rem;"),
-            A("Полный набор", href=f"/quote-control/{quote_id}/columns/preset/full",
-              cls="btn btn-sm"),
-            style="margin-bottom: 1rem;"
+            btn_link("Базовый набор", href=f"/quote-control/{quote_id}/columns/preset/basic", variant="secondary", size="sm"),
+            btn_link("Полный набор", href=f"/quote-control/{quote_id}/columns/preset/full", variant="secondary", size="sm"),
+            style="margin-bottom: 1rem; display: flex; gap: 0.5rem;"
         ),
 
         Form(
             *checkbox_groups,
 
             Div(
-                Button("Сохранить настройки", type="submit", cls="btn btn-primary",
-                       style="margin-right: 0.5rem;"),
-                A("Отмена", href=f"/quote-control/{quote_id}", cls="btn"),
-                style="margin-top: 1rem;"
+                btn("Сохранить настройки", variant="primary", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/quote-control/{quote_id}", variant="ghost"),
+                style="margin-top: 1rem; display: flex; gap: 0.5rem;"
             ),
             action=f"/quote-control/{quote_id}/columns",
             method="post"
@@ -16461,14 +16433,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(
-                    "↩ Вернуть на доработку",
-                    type="submit",
-                    style="background: #f59e0b; border-color: #f59e0b; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-                ),
-                A("Отмена", href=f"/quote-control/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
-                style="display: flex; align-items: center;"
+                btn("Вернуть на доработку", variant="secondary", icon_name="arrow-left", type="submit"),
+                btn_link("Отмена", href=f"/quote-control/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 1rem;"
             ),
 
             action=f"/quote-control/{quote_id}/return",
@@ -16759,14 +16726,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(
-                    icon("clock", size=16), " Отправить на согласование",
-                    type="submit",
-                    style="background: #3b82f6; border-color: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-                ),
-                A("Отмена", href=f"/quote-control/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
-                style="display: flex; align-items: center;"
+                btn("Отправить на согласование", variant="primary", icon_name="clock", type="submit"),
+                btn_link("Отмена", href=f"/quote-control/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 1rem;"
             ),
 
             action=f"/quote-control/{quote_id}/request-approval",
@@ -17031,14 +16993,9 @@ def get(session, quote_id: str):
 
             # Action buttons
             Div(
-                Button(
-                    icon("check", size=16), " Одобрить КП",
-                    type="submit",
-                    style="background: #22c55e; border-color: #22c55e; color: white; padding: 0.75rem 1.5rem; border-radius: 6px; cursor: pointer; font-weight: 500;"
-                ),
-                A("Отмена", href=f"/quote-control/{quote_id}",
-                  style="margin-left: 1rem; color: #6b7280; text-decoration: none;"),
-                style="display: flex; align-items: center;"
+                btn("Одобрить КП", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/quote-control/{quote_id}", variant="ghost"),
+                style="display: flex; align-items: center; gap: 1rem;"
             ),
 
             action=f"/quote-control/{quote_id}/approve",
@@ -17336,9 +17293,7 @@ async def submit_feedback(session, request: Request):
         return Div(
             Div("Спасибо за обратную связь!", cls="text-success font-medium"),
             P(f"Номер обращения: {short_id}", cls="text-sm text-gray-500 mt-1 font-mono"),
-            Button("Закрыть",
-                   onclick="closeFeedbackModal()",
-                   cls="btn btn-sm mt-3")
+            btn("Закрыть", variant="secondary", size="sm", onclick="closeFeedbackModal()", type="button")
         )
 
     except Exception as e:
@@ -18112,9 +18067,8 @@ def get(session, spec_id: str):
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="draft"),
-                    Button(icon("file-edit", size=16), " Черновик", type="submit",
-                           style="background: #6b7280; border-color: #6b7280;",
-                           disabled=(status == "draft")),
+                    btn("Черновик", variant="secondary", icon_name="file-edit", type="submit", size="sm",
+                        disabled=(status == "draft")),
                     action=f"/spec-control/{spec_id}",
                     method="POST",
                     style="display: inline;"
@@ -18567,8 +18521,7 @@ def get(session, spec_id: str):
                     Input(type="file", name="signed_scan", id="signed_scan",
                           accept=".pdf,.jpg,.jpeg,.png",
                           style="margin-bottom: 0.75rem;"),
-                    Button("📤 Загрузить скан", type="submit",
-                           style="background: #6f42c1; border-color: #6f42c1;"),
+                    btn("Загрузить скан", variant="primary", icon_name="upload", type="submit"),
                     action=f"/spec-control/{spec_id}/upload-signed",
                     method="POST",
                     enctype="multipart/form-data"
@@ -20998,10 +20951,8 @@ def get(session, deal_id: str, item_id: str):
 
             # Submit buttons
             Div(
-                Button("Сохранить платёж", type="submit",
-                       style="background: #10b981; margin-right: 0.5rem;"),
-                A("Отмена", href=f"/finance/{deal_id}", role="button",
-                  style="background: #6b7280;"),
+                btn("Сохранить платёж", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/finance/{deal_id}", variant="secondary"),
                 style="display: flex; gap: 0.5rem;"
             ),
 
@@ -21593,13 +21544,11 @@ def get(user_id: str, session):
             style="display: flex; flex-direction: column; background: #f9fafb; padding: 12px; border-radius: 8px; margin: 4px 0;"
         ),
         Div(
-            Button("💾 Сохранить", type="submit", style="font-size: 0.75rem; padding: 4px 12px; margin-right: 8px;"),
-            Button("✖ Отмена",
-                   type="button",
-                   style="font-size: 0.75rem; padding: 4px 12px; background: #6b7280;",
-                   hx_get=f"/admin/users/{user_id}/roles/cancel",
-                   hx_target=f"#roles-cell-{user_id}",
-                   hx_swap="innerHTML"),
+            btn("Сохранить", variant="primary", icon_name="check", type="submit", size="sm"),
+            btn("Отмена", variant="ghost", size="sm", type="button",
+                hx_get=f"/admin/users/{user_id}/roles/cancel",
+                hx_target=f"#roles-cell-{user_id}",
+                hx_swap="innerHTML"),
             style="display: flex; gap: 8px; margin-top: 8px;"
         ),
         hx_post=f"/admin/users/{user_id}/roles/update",
@@ -21816,14 +21765,14 @@ def get(user_id: str, session):
                 style="margin-bottom: 16px;"
             ),
             Input(type="hidden", name="user_id", value=user_id),
-            Button("Сохранить роли", type="submit"),
+            btn("Сохранить роли", variant="primary", icon_name="check", type="submit"),
             method="POST",
             action=f"/admin/users/{user_id}/roles"
         ),
 
         # Navigation
         Div(
-            A("← Назад к списку", href="/admin/users", role="button", cls="secondary"),
+            btn_link("Назад к списку", href="/admin/users", variant="secondary", icon_name="arrow-left"),
             style="margin-top: 24px;"
         ),
 
@@ -22001,16 +21950,14 @@ def get(session):
             Td(a.created_at.strftime("%Y-%m-%d") if a.created_at else "-"),
             Td(
                 Div(
-                    A("Изменить", href=f"/admin/brands/{a.id}/edit", role="button",
-                      style="font-size: 0.75rem; padding: 4px 10px; margin-right: 8px;"),
+                    btn_link("Изменить", href=f"/admin/brands/{a.id}/edit", variant="secondary", size="sm"),
                     Form(
-                        Button("Удалить", type="submit", cls="secondary",
-                               style="font-size: 0.75rem; padding: 4px 10px;"),
+                        btn("Удалить", variant="danger", size="sm", type="submit"),
                         method="POST",
                         action=f"/admin/brands/{a.id}/delete",
                         style="display: inline;"
                     ),
-                    style="display: flex; align-items: center;"
+                    style="display: flex; align-items: center; gap: 0.5rem;"
                 )
             )
         ))
@@ -22021,8 +21968,7 @@ def get(session):
         unassigned_items.append(
             Div(
                 Span(brand, style="font-weight: 500; margin-right: 12px;"),
-                A("Назначить", href=f"/admin/brands/new?brand={brand}", role="button",
-                  style="font-size: 0.75rem; padding: 2px 8px;"),
+                btn_link("Назначить", href=f"/admin/brands/new?brand={brand}", variant="secondary", size="sm"),
                 style="display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6;"
             )
         )
@@ -22171,13 +22117,13 @@ def get(session, brand: str = None):
                       A("странице пользователей", href="/admin/users"), ".")
                 )
             ),
-            Button("Создать назначение", type="submit") if user_options else None,
+            btn("Создать назначение", variant="primary", icon_name="plus", type="submit") if user_options else None,
             method="POST",
             action="/admin/brands/new"
         ),
 
         Div(
-            A("← Назад к списку", href="/admin/brands", role="button", cls="secondary"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             style="margin-top: 24px;"
         ),
 
@@ -22322,13 +22268,13 @@ def get(assignment_id: str, session):
                     required=True
                 ) if user_options else P("Нет менеджеров", style="color: #ef4444;")
             ),
-            Button("Сохранить изменения", type="submit") if user_options else None,
+            btn("Сохранить изменения", variant="primary", icon_name="check", type="submit") if user_options else None,
             method="POST",
             action=f"/admin/brands/{assignment_id}/edit"
         ),
 
         Div(
-            A("← Назад к списку", href="/admin/brands", role="button", cls="secondary"),
+            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             style="margin-top: 24px;"
         ),
 
@@ -23504,7 +23450,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                         Input(name="q", value=q, placeholder="Поиск по названию или коду...", cls="table-search"),
                         Select(*country_options, name="country", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
                         Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
-                        Button(icon("search", size=14), " Поиск", type="submit", style="padding: 0.5rem 1rem;"),
+                        btn("Поиск", variant="secondary", icon_name="search", type="submit", size="sm"),
                         method="get",
                         action="/suppliers",
                         style="display: flex; gap: 0.5rem; align-items: center;"
@@ -23512,7 +23458,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                     cls="table-header-left"
                 ),
                 Div(
-                    A(icon("plus", size=16), " Добавить", href="/suppliers/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    btn_link("Добавить", href="/suppliers/new", variant="primary", icon_name="plus"),
                     cls="table-header-right"
                 ),
                 cls="table-header"
@@ -24972,7 +24918,7 @@ def get(session, q: str = "", status: str = ""):
                         "Статус:",
                         Select(*status_options, name="status"),
                     ),
-                    Button("Найти", type="submit"),
+                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
                     style="display: flex; gap: 1rem; align-items: flex-end;"
                 ),
                 method="get",
@@ -25770,7 +25716,7 @@ def get(session, q: str = "", status: str = ""):
                     Form(
                         Input(type="text", name="q", value=q, placeholder="Поиск по названию или ИНН...", cls="table-search"),
                         Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
-                        Button(icon("search", size=14), " Найти", type="submit", style="padding: 0.5rem 1rem;"),
+                        btn("Найти", variant="secondary", icon_name="search", type="submit", size="sm"),
                         method="get",
                         action="/customers",
                         style="display: flex; gap: 0.75rem; align-items: center;"
@@ -25778,7 +25724,7 @@ def get(session, q: str = "", status: str = ""):
                     cls="table-header-left"
                 ),
                 Div(
-                    A(icon("plus", size=16), " Добавить клиента", href="/customers/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"),
+                    btn_link("Добавить клиента", href="/customers/new", variant="primary", icon_name="plus"),
                     cls="table-header-right"
                 ),
                 cls="table-header"
@@ -26187,14 +26133,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 Div(
                     Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
                     _render_warehouses_list(customer_id, customer.warehouse_addresses or []),
-                    Button("+ Добавить адрес склада",
-                          hx_get=f"/customers/{customer_id}/warehouses/add",
-                          hx_target="#add-warehouse-form",
-                          hx_swap="outerHTML",
-                          id="add-warehouse-form",
-                          role="button",
-                          cls="outline",
-                          style="margin-top: 1rem;"),
+                    btn("Добавить адрес склада", variant="secondary", icon_name="plus", type="button",
+                        hx_get=f"/customers/{customer_id}/warehouses/add",
+                        hx_target="#add-warehouse-form",
+                        hx_swap="outerHTML",
+                        id="add-warehouse-form"),
                 ),
                 style="margin-top: 1rem;"
             )
@@ -26758,14 +26701,12 @@ def get(customer_id: str, session):
                 onkeydown="if(event.key === 'Escape') { event.target.form.querySelector('.cancel-btn').click(); }"
             ),
             Div(
-                Button("✓ Сохранить", type="submit",
-                      style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;"),
-                Button("✕ Отмена", type="button",
-                      cls="cancel-btn",
-                      hx_get=f"/customers/{customer_id}/cancel-edit-notes",
-                      hx_target="#field-notes",
-                      hx_swap="outerHTML",
-                      style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; font-size: 0.875rem;"),
+                btn("Сохранить", variant="success", icon_name="check", type="submit", size="sm"),
+                btn("Отмена", variant="danger", size="sm", type="button",
+                    cls="cancel-btn",
+                    hx_get=f"/customers/{customer_id}/cancel-edit-notes",
+                    hx_target="#field-notes",
+                    hx_swap="outerHTML"),
                 style="display: flex; gap: 0.5rem; margin-top: 0.75rem;"
             ),
             id="field-notes"
@@ -27210,13 +27151,11 @@ def get(customer_id: str, session):
         Input(type="text", name="warehouse_address", placeholder="Введите адрес склада",
               style="width: 100%; padding: 0.5rem; border: 2px solid #3b82f6; border-radius: 0.375rem;", required=True),
         Div(
-            Button("✓ Добавить", type="submit",
-                  style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer; margin-right: 0.5rem;"),
-            Button("✕ Отмена", type="button",
-                  hx_get=f"/customers/{customer_id}/warehouses/cancel-add",
-                  hx_target="#add-warehouse-form",
-                  hx_swap="outerHTML",
-                  style="background: #ef4444; color: white; padding: 0.5rem 1rem; border: none; border-radius: 0.375rem; cursor: pointer;"),
+            btn("Добавить", variant="success", icon_name="check", type="submit", size="sm"),
+            btn("Отмена", variant="danger", size="sm", type="button",
+                hx_get=f"/customers/{customer_id}/warehouses/cancel-add",
+                hx_target="#add-warehouse-form",
+                hx_swap="outerHTML"),
             style="display: flex; gap: 0.5rem; margin-top: 0.5rem;"
         ),
         hx_post=f"/customers/{customer_id}/warehouses/add",
@@ -27264,13 +27203,11 @@ def get(customer_id: str, session):
     if redirect:
         return redirect
 
-    return Button("+ Добавить адрес склада",
-                 hx_get=f"/customers/{customer_id}/warehouses/add",
-                 hx_target="#add-warehouse-form",
-                 hx_swap="outerHTML",
-                 id="add-warehouse-form",
-                 role="button",
-                 cls="outline")
+    return btn("Добавить адрес склада", variant="secondary", icon_name="plus", type="button",
+               hx_get=f"/customers/{customer_id}/warehouses/add",
+               hx_target="#add-warehouse-form",
+               hx_swap="outerHTML",
+               id="add-warehouse-form")
 
 
 @rt("/customers/{customer_id}/warehouses/delete/{index}")
@@ -27301,12 +27238,11 @@ def _render_warehouses_list(customer_id: str, warehouses: list):
         warehouse_items.append(
             Li(
                 Span(addr, style="flex: 1;"),
-                Button(icon("trash-2", size=14), " Удалить",
-                      hx_post=f"/customers/{customer_id}/warehouses/delete/{i}",
-                      hx_target="#warehouses-list",
-                      hx_swap="outerHTML",
-                      hx_confirm="Удалить этот адрес склада?",
-                      style="background: #ef4444; color: white; padding: 0.25rem 0.5rem; border: none; border-radius: 0.25rem; cursor: pointer; font-size: 0.875rem;"),
+                btn("Удалить", variant="danger", icon_name="trash-2", size="sm", type="button",
+                    hx_post=f"/customers/{customer_id}/warehouses/delete/{i}",
+                    hx_target="#warehouses-list",
+                    hx_swap="outerHTML",
+                    hx_confirm="Удалить этот адрес склада?"),
                 style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;"
             )
         )
@@ -27386,8 +27322,8 @@ def get(session, customer_id: str):
                 ),
                 Label("Заметки", Textarea(name="notes", placeholder="Дополнительная информация о контакте", rows="3")),
                 Div(
-                    Button("Сохранить", type="submit"),
-                    A("Отмена", href=f"/customers/{customer_id}", role="button", cls="secondary"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Отмена", href=f"/customers/{customer_id}", variant="secondary"),
                     cls="form-actions"
                 ),
                 method="post",
@@ -27483,8 +27419,8 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
                     ),
                     Label("Заметки", Textarea(name="notes", placeholder="Дополнительная информация о контакте", rows="3", value=notes)),
                     Div(
-                        Button("Сохранить", type="submit"),
-                        A("Отмена", href=f"/customers/{customer_id}", role="button", cls="secondary"),
+                        btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                        btn_link("Отмена", href=f"/customers/{customer_id}", variant="secondary"),
                         cls="form-actions"
                     ),
                     method="post",
@@ -28241,7 +28177,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                         "Статус:",
                         Select(*status_options, name="status"),
                     ),
-                    Button("Найти", type="submit"),
+                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
                     style="display: flex; gap: 1rem; align-items: flex-end;"
                 ),
                 method="get",
@@ -28582,7 +28518,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
                         "Статус:",
                         Select(*status_options, name="status"),
                     ),
-                    Button("Найти", type="submit"),
+                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
                     style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
                 ),
                 method="get",
@@ -30283,14 +30219,8 @@ def _quote_documents_section(
                         style="margin-bottom: 0.5rem;"
                     ),
 
-                    # Save button - grey style
-                    Button(
-                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem; color: #374151;"),
-                        "Сохранить",
-                        type="submit",
-                        cls="btn-outline",
-                        style="width: 100% !important; padding: 0.5rem 1rem !important; background: #f3f4f6 !important; background-color: #f3f4f6 !important; background-image: none !important; border: 1px solid #e5e7eb !important; border-radius: 6px !important; color: #374151 !important; font-size: 0.875rem !important; cursor: pointer; display: flex !important; align-items: center; justify-content: center;"
-                    ),
+                    # Save button
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit", full_width=True),
 
                     style="width: 280px; flex-shrink: 0;"
                 ),
@@ -30526,14 +30456,8 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                         style="margin-bottom: 0.5rem;"
                     ),
 
-                    # Save button - grey style
-                    Button(
-                        I(cls="fa-solid fa-check", style="margin-right: 0.5rem; color: #374151;"),
-                        "Сохранить",
-                        type="submit",
-                        cls="btn-outline",
-                        style="width: 100% !important; padding: 0.5rem 1rem !important; background: #f3f4f6 !important; background-color: #f3f4f6 !important; background-image: none !important; border: 1px solid #e5e7eb !important; border-radius: 6px !important; color: #374151 !important; font-size: 0.875rem !important; cursor: pointer; display: flex !important; align-items: center; justify-content: center;"
-                    ),
+                    # Save button
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit", full_width=True),
 
                     style="flex: 1; min-width: 180px;"
                 ),
@@ -30622,7 +30546,7 @@ async def post(session, entity_type: str, entity_id: str, request):
                     cls="card",
                     style="background: #fee2e2; border-left: 4px solid #dc2626;"
                 ),
-                Button("Назад", onclick="history.back()"),
+                btn("Назад", variant="secondary", icon_name="arrow-left", type="button", onclick="history.back()"),
                 session=session
             )
 
@@ -30665,7 +30589,7 @@ async def post(session, entity_type: str, entity_id: str, request):
                     cls="card",
                     style="background: #fee2e2; border-left: 4px solid #dc2626;"
                 ),
-                Button("Назад", onclick="history.back()"),
+                btn("Назад", variant="secondary", icon_name="arrow-left", type="button", onclick="history.back()"),
                 session=session
             )
 
@@ -30700,7 +30624,7 @@ async def post(session, entity_type: str, entity_id: str, request):
                 cls="card",
                 style="background: #fee2e2; border-left: 4px solid #dc2626;"
             ),
-            Button("Назад", onclick="history.back()"),
+            btn("Назад", variant="secondary", icon_name="arrow-left", type="button", onclick="history.back()"),
             session=session
         )
 
