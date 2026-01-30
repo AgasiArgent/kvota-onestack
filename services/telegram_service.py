@@ -3414,3 +3414,116 @@ async def notify_creator_of_return(
             "success": False,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Admin Bug Reports
+# ============================================================================
+
+ADMIN_TELEGRAM_CHAT_ID = os.getenv("ADMIN_TELEGRAM_CHAT_ID", "")
+
+
+async def send_admin_bug_report(
+    short_id: str,
+    user_name: str,
+    user_email: str,
+    org_name: str,
+    page_url: str,
+    feedback_type: str,
+    description: str,
+    debug_context: dict = None
+) -> bool:
+    """Send bug report to admin via Telegram with debug context.
+
+    Args:
+        short_id: Short feedback ID (e.g., FB-2401301435)
+        user_name: Name of the user submitting feedback
+        user_email: Email of the user
+        org_name: Organization name
+        page_url: URL where feedback was submitted
+        feedback_type: Type of feedback (bug, suggestion, question)
+        description: User's description of the issue
+        debug_context: Dict with console errors, requests, form state, etc.
+
+    Returns:
+        True if message was sent successfully, False otherwise
+    """
+    if not ADMIN_TELEGRAM_CHAT_ID:
+        logger.warning("ADMIN_TELEGRAM_CHAT_ID not configured, skipping bug report")
+        return False
+
+    bot = get_bot()
+    if not bot:
+        logger.warning("Telegram bot not available for bug report")
+        return False
+
+    type_emoji = {
+        'bug': '🐛 Ошибка',
+        'suggestion': '💡 Предложение',
+        'question': '❓ Вопрос'
+    }
+
+    # Build main message with short_id in header
+    text = f"""
+{type_emoji.get(feedback_type, '📝 Обратная связь')}  #{short_id}
+
+👤 {user_name} ({user_email})
+🏢 {org_name or 'Не указана'}
+📍 {page_url}
+
+💬 {description}
+    """.strip()
+
+    # Add debug context if available
+    if debug_context:
+        context_lines = ["\n\n📋 Контекст:"]
+
+        # Browser detection
+        ua = debug_context.get('userAgent', '')
+        if 'Chrome' in ua:
+            browser = 'Chrome'
+        elif 'Firefox' in ua:
+            browser = 'Firefox'
+        elif 'Safari' in ua:
+            browser = 'Safari'
+        elif 'Edge' in ua:
+            browser = 'Edge'
+        else:
+            browser = 'Other'
+        context_lines.append(f"• Browser: {browser}")
+
+        # Screen size
+        if debug_context.get('screenSize'):
+            context_lines.append(f"• Screen: {debug_context['screenSize']}")
+
+        # Console errors
+        errors = debug_context.get('consoleErrors', [])
+        if errors:
+            context_lines.append(f"• Console errors: {len(errors)}")
+            for err in errors[:3]:  # Show first 3
+                msg = str(err.get('message', ''))[:80]
+                context_lines.append(f"  - {msg}")
+
+        # Failed requests
+        requests = debug_context.get('recentRequests', [])
+        failed = [r for r in requests if isinstance(r.get('status'), int) and r.get('status', 0) >= 400]
+        if failed:
+            context_lines.append(f"• Failed requests: {len(failed)}")
+            for req in failed[:3]:
+                context_lines.append(f"  - {req.get('method')} {req.get('url')}: {req.get('status')}")
+
+        # Sentry event ID
+        if debug_context.get('sentryEventId'):
+            context_lines.append(f"• Sentry: {debug_context['sentryEventId']}")
+
+        text += "\n".join(context_lines)
+
+    try:
+        chat_id = int(ADMIN_TELEGRAM_CHAT_ID)
+        # Telegram message limit is 4096 characters
+        await bot.send_message(chat_id=chat_id, text=text[:4096])
+        logger.info(f"Bug report {short_id} sent to admin chat {chat_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send bug report to admin: {e}")
+        return False

@@ -2294,6 +2294,221 @@ document.addEventListener('DOMContentLoaded', function() {
 """
 
 
+# ============================================================================
+# FEEDBACK / BUG REPORT COMPONENTS
+# ============================================================================
+
+FEEDBACK_JS = """
+// ========================================
+// FEEDBACK: Debug context collection
+// ========================================
+
+// Storage for console errors (last 10)
+window._feedbackConsoleErrors = [];
+window._feedbackHTMXRequests = [];
+
+// Intercept console.error
+(function() {
+    const originalError = console.error;
+    console.error = function(...args) {
+        window._feedbackConsoleErrors.push({
+            type: 'error',
+            message: args.map(a => String(a)).join(' '),
+            time: new Date().toISOString()
+        });
+        if (window._feedbackConsoleErrors.length > 10) {
+            window._feedbackConsoleErrors.shift();
+        }
+        originalError.apply(console, args);
+    };
+})();
+
+// Intercept console.warn
+(function() {
+    const originalWarn = console.warn;
+    console.warn = function(...args) {
+        window._feedbackConsoleErrors.push({
+            type: 'warn',
+            message: args.map(a => String(a)).join(' '),
+            time: new Date().toISOString()
+        });
+        if (window._feedbackConsoleErrors.length > 10) {
+            window._feedbackConsoleErrors.shift();
+        }
+        originalWarn.apply(console, args);
+    };
+})();
+
+// Intercept JS exceptions
+window.addEventListener('error', function(e) {
+    window._feedbackConsoleErrors.push({
+        type: 'exception',
+        message: e.message + ' at ' + e.filename + ':' + e.lineno,
+        time: new Date().toISOString()
+    });
+});
+
+// Intercept HTMX requests
+document.body.addEventListener('htmx:afterRequest', function(e) {
+    const xhr = e.detail.xhr;
+    window._feedbackHTMXRequests.push({
+        url: e.detail.pathInfo?.requestPath || e.detail.requestConfig?.path,
+        method: e.detail.requestConfig?.verb?.toUpperCase() || 'GET',
+        status: xhr?.status || 'unknown',
+        time: new Date().toISOString()
+    });
+    if (window._feedbackHTMXRequests.length > 10) {
+        window._feedbackHTMXRequests.shift();
+    }
+});
+
+// Collect debug context
+function collectDebugContext() {
+    return {
+        url: window.location.href,
+        title: document.title,
+        userAgent: navigator.userAgent,
+        screenSize: window.innerWidth + 'x' + window.innerHeight,
+        consoleErrors: window._feedbackConsoleErrors.slice(-5),
+        recentRequests: window._feedbackHTMXRequests.slice(-5),
+        formState: collectFormState(),
+        sentryEventId: (typeof Sentry !== 'undefined' && Sentry.lastEventId) ? Sentry.lastEventId() : null,
+        collectedAt: new Date().toISOString()
+    };
+}
+
+// Collect form state (without passwords)
+function collectFormState() {
+    const forms = {};
+    document.querySelectorAll('form').forEach((form, idx) => {
+        const formData = {};
+        form.querySelectorAll('input, select, textarea').forEach(el => {
+            if (el.type === 'password' || el.type === 'hidden') return;
+            if (!el.name) return;
+            formData[el.name] = el.value?.substring(0, 100) || '';
+        });
+        if (Object.keys(formData).length > 0) {
+            forms['form_' + idx] = formData;
+        }
+    });
+    return forms;
+}
+
+// Open feedback modal
+function openFeedbackModal() {
+    const context = collectDebugContext();
+
+    document.getElementById('feedback-page-url').value = context.url;
+    document.getElementById('feedback-page-title').value = context.title;
+    document.getElementById('feedback-debug-context').value = JSON.stringify(context);
+
+    // Show context preview
+    const preview = document.getElementById('feedback-context-preview');
+    let previewHtml = '<span class="opacity-70">URL:</span> ' + context.url.substring(0, 50) + (context.url.length > 50 ? '...' : '') + '<br>';
+    const browser = context.userAgent.includes('Chrome') ? 'Chrome' :
+                   context.userAgent.includes('Firefox') ? 'Firefox' : 'Other';
+    previewHtml += '<span class="opacity-70">Browser:</span> ' + browser + '<br>';
+    if (context.consoleErrors.length > 0) {
+        previewHtml += '<span class="text-error">Console errors:</span> ' + context.consoleErrors.length + '<br>';
+    }
+    if (context.recentRequests.length > 0) {
+        const failed = context.recentRequests.filter(r => r.status >= 400).length;
+        previewHtml += '<span class="opacity-70">Recent requests:</span> ' + context.recentRequests.length;
+        if (failed > 0) previewHtml += ' <span class="text-error">(' + failed + ' failed)</span>';
+        previewHtml += '<br>';
+    }
+    preview.innerHTML = previewHtml;
+
+    document.getElementById('feedback-modal').showModal();
+}
+
+// Close feedback modal
+function closeFeedbackModal() {
+    document.getElementById('feedback-modal').close();
+    // Reset form
+    const form = document.querySelector('#feedback-modal form');
+    if (form) form.reset();
+    document.getElementById('feedback-result').innerHTML = '';
+}
+"""
+
+
+def feedback_modal():
+    """Feedback modal dialog for bug reports and suggestions"""
+    return Dialog(
+        Div(
+            H3("Сообщить о проблеме", cls="font-bold text-lg mb-4"),
+            Form(
+                # Feedback type
+                Div(
+                    Label("Тип обращения", cls="label"),
+                    Select(
+                        Option("Ошибка / Баг", value="bug"),
+                        Option("Предложение", value="suggestion"),
+                        Option("Вопрос", value="question"),
+                        name="feedback_type",
+                        cls="select select-bordered w-full"
+                    ),
+                    cls="form-control mb-4"
+                ),
+                # Description
+                Div(
+                    Label("Опишите проблему", cls="label"),
+                    Textarea(
+                        name="description",
+                        placeholder="Что случилось? Что ожидали увидеть?",
+                        cls="textarea textarea-bordered w-full h-32",
+                        required=True
+                    ),
+                    cls="form-control mb-4"
+                ),
+                # Context preview
+                Div(
+                    P("Автоматически прикрепится:", cls="text-sm text-gray-500 mb-1"),
+                    Div(id="feedback-context-preview",
+                        cls="text-xs bg-base-200 p-2 rounded max-h-24 overflow-auto font-mono"),
+                    cls="form-control mb-4"
+                ),
+                # Hidden fields
+                Input(type="hidden", name="page_url", id="feedback-page-url"),
+                Input(type="hidden", name="page_title", id="feedback-page-title"),
+                Input(type="hidden", name="debug_context", id="feedback-debug-context"),
+                # Buttons
+                Div(
+                    Button("Отмена", type="button",
+                           onclick="closeFeedbackModal()",
+                           cls="btn btn-ghost"),
+                    Button("Отправить", type="submit", cls="btn btn-primary"),
+                    cls="flex gap-2 justify-end"
+                ),
+                hx_post="/api/feedback",
+                hx_swap="innerHTML",
+                hx_target="#feedback-result"
+            ),
+            Div(id="feedback-result"),
+            cls="modal-box max-w-lg"
+        ),
+        Form(method="dialog", cls="modal-backdrop")(
+            Button("close")
+        ),
+        id="feedback-modal",
+        cls="modal"
+    )
+
+
+def feedback_button():
+    """Floating feedback button (fixed position, bottom right)"""
+    return Div(
+        Button(
+            I(data_lucide="message-circle-warning", style="width: 18px; height: 18px;"),
+            Span("Сообщить о проблеме", cls="ml-2 hidden sm:inline"),
+            cls="btn btn-warning btn-sm shadow-lg",
+            onclick="openFeedbackModal()"
+        ),
+        cls="fixed bottom-4 right-4 z-50"
+    )
+
+
 def page_layout(title, *content, session=None, current_path: str = ""):
     """Standard page layout wrapper with sidebar navigation and theme support"""
     return Html(
@@ -2323,6 +2538,8 @@ def page_layout(title, *content, session=None, current_path: str = ""):
             Script(src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"),
             # Sidebar toggle script
             NotStr(SIDEBAR_JS),
+            # Feedback JS (debug context collection)
+            Script(FEEDBACK_JS),
             # Theme initialization + Lucide icons initialization
             Script("""
                 (function() {
@@ -2348,7 +2565,10 @@ def page_layout(title, *content, session=None, current_path: str = ""):
                 sidebar(session or {}, current_path),
                 Main(Div(*content, cls="container"), cls="main-content"),
                 cls="app-layout"
-            )
+            ),
+            # Feedback components (floating button + modal)
+            feedback_button(),
+            feedback_modal()
         ),
         data_theme="light"  # Default theme
     )
@@ -16445,6 +16665,8 @@ from services.telegram_service import (
     handle_reject_callback,
     # Feature #63 imports
     notify_creator_of_return,
+    # Bug report imports
+    send_admin_bug_report,
 )
 
 
@@ -16547,6 +16769,95 @@ async def telegram_webhook(request):
 
     # Always return 200 OK to Telegram
     return {"ok": True}
+
+
+# ============================================================================
+# FEEDBACK / BUG REPORT API
+# ============================================================================
+
+def generate_feedback_short_id():
+    """Generate short ID: FB-YYMMDDHHMMSS"""
+    from datetime import datetime
+    now = datetime.now()
+    return f"FB-{now.strftime('%y%m%d%H%M%S')}"
+
+
+@rt("/api/feedback", methods=["POST"])
+async def submit_feedback(session, request: Request):
+    """Handle feedback/bug report submission.
+
+    Saves to database and sends notification to admin via Telegram.
+    """
+    import json as json_lib
+
+    user = session.get("user", {})
+    form = await request.form()
+
+    feedback_type = form.get("feedback_type", "bug")
+    description = form.get("description", "").strip()
+    page_url = form.get("page_url", "")
+    page_title = form.get("page_title", "")
+    debug_context_str = form.get("debug_context", "{}")
+
+    if not description:
+        return Div("Пожалуйста, опишите проблему", cls="text-error mt-2")
+
+    # Parse debug_context
+    try:
+        debug_context = json_lib.loads(debug_context_str)
+    except:
+        debug_context = {}
+
+    # Generate short ID
+    short_id = generate_feedback_short_id()
+
+    supabase = get_supabase()
+
+    try:
+        # 1. Save to database
+        supabase.table("user_feedback").insert({
+            "short_id": short_id,
+            "user_id": user.get("id"),
+            "user_email": user.get("email"),
+            "user_name": user.get("name", user.get("email", "Неизвестный")),
+            "organization_id": user.get("org_id"),
+            "organization_name": user.get("org_name", ""),
+            "page_url": page_url,
+            "page_title": page_title,
+            "user_agent": request.headers.get("user-agent", ""),
+            "feedback_type": feedback_type,
+            "description": description,
+            "debug_context": debug_context
+        }).execute()
+
+        # 2. Send to Telegram
+        await send_admin_bug_report(
+            short_id=short_id,
+            user_name=user.get("name", user.get("email", "Неизвестный")),
+            user_email=user.get("email", ""),
+            org_name=user.get("org_name", ""),
+            page_url=page_url,
+            feedback_type=feedback_type,
+            description=description,
+            debug_context=debug_context
+        )
+
+        # 3. Return success message with short ID
+        return Div(
+            Div("Спасибо за обратную связь!", cls="text-success font-medium"),
+            P(f"Номер обращения: {short_id}", cls="text-sm text-gray-500 mt-1 font-mono"),
+            Button("Закрыть",
+                   onclick="closeFeedbackModal()",
+                   cls="btn btn-sm mt-3")
+        )
+
+    except Exception as e:
+        logger.error(f"Error saving feedback: {e}")
+        return Div(
+            Div("Ошибка при отправке", cls="text-error font-medium"),
+            P(str(e), cls="text-sm text-gray-500 mt-1"),
+            cls="mt-2"
+        )
 
 
 # ============================================================================
