@@ -5642,15 +5642,14 @@ def get(quote_id: str, session):
             ),
             cls="table-container", style="margin: 0;"
         ),
-        # Handsontable initialization script with auto-save and context menu
+        # Handsontable initialization script - EXPLICIT SAVE ONLY (no auto-save)
         Script(f"""
             (function() {{
                 var quoteId = '{quote_id}';
                 var quoteIdn = '{quote.get("idn_quote", "")}';
                 var initialData = {items_json};
-                var saveTimeouts = {{}};      // Per-row debounce timers
-                var inFlightRows = new Set(); // Rows currently being saved (prevents duplicates)
                 var hot = null;
+                var hasUnsavedChanges = false;
 
                 function updateCount() {{
                     var count = hot ? hot.countRows() : 0;
@@ -5659,9 +5658,6 @@ def get(quote_id: str, session):
                     var footer = document.getElementById('footer-count');
                     if (footer) footer.textContent = 'Всего: ' + count + ' позиций';
                 }}
-
-                var saveRetryCount = 0;
-                var maxRetries = 3;
 
                 function showSaveStatus(status) {{
                     var el = document.getElementById('save-status');
@@ -5672,11 +5668,8 @@ def get(quote_id: str, session):
                     }} else if (status === 'saved') {{
                         el.textContent = 'Сохранено ✓';
                         el.style.color = '#10b981';
-                        saveRetryCount = 0;
+                        hasUnsavedChanges = false;
                         setTimeout(function() {{ el.textContent = ''; }}, 2000);
-                    }} else if (status === 'retrying') {{
-                        el.textContent = 'Сохранение... (повтор)';
-                        el.style.color = '#f59e0b';
                     }} else if (status === 'error') {{
                         el.textContent = 'Не удалось сохранить';
                         el.style.color = '#ef4444';
@@ -5684,149 +5677,67 @@ def get(quote_id: str, session):
                     }}
                 }}
 
-                function saveCell(row, prop, newVal, retryAttempt) {{
-                    retryAttempt = retryAttempt || 0;
-                    var rowData = hot.getSourceDataAtRow(row);
-                    if (!rowData) return;
-
-                    // If row has no ID, need to create it first
-                    if (!rowData.id) {{
-                        // Double-check with both Set (by index) AND flag on object (belt and suspenders)
-                        if (inFlightRows.has(row) || rowData._creating) {{
-                            console.log('Row ' + row + ' save already in flight, skipping');
-                            return;
-                        }}
-                        createNewRow(row, rowData, 0);
-                        return;
-                    }}
-                    showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
-                    var body = {{}};
-                    body[prop] = newVal;
-
-                    var controller = new AbortController();
-                    var timeoutId = setTimeout(function() {{ controller.abort(); }}, 10000);
-
-                    fetch('/quotes/' + quoteId + '/items/' + rowData.id, {{
-                        method: 'PATCH',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify(body),
-                        signal: controller.signal
-                    }})
-                    .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
-                    .then(function(data) {{
-                        if (data.success) {{
-                            showSaveStatus('saved');
-                        }} else if (retryAttempt < maxRetries) {{
-                            setTimeout(function() {{ saveCell(row, prop, newVal, retryAttempt + 1); }}, 1000);
-                        }} else {{
-                            showSaveStatus('error');
-                        }}
-                    }})
-                    .catch(function(e) {{
-                        clearTimeout(timeoutId);
-                        if (retryAttempt < maxRetries) {{
-                            setTimeout(function() {{ saveCell(row, prop, newVal, retryAttempt + 1); }}, 1000);
-                        }} else {{
-                            showSaveStatus('error');
-                        }}
+                // Bulk save all items - replaces everything in DB
+                function saveAllItems() {{
+                    var sourceData = hot.getSourceData();
+                    var items = sourceData.filter(function(row) {{
+                        return row.product_name && row.product_name.trim();
                     }});
-                }}
 
-                function createNewRow(rowIndex, rowData, retryAttempt) {{
-                    retryAttempt = retryAttempt || 0;
-                    if (!rowData || !rowData.product_name) return;
-
-                    // Double-check: both Set AND object flag (belt and suspenders approach)
-                    if (inFlightRows.has(rowIndex) || rowData._creating) {{
-                        console.log('Row ' + rowIndex + ' already being saved, skipping duplicate createNewRow');
-                        return;
+                    if (items.length === 0) {{
+                        alert('Нет позиций для сохранения');
+                        return Promise.resolve(false);
                     }}
 
-                    // Mark as creating in BOTH places
-                    inFlightRows.add(rowIndex);
-                    rowData._creating = true;
+                    showSaveStatus('saving');
 
-                    // Generate temp ID if not exists (for matching after save)
-                    if (!rowData._tempId) {{
-                        rowData._tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                    }}
-
-                    showSaveStatus(retryAttempt > 0 ? 'retrying' : 'saving');
-
-                    var controller = new AbortController();
-                    var timeoutId = setTimeout(function() {{ controller.abort(); }}, 10000);
-
-                    // Use single item endpoint (not bulk which deletes existing items!)
-                    fetch('/quotes/' + quoteId + '/items', {{
+                    return fetch('/quotes/' + quoteId + '/items/bulk', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify(rowData),
-                        signal: controller.signal
+                        body: JSON.stringify({{ items: items }})
                     }})
-                    .then(function(r) {{ clearTimeout(timeoutId); return r.json(); }})
+                    .then(function(r) {{ return r.json(); }})
                     .then(function(data) {{
-                        if (data.success && data.item) {{
-                            // Find the row by temp ID (unique) instead of product_name
-                            var sourceData = hot.getSourceData();
-                            for (var i = 0; i < sourceData.length; i++) {{
-                                if (sourceData[i]._tempId === rowData._tempId) {{
-                                    sourceData[i].id = data.item.id;
-                                    delete sourceData[i]._tempId;
-                                    delete sourceData[i]._creating;
-                                    inFlightRows.delete(i);  // Only remove AFTER id is set
-                                    break;
+                        if (data.success) {{
+                            // Update IDs in table data
+                            if (data.items) {{
+                                var validIdx = 0;
+                                for (var i = 0; i < sourceData.length; i++) {{
+                                    if (sourceData[i].product_name && sourceData[i].product_name.trim()) {{
+                                        if (data.items[validIdx]) {{
+                                            sourceData[i].id = data.items[validIdx].id;
+                                        }}
+                                        validIdx++;
+                                    }}
                                 }}
                             }}
                             showSaveStatus('saved');
-                        }} else if (retryAttempt < maxRetries) {{
-                            // Keep in Set during retry - don't allow other calls to slip in
-                            setTimeout(function() {{
-                                // Temporarily remove to allow retry to proceed
-                                inFlightRows.delete(rowIndex);
-                                rowData._creating = false;
-                                createNewRow(rowIndex, rowData, retryAttempt + 1);
-                            }}, 1000);
+                            return true;
                         }} else {{
-                            // Final failure - cleanup
-                            inFlightRows.delete(rowIndex);
-                            delete rowData._creating;
                             showSaveStatus('error');
-                            console.error('Create row failed:', data.error);
+                            alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
+                            return false;
                         }}
                     }})
                     .catch(function(e) {{
-                        clearTimeout(timeoutId);
-                        if (retryAttempt < maxRetries) {{
-                            // Keep in Set during retry - don't allow other calls to slip in
-                            setTimeout(function() {{
-                                // Temporarily remove to allow retry to proceed
-                                inFlightRows.delete(rowIndex);
-                                rowData._creating = false;
-                                createNewRow(rowIndex, rowData, retryAttempt + 1);
-                            }}, 1000);
-                        }} else {{
-                            // Final failure - cleanup
-                            inFlightRows.delete(rowIndex);
-                            delete rowData._creating;
-                            showSaveStatus('error');
-                            console.error('Create row error:', e);
-                        }}
+                        showSaveStatus('error');
+                        alert('Ошибка сети: ' + e.message);
+                        return false;
                     }});
-                    // NO .finally() - we handle cleanup explicitly in success/error paths
                 }}
 
-                function debouncedSave(row, prop, newVal) {{
-                    // Per-row debounce - prevents interference between different rows
-                    // 800ms gives user time to fill multiple cells before triggering save
-                    clearTimeout(saveTimeouts[row]);
-                    saveTimeouts[row] = setTimeout(function() {{
-                        delete saveTimeouts[row];
-                        saveCell(row, prop, newVal);
-                    }}, 800);
-                }}
+                // Make saveAllItems available globally
+                window.saveAllItems = saveAllItems;
+
+                // Warn on page leave with unsaved changes
+                window.addEventListener('beforeunload', function(e) {{
+                    if (hasUnsavedChanges) {{
+                        e.preventDefault();
+                        e.returnValue = 'Есть несохранённые изменения. Уйти?';
+                    }}
+                }});
 
                 // Row numbers are assigned on save, not during editing
-                // This function just updates the count display
                 function updateRowNumbers() {{
                     updateCount();
                 }}
@@ -5864,22 +5775,18 @@ def get(quote_id: str, session):
                         minSpareRows: 0,
                         afterChange: function(changes, source) {{
                             if (source === 'loadData' || !changes) return;
-                            changes.forEach(function(change) {{
-                                var row = change[0], prop = change[1], oldVal = change[2], newVal = change[3];
-                                if (oldVal !== newVal && prop !== 'row_num') {{
-                                    debouncedSave(row, prop, newVal);
-                                }}
-                            }});
+                            // Mark as having unsaved changes (no auto-save)
+                            hasUnsavedChanges = true;
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterCreateRow: function(index, amount, source) {{
-                            // Just update count - row numbers are assigned on save
+                            hasUnsavedChanges = true;
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
                         afterRemoveRow: function() {{
-                            // Just update count - row numbers are assigned on save
+                            hasUnsavedChanges = true;
                             updateCount();
                             if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                         }},
@@ -6043,36 +5950,15 @@ def get(quote_id: str, session):
                             return;
                         }}
 
-                        showSaveStatus('saving');
-                        fetch('/quotes/' + quoteId + '/items/bulk', {{
-                            method: 'POST',
-                            headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ items: newItems }})
-                        }})
-                        .then(function(r) {{ return r.json(); }})
-                        .then(function(data) {{
-                            if (data.success) {{
-                                data.items.forEach(function(item, idx) {{
-                                    newItems[idx].id = item.id;
-                                }});
-                                var sourceData = hot.getSourceData();
-                                var filtered = sourceData.filter(function(r) {{ return r.id || r.product_name; }});
-                                hot.loadData(filtered.concat(newItems));
-                                for (var i = 0; i < hot.countRows(); i++) {{
-                                    hot.setDataAtRowProp(i, 'row_num', i + 1, 'updateRowNum');
-                                }}
-                                showSaveStatus('saved');
-                                closeFileImportModal();
-                                updateCount();
-                            }} else {{
-                                showSaveStatus('error');
-                                alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
-                            }}
-                        }})
-                        .catch(function(err) {{
-                            showSaveStatus('error');
-                            alert('Ошибка: ' + err.message);
-                        }});
+                        // Add items to table (in memory) - user will click Save to persist
+                        var sourceData = hot.getSourceData();
+                        var filtered = sourceData.filter(function(r) {{ return r.product_name && r.product_name.trim(); }});
+                        hot.loadData(filtered.concat(newItems));
+                        hasUnsavedChanges = true;
+                        updateCount();
+                        closeFileImportModal();
+                        alert('Импортировано ' + newItems.length + ' позиций. Нажмите "Сохранить" для сохранения.');
+                        if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
                     }};
                 }}
 
@@ -6232,21 +6118,41 @@ def get(quote_id: str, session):
 
         # Draft validation script (moved to header buttons)
         Script(f"""
-            // Save confirmation for draft
+            // Save all items when clicking Save button
             function showSaveConfirmation() {{
                 var btn = document.getElementById('btn-save-draft');
                 if (!btn) return;
                 var originalHTML = btn.innerHTML;
-                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Сохранено!';
-                btn.style.background = '#dcfce7';
-                btn.style.borderColor = '#16a34a';
-                btn.style.color = '#16a34a';
-                setTimeout(function() {{
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg> Сохранение...';
+                btn.style.pointerEvents = 'none';
+
+                // Call global saveAllItems function
+                if (typeof window.saveAllItems === 'function') {{
+                    window.saveAllItems().then(function(success) {{
+                        if (success) {{
+                            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Сохранено!';
+                            btn.style.background = '#dcfce7';
+                            btn.style.borderColor = '#16a34a';
+                            btn.style.color = '#16a34a';
+                        }} else {{
+                            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg> Ошибка';
+                            btn.style.background = '#fee2e2';
+                            btn.style.borderColor = '#ef4444';
+                            btn.style.color = '#ef4444';
+                        }}
+                        btn.style.pointerEvents = '';
+                        setTimeout(function() {{
+                            btn.innerHTML = originalHTML;
+                            btn.style.background = '';
+                            btn.style.borderColor = '';
+                            btn.style.color = '';
+                        }}, 2000);
+                    }});
+                }} else {{
                     btn.innerHTML = originalHTML;
-                    btn.style.background = '';
-                    btn.style.borderColor = '';
-                    btn.style.color = '';
-                }}, 2000);
+                    btn.style.pointerEvents = '';
+                    alert('Таблица не загружена');
+                }}
             }}
 
             // Validation for submit to procurement
@@ -6311,19 +6217,41 @@ def get(quote_id: str, session):
                 }}
             }}
 
-            // Submit to procurement with validation
+            // Submit to procurement with validation - saves first, then submits
             function submitToProcurement() {{
                 var errors = validateForProcurement();
                 if (errors.length > 0) {{
                     alert('Заполните обязательные поля:\\n- ' + errors.join('\\n- '));
                     return false;
                 }}
-                // Submit via POST
-                var form = document.createElement('form');
-                form.method = 'POST';
-                form.action = '/quotes/{quote_id}/submit-procurement';
-                document.body.appendChild(form);
-                form.submit();
+
+                var btn = document.getElementById('btn-submit-procurement');
+                if (btn) {{
+                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg> Сохранение...';
+                    btn.style.pointerEvents = 'none';
+                }}
+
+                // First save all items, then submit
+                if (typeof window.saveAllItems === 'function') {{
+                    window.saveAllItems().then(function(saved) {{
+                        if (saved) {{
+                            // Now submit via POST
+                            var form = document.createElement('form');
+                            form.method = 'POST';
+                            form.action = '/quotes/{quote_id}/submit-procurement';
+                            document.body.appendChild(form);
+                            form.submit();
+                        }} else {{
+                            if (btn) {{
+                                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path></svg> Передать в закупки';
+                                btn.style.pointerEvents = '';
+                            }}
+                        }}
+                    }});
+                }} else {{
+                    alert('Таблица не загружена');
+                    if (btn) btn.style.pointerEvents = '';
+                }}
                 return true;
             }}
 
