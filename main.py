@@ -2531,12 +2531,14 @@ def feedback_modal():
                 **{"hx-on::after-request": "if(event.detail.successful) setTimeout(() => closeFeedbackModal(), 1500)"}
             ),
             Div(id="feedback-result"),
-            cls="modal-box w-11/12 max-w-md"
+            cls="modal-box w-11/12 max-w-xl"  # Wider modal
         ),
-        # Backdrop - clicking closes modal
-        Div(cls="modal-backdrop", onclick="closeFeedbackModal()"),
+        # Backdrop - form with method=dialog allows clicking outside to close
+        Form(method="dialog", cls="modal-backdrop")(
+            Button("close", cls="cursor-default")
+        ),
         id="feedback-modal",
-        cls="modal"
+        cls="modal modal-bottom sm:modal-middle"
     )
 
 
