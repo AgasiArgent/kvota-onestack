@@ -5900,9 +5900,12 @@ def get(quote_id: str, session):
                 // Bulk save all items - replaces everything in DB
                 function saveAllItems() {{
                     var sourceData = hot.getSourceData();
+                    console.log('[SaveAllItems] sourceData:', JSON.stringify(sourceData, null, 2));
+
                     var items = sourceData.filter(function(row) {{
                         return row.product_name && row.product_name.trim();
                     }});
+                    console.log('[SaveAllItems] filtered items:', JSON.stringify(items, null, 2));
 
                     if (items.length === 0) {{
                         alert('Нет позиций для сохранения');
@@ -5911,10 +5914,13 @@ def get(quote_id: str, session):
 
                     showSaveStatus('saving');
 
+                    var payload = {{ items: items }};
+                    console.log('[SaveAllItems] sending to /items/bulk:', JSON.stringify(payload, null, 2));
+
                     return fetch('/quotes/' + quoteId + '/items/bulk', {{
                         method: 'POST',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{ items: items }})
+                        body: JSON.stringify(payload)
                     }})
                     .then(function(r) {{ return r.json(); }})
                     .then(function(data) {{
@@ -7837,6 +7843,10 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
 
     items_data = data.get("items", [])
+    print(f"[BULK SAVE] Received {len(items_data)} items for quote {quote_id}")
+    for i, item in enumerate(items_data):
+        print(f"[BULK SAVE] Item {i}: name={item.get('product_name')}, brand={item.get('brand')}, code={item.get('product_code')}")
+
     if not items_data:
         return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
 
