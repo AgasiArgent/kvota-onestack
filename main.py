@@ -2556,14 +2556,11 @@ def feedback_button():
     """Floating feedback button (fixed position, bottom right)"""
     return Div(
         Button(
-            Span(
-                I(data_lucide="message-circle-warning", style="width: 14px; height: 14px;"),
-                style="display: flex; align-items: center;"
-            ),
-            Span("Проблема?", cls="hidden sm:inline", style="margin-left: 6px;"),
-            cls="btn btn-warning btn-sm shadow-lg",
-            style="display: inline-flex; align-items: center; padding: 8px 12px; font-size: 13px; height: auto;",
-            onclick="openFeedbackModal()"
+            I(data_lucide="bug", style="width: 18px; height: 18px; color: #6b7280;"),
+            cls="shadow-md hover:shadow-lg transition-shadow",
+            style="display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; cursor: pointer;",
+            onclick="openFeedbackModal()",
+            title="Сообщить о проблеме"
         ),
         cls="fixed bottom-4 right-4 z-50"
     )
