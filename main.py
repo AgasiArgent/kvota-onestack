@@ -5691,8 +5691,8 @@ def get(quote_id: str, session):
 
                     // If row has no ID, need to create it first
                     if (!rowData.id) {{
-                        // Check if save is already in flight using Set (prevents duplicates)
-                        if (inFlightRows.has(row)) {{
+                        // Double-check with both Set (by index) AND flag on object (belt and suspenders)
+                        if (inFlightRows.has(row) || rowData._creating) {{
                             console.log('Row ' + row + ' save already in flight, skipping');
                             return;
                         }}
@@ -5736,12 +5736,15 @@ def get(quote_id: str, session):
                     retryAttempt = retryAttempt || 0;
                     if (!rowData || !rowData.product_name) return;
 
-                    // Use Set to prevent duplicate creation - more reliable than object property
-                    if (inFlightRows.has(rowIndex)) {{
+                    // Double-check: both Set AND object flag (belt and suspenders approach)
+                    if (inFlightRows.has(rowIndex) || rowData._creating) {{
                         console.log('Row ' + rowIndex + ' already being saved, skipping duplicate createNewRow');
                         return;
                     }}
+
+                    // Mark as creating in BOTH places
                     inFlightRows.add(rowIndex);
+                    rowData._creating = true;
 
                     // Generate temp ID if not exists (for matching after save)
                     if (!rowData._tempId) {{
@@ -5769,13 +5772,24 @@ def get(quote_id: str, session):
                                 if (sourceData[i]._tempId === rowData._tempId) {{
                                     sourceData[i].id = data.item.id;
                                     delete sourceData[i]._tempId;
+                                    delete sourceData[i]._creating;
+                                    inFlightRows.delete(i);  // Only remove AFTER id is set
                                     break;
                                 }}
                             }}
                             showSaveStatus('saved');
                         }} else if (retryAttempt < maxRetries) {{
-                            setTimeout(function() {{ createNewRow(rowIndex, rowData, retryAttempt + 1); }}, 1000);
+                            // Keep in Set during retry - don't allow other calls to slip in
+                            setTimeout(function() {{
+                                // Temporarily remove to allow retry to proceed
+                                inFlightRows.delete(rowIndex);
+                                rowData._creating = false;
+                                createNewRow(rowIndex, rowData, retryAttempt + 1);
+                            }}, 1000);
                         }} else {{
+                            // Final failure - cleanup
+                            inFlightRows.delete(rowIndex);
+                            delete rowData._creating;
                             showSaveStatus('error');
                             console.error('Create row failed:', data.error);
                         }}
@@ -5783,24 +5797,32 @@ def get(quote_id: str, session):
                     .catch(function(e) {{
                         clearTimeout(timeoutId);
                         if (retryAttempt < maxRetries) {{
-                            setTimeout(function() {{ createNewRow(rowIndex, rowData, retryAttempt + 1); }}, 1000);
+                            // Keep in Set during retry - don't allow other calls to slip in
+                            setTimeout(function() {{
+                                // Temporarily remove to allow retry to proceed
+                                inFlightRows.delete(rowIndex);
+                                rowData._creating = false;
+                                createNewRow(rowIndex, rowData, retryAttempt + 1);
+                            }}, 1000);
                         }} else {{
+                            // Final failure - cleanup
+                            inFlightRows.delete(rowIndex);
+                            delete rowData._creating;
                             showSaveStatus('error');
                             console.error('Create row error:', e);
                         }}
-                    }})
-                    .finally(function() {{
-                        inFlightRows.delete(rowIndex);  // Always remove from Set when done
                     }});
+                    // NO .finally() - we handle cleanup explicitly in success/error paths
                 }}
 
                 function debouncedSave(row, prop, newVal) {{
                     // Per-row debounce - prevents interference between different rows
+                    // 800ms gives user time to fill multiple cells before triggering save
                     clearTimeout(saveTimeouts[row]);
                     saveTimeouts[row] = setTimeout(function() {{
                         delete saveTimeouts[row];
                         saveCell(row, prop, newVal);
-                    }}, 500);
+                    }}, 800);
                 }}
 
                 // Row numbers are assigned on save, not during editing
