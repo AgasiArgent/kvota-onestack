@@ -2556,10 +2556,13 @@ def feedback_button():
     """Floating feedback button (fixed position, bottom right)"""
     return Div(
         Button(
-            I(data_lucide="message-circle-warning", cls="flex-shrink-0", style="width: 16px; height: 16px;"),
-            Span("Проблема?", cls="hidden sm:inline"),
-            cls="btn btn-warning btn-sm shadow-lg gap-1.5 px-3 py-2",
-            style="display: inline-flex; align-items: center; line-height: 1;",
+            Span(
+                I(data_lucide="message-circle-warning", style="width: 14px; height: 14px;"),
+                style="display: flex; align-items: center;"
+            ),
+            Span("Проблема?", cls="hidden sm:inline", style="margin-left: 6px;"),
+            cls="btn btn-warning btn-sm shadow-lg",
+            style="display: inline-flex; align-items: center; padding: 8px 12px; font-size: 13px; height: auto;",
             onclick="openFeedbackModal()"
         ),
         cls="fixed bottom-4 right-4 z-50"
@@ -29663,14 +29666,17 @@ def _quote_documents_section(
 
         doc_rows.append(
             Tr(
-                # File icon + name
+                # File icon + name (narrow, truncated, tooltip on hover)
                 Td(
-                    I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent);"),
-                    A(doc.original_filename,
-                      href=f"/documents/{doc.id}/download",
-                      target="_blank",
-                      style="text-decoration: none; color: var(--text-primary);"),
-                    style="display: flex; align-items: center;"
+                    A(
+                        I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style="margin-right: 0.5rem; color: var(--accent); flex-shrink: 0;"),
+                        Span(doc.original_filename, style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
+                        href=f"/documents/{doc.id}/download",
+                        target="_blank",
+                        title=doc.original_filename,
+                        style="text-decoration: none; color: var(--text-primary); display: flex; align-items: center; max-width: 100%; overflow: hidden;"
+                    ),
+                    style="max-width: 150px; overflow: hidden;"
                 ),
                 # Document type
                 Td(
@@ -29679,16 +29685,22 @@ def _quote_documents_section(
                          style="background: var(--accent-light); color: var(--accent); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;")
                     if doc.document_type else "-"
                 ),
-                # Binding (NEW column)
+                # Binding
                 Td(
                     Span(binding_label,
                          style=f"{binding_style}; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; white-space: nowrap;")
+                ),
+                # Description (NEW)
+                Td(
+                    Span(doc.description or "-",
+                         title=doc.description if doc.description else None,
+                         style="color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; max-width: 150px;")
                 ),
                 # File size
                 Td(format_file_size(doc.file_size_bytes) or "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Upload date
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
-                # Actions - small square icon buttons (using Lucide icons)
+                # Actions - small square icon buttons
                 Td(
                     A(
                       icon("download", size=16),
@@ -29715,7 +29727,7 @@ def _quote_documents_section(
     if not doc_rows:
         doc_rows.append(
             Tr(
-                Td("Документы не загружены", colspan="6", style="text-align: center; color: var(--text-muted); padding: 2rem;")
+                Td("Документы не загружены", colspan="7", style="text-align: center; color: var(--text-muted); padding: 2rem;")
             )
         )
 
@@ -29937,12 +29949,13 @@ def _quote_documents_section(
             Table(
                 Thead(
                     Tr(
-                        Th("Файл", style="width: 25%;"),
-                        Th("Тип", style="width: 14%;"),
-                        Th("Привязка", style="width: 14%;"),
-                        Th("Размер", style="width: 10%;"),
+                        Th("Файл", style="width: 15%;"),
+                        Th("Тип", style="width: 12%;"),
+                        Th("Привязка", style="width: 10%;"),
+                        Th("Описание", style="width: 18%;"),
+                        Th("Размер", style="width: 8%;"),
                         Th("Дата", style="width: 10%;"),
-                        Th("Действия", style="width: 17%;"),
+                        Th("", style="width: 10%;"),
                     )
                 ),
                 Tbody(*doc_rows, id="documents-tbody"),
