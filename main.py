@@ -549,82 +549,83 @@ button, [role="button"], .button, a[role="button"] {
 }
 
 /* Primary button (default) - Override ALL button colors including Pico CSS */
-button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle),
-[role="button"]:not(.secondary):not(.ghost),
-button[type="submit"],
-a[href*="/new"]:not(.sidebar-item) {
+/* IMPORTANT: Exclude .btn class elements - they use BEM system */
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):not(.btn),
+[role="button"]:not(.secondary):not(.ghost):not(.btn),
+button[type="submit"]:not(.btn),
+a[href*="/new"]:not(.sidebar-item):not(.btn) {
     background: var(--accent) !important;
     color: var(--text-on-accent) !important;
     box-shadow: 0 1px 3px rgba(59, 130, 246, 0.2) !important;
     border-color: transparent !important;
 }
 
-button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):hover,
-[role="button"]:not(.secondary):not(.ghost):hover,
-button[type="submit"]:hover,
-a[href*="/new"]:not(.sidebar-item):hover {
+button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):not(.btn):hover,
+[role="button"]:not(.secondary):not(.ghost):not(.btn):hover,
+button[type="submit"]:not(.btn):hover,
+a[href*="/new"]:not(.sidebar-item):not(.btn):hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
     background: var(--accent-hover) !important;
 }
 
-/* Secondary button */
-button.secondary,
-[role="button"].secondary,
-.button.secondary {
+/* Secondary button (legacy - exclude .btn) */
+button.secondary:not(.btn),
+[role="button"].secondary:not(.btn),
+.button.secondary:not(.btn) {
     background: var(--bg-card);
     color: var(--accent);
     border: 1.5px solid var(--accent);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
-button.secondary:hover,
-[role="button"].secondary:hover,
-.button.secondary:hover {
+button.secondary:not(.btn):hover,
+[role="button"].secondary:not(.btn):hover,
+.button.secondary:not(.btn):hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
     background: var(--accent-light);
 }
 
-/* Ghost button */
-button.ghost,
-[role="button"].ghost,
-.button.ghost {
+/* Ghost button (legacy - exclude .btn) */
+button.ghost:not(.btn),
+[role="button"].ghost:not(.btn),
+.button.ghost:not(.btn) {
     background: transparent;
     color: var(--accent);
     border: none;
 }
 
-button.ghost:hover,
-[role="button"].ghost:hover,
-.button.ghost:hover {
+button.ghost:not(.btn):hover,
+[role="button"].ghost:not(.btn):hover,
+.button.ghost:not(.btn):hover {
     background: var(--accent-light);
 }
 
-/* Success button */
-button.success,
-[role="button"].success {
+/* Success button (legacy - exclude .btn) */
+button.success:not(.btn),
+[role="button"].success:not(.btn) {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
     color: white;
     box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
 }
 
-button.success:hover,
-[role="button"].success:hover {
+button.success:not(.btn):hover,
+[role="button"].success:not(.btn):hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
 }
 
-/* Danger button */
-button.danger,
-[role="button"].danger {
+/* Danger button (legacy - exclude .btn) */
+button.danger:not(.btn),
+[role="button"].danger:not(.btn) {
     background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: white;
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
 }
 
-button.danger:hover,
-[role="button"].danger:hover {
+button.danger:not(.btn):hover,
+[role="button"].danger:not(.btn):hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
 }
@@ -637,9 +638,9 @@ button:disabled,
     transform: none !important;
 }
 
-/* Small button variant */
-button.btn-sm,
-[role="button"].btn-sm {
+/* Small button variant (legacy - exclude .btn) */
+button.btn-sm:not(.btn),
+[role="button"].btn-sm:not(.btn) {
     padding: 0.4rem 0.875rem;
     font-size: 0.875rem;
 }
