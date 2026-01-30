@@ -1267,15 +1267,15 @@ form[method="get"] button {
 
 /* ========== Button Style Overrides (NUCLEAR - Override Everything) ========== */
 /* Force ALL buttons to use new gradient - override Pico CSS and inline styles */
-button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle),
-[role="button"],
-.button,
-button[type="submit"],
-button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle),
-input[type="submit"],
-input[type="button"],
-a[href*="/new"]:not(.sidebar-item),
-a[href*="/create"]:not(.sidebar-item) {
+button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle):not(.btn-outline):not(.btn-danger),
+[role="button"]:not(.btn-outline):not(.btn-danger),
+.button:not(.btn-outline):not(.btn-danger),
+button[type="submit"]:not(.btn-outline):not(.btn-danger),
+button[type="button"]:not(.sidebar-toggle-btn):not(.theme-toggle):not(.btn-outline):not(.btn-danger),
+input[type="submit"]:not(.btn-outline):not(.btn-danger),
+input[type="button"]:not(.btn-outline):not(.btn-danger),
+a[href*="/new"]:not(.sidebar-item):not(.btn-outline),
+a[href*="/create"]:not(.sidebar-item):not(.btn-outline) {
     background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
     background-color: #6366f1 !important;
     color: white !important;
@@ -1289,6 +1289,33 @@ a[href*="/create"]:not(.sidebar-item) {
     text-decoration: none !important;
     display: inline-block !important;
     cursor: pointer !important;
+}
+
+/* Outline button style - transparent with colored border */
+.btn-outline {
+    background: white !important;
+    color: var(--accent) !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    padding: 0.5rem 1rem !important;
+}
+.btn-outline:hover {
+    background: #f9fafb !important;
+    border-color: var(--accent) !important;
+}
+
+/* Danger button style - for delete actions */
+.btn-danger {
+    background: white !important;
+    color: #dc3545 !important;
+    border: 1px solid #e5e7eb !important;
+    box-shadow: none !important;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.8rem !important;
+}
+.btn-danger:hover {
+    background: #fee2e2 !important;
+    border-color: #dc3545 !important;
 }
 
 button:not(.sidebar-toggle-btn):not(.sidebar-section-header):not(.theme-toggle):hover,
@@ -29633,17 +29660,18 @@ def _quote_documents_section(
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Actions
                 Td(
-                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem; color: var(--accent);"), "Скачать",
+                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem;"), "Скачать",
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex; align-items: center; background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; text-decoration: none; font-size: 0.8rem; margin-right: 0.5rem;"),
-                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
+                      cls="btn-outline",
+                      style="display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.5rem; text-decoration: none;"),
+                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem;"), "Удалить",
                            hx_delete=f"/documents/{doc.id}",
                            hx_confirm="Удалить документ?",
                            hx_target=f"#doc-row-{doc.id}",
                            hx_swap="outerHTML",
-                           style="display: inline-flex; align-items: center; background: white; color: #dc3545; border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;",
+                           cls="btn-danger",
                            title="Удалить") if can_delete else None,
                     style="white-space: nowrap;"
                 ),
@@ -29793,9 +29821,9 @@ def _quote_documents_section(
                     ),
                     Div(
                         Label(" ", style="visibility: hidden;"),
-                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem; color: var(--accent);"), "Загрузить",
+                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
                                type="submit",
-                               style="background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;"),
+                               cls="btn-outline"),
                         cls="form-group"
                     ),
                     style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
@@ -29884,17 +29912,18 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
                 # Actions
                 Td(
-                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem; color: var(--accent);"), "Скачать",
+                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem;"), "Скачать",
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="display: inline-flex; align-items: center; background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; text-decoration: none; font-size: 0.8rem; margin-right: 0.5rem;"),
-                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
+                      cls="btn-outline",
+                      style="display: inline-flex; align-items: center; padding: 0.25rem 0.5rem; font-size: 0.8rem; margin-right: 0.5rem; text-decoration: none;"),
+                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem;"), "Удалить",
                            hx_delete=f"/documents/{doc.id}",
                            hx_confirm="Удалить документ?",
                            hx_target=f"#doc-row-{doc.id}",
                            hx_swap="outerHTML",
-                           style="display: inline-flex; align-items: center; background: white; color: #dc3545; border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;",
+                           cls="btn-danger",
                            title="Удалить") if can_delete else None,
                     style="white-space: nowrap;"
                 ),
