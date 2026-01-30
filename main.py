@@ -2451,7 +2451,7 @@ def feedback_modal():
                         name="feedback_type",
                         cls="select select-bordered w-full"
                     ),
-                    cls="form-control mb-4"
+                    cls="form-control mb-3"
                 ),
                 # Description
                 Div(
@@ -2459,40 +2459,38 @@ def feedback_modal():
                     Textarea(
                         name="description",
                         placeholder="Что случилось? Что ожидали увидеть?",
-                        cls="textarea textarea-bordered w-full h-32",
+                        cls="textarea textarea-bordered w-full h-24",
                         required=True
                     ),
-                    cls="form-control mb-4"
+                    cls="form-control mb-3"
                 ),
-                # Context preview
+                # Context preview (compact)
                 Div(
-                    P("Автоматически прикрепится:", cls="text-sm text-gray-500 mb-1"),
+                    P("Автоматически прикрепится:", cls="text-xs text-gray-400 mb-1"),
                     Div(id="feedback-context-preview",
-                        cls="text-xs bg-base-200 p-2 rounded max-h-24 overflow-auto font-mono"),
+                        cls="text-xs bg-base-200 p-2 rounded max-h-16 overflow-auto font-mono"),
                     cls="form-control mb-4"
                 ),
                 # Hidden fields
                 Input(type="hidden", name="page_url", id="feedback-page-url"),
                 Input(type="hidden", name="page_title", id="feedback-page-title"),
                 Input(type="hidden", name="debug_context", id="feedback-debug-context"),
-                # Buttons
+                # Single submit button (right aligned)
                 Div(
-                    Button("Отмена", type="button",
-                           onclick="closeFeedbackModal()",
-                           cls="btn btn-ghost"),
                     Button("Отправить", type="submit", cls="btn btn-primary"),
-                    cls="flex gap-2 justify-end"
+                    cls="flex justify-end"
                 ),
                 hx_post="/api/feedback",
                 hx_swap="innerHTML",
-                hx_target="#feedback-result"
+                hx_target="#feedback-result",
+                # Auto-close after successful submit
+                **{"hx-on::after-request": "if(event.detail.successful) setTimeout(() => closeFeedbackModal(), 1500)"}
             ),
             Div(id="feedback-result"),
-            cls="modal-box max-w-lg"
+            cls="modal-box w-11/12 max-w-md"
         ),
-        Form(method="dialog", cls="modal-backdrop")(
-            Button("close")
-        ),
+        # Backdrop - clicking closes modal
+        Div(cls="modal-backdrop", onclick="closeFeedbackModal()"),
         id="feedback-modal",
         cls="modal"
     )
