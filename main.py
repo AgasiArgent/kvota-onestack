@@ -29633,17 +29633,17 @@ def _quote_documents_section(
                 Td(doc.created_at.strftime("%d.%m.%Y") if doc.created_at else "-", style="color: var(--text-secondary); font-size: 0.85rem;"),
                 # Actions
                 Td(
-                    A(I(cls="fa-solid fa-download", style="color: #28a745;"),
+                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem; color: var(--accent);"), "Скачать",
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="margin-right: 0.5rem;"),
-                    Button(I(cls="fa-solid fa-trash", style="color: #dc3545;"),
+                      style="display: inline-flex; align-items: center; background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; text-decoration: none; font-size: 0.8rem; margin-right: 0.5rem;"),
+                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
                            hx_delete=f"/documents/{doc.id}",
                            hx_confirm="Удалить документ?",
                            hx_target=f"#doc-row-{doc.id}",
                            hx_swap="outerHTML",
-                           style="background: none; border: none; cursor: pointer; padding: 0.25rem;",
+                           style="display: inline-flex; align-items: center; background: white; color: #dc3545; border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;",
                            title="Удалить") if can_delete else None,
                     style="white-space: nowrap;"
                 ),
@@ -29793,9 +29793,9 @@ def _quote_documents_section(
                     ),
                     Div(
                         Label(" ", style="visibility: hidden;"),
-                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
+                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem; color: var(--accent);"), "Загрузить",
                                type="submit",
-                               style="background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;"),
+                               style="background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500;"),
                         cls="form-group"
                     ),
                     style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
@@ -29818,12 +29818,12 @@ def _quote_documents_section(
             Table(
                 Thead(
                     Tr(
-                        Th("Файл", style="width: 28%;"),
-                        Th("Тип", style="width: 15%;"),
-                        Th("Привязка", style="width: 15%;"),
+                        Th("Файл", style="width: 25%;"),
+                        Th("Тип", style="width: 14%;"),
+                        Th("Привязка", style="width: 14%;"),
                         Th("Размер", style="width: 10%;"),
-                        Th("Дата", style="width: 12%;"),
-                        Th("", style="width: 10%;"),
+                        Th("Дата", style="width: 10%;"),
+                        Th("Действия", style="width: 17%;"),
                     )
                 ),
                 Tbody(*doc_rows, id="documents-tbody"),
@@ -29884,17 +29884,17 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                 Td(doc.description or "-", style="color: var(--text-secondary); max-width: 200px; overflow: hidden; text-overflow: ellipsis;"),
                 # Actions
                 Td(
-                    A(I(cls="fa-solid fa-download", style="color: #28a745;"),
+                    A(I(cls="fa-solid fa-download", style="margin-right: 0.25rem; color: var(--accent);"), "Скачать",
                       href=f"/documents/{doc.id}/download",
                       target="_blank",
                       title="Скачать",
-                      style="margin-right: 0.5rem;"),
-                    Button(I(cls="fa-solid fa-trash", style="color: #dc3545;"),
+                      style="display: inline-flex; align-items: center; background: white; color: var(--accent); border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; text-decoration: none; font-size: 0.8rem; margin-right: 0.5rem;"),
+                    Button(I(cls="fa-solid fa-trash", style="margin-right: 0.25rem; color: #dc3545;"), "Удалить",
                            hx_delete=f"/documents/{doc.id}",
                            hx_confirm="Удалить документ?",
                            hx_target=f"#doc-row-{doc.id}",
                            hx_swap="outerHTML",
-                           style="background: none; border: none; cursor: pointer; padding: 0.25rem;",
+                           style="display: inline-flex; align-items: center; background: white; color: #dc3545; border: 1px solid #e5e7eb; padding: 0.25rem 0.5rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem;",
                            title="Удалить") if can_delete else None,
                     style="white-space: nowrap;"
                 ),
