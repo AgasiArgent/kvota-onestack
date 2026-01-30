@@ -29838,9 +29838,10 @@ def _quote_documents_section(
                     ),
                     Div(
                         Label(" ", style="visibility: hidden;"),
-                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem;"), "Загрузить",
+                        Button(I(cls="fa-solid fa-upload", style="margin-right: 0.5rem; color: var(--accent);"), "Загрузить",
                                type="submit",
-                               cls="btn-outline"),
+                               cls="btn-outline",
+                               style="background: white !important; background-color: white !important; background-image: none !important; color: var(--accent) !important; border: 1px solid #e5e7eb !important;"),
                         cls="form-group"
                     ),
                     style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
