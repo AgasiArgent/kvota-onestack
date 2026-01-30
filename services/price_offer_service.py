@@ -206,21 +206,11 @@ def create_offer(
         "created_by": user_id,
     }
 
-    print(f"[DEBUG] create_offer: Inserting data: {data}")
-
-    try:
-        result = supabase.table("item_price_offers") \
-            .insert(data) \
-            .execute()
-        print(f"[DEBUG] create_offer: Insert result.data={result.data}, count={result.count}")
-    except Exception as e:
-        print(f"[DEBUG] create_offer: Insert exception: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    result = supabase.table("item_price_offers") \
+        .insert(data) \
+        .execute()
 
     if not result.data:
-        print(f"[DEBUG] create_offer: result.data is empty!")
         raise ValueError("Не удалось создать предложение")
 
     # Fetch with joined supplier name
