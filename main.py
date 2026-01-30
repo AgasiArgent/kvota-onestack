@@ -5503,7 +5503,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;" + (" border-color: #f59e0b;" if not quote.get("customer_id") else ""),
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "customer_id", value: this.value}',
+                        hx_vals='js:{field: "customer_id", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1; min-width: 200px;"
@@ -5523,7 +5523,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "seller_company_id", value: this.value}',
+                        hx_vals='js:{field: "seller_company_id", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1; min-width: 200px;"
@@ -5543,7 +5543,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "delivery_city", value: this.value}',
+                        hx_vals='js:{field: "delivery_city", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1 1 120px; min-width: 120px;"
@@ -5559,7 +5559,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "delivery_country", value: this.value}',
+                        hx_vals='js:{field: "delivery_country", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1 1 120px; min-width: 120px;"
@@ -5574,7 +5574,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "delivery_method", value: this.value}',
+                        hx_vals='js:{field: "delivery_method", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1 1 200px; min-width: 200px;"
@@ -5588,7 +5588,7 @@ def get(quote_id: str, session):
                         style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "delivery_terms", value: this.value}',
+                        hx_vals='js:{field: "delivery_terms", value: elt.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1 1 100px; min-width: 100px;"
