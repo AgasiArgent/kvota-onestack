@@ -11720,18 +11720,30 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
-# PROCUREMENT DETAIL PAGE (Feature #35)
+# PROCUREMENT DETAIL PAGE v2.0 - Single-Page Invoice-First Design
+# ============================================================================
+# Redesigned procurement workspace with:
+# - Two-column layout (invoices left, items table right)
+# - Invoice-first workflow: create invoice → assign items → enter prices
+# - Handsontable for fast price entry with copy-paste support
+# - Bulk operations for efficiency
 # ============================================================================
 
 @rt("/procurement/{quote_id}")
 def get(quote_id: str, session):
     """
-    Procurement detail page - form for entering procurement data for items.
+    Procurement workspace - single-page invoice-first design.
 
-    Feature #35: Форма ввода закупочных данных
-    - Shows items belonging to user's assigned brands
-    - Allows editing: price, supplier country/city, weight, production time,
-      payer company, advance %, payment terms
+    Layout:
+    - Left panel: Invoice list with create/edit functionality
+    - Right panel: Items table (Handsontable) with price entry
+
+    Workflow:
+    1. Create invoice (supplier, buyer, currency)
+    2. Assign items to invoice
+    3. Enter prices (copy-paste from Excel supported)
+    4. Set invoice weight/volume
+    5. Complete procurement
     """
     redirect = require_login(session)
     if redirect:
@@ -11784,77 +11796,43 @@ def get(quote_id: str, session):
     my_items = [item for item in all_items
                 if (item.get("brand") or "").lower() in my_brands_lower]
 
-    # v3.0: Fetch supplier info for items that have supplier_id
-    supplier_map = {}
-    supplier_ids = [item.get("supplier_id") for item in my_items if item.get("supplier_id")]
+    # Get existing invoices for this quote
+    invoices_result = supabase.table("invoices") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    invoices = invoices_result.data or []
+
+    # Build invoice map for quick lookup
+    invoice_map = {inv["id"]: inv for inv in invoices}
+
+    # Get supplier names
+    supplier_ids = list(set(inv.get("supplier_id") for inv in invoices if inv.get("supplier_id")))
+    suppliers = {}
     if supplier_ids:
-        try:
-            from services.supplier_service import get_supplier, format_supplier_for_dropdown
-            for supplier_id in set(supplier_ids):
-                try:
-                    supplier = get_supplier(supplier_id)
-                    if supplier:
-                        supplier_map[supplier_id] = {
-                            "id": supplier.id,
-                            "label": format_supplier_for_dropdown(supplier)
-                        }
-                except Exception:
-                    pass
-        except ImportError:
-            pass
+        suppliers_result = supabase.table("suppliers").select("id, name").in_("id", supplier_ids).execute()
+        suppliers = {s["id"]: s["name"] for s in suppliers_result.data or []}
 
-    # v3.0: Fetch buyer company info for items that have buyer_company_id
-    buyer_company_map = {}
-    buyer_company_ids = [item.get("buyer_company_id") for item in my_items if item.get("buyer_company_id")]
+    # Get buyer company names
+    buyer_company_ids = list(set(inv.get("buyer_company_id") for inv in invoices if inv.get("buyer_company_id")))
+    buyer_companies = {}
     if buyer_company_ids:
-        try:
-            from services.buyer_company_service import get_buyer_company, format_buyer_company_for_dropdown
-            for buyer_company_id in set(buyer_company_ids):
-                try:
-                    bc = get_buyer_company(buyer_company_id)
-                    if bc:
-                        buyer_company_map[buyer_company_id] = {
-                            "id": bc.id,
-                            "label": format_buyer_company_for_dropdown(bc)
-                        }
-                except Exception:
-                    pass
-        except ImportError:
-            pass
+        buyers_result = supabase.table("buyer_companies").select("id, name, company_code").in_("id", buyer_company_ids).execute()
+        buyer_companies = {b["id"]: {"name": b["name"], "code": b.get("company_code", "")} for b in buyers_result.data or []}
 
-    # v3.0: Fetch pickup location info for items that have pickup_location_id
-    pickup_location_map = {}
-    pickup_location_ids = [item.get("pickup_location_id") for item in my_items if item.get("pickup_location_id")]
-    if pickup_location_ids:
-        try:
-            from services.location_service import get_location, format_location_for_dropdown
-            for pickup_location_id in set(pickup_location_ids):
-                try:
-                    loc = get_location(pickup_location_id)
-                    if loc:
-                        pickup_location_map[pickup_location_id] = {
-                            "id": loc.id,
-                            "label": format_location_for_dropdown(loc).get("label", loc.display_name or f"{loc.city}, {loc.country}")
-                        }
-                except Exception:
-                    pass
-        except ImportError:
-            pass
-
-    # Calculate progress for MY items
+    # Calculate progress
     total_items = len(my_items)
+    priced_items = len([i for i in my_items if i.get("purchase_price_original")])
+    assigned_items = len([i for i in my_items if i.get("invoice_id")])
     completed_items = len([i for i in my_items if i.get("procurement_status") == "completed"])
-    my_items_complete = (completed_items == total_items) and total_items > 0
-
-    # Calculate progress for ALL items (Feature #37: overall procurement status)
-    overall_total = len(all_items)
-    overall_completed = len([i for i in all_items if i.get("procurement_status") == "completed"])
-    all_procurement_complete = (overall_completed == overall_total) and overall_total > 0
 
     customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
     workflow_status = quote.get("workflow_status", "draft")
+    quote_idn = quote.get("idn_quote", f"#{quote_id[:8]}")
 
-    # Check for revision status (returned from quote control)
+    # Check for revision status
     revision_department = quote.get("revision_department")
     revision_comment = quote.get("revision_comment")
     is_revision = revision_department == "procurement" and workflow_status == "pending_procurement"
@@ -11862,156 +11840,115 @@ def get(quote_id: str, session):
     # Check if quote is in the right status for editing
     can_edit = workflow_status in ["pending_procurement", "draft"]
 
-    # Build item rows for the form
-    def item_row(item, index):
-        item_id = item["id"]
-        brand = item.get("brand", "—")
-        name = item.get("product_name", item.get("name", ""))
-        product_code = item.get("product_code", "")
-        quantity = item.get("quantity", 1)
-        is_completed = item.get("procurement_status") == "completed"
+    # Currency symbols for display
+    currency_symbols = {"USD": "$", "EUR": "€", "RUB": "₽", "CNY": "¥", "TRY": "₺"}
 
-        # Current values - procurement fields (simplified 2026-01-21)
-        purchase_price = item.get("purchase_price_original", "")
-        purchase_currency = item.get("purchase_currency", "USD")
-        supplier_country = item.get("supplier_country", "")
-        production_time = item.get("production_time_days", "")
+    # Prepare items data for Handsontable
+    items_for_handsontable = []
+    for idx, item in enumerate(my_items):
+        inv = invoice_map.get(item.get("invoice_id"))
+        items_for_handsontable.append({
+            'id': item.get('id'),
+            'brand': item.get('brand', ''),
+            'product_name': item.get('product_name', ''),
+            'product_code': item.get('product_code', ''),
+            'quantity': item.get('quantity', 1),
+            'price': item.get('purchase_price_original') or '',
+            'production_time': item.get('production_time_days') or '',
+            'invoice_id': item.get('invoice_id') or '',
+            'invoice_label': f"#{invoices.index(inv)+1}" if inv else '',
+            'supplier_country': item.get('supplier_country', ''),
+        })
 
-        # v3.0 supply chain fields
-        supplier_id = item.get("supplier_id")
-        buyer_company_id = item.get("buyer_company_id")
-        pickup_location_id = item.get("pickup_location_id")
+    items_json = json.dumps(items_for_handsontable)
 
-        # Get pre-selected labels from maps (populated above)
-        supplier_info = supplier_map.get(supplier_id) if supplier_id else None
-        buyer_company_info = buyer_company_map.get(buyer_company_id) if buyer_company_id else None
-        pickup_location_info = pickup_location_map.get(pickup_location_id) if pickup_location_id else None
+    # Prepare invoices data for JavaScript
+    invoices_for_js = []
+    for idx, inv in enumerate(invoices, 1):
+        supp = suppliers.get(inv.get("supplier_id"), "—")
+        buyer = buyer_companies.get(inv.get("buyer_company_id"), {})
+        invoices_for_js.append({
+            'id': inv['id'],
+            'number': idx,
+            'invoice_number': inv.get('invoice_number', ''),
+            'supplier_id': inv.get('supplier_id'),
+            'supplier_name': supp,
+            'buyer_company_id': inv.get('buyer_company_id'),
+            'buyer_name': buyer.get('name', '—'),
+            'buyer_code': buyer.get('code', ''),
+            'currency': inv.get('currency', 'USD'),
+            'currency_symbol': currency_symbols.get(inv.get('currency', 'USD'), inv.get('currency', '')),
+            'total_weight_kg': inv.get('total_weight_kg'),
+            'total_volume_m3': inv.get('total_volume_m3'),
+            'pickup_location_id': inv.get('pickup_location_id'),
+        })
 
-        # Status badge
-        status_style = "background: #dcfce7; color: #166534;" if is_completed else "background: #fef3c7; color: #92400e;"
-        status_text = "Оценено" if is_completed else "Ожидает"
+    invoices_json = json.dumps(invoices_for_js)
 
-        return Div(
-            # Item header with status
-            Div(
-                Div(
-                    Span(brand, style="font-weight: 600; font-size: 1.1rem;"),
-                    Span(f" / {product_code}" if product_code else "", style="color: #666;"),
-                    style="flex: 1;"
-                ),
-                Span(status_text, style=f"display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; {status_style}"),
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
-            ),
+    # Count unassigned items
+    unassigned_count = len([i for i in my_items if not i.get("invoice_id")])
 
-            # Product info (read-only)
-            Div(
-                Div(f"Наименование: {name}", style="flex: 1;") if name else None,
-                Div(f"Количество: {quantity} шт.", style="font-weight: 500;"),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem; font-size: 0.875rem; color: #666;"
-            ) if name else None,
+    # Build invoice cards for left panel
+    def invoice_card(inv, idx):
+        supp = suppliers.get(inv.get("supplier_id"), "Поставщик не указан")
+        buyer = buyer_companies.get(inv.get("buyer_company_id"), {})
+        buyer_name = buyer.get("name", "Компания не указана")
+        currency = inv.get("currency", "USD")
+        currency_sym = currency_symbols.get(currency, currency)
+        weight = inv.get("total_weight_kg")
+        volume = inv.get("total_volume_m3")
 
-            # v3.0 Supply Chain section (collapsible for clarity)
-            Div(
-                H4("🔗 Цепочка поставок", style="margin: 0 0 1rem; color: #1f2937; font-size: 0.95rem;"),
+        # Count items in this invoice
+        items_in_invoice = len([i for i in my_items if i.get("invoice_id") == inv["id"]])
 
-                # Row 1: Supplier, Buyer Company, Pickup Location
-                Div(
-                    # Supplier dropdown (v3.0 - searchable)
-                    supplier_dropdown(
-                        name=f"supplier_id_{item_id}",
-                        label="Поставщик",
-                        selected_id=supplier_id,
-                        selected_label=supplier_info["label"] if supplier_info else None,
-                        placeholder="Поиск поставщика...",
-                        help_text="Внешний поставщик товара",
-                        dropdown_id=f"sup-{item_id[:8]}",
-                    ) if can_edit else Label(
-                        "Поставщик",
-                        Div(supplier_info["label"] if supplier_info else "— не выбран —",
-                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
-                    ),
-
-                    # Buyer Company dropdown (v3.0 - searchable)
-                    buyer_company_dropdown(
-                        name=f"buyer_company_id_{item_id}",
-                        label="Компания-покупатель",
-                        selected_id=buyer_company_id,
-                        selected_label=buyer_company_info["label"] if buyer_company_info else None,
-                        placeholder="Поиск компании...",
-                        help_text="Наше юрлицо для закупки",
-                        dropdown_id=f"buy-{item_id[:8]}",
-                    ) if can_edit else Label(
-                        "Компания-покупатель",
-                        Div(buyer_company_info["label"] if buyer_company_info else "— не выбрана —",
-                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
-                    ),
-
-                    # Pickup Location dropdown (v3.0 - searchable)
-                    location_dropdown(
-                        name=f"pickup_location_id_{item_id}",
-                        label="Точка отгрузки",
-                        selected_id=pickup_location_id,
-                        selected_label=pickup_location_info["label"] if pickup_location_info else None,
-                        placeholder="Поиск локации...",
-                        help_text="Откуда забирать товар",
-                        dropdown_id=f"loc-{item_id[:8]}",
-                    ) if can_edit else Label(
-                        "Точка отгрузки",
-                        Div(pickup_location_info["label"] if pickup_location_info else "— не выбрана —",
-                            style="padding: 0.5rem; background: #f3f4f6; border-radius: 4px;"),
-                    ),
-
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-                ),
-                style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid #e2e8f0;"
-            ),
-
-            # Row 2: Price, Country, Production time (2026-01-26: removed currency - set at invoice level)
-            Div(
-                Label("Закупочная цена *",
-                    Input(name=f"purchase_price_original_{item_id}", type="number", step="0.01", min="0",
-                          value=str(purchase_price) if purchase_price else "",
-                          placeholder="150.00", required=True if can_edit else False,
-                          disabled=not can_edit),
-                    Small("Цена от поставщика (валюта указывается при создании инвойса)", style="display: block; color: #666; margin-top: 0.25rem;"),
-                    style="flex: 1;"
-                ),
-                Label("Страна закупки *",
-                    Select(
-                        Option("Выберите страну...", value="", selected=not supplier_country),
-                        Option("Россия", value="RU", selected=supplier_country == "RU"),
-                        Option("Китай", value="CN", selected=supplier_country == "CN"),
-                        Option("Турция", value="TR", selected=supplier_country == "TR"),
-                        Option("Германия", value="DE", selected=supplier_country == "DE"),
-                        Option("США", value="US", selected=supplier_country == "US"),
-                        Option("Италия", value="IT", selected=supplier_country == "IT"),
-                        Option("Другая", value="OTHER", selected=supplier_country == "OTHER"),
-                        name=f"supplier_country_{item_id}",
-                        required=True if can_edit else False,
-                        disabled=not can_edit
-                    ),
-                    style="flex: 1;"
-                ),
-                Label("Срок пр-ва, дней *",
-                    Input(name=f"production_time_days_{item_id}", type="number", min="0",
-                          value=str(production_time) if production_time else "",
-                          placeholder="30", required=True if can_edit else False,
-                          disabled=not can_edit),
-                    style="flex: 1;"
-                ),
-                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-            ),
-
-            # Hidden field for item ID
-            Input(type="hidden", name=f"item_id_{index}", value=item_id),
-
-            cls="card",
-            style=f"border-left: 4px solid {'#22c55e' if is_completed else '#f59e0b'}; margin-bottom: 1rem;",
-            id=f"item-{item_id}"
+        # Calculate total for this invoice
+        total_sum = sum(
+            (item.get("purchase_price_original", 0) or 0) * (item.get("quantity", 0) or 0)
+            for item in my_items if item.get("invoice_id") == inv["id"]
         )
 
-    # Build the page
-    return page_layout(f"Закупки — {quote.get('idn_quote', 'КП')}",
+        return Div(
+            # Invoice header
+            Div(
+                Span(f"📦 Инвойс #{idx}", style="font-weight: 600; font-size: 1rem;"),
+                Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+            ),
+
+            # Supplier → Buyer
+            Div(
+                Span(supp, style="font-size: 0.875rem; color: #374151;"),
+                Span(" → ", style="color: #9ca3af;"),
+                Span(buyer_name, style="font-size: 0.875rem; color: #374151;"),
+                style="margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+            ),
+
+            # Currency, weight, items count
+            Div(
+                Span(currency, style="font-weight: 500; color: #059669; margin-right: 0.75rem;"),
+                Span(f"{weight or '—'} кг", style="color: #666; margin-right: 0.75rem;") if weight else Span("⚠ вес", style="color: #f59e0b; margin-right: 0.75rem;"),
+                Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500;") if total_sum > 0 else None,
+                style="font-size: 0.75rem; display: flex; align-items: center;"
+            ),
+
+            # Action buttons
+            Div(
+                A("Редактировать", href="#", cls="text-blue-600 text-sm",
+                  onclick=f"openEditInvoiceModal('{inv['id']}'); return false;",
+                  style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;"),
+                A("Назначить ↓", href="#", cls="text-green-600 text-sm",
+                  onclick=f"assignSelectedToInvoice('{inv['id']}'); return false;",
+                  style="font-size: 0.75rem; color: #059669;") if can_edit else None,
+                style="margin-top: 0.5rem;"
+            ) if can_edit else None,
+
+            cls="card",
+            style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid #3b82f6; cursor: pointer;",
+            id=f"invoice-card-{inv['id']}",
+            onclick=f"selectInvoice('{inv['id']}')"
+        )
+
+    return page_layout(f"Закупки — {quote_idn}",
         # Breadcrumbs
         Div(
             A("← Назад к задачам", href="/tasks"),
@@ -12023,728 +11960,985 @@ def get(quote_id: str, session):
 
         # Header
         Div(
-            H1(f"Оценка КП: {quote.get('idn_quote', f'#{quote_id[:8]}')}"),
+            H1(f"Закупки: {quote_idn}", style="margin: 0;"),
             Div(
-                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem;"),
+                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem; color: #666;"),
                 workflow_status_badge(workflow_status),
+                style="margin-top: 0.5rem;"
             ),
             style="margin-bottom: 1rem;"
         ),
 
-        # Workflow progress bar (Feature #87)
+        # Workflow progress bar
         workflow_progress_bar(workflow_status),
 
-        # Partial recalculation banner - shown when returned from client for adding items
-        Div(
-            Div(
-                Span("🔄 Добавление позиций по запросу клиента", style="font-weight: 600; font-size: 1.1rem;"),
-                style="margin-bottom: 0.5rem;"
-            ),
-            Div(
-                P("Клиент запросил добавление позиций. Вы можете добавить новые товары в существующие инвойсы.", style="margin: 0 0 0.5rem;"),
-                P("После завершения закупки КП пройдёт полный цикл пересчёта.", style="margin: 0; font-size: 0.875rem; color: #666;"),
-            ),
-            cls="card",
-            style="background: #dbeafe; border: 2px solid #3b82f6; margin-bottom: 1rem;"
-        ) if quote.get("partial_recalc") == "add_item" else None,
-
-        # Partial recalculation banner - shown for full recalculation
-        Div(
-            Div(
-                Span("🔄 Полный пересчёт по запросу клиента", style="font-weight: 600; font-size: 1.1rem;"),
-                style="margin-bottom: 0.5rem;"
-            ),
-            Div(
-                P("Клиент запросил полный пересчёт КП.", style="margin: 0 0 0.5rem;"),
-                P("После завершения закупки КП пройдёт полный цикл пересчёта.", style="margin: 0; font-size: 0.875rem; color: #666;"),
-            ),
-            cls="card",
-            style="background: #fce7f3; border: 2px solid #ec4899; margin-bottom: 1rem;"
-        ) if quote.get("partial_recalc") == "full" else None,
-
-        # Revision banner - shown when returned from quote control (Feature: multi-department return)
+        # Revision banner
         Div(
             Div(
                 Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
                 style="margin-bottom: 0.5rem;"
             ),
             Div(
-                Span("Комментарий контроллёра КП:", style="font-weight: 500;"),
-                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic; white-space: pre-wrap;"),
-                style="margin-bottom: 1rem;"
+                Span("Комментарий:", style="font-weight: 500;"),
+                P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic;"),
             ) if revision_comment else None,
-            P("После внесения исправлений верните КП на проверку.", style="margin: 0; font-size: 0.875rem;"),
             cls="card",
             style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
         ) if is_revision else None,
 
-        # Progress card with export button
+        # Progress bar
         Div(
             Div(
-                H3("Мой прогресс", style="margin: 0;"),
-                btn_link("Скачать Excel", href=f"/procurement/{quote_id}/export", variant="secondary", size="sm", icon_name="download") if total_items > 0 else None,
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+                Span(f"Прогресс: {priced_items}/{total_items} оценено", style="font-weight: 500;"),
+                Span(f" | {assigned_items} назначено на инвойсы", style="color: #666;"),
+                style="margin-bottom: 0.5rem;"
             ),
             Div(
-                Div(f"{completed_items}/{total_items} позиций", style="margin-bottom: 0.5rem;"),
-                Div(
-                    Div(style=f"width: {(completed_items/total_items*100) if total_items > 0 else 0}%; height: 100%; background: #22c55e;"),
-                    style="width: 100%; height: 12px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;"
-                ),
+                Div(style=f"width: {(priced_items/total_items*100) if total_items > 0 else 0}%; height: 8px; background: #22c55e; border-radius: 999px;"),
+                style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden;"
             ),
-            # Show success when all MY items are complete
-            Div(
-                P(icon("check-circle", size=16), " Вы завершили оценку своих позиций!", style="color: #166534; margin: 0.5rem 0 0; display: flex; align-items: center; gap: 0.5rem;"),
-                style="padding: 0.5rem; background: #dcfce7; border-radius: 0.5rem; margin-top: 0.75rem;"
-            ) if my_items_complete else None,
-            cls="card"
+            cls="card", style="padding: 1rem; margin-bottom: 1rem;"
         ),
-
-        # Overall procurement status (Feature #37)
-        Div(
-            H4("Общий статус закупок", style="margin: 0 0 0.5rem;"),
-            Div(
-                Div(f"{overall_completed}/{overall_total} позиций оценено всеми менеджерами", style="margin-bottom: 0.5rem; font-size: 0.875rem;"),
-                Div(
-                    Div(style=f"width: {(overall_completed/overall_total*100) if overall_total > 0 else 0}%; height: 8px; background: #3b82f6;"),
-                    style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 9999px; overflow: hidden;"
-                ),
-            ),
-            # Show status message
-            Div(
-                P(icon("check-circle", size=16), " Все закупки оценены! КП перешло на следующий этап.", style="color: #166534; margin: 0; display: flex; align-items: center; gap: 0.5rem;") if all_procurement_complete and workflow_status != "pending_procurement" else
-                P(icon("clock", size=16), " Ожидается оценка от других менеджеров по закупкам.", style="color: #92400e; margin: 0; display: flex; align-items: center; gap: 0.5rem;") if my_items_complete and not all_procurement_complete else None,
-                style=f"padding: 0.5rem; background: {'#dcfce7' if all_procurement_complete and workflow_status != 'pending_procurement' else '#fef3c7'}; border-radius: 0.5rem; margin-top: 0.5rem;"
-            ) if (my_items_complete and not all_procurement_complete) or (all_procurement_complete and workflow_status != "pending_procurement") else None,
-            cls="card",
-            style="background: #f8fafc; border: 1px dashed #cbd5e1;"
-        ) if overall_total > total_items else None,  # Only show if there are other brands
 
         # Warning if not in correct status
         Div(
-            P(icon("alert-triangle", size=16), f" КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}». "
-              "Редактирование недоступно.", style="color: #b45309; margin: 0;"),
-            cls="card",
-            style="background: #fffbeb;"
+            P(icon("alert-triangle", size=16), f" КП в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}». Редактирование недоступно.",
+              style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+            cls="card", style="background: #fffbeb; margin-bottom: 1rem;"
         ) if not can_edit else None,
 
-        # Form with items
-        Form(
-            # Hidden field with quote_id
-            Input(type="hidden", name="quote_id", value=quote_id),
-            Input(type="hidden", name="item_count", value=str(len(my_items))),
-
-            # Items section
+        # Two-column layout
+        Div(
+            # Left panel - Invoices
             Div(
-                H2(f"Мои позиции ({len(my_items)})"),
-                P("Заполните данные для каждой позиции:", style="color: #666; margin-bottom: 1rem;") if can_edit else None,
-                *[item_row(item, idx) for idx, item in enumerate(my_items)],
-            ) if my_items else Div(
-                P("Нет позиций с вашими брендами в этом КП.", style="color: #666;"),
-                cls="card"
+                # Header with add button
+                Div(
+                    H3("Инвойсы", style="margin: 0;"),
+                    A(icon("plus", size=16), " Новый",
+                      href="#", onclick="openCreateInvoiceModal(); return false;",
+                      style="font-size: 0.875rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
+                    ) if can_edit else None,
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                ),
+
+                # Invoice cards
+                Div(
+                    *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
+                    id="invoices-list"
+                ) if invoices else Div(
+                    P("Нет инвойсов", style="color: #666; text-align: center;"),
+                    P("Создайте инвойс, чтобы начать", style="color: #9ca3af; text-align: center; font-size: 0.875rem;"),
+                    style="padding: 2rem 0;"
+                ),
+
+                # Unassigned items count
+                Div(
+                    Div(
+                        Span(f"⚠ Без инвойса: {unassigned_count}", style="font-weight: 500; color: #92400e;"),
+                        style="padding: 0.5rem 0.75rem; background: #fef3c7; border-radius: 6px; text-align: center;"
+                    ),
+                    style="margin-top: 1rem;"
+                ) if unassigned_count > 0 else None,
+
+                style="width: 280px; flex-shrink: 0; padding-right: 1.5rem; border-right: 1px solid #e5e7eb;",
+                id="invoices-panel"
             ),
 
-            # Action buttons (2026-01-21: Two-screen workflow with invoices)
+            # Right panel - Items table
             Div(
-                btn("Далее к инвойсам", variant="primary", icon_name="arrow-right", icon_right=True, type="submit", name="action", value="next_to_invoices") if can_edit and not my_items_complete else None,
-                # Show a disabled "already complete" button when user's items are done
-                btn("Моя оценка завершена", variant="secondary", icon_name="check", disabled=True) if can_edit and my_items_complete else None,
-                # Return to quote control button (for revision workflow)
-                btn_link("Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control", variant="success", icon_name="check") if is_revision else None,
-                btn_link("К задачам", href="/tasks", variant="ghost", icon_name="arrow-left"),
-                style="display: flex; align-items: center; gap: 1rem; margin-top: 1rem;"
+                # Header
+                Div(
+                    H3(f"Позиции ({total_items})", style="margin: 0;"),
+                    Div(
+                        Span(id="selection-count", style="margin-right: 1rem; color: #666;"),
+                        A(icon("download", size=16), " Excel",
+                          href=f"/procurement/{quote_id}/export",
+                          style="font-size: 0.875rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
+                        ),
+                        style="display: flex; align-items: center;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                ),
+
+                # Copy-paste hint
+                Div(
+                    icon("clipboard", size=14),
+                    Span(" Ctrl+V для вставки цен из Excel", style="margin-left: 0.5rem;"),
+                    style="font-size: 0.75rem; color: #666; margin-bottom: 0.5rem; display: flex; align-items: center;"
+                ) if can_edit else None,
+
+                # Handsontable container
+                Div(id="items-spreadsheet", style="width: 100%; height: 500px; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px;"),
+
+                # Footer with actions
+                Div(
+                    btn("Сохранить", variant="secondary", icon_name="save", id="btn-save", onclick="saveAllChanges()") if can_edit else None,
+                    btn("Завершить закупку", variant="success", icon_name="check", id="btn-complete", onclick="completeProcurement()") if can_edit else None,
+                    btn_link("Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control", variant="primary", icon_name="arrow-up") if is_revision else None,
+                    style="display: flex; gap: 0.75rem; margin-top: 1rem;"
+                ),
+
+                style="flex: 1; padding-left: 1.5rem;",
+                id="items-panel"
             ),
 
-            method="post",
-            action=f"/procurement/{quote_id}"
+            style="display: flex; gap: 0;",
+            cls="card"
         ),
 
-        # Transition history (Feature #88)
+        # Create Invoice Modal
+        Div(
+            Div(
+                Div(
+                    H3("Новый инвойс", style="margin: 0;"),
+                    A("×", href="#", onclick="closeCreateInvoiceModal(); return false;",
+                      style="font-size: 1.5rem; color: #666; text-decoration: none;"),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
+                ),
+
+                Form(
+                    # Supplier dropdown
+                    supplier_dropdown(
+                        name="supplier_id",
+                        label="Поставщик *",
+                        required=True,
+                        placeholder="Поиск поставщика...",
+                        dropdown_id="modal-supplier"
+                    ),
+
+                    # Buyer company dropdown
+                    buyer_company_dropdown(
+                        name="buyer_company_id",
+                        label="Компания-покупатель *",
+                        required=True,
+                        placeholder="Поиск компании...",
+                        dropdown_id="modal-buyer"
+                    ),
+
+                    # Location dropdown
+                    location_dropdown(
+                        name="pickup_location_id",
+                        label="Точка отгрузки",
+                        placeholder="Поиск локации...",
+                        dropdown_id="modal-location"
+                    ),
+
+                    # Currency
+                    Div(
+                        Label("Валюта *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Select(
+                            Option("USD", value="USD", selected=True),
+                            Option("EUR", value="EUR"),
+                            Option("RUB", value="RUB"),
+                            Option("CNY", value="CNY"),
+                            Option("TRY", value="TRY"),
+                            name="currency",
+                            required=True,
+                            style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"
+                        ),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Invoice number (auto-generated)
+                    Div(
+                        Label("Номер инвойса", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Input(type="text", name="invoice_number", placeholder="Авто-генерация",
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
+                        Small("Оставьте пустым для автогенерации", style="color: #666;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Action buttons
+                    Div(
+                        btn("Создать", variant="primary", type="submit", icon_name="check"),
+                        btn("Отмена", variant="ghost", type="button", onclick="closeCreateInvoiceModal()"),
+                        style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;"
+                    ),
+
+                    id="create-invoice-form",
+                    hx_post=f"/api/procurement/{quote_id}/invoices",
+                    hx_target="#invoices-list",
+                    hx_swap="innerHTML",
+                    hx_on="htmx:afterRequest: if(event.detail.successful) closeCreateInvoiceModal();"
+                ),
+
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
+            ),
+            id="create-invoice-modal",
+            style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
+        ),
+
+        # Edit Invoice Modal
+        Div(
+            Div(
+                Div(
+                    H3("Редактировать инвойс", style="margin: 0;"),
+                    A("×", href="#", onclick="closeEditInvoiceModal(); return false;",
+                      style="font-size: 1.5rem; color: #666; text-decoration: none;"),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
+                ),
+
+                Form(
+                    Input(type="hidden", name="invoice_id", id="edit-invoice-id"),
+
+                    # Invoice number
+                    Div(
+                        Label("Номер инвойса *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Input(type="text", name="invoice_number", id="edit-invoice-number", required=True,
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Currency
+                    Div(
+                        Label("Валюта *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Select(
+                            Option("USD", value="USD"),
+                            Option("EUR", value="EUR"),
+                            Option("RUB", value="RUB"),
+                            Option("CNY", value="CNY"),
+                            Option("TRY", value="TRY"),
+                            name="currency",
+                            id="edit-invoice-currency",
+                            required=True,
+                            style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"
+                        ),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Weight
+                    Div(
+                        Label("Общий вес, кг *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Input(type="number", name="total_weight_kg", id="edit-invoice-weight", step="0.001", min="0", required=True,
+                              placeholder="125.5",
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Volume
+                    Div(
+                        Label("Общий объём, м³", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Input(type="number", name="total_volume_m3", id="edit-invoice-volume", step="0.0001", min="0",
+                              placeholder="2.5",
+                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Delete button
+                    Div(
+                        A("🗑 Удалить инвойс", href="#", onclick="deleteInvoice(); return false;",
+                          style="color: #dc2626; font-size: 0.875rem;"),
+                        style="margin-bottom: 1rem;"
+                    ),
+
+                    # Action buttons
+                    Div(
+                        btn("Сохранить", variant="primary", type="submit", icon_name="check"),
+                        btn("Отмена", variant="ghost", type="button", onclick="closeEditInvoiceModal()"),
+                        style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;"
+                    ),
+
+                    id="edit-invoice-form",
+                    hx_patch=f"/api/procurement/{quote_id}/invoices/update",
+                    hx_target="#invoices-list",
+                    hx_swap="innerHTML",
+                    hx_on="htmx:afterRequest: if(event.detail.successful) closeEditInvoiceModal();"
+                ),
+
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
+            ),
+            id="edit-invoice-modal",
+            style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
+        ),
+
+        # Transition history
         workflow_transition_history(quote_id),
+
+        # JavaScript for procurement workspace
+        Script(f"""
+        (function() {{
+            var quoteId = '{quote_id}';
+            var canEdit = {'true' if can_edit else 'false'};
+            var invoicesData = {invoices_json};
+            var itemsData = {items_json};
+            var hot = null;
+            var selectedInvoiceId = null;
+
+            // Modal functions
+            window.openCreateInvoiceModal = function() {{
+                document.getElementById('create-invoice-modal').style.display = 'flex';
+            }};
+
+            window.closeCreateInvoiceModal = function() {{
+                document.getElementById('create-invoice-modal').style.display = 'none';
+                document.getElementById('create-invoice-form').reset();
+            }};
+
+            window.openEditInvoiceModal = function(invoiceId) {{
+                var inv = invoicesData.find(function(i) {{ return i.id === invoiceId; }});
+                if (!inv) return;
+
+                document.getElementById('edit-invoice-id').value = inv.id;
+                document.getElementById('edit-invoice-number').value = inv.invoice_number || '';
+                document.getElementById('edit-invoice-currency').value = inv.currency || 'USD';
+                document.getElementById('edit-invoice-weight').value = inv.total_weight_kg || '';
+                document.getElementById('edit-invoice-volume').value = inv.total_volume_m3 || '';
+
+                selectedInvoiceId = invoiceId;
+                document.getElementById('edit-invoice-modal').style.display = 'flex';
+            }};
+
+            window.closeEditInvoiceModal = function() {{
+                document.getElementById('edit-invoice-modal').style.display = 'none';
+                selectedInvoiceId = null;
+            }};
+
+            // Invoice selection
+            window.selectInvoice = function(invoiceId) {{
+                document.querySelectorAll('[id^="invoice-card-"]').forEach(function(el) {{
+                    el.style.background = 'white';
+                }});
+                var card = document.getElementById('invoice-card-' + invoiceId);
+                if (card) card.style.background = '#eff6ff';
+                selectedInvoiceId = invoiceId;
+            }};
+
+            // Assign selected items to invoice
+            window.assignSelectedToInvoice = function(invoiceId) {{
+                if (!hot) return;
+                var selectedRows = [];
+                var sourceData = hot.getSourceData();
+
+                for (var i = 0; i < sourceData.length; i++) {{
+                    var cellMeta = hot.getCellMeta(i, 0);
+                    if (cellMeta && hot.getDataAtCell(i, 0) === true) {{
+                        selectedRows.push(sourceData[i].id);
+                    }}
+                }}
+
+                if (selectedRows.length === 0) {{
+                    alert('Выберите позиции для назначения');
+                    return;
+                }}
+
+                fetch('/api/procurement/' + quoteId + '/items/assign', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        item_ids: selectedRows,
+                        invoice_id: invoiceId
+                    }})
+                }})
+                .then(function(r) {{ return r.json(); }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        // Update table data
+                        var inv = invoicesData.find(function(i) {{ return i.id === invoiceId; }});
+                        var invLabel = inv ? '#' + inv.number : '';
+
+                        for (var i = 0; i < sourceData.length; i++) {{
+                            if (selectedRows.indexOf(sourceData[i].id) >= 0) {{
+                                sourceData[i].invoice_id = invoiceId;
+                                sourceData[i].invoice_label = invLabel;
+                                hot.setDataAtCell(i, 0, false);  // Uncheck
+                            }}
+                        }}
+                        hot.render();
+                        location.reload();  // Refresh to update counts
+                    }} else {{
+                        alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                    }}
+                }});
+            }};
+
+            // Save all changes
+            window.saveAllChanges = function() {{
+                if (!hot) return;
+                var sourceData = hot.getSourceData();
+                var updates = [];
+
+                for (var i = 0; i < sourceData.length; i++) {{
+                    var row = sourceData[i];
+                    if (row.id) {{
+                        updates.push({{
+                            id: row.id,
+                            purchase_price_original: row.price ? parseFloat(row.price) : null,
+                            production_time_days: row.production_time ? parseInt(row.production_time) : null,
+                            supplier_country: row.supplier_country || null
+                        }});
+                    }}
+                }}
+
+                fetch('/api/procurement/' + quoteId + '/items/bulk', {{
+                    method: 'PATCH',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ items: updates }})
+                }})
+                .then(function(r) {{ return r.json(); }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        alert('Сохранено успешно');
+                    }} else {{
+                        alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
+                    }}
+                }});
+            }};
+
+            // Complete procurement
+            window.completeProcurement = function() {{
+                if (!confirm('Завершить закупку? Все позиции будут отмечены как оценённые.')) return;
+
+                // First save all changes
+                window.saveAllChanges();
+
+                // Then complete
+                setTimeout(function() {{
+                    fetch('/api/procurement/' + quoteId + '/complete', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }}
+                    }})
+                    .then(function(r) {{ return r.json(); }})
+                    .then(function(data) {{
+                        if (data.success) {{
+                            alert('Закупка завершена!');
+                            location.href = '/tasks';
+                        }} else {{
+                            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                        }}
+                    }});
+                }}, 500);
+            }};
+
+            // Delete invoice
+            window.deleteInvoice = function() {{
+                if (!selectedInvoiceId) return;
+                if (!confirm('Удалить инвойс? Товары будут откреплены.')) return;
+
+                fetch('/api/procurement/' + quoteId + '/invoices/' + selectedInvoiceId, {{
+                    method: 'DELETE'
+                }})
+                .then(function(r) {{ return r.json(); }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        closeEditInvoiceModal();
+                        location.reload();
+                    }} else {{
+                        alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                    }}
+                }});
+            }};
+
+            // Update selection count
+            function updateSelectionCount() {{
+                if (!hot) return;
+                var count = 0;
+                for (var i = 0; i < hot.countRows(); i++) {{
+                    if (hot.getDataAtCell(i, 0) === true) count++;
+                }}
+                var el = document.getElementById('selection-count');
+                if (el) el.textContent = count > 0 ? count + ' выбрано' : '';
+            }}
+
+            // Country options
+            var countryOptions = ['', 'RU', 'CN', 'TR', 'DE', 'US', 'IT', 'OTHER'];
+
+            // Initialize Handsontable
+            function initTable() {{
+                var container = document.getElementById('items-spreadsheet');
+                if (!container || typeof Handsontable === 'undefined') return;
+
+                var columns = [
+                    {{data: 'selected', type: 'checkbox', width: 40, readOnly: !canEdit}},
+                    {{data: 'brand', type: 'text', readOnly: true, width: 100}},
+                    {{data: 'product_name', type: 'text', readOnly: true, width: 250}},
+                    {{data: 'quantity', type: 'numeric', readOnly: true, width: 60}},
+                    {{data: 'price', type: 'numeric', width: 90, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
+                    {{data: 'production_time', type: 'numeric', width: 70, readOnly: !canEdit}},
+                    {{data: 'supplier_country', type: 'dropdown', source: countryOptions, width: 70, readOnly: !canEdit}},
+                    {{data: 'invoice_label', type: 'text', readOnly: true, width: 70,
+                      renderer: function(instance, td, row, col, prop, value) {{
+                          td.innerHTML = value || '<span style="color:#f59e0b">—</span>';
+                          td.style.textAlign = 'center';
+                          if (value) td.style.color = '#3b82f6';
+                          return td;
+                      }}
+                    }}
+                ];
+
+                // Add 'selected' field to each item
+                itemsData.forEach(function(item) {{
+                    item.selected = false;
+                }});
+
+                hot = new Handsontable(container, {{
+                    licenseKey: 'non-commercial-and-evaluation',
+                    data: itemsData,
+                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Страна', 'Инвойс'],
+                    columns: columns,
+                    rowHeaders: true,
+                    stretchH: 'all',
+                    autoWrapRow: true,
+                    contextMenu: false,
+                    manualColumnResize: true,
+                    afterChange: function(changes, source) {{
+                        if (source === 'loadData') return;
+                        updateSelectionCount();
+                    }},
+                    cells: function(row, col) {{
+                        var cellProperties = {{}};
+                        if (col === 0) {{
+                            cellProperties.className = 'htCenter';
+                        }}
+                        return cellProperties;
+                    }}
+                }});
+
+                window.hot = hot;
+            }}
+
+            // Initialize on DOM ready
+            if (document.readyState === 'loading') {{
+                document.addEventListener('DOMContentLoaded', initTable);
+            }} else {{
+                initTable();
+            }}
+        }})();
+        """),
 
         session=session
     )
 
 
-@rt("/procurement/{quote_id}")
-async def post(quote_id: str, session, request):
-    """
-    Save procurement data for quote items.
+# ============================================================================
+# PROCUREMENT API ENDPOINTS
+# ============================================================================
 
-    Feature #35: Handler for saving procurement form data
-    - Saves all procurement fields for each item
-    - Can mark items as complete
-    """
+@rt("/api/procurement/{quote_id}/invoices", methods=["POST"])
+async def api_create_invoice(quote_id: str, session, request):
+    """Create a new invoice for procurement."""
     redirect = require_login(session)
     if redirect:
-        return redirect
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
-    user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has procurement role
     if not user_has_any_role(session, ["procurement", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    # Get form data
-    form_data = await request.form()
-    action = form_data.get("action", "save")
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
 
-    # Verify quote exists and is accessible
+    # Verify quote exists
     quote_result = supabase.table("quotes") \
-        .select("*") \
+        .select("id, idn_quote") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
         .execute()
 
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
     quote = quote_result.data
-    if not quote:
-        return RedirectResponse("/procurement", status_code=303)
 
-    # Check workflow status allows editing
-    workflow_status = quote.get("workflow_status", "draft")
-    if workflow_status not in ["pending_procurement", "draft"]:
-        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+    # Parse form data
+    form = await request.form()
 
-    # Get user's assigned brands to filter items
-    my_brands = get_assigned_brands(user_id, org_id)
-    my_brands_lower = [b.lower() for b in my_brands]
+    supplier_id = form.get("supplier_id")
+    buyer_company_id = form.get("buyer_company_id")
+    pickup_location_id = form.get("pickup_location_id") or None
+    currency = form.get("currency", "USD")
+    invoice_number = form.get("invoice_number", "").strip()
 
-    # Get items count from form
-    item_count = int(form_data.get("item_count", 0))
+    if not supplier_id or not buyer_company_id:
+        return JSONResponse({"success": False, "error": "Supplier and buyer company are required"}, status_code=400)
 
-    # Process each item from the form
-    updated_items = 0
-    for idx in range(item_count):
-        item_id = form_data.get(f"item_id_{idx}")
-        if not item_id:
-            continue
+    # Generate invoice number if not provided
+    if not invoice_number:
+        # Count existing invoices for this quote
+        count_result = supabase.table("invoices").select("id", count="exact").eq("quote_id", quote_id).execute()
+        idx = (count_result.count or 0) + 1
+        invoice_number = f"INV-{idx:02d}-{quote.get('idn_quote', quote_id[:8])}"
 
-        # Verify this item belongs to user's brands
-        item_result = supabase.table("quote_items") \
-            .select("id, brand") \
-            .eq("id", item_id) \
-            .eq("quote_id", quote_id) \
-            .single() \
+    try:
+        # Create invoice
+        invoice_data = {
+            "quote_id": quote_id,
+            "supplier_id": supplier_id,
+            "buyer_company_id": buyer_company_id,
+            "pickup_location_id": pickup_location_id,
+            "currency": currency,
+            "invoice_number": invoice_number,
+            "total_weight_kg": 0.001,  # Placeholder, will be updated
+        }
+
+        result = supabase.table("invoices").insert(invoice_data).execute()
+
+        if result.data:
+            # Return updated invoice list HTML
+            return await render_invoices_list(quote_id, org_id, session)
+        else:
+            return JSONResponse({"success": False, "error": "Failed to create invoice"}, status_code=500)
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/api/procurement/{quote_id}/invoices/update", methods=["PATCH"])
+async def api_update_invoice(quote_id: str, session, request):
+    """Update an existing invoice."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    form = await request.form()
+    invoice_id = form.get("invoice_id")
+
+    if not invoice_id:
+        return JSONResponse({"success": False, "error": "Invoice ID required"}, status_code=400)
+
+    supabase = get_supabase()
+
+    # Build update data
+    update_data = {}
+
+    invoice_number = form.get("invoice_number")
+    if invoice_number:
+        update_data["invoice_number"] = invoice_number.strip()
+
+    currency = form.get("currency")
+    if currency:
+        update_data["currency"] = currency
+
+    weight = form.get("total_weight_kg")
+    if weight:
+        update_data["total_weight_kg"] = float(weight)
+
+    volume = form.get("total_volume_m3")
+    if volume:
+        update_data["total_volume_m3"] = float(volume)
+
+    if not update_data:
+        return JSONResponse({"success": False, "error": "No fields to update"}, status_code=400)
+
+    try:
+        supabase.table("invoices").update(update_data).eq("id", invoice_id).execute()
+
+        # Also update currency on linked items
+        if currency:
+            supabase.table("quote_items") \
+                .update({"purchase_currency": currency}) \
+                .eq("invoice_id", invoice_id) \
+                .execute()
+
+        return await render_invoices_list(quote_id, org_id, session)
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/api/procurement/{quote_id}/invoices/{invoice_id}", methods=["DELETE"])
+async def api_delete_invoice(quote_id: str, invoice_id: str, session):
+    """Delete an invoice and unlink items."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    supabase = get_supabase()
+
+    try:
+        # Unlink items first
+        supabase.table("quote_items") \
+            .update({"invoice_id": None}) \
+            .eq("invoice_id", invoice_id) \
             .execute()
 
-        item = item_result.data
-        if not item or (item.get("brand") or "").lower() not in my_brands_lower:
-            continue
+        # Delete invoice
+        supabase.table("invoices").delete().eq("id", invoice_id).execute()
 
-        # Build update data (Simplified 2026-01-21)
-        update_data = {}
+        return JSONResponse({"success": True})
 
-        # NEW: Purchase price in supplier's currency
-        purchase_price = form_data.get(f"purchase_price_original_{item_id}")
-        if purchase_price:
-            update_data["purchase_price_original"] = float(purchase_price)
-
-        # NEW: Purchase currency (USD/EUR/RUB/CNY/TRY)
-        purchase_currency = form_data.get(f"purchase_currency_{item_id}")
-        if purchase_currency:
-            update_data["purchase_currency"] = purchase_currency
-
-        # NEW: Supplier country
-        supplier_country = form_data.get(f"supplier_country_{item_id}")
-        if supplier_country:
-            update_data["supplier_country"] = supplier_country
-
-        # v3.0: Supply chain fields
-        supplier_id = form_data.get(f"supplier_id_{item_id}")
-        if supplier_id:
-            update_data["supplier_id"] = supplier_id
-        else:
-            update_data["supplier_id"] = None
-
-        buyer_company_id = form_data.get(f"buyer_company_id_{item_id}")
-        if buyer_company_id:
-            update_data["buyer_company_id"] = buyer_company_id
-        else:
-            update_data["buyer_company_id"] = None
-
-        pickup_location_id = form_data.get(f"pickup_location_id_{item_id}")
-        if pickup_location_id:
-            update_data["pickup_location_id"] = pickup_location_id
-        else:
-            update_data["pickup_location_id"] = None
-
-        # Production time
-        production_time = form_data.get(f"production_time_days_{item_id}")
-        if production_time:
-            update_data["production_time_days"] = int(production_time)
-
-        # If completing, mark procurement status
-        if action == "complete":
-            update_data["procurement_status"] = "completed"
-            update_data["procurement_completed_at"] = datetime.utcnow().isoformat()
-            update_data["procurement_completed_by"] = user_id
-
-        # Update the item
-        if update_data:
-            supabase.table("quote_items") \
-                .update(update_data) \
-                .eq("id", item_id) \
-                .execute()
-            updated_items += 1
-
-    # Feature #37: If completing, check if ALL procurement is done and trigger workflow transition
-    if action == "complete" and updated_items > 0:
-        # Get user's roles for the workflow transition
-        user_roles = get_user_roles_from_session(session)
-
-        # Try to complete procurement and transition to next status
-        completion_result = complete_procurement(
-            quote_id=quote_id,
-            actor_id=user_id,
-            actor_roles=user_roles
-        )
-
-        # Note: Even if not all items are complete (other users' brands still pending),
-        # the user's items are saved. The workflow transition only happens when ALL
-        # items across ALL brands are complete.
-
-        # If transition was successful, show success message (via redirect)
-        # If not (other items still pending), user sees updated progress on the page
-
-    # Redirect based on action (2026-01-21: Two-screen workflow)
-    if action == "next_to_invoices":
-        return RedirectResponse(f"/procurement/{quote_id}/invoices", status_code=303)
-    else:
-        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
-# ============================================================================
-# PROCUREMENT EXCEL EXPORT (Feature #36)
-# ============================================================================
-
-# ============================================================================
-# PROCUREMENT INVOICES (Feature: Invoice-based workflow)
-# ============================================================================
-
-@rt("/procurement/{quote_id}/invoices")
-def get(quote_id: str, session):
-    """
-    Procurement invoices screen (Screen 2 of 2-screen workflow).
-
-    Groups quote items into invoices by (supplier + buyer_company + pickup_location).
-    Procurement manager enters: invoice_number, total_weight_kg, total_volume_m3.
-    """
+@rt("/api/procurement/{quote_id}/items/assign", methods=["POST"])
+async def api_assign_items_to_invoice(quote_id: str, session, request):
+    """Bulk assign items to an invoice."""
     redirect = require_login(session)
     if redirect:
-        return redirect
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except:
+        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
+
+    item_ids = data.get("item_ids", [])
+    invoice_id = data.get("invoice_id")
+
+    if not item_ids or not invoice_id:
+        return JSONResponse({"success": False, "error": "item_ids and invoice_id required"}, status_code=400)
+
+    supabase = get_supabase()
+
+    try:
+        # Get invoice currency
+        invoice_result = supabase.table("invoices").select("currency").eq("id", invoice_id).single().execute()
+        currency = invoice_result.data.get("currency", "USD") if invoice_result.data else "USD"
+
+        # Update items
+        supabase.table("quote_items") \
+            .update({
+                "invoice_id": invoice_id,
+                "purchase_currency": currency
+            }) \
+            .in_("id", item_ids) \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        return JSONResponse({"success": True, "updated": len(item_ids)})
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/api/procurement/{quote_id}/items/bulk", methods=["PATCH"])
+async def api_bulk_update_items(quote_id: str, session, request):
+    """Bulk update item prices and production times."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    body = await request.body()
+    try:
+        data = json.loads(body)
+    except:
+        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
+
+    items = data.get("items", [])
+    if not items:
+        return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
+
+    supabase = get_supabase()
+    updated = 0
+
+    try:
+        for item in items:
+            item_id = item.get("id")
+            if not item_id:
+                continue
+
+            update_data = {}
+
+            if "purchase_price_original" in item and item["purchase_price_original"] is not None:
+                update_data["purchase_price_original"] = item["purchase_price_original"]
+
+            if "production_time_days" in item and item["production_time_days"] is not None:
+                update_data["production_time_days"] = item["production_time_days"]
+
+            if "supplier_country" in item:
+                update_data["supplier_country"] = item["supplier_country"] or None
+
+            if update_data:
+                supabase.table("quote_items") \
+                    .update(update_data) \
+                    .eq("id", item_id) \
+                    .eq("quote_id", quote_id) \
+                    .execute()
+                updated += 1
+
+        return JSONResponse({"success": True, "updated": updated})
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/api/procurement/{quote_id}/complete", methods=["POST"])
+async def api_complete_procurement(quote_id: str, session):
+    """Complete procurement for all user's items."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has procurement role
     if not user_has_any_role(session, ["procurement", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
-
-    # Get the quote with customer info
-    quote_result = supabase.table("quotes") \
-        .select("*, customers(name)") \
-        .eq("id", quote_id) \
-        .eq("organization_id", org_id) \
-        .single() \
-        .execute()
-
-    quote = quote_result.data
-    if not quote:
-        return RedirectResponse("/procurement", status_code=303)
-
-    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
-    quote_number = quote.get("quote_number", "")
 
     # Get user's assigned brands
     my_brands = get_assigned_brands(user_id, org_id)
     my_brands_lower = [b.lower() for b in my_brands]
 
-    # Get all items for this quote (only my brands)
+    # Get all items for this quote
     items_result = supabase.table("quote_items") \
-        .select("*") \
+        .select("id, brand") \
         .eq("quote_id", quote_id) \
-        .order("created_at") \
         .execute()
 
     all_items = items_result.data or []
 
     # Filter items for my brands
+    my_item_ids = [item["id"] for item in all_items
+                   if (item.get("brand") or "").lower() in my_brands_lower]
+
+    if my_item_ids:
+        # Mark items as completed
+        supabase.table("quote_items") \
+            .update({
+                "procurement_status": "completed",
+                "procurement_completed_at": datetime.utcnow().isoformat(),
+                "procurement_completed_by": user_id
+            }) \
+            .in_("id", my_item_ids) \
+            .execute()
+
+    # Check if ALL items are complete and trigger workflow transition
+    user_roles = get_user_roles_from_session(session)
+    completion_result = complete_procurement(
+        quote_id=quote_id,
+        actor_id=user_id,
+        actor_roles=user_roles
+    )
+
+    return JSONResponse({
+        "success": True,
+        "completed_items": len(my_item_ids),
+        "workflow_transitioned": completion_result.success if completion_result else False
+    })
+
+
+async def render_invoices_list(quote_id: str, org_id: str, session):
+    """Helper to render the invoices list HTML for HTMX updates."""
+    supabase = get_supabase()
+    user = session["user"]
+    user_id = user["id"]
+
+    # Get user's assigned brands
+    my_brands = get_assigned_brands(user_id, org_id)
+    my_brands_lower = [b.lower() for b in my_brands]
+
+    # Get invoices
+    invoices_result = supabase.table("invoices") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("created_at") \
+        .execute()
+
+    invoices = invoices_result.data or []
+
+    # Get items
+    items_result = supabase.table("quote_items") \
+        .select("id, brand, invoice_id, purchase_price_original, quantity") \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    all_items = items_result.data or []
     my_items = [item for item in all_items
                 if (item.get("brand") or "").lower() in my_brands_lower]
 
-    if not my_items:
-        return page_layout("Инвойсы",
-            H1("Нет товаров для группировки"),
-            P("У вас нет товаров в этом КП."),
-            btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="secondary", icon_name="arrow-left")
-        )
-
-    # Group items into invoices by (supplier + buyer_company + pickup_location + currency)
-    from collections import defaultdict
-    invoice_groups = defaultdict(list)
-
-    for item in my_items:
-        # Skip items without required fields (2026-01-26: removed purchase_currency - set at invoice level)
-        if not all([item.get("supplier_id"), item.get("buyer_company_id")]):
-            continue
-
-        # Create grouping key (2026-01-26: group by supplier/buyer/location only, currency selected per invoice)
-        key = (
-            item.get("supplier_id"),
-            item.get("buyer_company_id"),
-            item.get("pickup_location_id"),  # Can be None
-        )
-        invoice_groups[key].append(item)
-
-    if not invoice_groups:
-        return page_layout("Инвойсы",
-            H1("Нет товаров для группировки"),
-            P("Товары не заполнены полностью (поставщик, компания-покупатель)."),
-            btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="secondary", icon_name="arrow-left")
-        )
-
-    # Fetch supplier and buyer company names for display
-    supplier_ids = list(set(item.get("supplier_id") for group in invoice_groups.values() for item in group if item.get("supplier_id")))
-    buyer_company_ids = list(set(item.get("buyer_company_id") for group in invoice_groups.values() for item in group if item.get("buyer_company_id")))
-
+    # Get supplier and buyer names
+    supplier_ids = list(set(inv.get("supplier_id") for inv in invoices if inv.get("supplier_id")))
     suppliers = {}
     if supplier_ids:
         suppliers_result = supabase.table("suppliers").select("id, name").in_("id", supplier_ids).execute()
         suppliers = {s["id"]: s["name"] for s in suppliers_result.data or []}
 
+    buyer_company_ids = list(set(inv.get("buyer_company_id") for inv in invoices if inv.get("buyer_company_id")))
     buyer_companies = {}
-    buyer_company_codes = {}
     if buyer_company_ids:
-        buyers_result = supabase.table("buyer_companies").select("id, name, company_code").in_("id", buyer_company_ids).execute()
+        buyers_result = supabase.table("buyer_companies").select("id, name").in_("id", buyer_company_ids).execute()
         buyer_companies = {b["id"]: b["name"] for b in buyers_result.data or []}
-        buyer_company_codes = {b["id"]: b.get("company_code", "INV") for b in buyers_result.data or []}
 
-    # Check if invoices already exist for this quote
-    existing_invoices_result = supabase.table("invoices") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .execute()
+    currency_symbols = {"USD": "$", "EUR": "€", "RUB": "₽", "CNY": "¥", "TRY": "₺"}
 
-    # 2026-01-26: Changed to 3-tuple key (currency now editable per invoice)
-    existing_invoices = {
-        (inv["supplier_id"], inv["buyer_company_id"], inv["pickup_location_id"]): inv
-        for inv in (existing_invoices_result.data or [])
-    }
+    # Build invoice cards
+    cards = []
+    for idx, inv in enumerate(invoices, 1):
+        supp = suppliers.get(inv.get("supplier_id"), "—")
+        buyer = buyer_companies.get(inv.get("buyer_company_id"), "—")
+        currency = inv.get("currency", "USD")
+        currency_sym = currency_symbols.get(currency, currency)
+        weight = inv.get("total_weight_kg")
 
-    # Build invoice cards (2026-01-26: key is now 3-tuple, currency is selected per invoice)
-    invoice_cards = []
-    for idx, (key, items) in enumerate(invoice_groups.items(), 1):
-        supplier_id, buyer_company_id, pickup_location_id = key
-
-        # Get existing invoice if any
-        existing_invoice = existing_invoices.get(key)
-
-        # Determine default currency: from existing invoice, or USD as default
-        default_currency = existing_invoice.get("currency", "USD") if existing_invoice else "USD"
-
-        # Calculate total sum for this invoice
+        items_in_invoice = len([i for i in my_items if i.get("invoice_id") == inv["id"]])
         total_sum = sum(
             (item.get("purchase_price_original", 0) or 0) * (item.get("quantity", 0) or 0)
-            for item in items
+            for item in my_items if item.get("invoice_id") == inv["id"]
         )
 
-        supplier_name = suppliers.get(supplier_id, "Неизвестный поставщик")
-        buyer_name = buyer_companies.get(buyer_company_id, "Неизвестная компания")
-        buyer_code = buyer_company_codes.get(buyer_company_id, "INV")
-
-        # Generate invoice number: {buyer_code}-{NN}-{quote_idn}
-        quote_idn = quote.get("idn_quote", f"Q-{quote_id[:8]}")
-        generated_invoice_number = f"{buyer_code}-{idx:02d}-{quote_idn}"
-
-        invoice_cards.append(
+        cards.append(
             Div(
-                H3(icon("package", size=20), f" Инвойс #{idx}: {supplier_name}", style="margin: 0 0 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
-                P(f"Компания-покупатель: {buyer_name}", style="color: #666; font-size: 0.875rem; margin: 0 0 1rem;"),
-
-                # Items list
                 Div(
-                    Table(
-                        Thead(
-                            Tr(
-                                Th("Товар"),
-                                Th("Количество"),
-                                Th("Цена"),
-                                Th("Сумма")
-                            )
-                        ),
-                        Tbody(
-                            *[Tr(
-                                Td(item.get("product_name", "—")),
-                                Td(str(item.get("quantity", 0))),
-                                Td(f"{item.get('purchase_price_original', 0):.2f}"),
-                                Td(f"{(item.get('purchase_price_original', 0) or 0) * (item.get('quantity', 0) or 0):.2f}")
-                            ) for item in items]
-                        ),
-                        style="margin-bottom: 1rem; font-size: 0.875rem;"
-                    ),
-                    Div(
-                        Strong("Общая сумма закупки: "),
-                        Span(f"{total_sum:.2f}", id=f"total-sum-value-{idx}"),
-                        Span(" "),
-                        Span({"USD": "$", "EUR": "€", "RUB": "₽", "CNY": "¥", "TRY": "₺"}.get(default_currency, default_currency), id=f"total-sum-currency-{idx}"),
-                        style="text-align: right; font-size: 1rem; margin-bottom: 1rem; color: #16a34a;"
-                    ),
-                    P("Для сверки с инвойсом поставщика", style="color: #666; font-size: 0.75rem; text-align: right; margin: 0;")
+                    Span(f"📦 Инвойс #{idx}", style="font-weight: 600;"),
+                    Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px;"),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                 ),
-
-                # Invoice input fields (2026-01-26: added currency selector, auto-generated invoice number)
                 Div(
-                    Label("Номер инвойса *",
-                        Input(name=f"invoice_number_{idx}", type="text",
-                              value=existing_invoice.get("invoice_number", "") if existing_invoice else generated_invoice_number,
-                              placeholder=generated_invoice_number,
-                              required=True),
-                        Small(f"Формат: {buyer_code}-НН-номер КП", style="color: #666; display: block; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    Label("Валюта инвойса *",
-                        Select(
-                            Option("USD", value="USD", selected=default_currency == "USD"),
-                            Option("EUR", value="EUR", selected=default_currency == "EUR"),
-                            Option("RUB", value="RUB", selected=default_currency == "RUB"),
-                            Option("CNY", value="CNY", selected=default_currency == "CNY"),
-                            Option("TRY", value="TRY", selected=default_currency == "TRY"),
-                            name=f"currency_{idx}",
-                            required=True,
-                            onchange=f"document.getElementById('total-sum-currency-{idx}').textContent = {{'USD':'$','EUR':'€','RUB':'₽','CNY':'¥','TRY':'₺'}}[this.value] || this.value"
-                        ),
-                        Small("Валюта закупки", style="color: #666; display: block; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    Label("Общий вес, кг *",
-                        Input(name=f"total_weight_kg_{idx}", type="number", step="0.001", min="0",
-                              value=str(existing_invoice.get("total_weight_kg", "")) if existing_invoice else "",
-                              placeholder="125.5",
-                              required=True),
-                        Small("Вес всегда известен", style="color: #666; display: block; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    Label("Общий объем, м³",
-                        Input(name=f"total_volume_m3_{idx}", type="number", step="0.0001", min="0",
-                              value=str(existing_invoice.get("total_volume_m3", "")) if existing_invoice else "",
-                              placeholder="2.5"),
-                        Small("Необязательно (если известно)", style="color: #666; display: block; margin-top: 0.25rem;"),
-                        style="flex: 1;"
-                    ),
-                    # Hidden fields to store grouping key
-                    Input(type="hidden", name=f"supplier_id_{idx}", value=supplier_id),
-                    Input(type="hidden", name=f"buyer_company_id_{idx}", value=buyer_company_id),
-                    Input(type="hidden", name=f"pickup_location_id_{idx}", value=pickup_location_id or ""),
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;"
+                    Span(supp, style="font-size: 0.875rem;"),
+                    Span(" → ", style="color: #9ca3af;"),
+                    Span(buyer, style="font-size: 0.875rem;"),
+                    style="margin-bottom: 0.5rem;"
                 ),
-
+                Div(
+                    Span(currency, style="font-weight: 500; color: #059669; margin-right: 0.75rem;"),
+                    Span(f"{weight or '—'} кг", style="color: #666; margin-right: 0.75rem;") if weight else Span("⚠ вес", style="color: #f59e0b; margin-right: 0.75rem;"),
+                    Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500;") if total_sum > 0 else None,
+                    style="font-size: 0.75rem;"
+                ),
+                Div(
+                    A("Редактировать", href="#", onclick=f"openEditInvoiceModal('{inv['id']}'); return false;",
+                      style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;"),
+                    A("Назначить ↓", href="#", onclick=f"assignSelectedToInvoice('{inv['id']}'); return false;",
+                      style="font-size: 0.75rem; color: #059669;"),
+                    style="margin-top: 0.5rem;"
+                ),
                 cls="card",
-                style="background: white; border-left: 4px solid #3b82f6; margin-bottom: 1.5rem;"
+                style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid #3b82f6;",
+                id=f"invoice-card-{inv['id']}",
+                onclick=f"selectInvoice('{inv['id']}')"
             )
         )
 
-    # Hidden field for total invoice count
-    hidden_invoice_count = Input(type="hidden", name="invoice_count", value=str(len(invoice_cards)))
-
-    return page_layout(f"Инвойсы — {quote_number}",
-        A("← Назад к товарам", href=f"/procurement/{quote_id}", style="display: inline-block; margin-bottom: 1rem;"),
-        H1(f"Инвойсы: {quote_number}"),
-        P(f"Клиент: {customer_name}", style="color: #666; margin-bottom: 2rem;"),
-
-        Form(
-            *invoice_cards,
-            hidden_invoice_count,
-
-            Div(
-                btn("Сохранить инвойсы", variant="secondary", icon_name="save", type="submit", name="action", value="save"),
-                btn("Завершить оценку", variant="success", icon_name="check", type="submit", name="action", value="complete"),
-                btn_link("Назад к товарам", href=f"/procurement/{quote_id}", variant="ghost", icon_name="arrow-left", cls="ml-auto"),
-                style="display: flex; align-items: center; gap: 0.75rem; margin-top: 2rem;"
-            ),
-
-            method="post",
-            action=f"/procurement/{quote_id}/invoices"
-        )
-    )
-
-
-@rt("/procurement/{quote_id}/invoices")
-async def post(quote_id: str, request: Request, session):
-    """
-    Save invoices to database (Screen 2 POST handler).
-
-    Groups items into invoices and saves invoice metadata:
-    - invoice_number, total_weight_kg, total_volume_m3
-    - Links quote_items to invoices via invoice_id
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    # Check if user has procurement role
-    if not user_has_any_role(session, ["procurement", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Get form data
-    form = await request.form()
-    form_data = dict(form)
-
-    action = form_data.get("action", "save")
-    invoice_count = int(form_data.get("invoice_count", 0))
-
-    if invoice_count == 0:
-        return RedirectResponse(f"/procurement/{quote_id}/invoices", status_code=303)
-
-    # Get user's assigned brands
-    my_brands = get_assigned_brands(user_id, org_id)
-    my_brands_lower = [b.lower() for b in my_brands]
-
-    # Get all items for this quote (only my brands)
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .order("created_at") \
-        .execute()
-
-    all_items = items_result.data or []
-
-    # Filter items for my brands
-    my_items = [item for item in all_items
-                if (item.get("brand") or "").lower() in my_brands_lower]
-
-    # Group items by supplier/buyer/location (2026-01-26: currency is now per invoice, not per item)
-    from collections import defaultdict
-    invoice_groups = defaultdict(list)
-
-    for item in my_items:
-        if not all([item.get("supplier_id"), item.get("buyer_company_id")]):
-            continue
-
-        key = (
-            item.get("supplier_id"),
-            item.get("buyer_company_id"),
-            item.get("pickup_location_id"),
-        )
-        invoice_groups[key].append(item)
-
-    # Process each invoice
-    saved_invoices = 0
-    for idx in range(1, invoice_count + 1):
-        invoice_number = form_data.get(f"invoice_number_{idx}", "").strip()
-        total_weight_kg = form_data.get(f"total_weight_kg_{idx}")
-        total_volume_m3 = form_data.get(f"total_volume_m3_{idx}")
-        supplier_id = form_data.get(f"supplier_id_{idx}")
-        buyer_company_id = form_data.get(f"buyer_company_id_{idx}")
-        pickup_location_id = form_data.get(f"pickup_location_id_{idx}")
-        currency = form_data.get(f"currency_{idx}")
-
-        # Validation
-        if not invoice_number:
-            continue
-        if not total_weight_kg:
-            continue
-        if not currency:
-            continue
-
-        # Create grouping key to match items (2026-01-26: 3-tuple, currency is per invoice)
-        key = (
-            supplier_id,
-            buyer_company_id,
-            pickup_location_id if pickup_location_id else None,
+    if not cards:
+        return Div(
+            P("Нет инвойсов", style="color: #666; text-align: center;"),
+            P("Создайте инвойс, чтобы начать", style="color: #9ca3af; text-align: center; font-size: 0.875rem;"),
+            style="padding: 2rem 0;"
         )
 
-        items_for_invoice = invoice_groups.get(key, [])
-        if not items_for_invoice:
-            continue
+    return Div(*cards)
 
-        # Check if invoice already exists (2026-01-26: don't match by currency, allow currency change)
-        existing_invoice_result = supabase.table("invoices") \
-            .select("id") \
-            .eq("quote_id", quote_id) \
-            .eq("supplier_id", supplier_id) \
-            .eq("buyer_company_id", buyer_company_id)
 
-        if pickup_location_id:
-            existing_invoice_result = existing_invoice_result.eq("pickup_location_id", pickup_location_id)
-        else:
-            existing_invoice_result = existing_invoice_result.is_("pickup_location_id", "null")
-
-        existing_invoice = existing_invoice_result.execute()
-
-        invoice_data = {
-            "quote_id": quote_id,
-            "supplier_id": supplier_id,
-            "buyer_company_id": buyer_company_id,
-            "pickup_location_id": pickup_location_id if pickup_location_id else None,
-            "invoice_number": invoice_number,
-            "currency": currency,
-            "total_weight_kg": float(total_weight_kg),
-            "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
-        }
-
-        if existing_invoice.data:
-            # Update existing invoice
-            invoice_id = existing_invoice.data[0]["id"]
-            supabase.table("invoices") \
-                .update(invoice_data) \
-                .eq("id", invoice_id) \
-                .execute()
-        else:
-            # Insert new invoice
-            invoice_result = supabase.table("invoices") \
-                .insert(invoice_data) \
-                .execute()
-            invoice_id = invoice_result.data[0]["id"]
-
-        # Link items to this invoice and set their purchase_currency from invoice
-        # (2026-01-26: currency is now set at invoice level, propagated to items)
-        item_ids = [item["id"] for item in items_for_invoice]
-        if item_ids:
-            supabase.table("quote_items") \
-                .update({"invoice_id": invoice_id, "purchase_currency": currency}) \
-                .in_("id", item_ids) \
-                .execute()
-
-        saved_invoices += 1
-
-    # Mark all my items as procurement completed if action is complete
-    if action == "complete":
-        # Mark items as completed
-        item_ids = [item["id"] for item in my_items]
-        if item_ids:
-            supabase.table("quote_items") \
-                .update({
-                    "procurement_status": "completed",
-                    "procurement_completed_at": datetime.utcnow().isoformat(),
-                    "procurement_completed_by": user_id
-                }) \
-                .in_("id", item_ids) \
-                .execute()
-
-        # Check if ALL items are complete and trigger workflow transition
-        user_roles = get_user_roles_from_session(session)
-        completion_result = complete_procurement(
-            quote_id=quote_id,
-            actor_id=user_id,
-            actor_roles=user_roles
-        )
-
-    # Redirect back to procurement list
-    return RedirectResponse(f"/procurement", status_code=303)
+# ============================================================================
+# PROCUREMENT EXCEL EXPORT (Feature #36)
+# ============================================================================
 
 
 # ============================================================================
