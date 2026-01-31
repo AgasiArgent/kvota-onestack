@@ -12088,6 +12088,12 @@ def get(quote_id: str, session):
 
         # Create Invoice Modal
         Div(
+            # Backdrop (separate element with onclick)
+            Div(
+                onclick="closeCreateInvoiceModal()",
+                style="position: absolute; inset: 0;"
+            ),
+            # Content box (sibling, not child of backdrop)
             Div(
                 Div(
                     H3("Новый инвойс", style="margin: 0;"),
@@ -12162,7 +12168,7 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeCreateInvoiceModal();"
                 ),
 
-                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
+                style="position: relative; background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
             ),
             id="create-invoice-modal",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
@@ -12170,6 +12176,12 @@ def get(quote_id: str, session):
 
         # Edit Invoice Modal
         Div(
+            # Backdrop (separate element with onclick)
+            Div(
+                onclick="closeEditInvoiceModal()",
+                style="position: absolute; inset: 0;"
+            ),
+            # Content box
             Div(
                 Div(
                     H3("Редактировать инвойс", style="margin: 0;"),
@@ -12245,7 +12257,7 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeEditInvoiceModal();"
                 ),
 
-                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
+                style="position: relative; background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
             ),
             id="edit-invoice-modal",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
@@ -12290,27 +12302,6 @@ def get(quote_id: str, session):
 
             window.closeEditInvoiceModal = function() {{
                 document.getElementById('edit-invoice-modal').style.display = 'none';
-
-            // Setup modal backdrop click handlers (close only on direct backdrop click)
-            var createModal = document.getElementById('create-invoice-modal');
-            var editModal = document.getElementById('edit-invoice-modal');
-
-            if (createModal) {{
-                createModal.addEventListener('click', function(e) {{
-                    // Only close if clicking directly on the backdrop (not on children)
-                    if (e.target === createModal) {{
-                        window.closeCreateInvoiceModal();
-                    }}
-                }});
-            }}
-
-            if (editModal) {{
-                editModal.addEventListener('click', function(e) {{
-                    if (e.target === editModal) {{
-                        window.closeEditInvoiceModal();
-                    }}
-                }});
-            }}
                 selectedInvoiceId = null;
             }};
 
