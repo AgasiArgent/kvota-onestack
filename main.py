@@ -12021,14 +12021,15 @@ def get(quote_id: str, session):
                     style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
                 ),
 
-                # Invoice cards
+                # Invoice cards (always has id for HTMX target)
                 Div(
                     *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
                     id="invoices-list"
                 ) if invoices else Div(
                     P("Нет инвойсов", style="color: #666; text-align: center;"),
                     P("Создайте инвойс, чтобы начать", style="color: #9ca3af; text-align: center; font-size: 0.875rem;"),
-                    style="padding: 2rem 0;"
+                    style="padding: 2rem 0;",
+                    id="invoices-list"
                 ),
 
                 # Unassigned items count
