@@ -12162,11 +12162,10 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeCreateInvoiceModal();"
                 ),
 
-                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;",
-                onclick="event.stopPropagation();"
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
             ),
             id="create-invoice-modal",
-            onclick="closeCreateInvoiceModal();",
+            onclick="if(event.target === this) closeCreateInvoiceModal();",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
         ),
 
@@ -12247,11 +12246,10 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeEditInvoiceModal();"
                 ),
 
-                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;",
-                onclick="event.stopPropagation();"
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
             ),
             id="edit-invoice-modal",
-            onclick="closeEditInvoiceModal();",
+            onclick="if(event.target === this) closeEditInvoiceModal();",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
         ),
 
