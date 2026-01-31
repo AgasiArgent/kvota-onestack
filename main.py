@@ -12170,6 +12170,7 @@ def get(quote_id: str, session):
                 ),
 
                 id="create-invoice-modal-box",
+                onclick="event.stopPropagation();",
                 style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; z-index: 1000;"
             ),
             id="create-invoice-modal"
@@ -12260,6 +12261,7 @@ def get(quote_id: str, session):
                 ),
 
                 id="edit-invoice-modal-box",
+                onclick="event.stopPropagation();",
                 style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; z-index: 1000;"
             ),
             id="edit-invoice-modal"
