@@ -12086,21 +12086,22 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Create Invoice Modal (sibling pattern like feedback modal)
+        # Create Invoice Modal (exact feedback modal pattern with Tailwind)
         Div(
             # Backdrop (click to close)
             Div(
                 id="create-invoice-backdrop",
                 onclick="closeCreateInvoiceModal()",
-                style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"
+                cls="fixed inset-0 bg-black/50 z-[999]",
+                style="display: none;"
             ),
             # Modal box (on top of backdrop)
             Div(
                 Div(
-                    H3("Новый инвойс", style="margin: 0;"),
+                    H3("Новый инвойс", cls="font-bold text-lg"),
                     A("×", href="#", onclick="closeCreateInvoiceModal(); return false;",
-                      style="font-size: 1.5rem; color: #666; text-decoration: none;"),
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
+                      cls="text-2xl text-gray-500 hover:text-gray-700 no-underline"),
+                    cls="flex justify-between items-center mb-4"
                 ),
 
                 Form(
@@ -12132,7 +12133,7 @@ def get(quote_id: str, session):
 
                     # Currency
                     Div(
-                        Label("Валюта *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Валюта *", cls="block mb-2 font-medium"),
                         Select(
                             Option("USD", value="USD", selected=True),
                             Option("EUR", value="EUR"),
@@ -12141,25 +12142,25 @@ def get(quote_id: str, session):
                             Option("TRY", value="TRY"),
                             name="currency",
                             required=True,
-                            style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"
+                            cls="w-full p-2 border border-gray-300 rounded-md"
                         ),
-                        style="margin-bottom: 1rem;"
+                        cls="mb-4"
                     ),
 
                     # Invoice number (auto-generated)
                     Div(
-                        Label("Номер инвойса", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Номер инвойса", cls="block mb-2 font-medium"),
                         Input(type="text", name="invoice_number", placeholder="Авто-генерация",
-                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
-                        Small("Оставьте пустым для автогенерации", style="color: #666;"),
-                        style="margin-bottom: 1rem;"
+                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        Small("Оставьте пустым для автогенерации", cls="text-gray-500"),
+                        cls="mb-4"
                     ),
 
                     # Action buttons
                     Div(
                         btn("Создать", variant="primary", type="submit", icon_name="check"),
                         btn("Отмена", variant="ghost", type="button", onclick="closeCreateInvoiceModal()"),
-                        style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;"
+                        cls="flex gap-3 justify-end mt-6"
                     ),
 
                     id="create-invoice-form",
@@ -12170,26 +12171,28 @@ def get(quote_id: str, session):
                 ),
 
                 id="create-invoice-modal-box",
-                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; z-index: 1000;"
+                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg max-h-[90vh] overflow-y-auto",
+                style="display: none;"
             ),
             id="create-invoice-modal"
         ),
 
-        # Edit Invoice Modal (sibling pattern like feedback modal)
+        # Edit Invoice Modal (exact feedback modal pattern with Tailwind)
         Div(
             # Backdrop (click to close)
             Div(
                 id="edit-invoice-backdrop",
                 onclick="closeEditInvoiceModal()",
-                style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"
+                cls="fixed inset-0 bg-black/50 z-[999]",
+                style="display: none;"
             ),
             # Modal box (on top of backdrop)
             Div(
                 Div(
-                    H3("Редактировать инвойс", style="margin: 0;"),
+                    H3("Редактировать инвойс", cls="font-bold text-lg"),
                     A("×", href="#", onclick="closeEditInvoiceModal(); return false;",
-                      style="font-size: 1.5rem; color: #666; text-decoration: none;"),
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;"
+                      cls="text-2xl text-gray-500 hover:text-gray-700 no-underline"),
+                    cls="flex justify-between items-center mb-4"
                 ),
 
                 Form(
@@ -12197,15 +12200,15 @@ def get(quote_id: str, session):
 
                     # Invoice number
                     Div(
-                        Label("Номер инвойса *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Номер инвойса *", cls="block mb-2 font-medium"),
                         Input(type="text", name="invoice_number", id="edit-invoice-number", required=True,
-                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
-                        style="margin-bottom: 1rem;"
+                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        cls="mb-4"
                     ),
 
                     # Currency
                     Div(
-                        Label("Валюта *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Валюта *", cls="block mb-2 font-medium"),
                         Select(
                             Option("USD", value="USD"),
                             Option("EUR", value="EUR"),
@@ -12215,41 +12218,41 @@ def get(quote_id: str, session):
                             name="currency",
                             id="edit-invoice-currency",
                             required=True,
-                            style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"
+                            cls="w-full p-2 border border-gray-300 rounded-md"
                         ),
-                        style="margin-bottom: 1rem;"
+                        cls="mb-4"
                     ),
 
                     # Weight
                     Div(
-                        Label("Общий вес, кг *", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Общий вес, кг *", cls="block mb-2 font-medium"),
                         Input(type="number", name="total_weight_kg", id="edit-invoice-weight", step="0.001", min="0", required=True,
                               placeholder="125.5",
-                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
-                        style="margin-bottom: 1rem;"
+                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        cls="mb-4"
                     ),
 
                     # Volume
                     Div(
-                        Label("Общий объём, м³", style="display: block; margin-bottom: 0.5rem; font-weight: 500;"),
+                        Label("Общий объём, м³", cls="block mb-2 font-medium"),
                         Input(type="number", name="total_volume_m3", id="edit-invoice-volume", step="0.0001", min="0",
                               placeholder="2.5",
-                              style="width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px;"),
-                        style="margin-bottom: 1rem;"
+                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        cls="mb-4"
                     ),
 
                     # Delete button
                     Div(
                         A("🗑 Удалить инвойс", href="#", onclick="deleteInvoice(); return false;",
-                          style="color: #dc2626; font-size: 0.875rem;"),
-                        style="margin-bottom: 1rem;"
+                          cls="text-red-600 text-sm"),
+                        cls="mb-4"
                     ),
 
                     # Action buttons
                     Div(
                         btn("Сохранить", variant="primary", type="submit", icon_name="check"),
                         btn("Отмена", variant="ghost", type="button", onclick="closeEditInvoiceModal()"),
-                        style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;"
+                        cls="flex gap-3 justify-end mt-6"
                     ),
 
                     id="edit-invoice-form",
@@ -12260,7 +12263,8 @@ def get(quote_id: str, session):
                 ),
 
                 id="edit-invoice-modal-box",
-                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; z-index: 1000;"
+                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg",
+                style="display: none;"
             ),
             id="edit-invoice-modal"
         ),
