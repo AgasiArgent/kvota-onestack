@@ -12165,7 +12165,6 @@ def get(quote_id: str, session):
                 style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
             ),
             id="create-invoice-modal",
-            onclick="if(event.target === this) closeCreateInvoiceModal();",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
         ),
 
@@ -12249,7 +12248,6 @@ def get(quote_id: str, session):
                 style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
             ),
             id="edit-invoice-modal",
-            onclick="if(event.target === this) closeEditInvoiceModal();",
             style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;"
         ),
 
@@ -12292,6 +12290,27 @@ def get(quote_id: str, session):
 
             window.closeEditInvoiceModal = function() {{
                 document.getElementById('edit-invoice-modal').style.display = 'none';
+
+            // Setup modal backdrop click handlers (close only on direct backdrop click)
+            var createModal = document.getElementById('create-invoice-modal');
+            var editModal = document.getElementById('edit-invoice-modal');
+
+            if (createModal) {{
+                createModal.addEventListener('click', function(e) {{
+                    // Only close if clicking directly on the backdrop (not on children)
+                    if (e.target === createModal) {{
+                        window.closeCreateInvoiceModal();
+                    }}
+                }});
+            }}
+
+            if (editModal) {{
+                editModal.addEventListener('click', function(e) {{
+                    if (e.target === editModal) {{
+                        window.closeEditInvoiceModal();
+                    }}
+                }});
+            }}
                 selectedInvoiceId = null;
             }};
 
