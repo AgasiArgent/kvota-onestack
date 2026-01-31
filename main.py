@@ -12086,15 +12086,16 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Create Invoice Modal (feedback modal pattern: separate fixed elements)
+        # Create Invoice Modal (exact feedback modal pattern with Tailwind)
         Div(
-            # Backdrop - fixed, covers screen, click to close
+            # Backdrop
             Div(
                 id="create-invoice-backdrop",
                 onclick="closeCreateInvoiceModal()",
-                style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"
+                cls="fixed inset-0 bg-black/50 z-[999]",
+                style="display: none;"
             ),
-            # Modal box - fixed, centered, higher z-index
+            # Modal box
             Div(
                 Div(
                     H3("Новый инвойс", style="margin: 0;"),
@@ -12170,21 +12171,22 @@ def get(quote_id: str, session):
                 ),
 
                 id="create-invoice-modal-box",
-                onclick="event.stopPropagation();",
-                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto; z-index: 1000;"
+                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg max-h-[90vh] overflow-y-auto",
+                style="display: none;"
             ),
             id="create-invoice-modal"
         ),
 
-        # Edit Invoice Modal (feedback modal pattern: separate fixed elements)
+        # Edit Invoice Modal (exact feedback modal pattern with Tailwind)
         Div(
-            # Backdrop - fixed, covers screen, click to close
+            # Backdrop
             Div(
                 id="edit-invoice-backdrop",
                 onclick="closeEditInvoiceModal()",
-                style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"
+                cls="fixed inset-0 bg-black/50 z-[999]",
+                style="display: none;"
             ),
-            # Modal box - fixed, centered, higher z-index
+            # Modal box
             Div(
                 Div(
                     H3("Редактировать инвойс", style="margin: 0;"),
@@ -12261,8 +12263,8 @@ def get(quote_id: str, session):
                 ),
 
                 id="edit-invoice-modal-box",
-                onclick="event.stopPropagation();",
-                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; z-index: 1000;"
+                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg",
+                style="display: none;"
             ),
             id="edit-invoice-modal"
         ),
