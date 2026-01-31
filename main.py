@@ -12086,16 +12086,9 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Create Invoice Modal (exact feedback modal pattern with Tailwind)
+        # Create Invoice Modal (single container approach)
         Div(
-            # Backdrop
-            Div(
-                id="create-invoice-backdrop",
-                onclick="closeCreateInvoiceModal()",
-                cls="fixed inset-0 bg-black/50 z-[999]",
-                style="display: none;"
-            ),
-            # Modal box
+            # Content box inside backdrop
             Div(
                 Div(
                     H3("Новый инвойс", style="margin: 0;"),
@@ -12170,23 +12163,16 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeCreateInvoiceModal();"
                 ),
 
-                id="create-invoice-modal-box",
-                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg max-h-[90vh] overflow-y-auto",
-                style="display: none;"
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;"
             ),
-            id="create-invoice-modal"
+            id="create-invoice-modal",
+            style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;",
+            onclick="if(event.target === this) closeCreateInvoiceModal();"
         ),
 
-        # Edit Invoice Modal (exact feedback modal pattern with Tailwind)
+        # Edit Invoice Modal (single container approach)
         Div(
-            # Backdrop
-            Div(
-                id="edit-invoice-backdrop",
-                onclick="closeEditInvoiceModal()",
-                cls="fixed inset-0 bg-black/50 z-[999]",
-                style="display: none;"
-            ),
-            # Modal box
+            # Content box inside backdrop
             Div(
                 Div(
                     H3("Редактировать инвойс", style="margin: 0;"),
@@ -12262,11 +12248,11 @@ def get(quote_id: str, session):
                     hx_on="htmx:afterRequest: if(event.detail.successful) closeEditInvoiceModal();"
                 ),
 
-                id="edit-invoice-modal-box",
-                cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-lg",
-                style="display: none;"
+                style="background: white; padding: 1.5rem; border-radius: 12px; max-width: 500px; width: 90%;"
             ),
-            id="edit-invoice-modal"
+            id="edit-invoice-modal",
+            style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;",
+            onclick="if(event.target === this) closeEditInvoiceModal();"
         ),
 
         # Transition history
@@ -12282,15 +12268,13 @@ def get(quote_id: str, session):
             var hot = null;
             var selectedInvoiceId = null;
 
-            // Modal functions (feedback modal pattern: control backdrop + modal-box separately)
+            // Modal functions (single container approach)
             window.openCreateInvoiceModal = function() {{
-                document.getElementById('create-invoice-backdrop').style.display = 'block';
-                document.getElementById('create-invoice-modal-box').style.display = 'block';
+                document.getElementById('create-invoice-modal').style.display = 'flex';
             }};
 
             window.closeCreateInvoiceModal = function() {{
-                document.getElementById('create-invoice-backdrop').style.display = 'none';
-                document.getElementById('create-invoice-modal-box').style.display = 'none';
+                document.getElementById('create-invoice-modal').style.display = 'none';
                 document.getElementById('create-invoice-form').reset();
             }};
 
@@ -12305,13 +12289,11 @@ def get(quote_id: str, session):
                 document.getElementById('edit-invoice-volume').value = inv.total_volume_m3 || '';
 
                 selectedInvoiceId = invoiceId;
-                document.getElementById('edit-invoice-backdrop').style.display = 'block';
-                document.getElementById('edit-invoice-modal-box').style.display = 'block';
+                document.getElementById('edit-invoice-modal').style.display = 'flex';
             }};
 
             window.closeEditInvoiceModal = function() {{
-                document.getElementById('edit-invoice-backdrop').style.display = 'none';
-                document.getElementById('edit-invoice-modal-box').style.display = 'none';
+                document.getElementById('edit-invoice-modal').style.display = 'none';
                 selectedInvoiceId = null;
             }};
 
