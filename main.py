@@ -12351,9 +12351,9 @@ def get(quote_id: str, session):
                 }});
             }};
 
-            // Save all changes
-            window.saveAllChanges = function() {{
-                if (!hot) return;
+            // Save all changes - returns Promise for chaining
+            window.saveAllChanges = function(showAlert) {{
+                if (!hot) return Promise.resolve({{ success: true }});
                 var sourceData = hot.getSourceData();
                 var updates = [];
 
@@ -12369,44 +12369,53 @@ def get(quote_id: str, session):
                     }}
                 }}
 
-                fetch('/api/procurement/' + quoteId + '/items/bulk', {{
+                return fetch('/api/procurement/' + quoteId + '/items/bulk', {{
                     method: 'PATCH',
                     headers: {{ 'Content-Type': 'application/json' }},
                     body: JSON.stringify({{ items: updates }})
                 }})
                 .then(function(r) {{ return r.json(); }})
                 .then(function(data) {{
-                    if (data.success) {{
-                        alert('Сохранено успешно');
-                    }} else {{
-                        alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
+                    if (showAlert !== false) {{
+                        if (data.success) {{
+                            alert('Сохранено успешно');
+                        }} else {{
+                            alert('Ошибка сохранения: ' + (data.error || 'Неизвестная ошибка'));
+                        }}
                     }}
+                    return data;
                 }});
             }};
 
-            // Complete procurement
+            // Complete procurement - properly awaits save before completing
             window.completeProcurement = function() {{
                 if (!confirm('Завершить закупку? Все позиции будут отмечены как оценённые.')) return;
 
-                // First save all changes
-                window.saveAllChanges();
-
-                // Then complete
-                setTimeout(function() {{
-                    fetch('/api/procurement/' + quoteId + '/complete', {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }}
+                // First save all changes, then complete (no race condition)
+                window.saveAllChanges(false)
+                    .then(function(saveResult) {{
+                        if (!saveResult.success) {{
+                            alert('Ошибка сохранения: ' + (saveResult.error || 'Неизвестная ошибка'));
+                            return;
+                        }}
+                        return fetch('/api/procurement/' + quoteId + '/complete', {{
+                            method: 'POST',
+                            headers: {{ 'Content-Type': 'application/json' }}
+                        }});
                     }})
-                    .then(function(r) {{ return r.json(); }})
+                    .then(function(r) {{ if (r) return r.json(); }})
                     .then(function(data) {{
+                        if (!data) return;
                         if (data.success) {{
                             alert('Закупка завершена!');
                             location.href = '/tasks';
                         }} else {{
                             alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
                         }}
+                    }})
+                    .catch(function(err) {{
+                        alert('Ошибка сети: ' + err.message);
                     }});
-                }}, 500);
             }};
 
             // Delete invoice
@@ -12651,21 +12660,38 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
+    org_id = user["org_id"]
 
     if not user_has_any_role(session, ["procurement", "admin"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
 
+    # Verify quote belongs to user's organization
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
     try:
-        # Unlink items first
+        # Unlink items first (scoped to quote_id for safety)
         supabase.table("quote_items") \
             .update({"invoice_id": None}) \
             .eq("invoice_id", invoice_id) \
+            .eq("quote_id", quote_id) \
             .execute()
 
-        # Delete invoice
-        supabase.table("invoices").delete().eq("id", invoice_id).execute()
+        # Delete invoice (scoped to quote_id for safety)
+        supabase.table("invoices") \
+            .delete() \
+            .eq("id", invoice_id) \
+            .eq("quote_id", quote_id) \
+            .execute()
 
         return JSONResponse({"success": True})
 
@@ -12681,6 +12707,7 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
+    org_id = user["org_id"]
 
     if not user_has_any_role(session, ["procurement", "admin"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
@@ -12688,7 +12715,7 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
     body = await request.body()
     try:
         data = json.loads(body)
-    except:
+    except json.JSONDecodeError:
         return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
 
     item_ids = data.get("item_ids", [])
@@ -12699,10 +12726,30 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
 
     supabase = get_supabase()
 
+    # Verify quote belongs to user's organization
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
     try:
-        # Get invoice currency
-        invoice_result = supabase.table("invoices").select("currency").eq("id", invoice_id).single().execute()
-        currency = invoice_result.data.get("currency", "USD") if invoice_result.data else "USD"
+        # Get invoice currency (verify invoice belongs to this quote)
+        invoice_result = supabase.table("invoices") \
+            .select("currency") \
+            .eq("id", invoice_id) \
+            .eq("quote_id", quote_id) \
+            .single() \
+            .execute()
+
+        if not invoice_result.data:
+            return JSONResponse({"success": False, "error": "Invoice not found"}, status_code=404)
+
+        currency = invoice_result.data.get("currency", "USD")
 
         # Update items
         supabase.table("quote_items") \
@@ -12728,6 +12775,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
+    org_id = user["org_id"]
 
     if not user_has_any_role(session, ["procurement", "admin"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
@@ -12735,7 +12783,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
     body = await request.body()
     try:
         data = json.loads(body)
-    except:
+    except json.JSONDecodeError:
         return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
 
     items = data.get("items", [])
@@ -12743,12 +12791,36 @@ async def api_bulk_update_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
 
     supabase = get_supabase()
-    updated = 0
+
+    # Verify quote belongs to user's organization
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
+    # Get valid item IDs for this quote (batch validation)
+    item_ids = [item.get("id") for item in items if item.get("id")]
+    if not item_ids:
+        return JSONResponse({"success": False, "error": "No valid item IDs"}, status_code=400)
+
+    valid_items_result = supabase.table("quote_items") \
+        .select("id") \
+        .eq("quote_id", quote_id) \
+        .in_("id", item_ids) \
+        .execute()
+
+    valid_item_ids = set(item["id"] for item in valid_items_result.data or [])
 
     try:
+        updated = 0
         for item in items:
             item_id = item.get("id")
-            if not item_id:
+            if not item_id or item_id not in valid_item_ids:
                 continue
 
             update_data = {}
@@ -12766,7 +12838,6 @@ async def api_bulk_update_items(quote_id: str, session, request):
                 supabase.table("quote_items") \
                     .update(update_data) \
                     .eq("id", item_id) \
-                    .eq("quote_id", quote_id) \
                     .execute()
                 updated += 1
 
