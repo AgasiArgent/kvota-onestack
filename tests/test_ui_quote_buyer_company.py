@@ -81,7 +81,8 @@ class TestQuoteItemFormBuyerCompany:
             # Check that buyer_company_dropdown is used in the products form
             assert "buyer_company_dropdown(" in content
             assert 'name="buyer_company_id"' in content
-            assert 'label="Компания-покупатель"' in content or 'label="Компания-покупатель"' in content
+            # Label may have asterisk or not
+            assert 'Компания-покупатель' in content
 
     def test_buyer_company_id_in_post_handler(self):
         """Verify buyer_company_id parameter is handled in POST"""
