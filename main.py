@@ -12167,7 +12167,7 @@ def get(quote_id: str, session):
                     hx_post=f"/api/procurement/{quote_id}/invoices",
                     hx_target="#invoices-list",
                     hx_swap="innerHTML",
-                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.elt === this) closeCreateInvoiceModal();"
+                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'post') closeCreateInvoiceModal();"
                 ),
 
                 id="create-invoice-modal-box",
@@ -12259,7 +12259,7 @@ def get(quote_id: str, session):
                     hx_patch=f"/api/procurement/{quote_id}/invoices/update",
                     hx_target="#invoices-list",
                     hx_swap="innerHTML",
-                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.elt === this) closeEditInvoiceModal();"
+                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'patch') closeEditInvoiceModal();"
                 ),
 
                 id="edit-invoice-modal-box",
