@@ -3264,7 +3264,7 @@ def page_layout(title, *content, session=None, current_path: str = ""):
 # ICON HELPER
 # ============================================================================
 
-def icon(name: str, size: int = 20, cls: str = ""):
+def icon(name: str, size: int = 20, cls: str = "", color: str = "", style: str = ""):
     """
     Lucide icon helper - renders an icon using data-lucide attribute.
 
@@ -3272,10 +3272,13 @@ def icon(name: str, size: int = 20, cls: str = ""):
         name: Lucide icon name (e.g., 'layout-dashboard', 'users', 'file-text')
         size: Icon size in pixels (default 20)
         cls: Additional CSS classes
+        color: Icon color (e.g., '#64748b', 'red')
+        style: Additional inline styles
 
     Example:
         icon('layout-dashboard')  # Dashboard icon
         icon('users', size=24)    # Users icon, larger
+        icon('check', color='#10b981')  # Green check icon
 
     Common icons mapping (emoji -> Lucide):
         📊 -> layout-dashboard
@@ -3293,10 +3296,16 @@ def icon(name: str, size: int = 20, cls: str = ""):
         📑 -> file-stack
         🔑 -> key
     """
+    style_parts = [f"width: {size}px; height: {size}px;"]
+    if color:
+        style_parts.append(f"color: {color};")
+    if style:
+        style_parts.append(style)
+
     return I(
         data_lucide=name,
         cls=f"lucide-icon {cls}".strip(),
-        style=f"width: {size}px; height: {size}px;"
+        style=" ".join(style_parts)
     )
 
 
