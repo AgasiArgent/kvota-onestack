@@ -13950,7 +13950,8 @@ def get(session, quote_id: str):
             transition: all 0.2s;
         """
         select_style = """
-            padding: 8px 6px;
+            width: 62px;
+            padding: 8px 4px;
             font-size: 13px;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
@@ -13958,6 +13959,7 @@ def get(session, quote_id: str):
             margin-left: 8px;
             color: #64748b;
             cursor: pointer;
+            flex-shrink: 0;
         """
 
         return Div(
