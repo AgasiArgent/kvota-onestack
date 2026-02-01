@@ -516,7 +516,7 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
                 text-transform: uppercase;
             }}
             .appendix-header {{
-                text-align: right;
+                text-align: left;
                 margin-bottom: 0.5cm;
                 font-size: 10pt;
             }}
@@ -628,6 +628,12 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
             </thead>
             <tbody>
                 {product_rows}
+                <tr style="font-weight: bold; background: #f0f0f0;">
+                    <td colspan="5" style="text-align: right;">Итого:</td>
+                    <td style="text-align: center;">{total_qty}</td>
+                    <td></td>
+                    <td style="text-align: right;">{format_number_russian(total_with_vat)} {currency_symbol}</td>
+                </tr>
             </tbody>
         </table>
 
