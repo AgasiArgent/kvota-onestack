@@ -13905,7 +13905,8 @@ def get(session, quote_id: str):
         origin_country = country_names.get(raw_origin_country, raw_origin_country) if raw_origin_country else ""
 
         dest_city = quote.get('delivery_city', '')
-        dest_country = quote.get('delivery_country', '')
+        raw_dest_country = quote.get('delivery_country', '')
+        dest_country = country_names.get(raw_dest_country, raw_dest_country) if raw_dest_country else ""
         delivery_method_text = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мульти"}.get(
             quote.get("delivery_method", ""), "—"
         )
