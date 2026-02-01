@@ -427,14 +427,24 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
     currency_symbol = get_currency_symbol(spec_currency)
 
     # Calculate totals
+    # Note: quote_calculation_summaries uses column names like calc_ae16_sale_price_total (not total_no_vat)
+    totals = None
     if calculations:
-        totals = {
-            "total_qty": sum(item.get("quantity", 1) for item in items),
-            "total_no_vat": calculations.get("total_no_vat", 0),
-            "total_with_vat": calculations.get("total_with_vat", 0),
-            "vat_amount": calculations.get("total_with_vat", 0) - calculations.get("total_no_vat", 0),
-        }
-    else:
+        # Get totals from summaries table (column names match Excel cell references)
+        total_no_vat = calculations.get("calc_ae16_sale_price_total") or calculations.get("total_no_vat", 0)
+        total_with_vat = calculations.get("calc_al16_total_with_vat") or calculations.get("total_with_vat", 0)
+
+        # Only use summaries if they have non-zero values
+        if total_with_vat:
+            totals = {
+                "total_qty": sum(item.get("quantity", 1) for item in items),
+                "total_no_vat": float(total_no_vat) if total_no_vat else 0,
+                "total_with_vat": float(total_with_vat) if total_with_vat else 0,
+                "vat_amount": (float(total_with_vat) if total_with_vat else 0) - (float(total_no_vat) if total_no_vat else 0),
+            }
+
+    # Fallback: calculate from item calc results if summaries are empty or have 0 values
+    if not totals:
         totals = _calculate_totals(items, spec_currency)
 
     # Build product rows (8 columns)
