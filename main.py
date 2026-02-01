@@ -15201,6 +15201,10 @@ def get(session, quote_id: str):
     is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
     customs_done = quote.get("customs_completed_at") is not None
 
+    # Check if customs can be completed (only after procurement is done)
+    completable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs"]
+    can_complete_customs = workflow_status in completable_statuses and not customs_done
+
     # v3.0: Fetch pickup location info for items
     pickup_location_map = {}
     pickup_location_ids = [item.get("pickup_location_id") for item in items if item.get("pickup_location_id")]
@@ -15582,7 +15586,11 @@ def get(session, quote_id: str):
         Div(
             Div(
                 btn("Сохранить расходы", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
-                btn("✓ Завершить таможню", variant="success", icon_name=None, type="submit", name="action", value="complete") if is_editable else None,
+                btn("✓ Завершить таможню", variant="success", icon_name=None, type="submit", name="action", value="complete") if can_complete_customs else None,
+                # Show message when editable but waiting for procurement
+                Span(icon("clock", size=16), " Ожидание завершения закупок",
+                     style="color: #f59e0b; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;"
+                ) if is_editable and not can_complete_customs else None,
                 Span(icon("check-circle", size=16), " Таможня завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if customs_done else None,
                 style="display: inline-flex; gap: 1rem; align-items: center;"
             ),
@@ -15694,12 +15702,12 @@ def get(session, quote_id: str):
         # Instructions
         Div(
             H3(icon("info", size=20), " Инструкция", cls="card-header"),
-            P("Заполните код ТН ВЭД и пошлину в таблице. Данные сохраняются автоматически. Можно копировать из Excel.", style="margin-bottom: 0;"),
+            P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить расходы' для сохранения. Можно копировать из Excel.", style="margin-bottom: 0;"),
             cls="card",
             style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
         ) if is_editable else None,
 
-        # Items table (Handsontable - auto-save)
+        # Items table (Handsontable - explicit save on button click)
         item_customs_section,
 
         # Quote-level costs form
@@ -15967,7 +15975,7 @@ async def post(session, quote_id: str, request):
             return default
 
     # NOTE: Item-level customs data (hs_code, customs_duty) is saved via
-    # Handsontable auto-save (PATCH /customs/{quote_id}/items/{item_id}).
+    # JavaScript bulk PATCH to /api/customs/{quote_id}/items/bulk on form submit.
     # DO NOT add a loop here to update item fields from form_data - the form
     # doesn't contain these fields and it would overwrite saved data with nulls.
 
