@@ -20163,13 +20163,10 @@ def get(session, spec_id: str):
                     disabled=not is_editable) if is_editable and status == "draft" else None,
                 btn("Утвердить", variant="success", icon_name="check", type="submit", name="action", value="approve",
                     disabled=not is_editable) if is_editable and status == "pending_review" else None,
-                # Feature #70: PDF Preview button
+                # Feature #70: PDF Preview button (opens in new tab)
                 btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
-                # Contract-style specification export with pre-export modal
-                btn("Экспорт PDF", variant="primary", icon_name="download",
-                    **{"hx-get": f"/spec-control/{spec_id}/export-modal",
-                       "hx-target": "#export-modal-container",
-                       "hx-swap": "innerHTML"}),
+                # Contract-style specification export (direct download - no modal)
+                btn_link("Экспорт PDF", href=f"/spec-control/{spec_id}/export-pdf", variant="primary", icon_name="download"),
                 btn_link("Назад к спецификациям", href="/spec-control", variant="ghost", icon_name="arrow-left"),
                 style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;"
             ),
@@ -20180,9 +20177,6 @@ def get(session, spec_id: str):
 
         # Transition history (Feature #88) - uses quote_id from the spec
         workflow_transition_history(quote_id) if quote_id else None,
-
-        # Modal container for export PDF
-        Div(id="export-modal-container"),
 
         session=session
     )
@@ -20328,12 +20322,12 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
 @rt("/spec-control/{spec_id}/preview-pdf")
 def get(session, spec_id: str):
     """
-    Preview/download specification PDF.
+    Preview specification PDF in browser.
 
     Feature #70: Preview PDF спецификации
 
-    Generates PDF using all 18 specification fields from the specifications table.
-    Returns PDF for download or viewing in browser.
+    Uses contract-style template with fixed delivery conditions.
+    Opens PDF inline in browser for preview.
     """
     redirect = require_login(session)
     if redirect:
@@ -20346,33 +20340,29 @@ def get(session, spec_id: str):
     if not user_has_any_role(session, ["spec_controller", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    # UUID validation
+    import uuid
     try:
-        # Generate PDF using enhanced specification export function
-        pdf_bytes = generate_spec_pdf_from_spec_id(spec_id, org_id)
+        uuid.UUID(spec_id)
+    except ValueError:
+        return RedirectResponse("/spec-control", status_code=303)
 
-        # Get spec number for filename
-        supabase = get_supabase()
-        spec_result = supabase.table("specifications") \
-            .select("specification_number, proposal_idn") \
-            .eq("id", spec_id) \
-            .eq("organization_id", org_id) \
-            .execute()
+    try:
+        from services.contract_spec_export import generate_contract_spec_pdf
 
-        spec_number = "spec"
-        if spec_result.data:
-            spec_number = spec_result.data[0].get("specification_number") or spec_result.data[0].get("proposal_idn") or "spec"
+        # Generate PDF using contract-style template (no modal - uses fixed template)
+        pdf_bytes, spec_number = generate_contract_spec_pdf(spec_id, org_id)
 
         # Clean filename for safe characters
         safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
 
-        # Return as file download (or inline view)
+        # Return as inline view (opens in browser)
         from starlette.responses import Response
-        filename = f"specification_{safe_spec_number}.pdf"
+        filename = f"Specification_{safe_spec_number}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                # Use "inline" for browser preview, "attachment" for download
                 "Content-Disposition": f'inline; filename="{filename}"'
             }
         )
@@ -20391,6 +20381,8 @@ def get(session, spec_id: str):
 
     except Exception as e:
         print(f"Error generating specification PDF: {e}")
+        import traceback
+        traceback.print_exc()
         return page_layout("Ошибка",
             H1("Ошибка генерации PDF"),
             Div(
@@ -20405,139 +20397,18 @@ def get(session, spec_id: str):
 
 
 # ============================================================================
-# Contract-style Specification Export with Pre-Export Modal
+# Contract-style Specification Export (Direct Download - No Modal)
 # ============================================================================
 
-@rt("/spec-control/{spec_id}/export-modal")
+@rt("/spec-control/{spec_id}/export-pdf")
 def get(session, spec_id: str):
-    """Export modal with editable delivery conditions."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
+    """
+    Download specification PDF.
 
-    user = session["user"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["spec_controller", "admin"]):
-        return Div("Нет доступа", cls="text-red-600")
-
-    # UUID validation
-    import uuid
-    try:
-        uuid.UUID(spec_id)
-    except ValueError:
-        return Div("Неверный ID спецификации", cls="text-red-600")
-
-    supabase = get_supabase()
-
-    # Fetch specification with contract
-    spec_result = supabase.table("specifications") \
-        .select("*, customer_contracts(contract_number, contract_date)") \
-        .eq("id", spec_id) \
-        .eq("organization_id", org_id) \
-        .execute()
-
-    if not spec_result.data:
-        return Div("Спецификация не найдена", cls="text-red-600")
-
-    spec = spec_result.data[0]
-    quote_id = spec.get("quote_id")
-
-    # Fetch quote with customer
-    quote_result = supabase.table("quotes") \
-        .select("*, customers(id, name, address, postal_address)") \
-        .eq("id", quote_id) \
-        .execute()
-
-    quote = quote_result.data[0] if quote_result.data else {}
-    customer = quote.get("customers") or {}
-
-    # Fetch incoterms
-    vars_result = supabase.table("quote_calculation_variables") \
-        .select("variables") \
-        .eq("quote_id", quote_id) \
-        .execute()
-    calc_vars = vars_result.data[0].get("variables", {}) if vars_result.data else {}
-    incoterms_val = calc_vars.get("offer_incoterms", "DDP 2020")
-
-    # Pre-fill values
-    spec_number = spec.get("specification_number") or "б/н"
-    customer_company = customer.get("company_name") or customer.get("name", "")
-    customer_address = customer.get("address", "")
-    customer_postal = customer.get("postal_address") or customer_address
-    spec_currency = spec.get("specification_currency") or quote.get("currency", "RUB")
-    exchange_rate = spec.get("exchange_rate_to_ruble")
-    payment_terms = spec.get("client_payment_terms") or "100% предоплата"
-    logistics_period = spec.get("logistics_period") or "30-45 рабочих дней"
-
-    # Default values for editable fields
-    defaults = {
-        "quality": "Требования к качеству: международные стандарты качества, стандарты, установленные заводом-изготовителем.",
-        "transport": "Цены по настоящей Спецификации указаны с учетом транспортных расходов.",
-        "currency_note": f"Цена и стоимость Продукции согласована Сторонами в {spec_currency}." + (f" Курс к рублю: {exchange_rate}" if exchange_rate and spec_currency != "RUB" else ""),
-        "payment_terms_text": f"Форма оплаты: перечисление на расчетный счет Поставщика. {payment_terms}.",
-        "partial_delivery": "Поставка Продукции может производиться партиями.",
-        "delivery_responsibility": "Поставка осуществляется силами и за счет Поставщика.",
-        "warehouse_address": f"Продукция поставляется по адресу: {customer_postal}",
-        "delivery_time": f"Срок поставки: {logistics_period} с даты комплектации.",
-        "consignee_legal": f"Грузополучатель – {customer_company}: юр. адрес: {customer_address}",
-        "consignee_delivery": f"адрес доставки – {customer_postal}",
-        "incoterms": f"Условия поставки: {incoterms_val}.",
-    }
-
-    modal = Div(
-        Div(onclick="document.getElementById('export-modal-container').innerHTML = '';",
-            style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"),
-        Div(
-            H3(f"Экспорт спецификации №{spec_number}", style="margin-bottom: 1rem;"),
-            P("Редактируйте условия поставки:", style="color: #666; margin-bottom: 1rem;"),
-            Form(
-                Input(type="hidden", name="spec_id", value=spec_id),
-                Div(Label("1. Качество:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["quality"], name="quality", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("2. Транспорт:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["transport"], name="transport", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("3. Валюта:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["currency_note"], name="currency_note", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("4. Оплата:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["payment_terms_text"], name="payment_terms_text", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("5. Частичная поставка:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["partial_delivery"], name="partial_delivery", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("6. Ответственность:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["delivery_responsibility"], name="delivery_responsibility", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("7. Адрес склада:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["warehouse_address"], name="warehouse_address", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("8. Срок поставки:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["delivery_time"], name="delivery_time", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("9. Юр. адрес:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["consignee_legal"], name="consignee_legal", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("10. Адрес доставки:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["consignee_delivery"], name="consignee_delivery", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(Label("11. Incoterms:", style="font-weight: 500; display: block;"),
-                    Textarea(defaults["incoterms"], name="incoterms", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
-                Div(
-                    btn("Отмена", variant="ghost", type="button",
-                        onclick="document.getElementById('export-modal-container').innerHTML = '';"),
-                    btn("Сформировать PDF", variant="primary", icon_name="download", type="submit"),
-                    style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;"
-                ),
-                action=f"/spec-control/{spec_id}/generate-contract-pdf",
-                method="POST",
-            ),
-            style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 1000; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto;"
-        ),
-    )
-    return modal
-
-
-@rt("/spec-control/{spec_id}/generate-contract-pdf")
-def post(session, spec_id: str,
-         quality: str = "", transport: str = "", currency_note: str = "",
-         payment_terms_text: str = "", partial_delivery: str = "",
-         delivery_responsibility: str = "", warehouse_address: str = "",
-         delivery_time: str = "", consignee_legal: str = "",
-         consignee_delivery: str = "", incoterms: str = ""):
-    """Generate contract-style specification PDF."""
+    Uses contract-style template with fixed delivery conditions.
+    All variable values are pulled from the database - no user input needed.
+    Downloads PDF as attachment.
+    """
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -20558,16 +20429,8 @@ def post(session, spec_id: str,
     try:
         from services.contract_spec_export import generate_contract_spec_pdf
 
-        delivery_conditions = {
-            "quality": quality, "transport": transport, "currency_note": currency_note,
-            "payment_terms_text": payment_terms_text, "partial_delivery": partial_delivery,
-            "delivery_responsibility": delivery_responsibility, "warehouse_address": warehouse_address,
-            "delivery_time": delivery_time, "consignee_legal": consignee_legal,
-            "consignee_delivery": consignee_delivery, "incoterms": incoterms,
-        }
-
-        # Service now returns tuple (pdf_bytes, spec_number) - no redundant DB fetch needed
-        pdf_bytes, spec_number = generate_contract_spec_pdf(spec_id, org_id, delivery_conditions)
+        # Generate PDF using contract-style template with fixed delivery conditions
+        pdf_bytes, spec_number = generate_contract_spec_pdf(spec_id, org_id)
 
         safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
 
