@@ -15281,7 +15281,7 @@ def get(session, quote_id: str):
                     if (items.length === 0) return Promise.resolve({{ success: true }});
 
                     showSaveStatus('saving');
-                    return fetch('/customs/' + quoteId + '/items/bulk', {{
+                    return fetch('/api/customs/' + quoteId + '/items/bulk', {{
                         method: 'PATCH',
                         headers: {{ 'Content-Type': 'application/json' }},
                         body: JSON.stringify({{ items: items }})
@@ -15568,8 +15568,8 @@ async def post(session, quote_id: str, request):
 # CUSTOMS ITEM API (bulk save on form submit)
 # ============================================================================
 
-@rt("/customs/{quote_id}/items/bulk", methods=["PATCH"])
-async def customs_items_bulk_patch(session, quote_id: str, request):
+@rt("/api/customs/{quote_id}/items/bulk", methods=["PATCH"])
+async def api_customs_items_bulk_update(session, quote_id: str, request):
     """Bulk update customs items (hs_code, customs_duty) on form submit"""
     redirect = require_login(session)
     if redirect:
