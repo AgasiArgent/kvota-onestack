@@ -7142,30 +7142,127 @@ def get(session):
     if redirect:
         return redirect
 
-    return page_layout("New Customer",
-        H1("Add Customer"),
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    form_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
+    return page_layout("Новый клиент",
+        # Header card with gradient
+        Div(
+            Div(
+                btn_link("", href="/customers", variant="secondary", icon_name="arrow-left",
+                         style="padding: 8px 12px; margin-right: 12px;"),
+                Div(
+                    icon("user-plus", size=24, color="#475569"),
+                    Span(" Новый клиент", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style=header_card_style
+        ),
+
+        # Form card
         Div(
             Form(
+                # Section: Company info
                 Div(
-                    Label("Company Name *", Input(name="name", required=True, placeholder="ООО Ромашка")),
-                    Label("INN", Input(name="inn", placeholder="7701234567")),
-                    cls="form-row"
+                    icon("building", size=16, color="#64748b"),
+                    Span(" ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
                 ),
                 Div(
-                    Label("Email", Input(name="email", type="email", placeholder="info@company.ru")),
-                    Label("Phone", Input(name="phone", placeholder="+7 999 123 4567")),
-                    cls="form-row"
+                    Div(
+                        Label("Название компании *", style=label_style),
+                        Input(name="name", required=True, placeholder="ООО Ромашка", style=input_style),
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label("ИНН", style=label_style),
+                        Input(name="inn", placeholder="7701234567", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
                 ),
-                Label("Address", Textarea(name="address", placeholder="Delivery address", rows="3")),
+
+                # Section: Contact info
                 Div(
-                    btn("Save Customer", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Cancel", href="/customers", variant="secondary"),
-                    cls="form-actions"
+                    icon("phone", size=16, color="#64748b"),
+                    Span(" КОНТАКТНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Div(
+                        Label("Email", style=label_style),
+                        Input(name="email", type="email", placeholder="info@company.ru", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Телефон", style=label_style),
+                        Input(name="phone", placeholder="+7 999 123 4567", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Label("Адрес доставки", style=label_style),
+                    Textarea(name="address", placeholder="Адрес доставки товара", rows="3",
+                             style=f"{input_style} resize: vertical;"),
+                    style="margin-bottom: 24px;"
+                ),
+
+                # Actions
+                Div(
+                    btn("Сохранить клиента", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Отмена", href="/customers", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid #e2e8f0;"
                 ),
                 method="post",
                 action="/customers/new"
             ),
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -30763,73 +30860,127 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
     if filter_customer:
         page_title = f"Договоры: {filter_customer.name}"
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    stat_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    """
+
+    filter_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    """
+
+    select_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        min-width: 150px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        min-width: 180px;
+    """
+
+    table_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    """
+
     return page_layout(page_title,
-        # Header
+        # Header card with gradient
         Div(
-            H1(icon("file-text", size=28), f" {page_title}", cls="page-header"),
+            Div(
+                # Title row
+                Div(
+                    icon("file-signature", size=24, color="#475569"),
+                    Span(f" {page_title}", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Subtitle
+                P("Рамочные соглашения на поставку с клиентами",
+                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+                style="flex: 1;"
+            ),
             btn_link("Добавить договор", href="/customer-contracts/new", variant="success", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
         ),
 
-        # Info alert
-        Div(
-            icon("info", size=16), " Договоры — это рамочные соглашения на поставку с клиентами. ",
-            "Каждый договор содержит счётчик для нумерации спецификаций. ",
-            "При создании спецификации номер автоматически увеличивается.",
-            cls="alert alert-info"
-        ),
-
-        # Stats cards
+        # Stats cards row (4 columns)
         Div(
             Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="stat-card card"
+                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div("Всего", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("active", 0)), cls="stat-value", style="color: green;"),
-                Div("Действующих"),
-                cls="stat-card card"
+                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
+                Div("Действующих", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("suspended", 0)), cls="stat-value", style="color: orange;"),
-                Div("Приостановлено"),
-                cls="stat-card card"
+                Div(str(stats.get("suspended", 0)), style="font-size: 28px; font-weight: 700; color: #f59e0b;"),
+                Div("Приостановлено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("terminated", 0)), cls="stat-value", style="color: red;"),
-                Div("Расторгнуто"),
-                cls="stat-card card"
+                Div(str(stats.get("terminated", 0)), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
+                Div("Расторгнуто", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
-            cls="stats-grid"
+            style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;"
         ),
 
-        # Filter form
+        # Filters card
         Div(
             Form(
                 Div(
-                    Label(
-                        "Поиск по номеру:",
-                        Input(type="text", name="q", value=q, placeholder="Например: ДП-2025-001"),
+                    # Search with icon
+                    Div(
+                        icon("search", size=16, color="#94a3b8"),
+                        Input(type="text", name="q", value=q, placeholder="Номер договора...",
+                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
+                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
                     ),
-                    Label(
-                        "Клиент:",
-                        Select(*customer_options, name="customer_id"),
-                    ),
-                    Label(
-                        "Статус:",
-                        Select(*status_options, name="status"),
-                    ),
-                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
-                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                    Select(*customer_options, name="customer_id", style=select_style),
+                    Select(*status_options, name="status", style=select_style),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
+                    btn_link("Сбросить", href="/customer-contracts", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
                 ),
                 method="get",
                 action="/customer-contracts"
             ),
-            cls="card"
+            style=filter_card_style
         ),
 
-        # Contracts table
+        # Contracts table with styled container
         Div(
             Table(
                 Thead(
@@ -30843,10 +30994,11 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                     )
                 ),
                 Tbody(*contract_rows) if contract_rows else Tbody(
-                    Tr(Td("Договоры не найдены", colspan="6", style="text-align: center; color: #666;"))
+                    Tr(Td("Договоры не найдены. ", A("Добавить первый договор", href="/customer-contracts/new"),
+                          colspan="6", style="text-align: center; padding: 2rem; color: #64748b;"))
                 )
             ),
-            cls="card"
+            style=table_card_style
         ),
 
         session=session
