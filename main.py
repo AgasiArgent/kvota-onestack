@@ -11857,7 +11857,6 @@ def get(quote_id: str, session):
             'production_time': item.get('production_time_days') or '',
             'invoice_id': item.get('invoice_id') or '',
             'invoice_label': f"#{invoices.index(inv)+1}" if inv else '',
-            'supplier_country': item.get('supplier_country', ''),
         })
 
     items_json = json.dumps(items_for_handsontable)
@@ -12087,7 +12086,7 @@ def get(quote_id: str, session):
             cls="card"
         ),
 
-        # Create Invoice Modal (exact feedback modal pattern with Tailwind)
+        # Create Invoice Modal (with all fields including pickup_country, weight, volume)
         Div(
             # Backdrop (click to close)
             Div(
@@ -12105,7 +12104,17 @@ def get(quote_id: str, session):
                     cls="flex justify-between items-center mb-4"
                 ),
 
+                # Selected items indicator
+                Div(
+                    Span("📦 Выбрано позиций: ", cls="text-gray-600"),
+                    Span("0", id="modal-selected-count", cls="font-bold text-blue-600"),
+                    cls="mb-4 p-3 bg-blue-50 rounded-lg text-sm"
+                ),
+
                 Form(
+                    # Hidden field for selected item IDs
+                    Input(type="hidden", name="item_ids", id="modal-item-ids"),
+
                     # Supplier dropdown
                     supplier_dropdown(
                         name="supplier_id",
@@ -12132,6 +12141,25 @@ def get(quote_id: str, session):
                         dropdown_id="modal-location"
                     ),
 
+                    # Pickup Country
+                    Div(
+                        Label("Страна отгрузки *", cls="block mb-2 font-medium"),
+                        Select(
+                            Option("— Выберите страну —", value="", disabled=True, selected=True),
+                            Option("Россия", value="RU"),
+                            Option("Китай", value="CN"),
+                            Option("Турция", value="TR"),
+                            Option("Германия", value="DE"),
+                            Option("США", value="US"),
+                            Option("Италия", value="IT"),
+                            Option("Другое", value="OTHER"),
+                            name="pickup_country",
+                            required=True,
+                            cls="w-full p-2 border border-gray-300 rounded-md"
+                        ),
+                        cls="mb-4"
+                    ),
+
                     # Currency
                     Div(
                         Label("Валюта *", cls="block mb-2 font-medium"),
@@ -12148,18 +12176,26 @@ def get(quote_id: str, session):
                         cls="mb-4"
                     ),
 
-                    # Invoice number (auto-generated)
+                    # Weight and Volume in a row
                     Div(
-                        Label("Номер инвойса", cls="block mb-2 font-medium"),
-                        Input(type="text", name="invoice_number", placeholder="Авто-генерация",
-                              cls="w-full p-2 border border-gray-300 rounded-md"),
-                        Small("Оставьте пустым для автогенерации", cls="text-gray-500"),
-                        cls="mb-4"
+                        Div(
+                            Label("Общий вес, кг *", cls="block mb-2 font-medium"),
+                            Input(type="number", name="total_weight_kg", step="0.001", min="0.001", required=True,
+                                  placeholder="125.5", cls="w-full p-2 border border-gray-300 rounded-md"),
+                            cls="flex-1"
+                        ),
+                        Div(
+                            Label("Объём, м³", cls="block mb-2 font-medium"),
+                            Input(type="number", name="total_volume_m3", step="0.0001", min="0",
+                                  placeholder="2.5", cls="w-full p-2 border border-gray-300 rounded-md"),
+                            cls="flex-1"
+                        ),
+                        cls="flex gap-4 mb-4"
                     ),
 
                     # Action buttons
                     Div(
-                        btn("Создать", variant="primary", type="submit", icon_name="check"),
+                        btn("Создать инвойс", variant="primary", type="submit", icon_name="check"),
                         btn("Отмена", variant="ghost", type="button", onclick="closeCreateInvoiceModal()"),
                         cls="flex gap-3 justify-end mt-6"
                     ),
@@ -12168,7 +12204,7 @@ def get(quote_id: str, session):
                     hx_post=f"/api/procurement/{quote_id}/invoices",
                     hx_target="#invoices-list",
                     hx_swap="innerHTML",
-                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'post') closeCreateInvoiceModal();"
+                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'post') { closeCreateInvoiceModal(); location.reload(); }"
                 ),
 
                 id="create-invoice-modal-box",
@@ -12285,6 +12321,27 @@ def get(quote_id: str, session):
 
             // Modal functions (sibling pattern - backdrop + modal-box)
             window.openCreateInvoiceModal = function() {{
+                // Collect selected item IDs
+                if (!hot) {{
+                    alert('Таблица не инициализирована');
+                    return;
+                }}
+                var sourceData = hot.getSourceData();
+                var selectedIds = [];
+                for (var i = 0; i < sourceData.length; i++) {{
+                    if (hot.getDataAtCell(i, 0) === true) {{
+                        selectedIds.push(sourceData[i].id);
+                    }}
+                }}
+                if (selectedIds.length === 0) {{
+                    alert('Сначала выберите позиции для добавления в инвойс');
+                    return;
+                }}
+                // Set hidden field with item IDs
+                document.getElementById('modal-item-ids').value = JSON.stringify(selectedIds);
+                // Update selected count display
+                document.getElementById('modal-selected-count').textContent = selectedIds.length;
+                // Show modal
                 document.getElementById('create-invoice-backdrop').style.display = 'block';
                 document.getElementById('create-invoice-modal-box').style.display = 'block';
             }};
@@ -12293,6 +12350,8 @@ def get(quote_id: str, session):
                 document.getElementById('create-invoice-backdrop').style.display = 'none';
                 document.getElementById('create-invoice-modal-box').style.display = 'none';
                 document.getElementById('create-invoice-form').reset();
+                document.getElementById('modal-item-ids').value = '';
+                document.getElementById('modal-selected-count').textContent = '0';
             }};
 
             window.openEditInvoiceModal = function(invoiceId) {{
@@ -12386,8 +12445,7 @@ def get(quote_id: str, session):
                         updates.push({{
                             id: row.id,
                             purchase_price_original: row.price ? parseFloat(row.price) : null,
-                            production_time_days: row.production_time ? parseInt(row.production_time) : null,
-                            supplier_country: row.supplier_country || null
+                            production_time_days: row.production_time ? parseInt(row.production_time) : null
                         }});
                     }}
                 }}
@@ -12471,9 +12529,6 @@ def get(quote_id: str, session):
                 if (el) el.textContent = count > 0 ? count + ' выбрано' : '';
             }}
 
-            // Country options
-            var countryOptions = ['', 'RU', 'CN', 'TR', 'DE', 'US', 'IT', 'OTHER'];
-
             // Initialize Handsontable
             function initTable() {{
                 var container = document.getElementById('items-spreadsheet');
@@ -12486,8 +12541,7 @@ def get(quote_id: str, session):
                     {{data: 'quantity', type: 'numeric', readOnly: true, width: 60}},
                     {{data: 'price', type: 'numeric', width: 90, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
                     {{data: 'production_time', type: 'numeric', width: 70, readOnly: !canEdit}},
-                    {{data: 'supplier_country', type: 'dropdown', source: countryOptions, width: 70, readOnly: !canEdit}},
-                    {{data: 'invoice_label', type: 'text', readOnly: true, width: 70,
+                    {{data: 'invoice_label', type: 'text', readOnly: true, width: 80,
                       renderer: function(instance, td, row, col, prop, value) {{
                           td.innerHTML = value || '<span style="color:#f59e0b">—</span>';
                           td.style.textAlign = 'center';
@@ -12505,7 +12559,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Страна', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -12547,7 +12601,7 @@ def get(quote_id: str, session):
 
 @rt("/api/procurement/{quote_id}/invoices", methods=["POST"])
 async def api_create_invoice(quote_id: str, session, request):
-    """Create a new invoice for procurement."""
+    """Create a new invoice for procurement with selected items."""
     redirect = require_login(session)
     if redirect:
         return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
@@ -12579,38 +12633,69 @@ async def api_create_invoice(quote_id: str, session, request):
     supplier_id = form.get("supplier_id")
     buyer_company_id = form.get("buyer_company_id")
     pickup_location_id = form.get("pickup_location_id") or None
+    pickup_country = form.get("pickup_country", "").strip()
     currency = form.get("currency", "USD")
-    invoice_number = form.get("invoice_number", "").strip()
+    total_weight_kg = form.get("total_weight_kg")
+    total_volume_m3 = form.get("total_volume_m3") or None
+    item_ids_json = form.get("item_ids", "[]")
+
+    # Parse item IDs
+    try:
+        item_ids = json.loads(item_ids_json) if item_ids_json else []
+    except json.JSONDecodeError:
+        item_ids = []
 
     if not supplier_id or not buyer_company_id:
         return JSONResponse({"success": False, "error": "Supplier and buyer company are required"}, status_code=400)
 
-    # Generate invoice number if not provided
-    if not invoice_number:
-        # Count existing invoices for this quote
-        count_result = supabase.table("invoices").select("id", count="exact").eq("quote_id", quote_id).execute()
-        idx = (count_result.count or 0) + 1
-        invoice_number = f"INV-{idx:02d}-{quote.get('idn_quote', quote_id[:8])}"
+    if not pickup_country:
+        return JSONResponse({"success": False, "error": "Pickup country is required"}, status_code=400)
+
+    if not total_weight_kg:
+        return JSONResponse({"success": False, "error": "Total weight is required"}, status_code=400)
+
+    if not item_ids:
+        return JSONResponse({"success": False, "error": "No items selected"}, status_code=400)
+
+    # Generate invoice number
+    count_result = supabase.table("invoices").select("id", count="exact").eq("quote_id", quote_id).execute()
+    idx = (count_result.count or 0) + 1
+    invoice_number = f"INV-{idx:02d}-{quote.get('idn_quote', quote_id[:8])}"
 
     try:
-        # Create invoice
+        # Create invoice with all fields
         invoice_data = {
             "quote_id": quote_id,
             "supplier_id": supplier_id,
             "buyer_company_id": buyer_company_id,
             "pickup_location_id": pickup_location_id,
+            "pickup_country": pickup_country,
             "currency": currency,
             "invoice_number": invoice_number,
-            "total_weight_kg": 0.001,  # Placeholder, will be updated
+            "total_weight_kg": float(total_weight_kg),
+            "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
         }
 
         result = supabase.table("invoices").insert(invoice_data).execute()
 
-        if result.data:
-            # Return updated invoice list HTML
-            return await render_invoices_list(quote_id, org_id, session)
-        else:
+        if not result.data:
             return JSONResponse({"success": False, "error": "Failed to create invoice"}, status_code=500)
+
+        invoice_id = result.data[0]["id"]
+
+        # Assign selected items to this invoice and set supplier_country
+        supabase.table("quote_items") \
+            .update({
+                "invoice_id": invoice_id,
+                "purchase_currency": currency,
+                "supplier_country": pickup_country,
+            }) \
+            .in_("id", item_ids) \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        # Return updated invoice list HTML
+        return await render_invoices_list(quote_id, org_id, session)
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -12854,8 +12939,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
             if "production_time_days" in item and item["production_time_days"] is not None:
                 update_data["production_time_days"] = item["production_time_days"]
 
-            if "supplier_country" in item:
-                update_data["supplier_country"] = item["supplier_country"] or None
+            # Note: supplier_country is now set at invoice level, not per-item
 
             if update_data:
                 supabase.table("quote_items") \
