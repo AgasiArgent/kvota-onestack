@@ -13863,6 +13863,17 @@ def get(session, quote_id: str):
         items = invoice.get("items", [])
         total_items_in_invoice = len(items)
 
+        # Get origin location text
+        origin_text = (
+            (invoice.get("pickup_location", {}).get("city", "") + ", " + invoice.get("pickup_location", {}).get("country", ""))
+            if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("city")
+            else (invoice.get("supplier", {}).get("country", "—")) if invoice.get("supplier") else "—"
+        )
+        dest_text = f"{quote.get('delivery_city', '—')}, {quote.get('delivery_country', '—')}"
+        delivery_method_text = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мульти"}.get(
+            quote.get("delivery_method", ""), "—"
+        )
+
         return Div(
             # Invoice header
             Div(
@@ -13873,159 +13884,177 @@ def get(session, quote_id: str):
                     style="flex: 1; display: flex; align-items: center;"
                 ),
                 Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb;"
             ),
 
-            # Route and delivery method - CRITICAL FOR LOGISTICS PRICING
+            # Two-column layout: Route info (left) + Pricing (right)
             Div(
-                # Route: From → To
+                # LEFT COLUMN: Route and shipment info
                 Div(
-                    Span(icon("map-pin", size=14), " Маршрут: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                    Span(
-                        (invoice.get("pickup_location", {}).get("city", "—") + ", " + invoice.get("pickup_location", {}).get("country", "—")) if invoice.get("pickup_location") else
-                        (invoice.get("supplier", {}).get("country", "—")) if invoice.get("supplier") else "—",
-                        style="color: #059669;"
-                    ),
-                    Span(" → ", style="margin: 0 0.5rem; color: #999;"),
-                    Span(f"{quote.get('delivery_city', '—')}, {quote.get('delivery_country', '—')}", style="color: #3b82f6;"),
-                    style="margin-bottom: 0.5rem;"
-                ),
-                # Delivery method
-                Div(
-                    Span(icon("truck", size=14), " Доставка: ", style="font-weight: 600; color: #374151; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                    Span(
-                        {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мультимодально"}.get(
-                            quote.get("delivery_method", ""), "Не указан"
+                    # Route card
+                    Div(
+                        Div(
+                            Span(origin_text, style="color: #059669; font-weight: 500;"),
+                            style="margin-bottom: 2px;"
                         ),
-                        style="color: #d97706; font-weight: 600;"
+                        Div(
+                            Span("↓", style="color: #999; font-size: 1.1rem;"),
+                            style="margin: 2px 0;"
+                        ),
+                        Div(
+                            Span(dest_text, style="color: #3b82f6; font-weight: 500;"),
+                            style="margin-bottom: 4px;"
+                        ),
+                        Div(
+                            Span(icon("truck", size=12), f" {delivery_method_text}",
+                                 style="color: #d97706; font-weight: 600; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 2px;"),
+                            style="margin-top: 4px;"
+                        ),
+                        style="background: #fef3c7; padding: 0.5rem; border-radius: 4px; border-left: 3px solid #f59e0b; text-align: center;"
                     ),
-                    style="margin-bottom: 0.75rem;"
+                    # Weight/volume badges
+                    Div(
+                        Div(
+                            icon("scale", size=12),
+                            Span(f" {weight} кг" if weight > 0 else " —", style="font-weight: 600;" + (" color: #059669;" if weight > 0 else " color: #999;")),
+                            style="display: flex; align-items: center; gap: 2px; font-size: 0.8rem;"
+                        ),
+                        Div(
+                            icon("package", size=12),
+                            Span(f" {total_items_in_invoice} поз.", style="color: #666;"),
+                            style="display: flex; align-items: center; gap: 2px; font-size: 0.8rem;"
+                        ),
+                        style="display: flex; gap: 1rem; margin-top: 0.5rem; justify-content: center;"
+                    ),
+                    # Items list (collapsed)
+                    Details(
+                        Summary(
+                            Span("▸ позиции", style="cursor: pointer; color: #3b82f6; font-size: 0.75rem;"),
+                        ),
+                        Div(
+                            *[Div(
+                                Span(f"• {item.get('brand', '—')} — {item.get('product_name', '—')[:30]}", style="flex: 1; font-size: 0.75rem;"),
+                                Span(f"×{item.get('quantity', 0)}", style="color: #666; font-size: 0.75rem;"),
+                                style="display: flex; justify-content: space-between; padding: 2px 0;"
+                            ) for item in items],
+                            style="background: #f9fafb; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem;"
+                        ),
+                        style="margin-top: 0.5rem;"
+                    ),
+                    style="flex: 0 0 180px; padding-right: 1rem; border-right: 1px solid #e5e7eb;"
                 ),
-                style="background: #fef3c7; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem; border-left: 3px solid #f59e0b;"
-            ),
 
-            # Invoice info badges - WEIGHT/VOLUME CRITICAL FOR LOGISTICS
-            Div(
-                Span(icon("package", size=14), f" Позиций: {total_items_in_invoice}", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                Span(icon("scale", size=14), f" Вес: {weight} кг", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; color: #059669; display: inline-flex; align-items: center; gap: 0.25rem;") if weight > 0 else Span(icon("scale", size=14), " Вес не указан", style="margin-right: 1rem; font-size: 0.875rem; color: #dc2626; display: inline-flex; align-items: center; gap: 0.25rem;"),
-                Span(icon("box", size=14), f" Объём: {volume} м³", style="margin-right: 1rem; font-size: 0.875rem; font-weight: 600; color: #059669; display: inline-flex; align-items: center; gap: 0.25rem;") if volume > 0 else None,
-                style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem;"
-            ),
-
-            # Items list (collapsed)
-            Details(
-                Summary(icon("search", size=14), f" Показать {total_items_in_invoice} позиций", style="cursor: pointer; color: #3b82f6; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;"),
+                # RIGHT COLUMN: Pricing inputs
                 Div(
-                    *[Div(
-                        Span(f"• {item.get('brand', '—')} — {item.get('product_name', '—')[:40]}", style="flex: 1;"),
-                        Span(f"× {item.get('quantity', 0)}", style="color: #666; margin-left: 0.5rem;"),
-                        style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.875rem;"
-                    ) for item in items],
-                    style="background: #f9fafb; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
-                )
-            ),
-
-            # Logistics cost inputs (v4.0 - compact inline design)
-            Div(
-                # Compact inline segment pricing row
-                Div(
-                    # Supplier → Hub
-                    Span("П→Хаб:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
-                    Input(
-                        name=f"logistics_supplier_to_hub_{invoice_id}",
-                        type="number",
-                        value=str(s2h),
-                        min="0",
-                        step="0.01",
-                        disabled=not is_editable,
-                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
+                    # Segment pricing in vertical layout
+                    Div(
+                        # Row 1: Supplier → Hub
+                        Div(
+                            Span("П → Хаб", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
+                            Input(
+                                name=f"logistics_supplier_to_hub_{invoice_id}",
+                                type="number",
+                                value=str(s2h),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
+                            ),
+                            Select(
+                                Option("USD", value="USD", selected=s2h_currency == "USD"),
+                                Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
+                                name=f"logistics_supplier_to_hub_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                            ),
+                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                        ),
+                        # Row 2: Hub → Customs
+                        Div(
+                            Span("Хаб → Там", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
+                            Input(
+                                name=f"logistics_hub_to_customs_{invoice_id}",
+                                type="number",
+                                value=str(h2c),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
+                            ),
+                            Select(
+                                Option("USD", value="USD", selected=h2c_currency == "USD"),
+                                Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
+                                name=f"logistics_hub_to_customs_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                            ),
+                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                        ),
+                        # Row 3: Customs → Customer
+                        Div(
+                            Span("Там → Кл", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
+                            Input(
+                                name=f"logistics_customs_to_customer_{invoice_id}",
+                                type="number",
+                                value=str(c2c),
+                                min="0",
+                                step="0.01",
+                                disabled=not is_editable,
+                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
+                            ),
+                            Select(
+                                Option("USD", value="USD", selected=c2c_currency == "USD"),
+                                Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
+                                Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
+                                Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
+                                Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
+                                name=f"logistics_customs_to_customer_currency_{invoice_id}",
+                                disabled=not is_editable,
+                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                            ),
+                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                        ),
+                        # Row 4: Days
+                        Div(
+                            Span("Дней", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
+                            Input(
+                                name=f"logistics_total_days_{invoice_id}",
+                                type="number",
+                                value=str(days) if days else "",
+                                min="1",
+                                max="365",
+                                disabled=not is_editable,
+                                style="width: 60px; padding: 4px 6px; font-size: 0.875rem;"
+                            ),
+                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                        ),
+                        style="background: #f9fafb; padding: 0.5rem; border-radius: 4px;"
                     ),
-                    Select(
-                        Option("USD", value="USD", selected=s2h_currency == "USD"),
-                        Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
-                        Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
-                        Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
-                        Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
-                        name=f"logistics_supplier_to_hub_currency_{invoice_id}",
-                        disabled=not is_editable,
-                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
+                    # Comment input
+                    Div(
+                        Input(
+                            name=f"logistics_notes_{invoice_id}",
+                            type="text",
+                            value=invoice.get("logistics_notes", ""),
+                            placeholder="💬 Комментарий...",
+                            disabled=not is_editable,
+                            style="width: 100%; padding: 4px 8px; font-size: 0.8rem;"
+                        ),
+                        style="margin-top: 6px;"
                     ),
-                    Span("│", style="color: #ddd; margin: 0 8px;"),
-                    # Hub → Customs
-                    Span("Хаб→Там:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
-                    Input(
-                        name=f"logistics_hub_to_customs_{invoice_id}",
-                        type="number",
-                        value=str(h2c),
-                        min="0",
-                        step="0.01",
-                        disabled=not is_editable,
-                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
-                    ),
-                    Select(
-                        Option("USD", value="USD", selected=h2c_currency == "USD"),
-                        Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
-                        Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
-                        Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
-                        Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
-                        name=f"logistics_hub_to_customs_currency_{invoice_id}",
-                        disabled=not is_editable,
-                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
-                    ),
-                    Span("│", style="color: #ddd; margin: 0 8px;"),
-                    # Customs → Customer
-                    Span("Там→Кл:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
-                    Input(
-                        name=f"logistics_customs_to_customer_{invoice_id}",
-                        type="number",
-                        value=str(c2c),
-                        min="0",
-                        step="0.01",
-                        disabled=not is_editable,
-                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
-                    ),
-                    Select(
-                        Option("USD", value="USD", selected=c2c_currency == "USD"),
-                        Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
-                        Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
-                        Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
-                        Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
-                        name=f"logistics_customs_to_customer_currency_{invoice_id}",
-                        disabled=not is_editable,
-                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
-                    ),
-                    Span("│", style="color: #ddd; margin: 0 8px;"),
-                    # Days
-                    Span("Дней:", style="font-size: 0.8rem; color: #666; margin-right: 4px;"),
-                    Input(
-                        name=f"logistics_total_days_{invoice_id}",
-                        type="number",
-                        value=str(days) if days else "",
-                        min="1",
-                        max="365",
-                        disabled=not is_editable,
-                        style="width: 50px; padding: 4px 6px; font-size: 0.875rem;"
-                    ),
-                    style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"
+                    style="flex: 1; padding-left: 1rem;"
                 ),
-                # Compact single-line comments
-                Div(
-                    Span("💬", style="margin-right: 6px; font-size: 0.9rem;"),
-                    Input(
-                        name=f"logistics_notes_{invoice_id}",
-                        type="text",
-                        value=invoice.get("logistics_notes", ""),
-                        placeholder="Комментарий...",
-                        disabled=not is_editable,
-                        style="flex: 1; padding: 4px 8px; font-size: 0.875rem;"
-                    ),
-                    style="display: flex; align-items: center; margin-top: 8px;"
-                ),
-                style="background: #f9fafb; padding: 0.75rem; border-radius: 4px;"
+                style="display: flex; align-items: flex-start;"
             ),
 
             cls="card",
-            style="margin-bottom: 1rem; border-left: 3px solid " + (status_color if has_logistics else "#e5e7eb") + ";"
+            style="margin-bottom: 0.75rem; border-left: 3px solid " + (status_color if has_logistics else "#e5e7eb") + "; padding: 0.75rem;"
         )
 
     # Build the invoice-level logistics form
