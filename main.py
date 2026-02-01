@@ -19836,7 +19836,15 @@ def get(session, quote_id: str):
                         cls="form-group"
                     ),
                     Div(
-                        Label("Тип дней поставки", For="delivery_days_type"),
+                        Label("Срок поставки (дней)", For="delivery_days"),
+                        Input(name="delivery_days", id="delivery_days", type="number", min="1",
+                              placeholder="Авто из расчёта",
+                              style="width: 100%;"),
+                        Small("Заполнится автоматически из расчёта КП", style="color: #666;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Тип дней", For="delivery_days_type"),
                         Select(
                             Option("рабочих дней", value="рабочих дней", selected=True),
                             Option("календарных дней", value="календарных дней"),
@@ -20612,7 +20620,16 @@ def get(session, spec_id: str):
                         cls="form-group"
                     ),
                     Div(
-                        Label("Тип дней поставки", For="delivery_days_type"),
+                        Label("Срок поставки (дней)", For="delivery_days"),
+                        Input(name="delivery_days", id="delivery_days", type="number", min="1",
+                              value=str(spec.get("delivery_days", "")) if spec.get("delivery_days") else "",
+                              placeholder="Из расчёта КП",
+                              disabled=not is_editable,
+                              style="width: 100%;"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Тип дней", For="delivery_days_type"),
                         Select(
                             Option("рабочих дней", value="рабочих дней",
                                    selected=spec.get("delivery_days_type", "рабочих дней") == "рабочих дней"),
