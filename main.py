@@ -212,6 +212,43 @@ APP_STYLES = """
     --btn-font-size: 0.875rem;
     --btn-font-size-sm: 0.8125rem;
     --btn-font-size-lg: 1rem;
+
+    /* ========== Compact Spacing (logistics-style) ========== */
+    --spacing-tight: 8px;
+    --spacing-compact: 12px;
+    --spacing-normal: 16px;
+
+    /* Compact Label Typography */
+    --label-size: 11px;
+    --label-weight: 600;
+    --label-color: #94a3b8;
+    --label-transform: uppercase;
+    --label-spacing: 0.05em;
+
+    /* Compact Inputs */
+    --input-height-compact: 36px;
+    --input-padding-compact: 8px 10px;
+    --input-bg-compact: #f8fafc;
+    --input-border-compact: #e2e8f0;
+
+    /* Elevated Card Backgrounds */
+    --bg-card-elevated: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    --bg-card-success: linear-gradient(90deg, #f0fdf4 0%, #fafbfc 100%);
+
+    /* Badge Gradients */
+    --badge-pending: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    --badge-active: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    --badge-complete: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    --badge-purple: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+    --badge-neutral: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+    --badge-error: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+
+    /* Subtle Shadows */
+    --shadow-subtle: 0 1px 4px rgba(0,0,0,0.06);
+    --shadow-card-v2: 0 2px 8px rgba(0,0,0,0.04);
+
+    /* Transition */
+    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Dark theme */
@@ -297,6 +334,21 @@ APP_STYLES = """
     --btn-ghost-bg: transparent;
     --btn-ghost-text: #e5e7eb;
     --btn-ghost-hover-bg: rgba(255, 255, 255, 0.1);
+
+    /* ========== Compact Spacing (Dark Theme) ========== */
+    --label-color: #94a3b8;
+    --input-bg-compact: #1e1e2f;
+    --input-border-compact: rgba(255, 255, 255, 0.15);
+    --bg-card-elevated: linear-gradient(135deg, #2d2d44 0%, #252538 100%);
+    --bg-card-success: linear-gradient(90deg, rgba(22, 163, 74, 0.15) 0%, #2d2d44 100%);
+
+    /* Badge Gradients (Dark Theme) */
+    --badge-pending: linear-gradient(135deg, rgba(217, 119, 6, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%);
+    --badge-active: linear-gradient(135deg, rgba(22, 163, 74, 0.25) 0%, rgba(22, 163, 74, 0.15) 100%);
+    --badge-complete: linear-gradient(135deg, rgba(37, 99, 235, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
+    --badge-purple: linear-gradient(135deg, rgba(124, 58, 237, 0.25) 0%, rgba(124, 58, 237, 0.15) 100%);
+    --badge-neutral: linear-gradient(135deg, rgba(107, 114, 128, 0.25) 0%, rgba(107, 114, 128, 0.15) 100%);
+    --badge-error: linear-gradient(135deg, rgba(220, 38, 38, 0.25) 0%, rgba(220, 38, 38, 0.15) 100%);
 }
 
 /* ========== Global Enhancements ========== */
@@ -2083,6 +2135,391 @@ button.theme-toggle.theme-toggle:hover {
 .app-layout nav:not(.sidebar-nav) {
     display: none;
 }
+
+/* ========== Design System V2: Status Badge System ========== */
+/* Reference: Logistics page compact design */
+
+.status-badge-v2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    transition: var(--transition-smooth);
+}
+
+.status-badge-v2--pending {
+    background: var(--badge-pending);
+    color: #92400e;
+}
+
+.status-badge-v2--active,
+.status-badge-v2--success {
+    background: var(--badge-active);
+    color: #065f46;
+}
+
+.status-badge-v2--complete,
+.status-badge-v2--info {
+    background: var(--badge-complete);
+    color: #1e40af;
+}
+
+.status-badge-v2--purple {
+    background: var(--badge-purple);
+    color: #6b21a8;
+}
+
+.status-badge-v2--neutral {
+    background: var(--badge-neutral);
+    color: #4b5563;
+}
+
+.status-badge-v2--error {
+    background: var(--badge-error);
+    color: #991b1b;
+}
+
+.status-badge-v2--warning {
+    background: var(--badge-pending);
+    color: #92400e;
+}
+
+/* Dark theme overrides */
+[data-theme="dark"] .status-badge-v2--pending { color: #fcd34d; }
+[data-theme="dark"] .status-badge-v2--active,
+[data-theme="dark"] .status-badge-v2--success { color: #86efac; }
+[data-theme="dark"] .status-badge-v2--complete,
+[data-theme="dark"] .status-badge-v2--info { color: #93c5fd; }
+[data-theme="dark"] .status-badge-v2--purple { color: #c4b5fd; }
+[data-theme="dark"] .status-badge-v2--neutral { color: #d1d5db; }
+[data-theme="dark"] .status-badge-v2--error { color: #fca5a5; }
+[data-theme="dark"] .status-badge-v2--warning { color: #fcd34d; }
+
+/* ========== Design System V2: Elevated Cards ========== */
+
+.card-elevated {
+    background: var(--bg-card-elevated);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: var(--shadow-card-v2);
+    transition: var(--transition-smooth);
+    overflow: hidden;
+}
+
+.card-elevated:hover {
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+}
+
+.card-elevated-static {
+    background: var(--bg-card-elevated);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: var(--shadow-card-v2);
+}
+
+[data-theme="dark"] .card-elevated,
+[data-theme="dark"] .card-elevated-static {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ========== Design System V2: Compact Labels ========== */
+
+.label-compact {
+    font-size: var(--label-size);
+    font-weight: var(--label-weight);
+    color: var(--label-color);
+    text-transform: var(--label-transform);
+    letter-spacing: var(--label-spacing);
+    margin-bottom: 4px;
+}
+
+/* ========== Design System V2: Enhanced Tables ========== */
+
+.table-enhanced {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    background: var(--bg-card);
+}
+
+/* Table Container with rounded corners */
+.table-enhanced-container {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card-v2);
+    border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .table-enhanced-container {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Header Row */
+.table-enhanced thead {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+[data-theme="dark"] .table-enhanced thead {
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+}
+
+.table-enhanced thead th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    padding: 12px 16px;
+    border-bottom: 2px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+[data-theme="dark"] .table-enhanced thead th {
+    color: #94a3b8;
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Body Rows */
+.table-enhanced tbody tr {
+    transition: all 0.15s ease;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+[data-theme="dark"] .table-enhanced tbody tr {
+    border-bottom-color: rgba(255, 255, 255, 0.05);
+}
+
+.table-enhanced tbody tr:last-child {
+    border-bottom: none;
+}
+
+/* Zebra Striping */
+.table-enhanced tbody tr:nth-child(even) {
+    background: rgba(59, 130, 246, 0.02);
+}
+
+[data-theme="dark"] .table-enhanced tbody tr:nth-child(even) {
+    background: rgba(99, 102, 241, 0.04);
+}
+
+/* Hover Effect */
+.table-enhanced tbody tr:hover {
+    background: rgba(59, 130, 246, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1);
+}
+
+[data-theme="dark"] .table-enhanced tbody tr:hover {
+    background: rgba(99, 102, 241, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.15);
+}
+
+/* Cell Styling */
+.table-enhanced td {
+    padding: 14px 16px;
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+/* Link Styling in Tables */
+.table-enhanced a {
+    color: #3b82f6;
+    font-weight: 500;
+}
+
+[data-theme="dark"] .table-enhanced a {
+    color: #93c5fd;
+}
+
+/* Right-align numeric columns */
+.table-enhanced th.col-number,
+.table-enhanced td.col-number,
+.table-enhanced th.col-money,
+.table-enhanced td.col-money {
+    text-align: right;
+}
+
+/* Center-align action columns */
+.table-enhanced th.col-actions,
+.table-enhanced td.col-actions {
+    text-align: center;
+    width: 100px;
+}
+
+/* ========== Design System V2: Handsontable Overrides ========== */
+
+/* Handsontable Container */
+.handsontable-container {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card-v2);
+    border: 1px solid #e2e8f0;
+}
+
+[data-theme="dark"] .handsontable-container {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Header Row - Match design system */
+.handsontable-container .handsontable thead th,
+.handsontable thead th.htNoFrame {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    color: #64748b !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    padding: 10px 12px !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable thead th,
+[data-theme="dark"] .handsontable thead th.htNoFrame {
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%) !important;
+    color: #94a3b8 !important;
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Body Cells */
+.handsontable-container .handsontable td {
+    border-color: #f1f5f9 !important;
+    font-size: 14px !important;
+    padding: 8px 12px !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable td {
+    border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Zebra Striping */
+.handsontable-container .handsontable tbody tr:nth-child(even) td {
+    background: rgba(59, 130, 246, 0.02) !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable tbody tr:nth-child(even) td {
+    background: rgba(99, 102, 241, 0.04) !important;
+}
+
+/* Hover Effect */
+.handsontable-container .handsontable tbody tr:hover td {
+    background: rgba(59, 130, 246, 0.06) !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable tbody tr:hover td {
+    background: rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Read-only Cells - Subtle gray background */
+.handsontable-container .handsontable td.htDimmed {
+    background: #f9fafb !important;
+    color: #64748b !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable td.htDimmed {
+    background: rgba(255, 255, 255, 0.03) !important;
+    color: #94a3b8 !important;
+}
+
+/* Editable Cells - White background */
+.handsontable-container .handsontable td:not(.htDimmed) {
+    background: #ffffff !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable td:not(.htDimmed) {
+    background: #1e1e2f !important;
+}
+
+/* Selected Cell */
+.handsontable-container .handsontable td.current,
+.handsontable-container .handsontable td.area {
+    border: 2px solid #3b82f6 !important;
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2) !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable td.current,
+[data-theme="dark"] .handsontable-container .handsontable td.area {
+    border-color: #6366f1 !important;
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.3) !important;
+}
+
+/* Input in Cell */
+.handsontable-container .handsontable .handsontableInput {
+    font-size: 14px !important;
+    padding: 6px 10px !important;
+    border: 1px solid #3b82f6 !important;
+    border-radius: 4px !important;
+}
+
+/* Checkbox Cells */
+.handsontable-container .handsontable td.htCheckboxRendererInput {
+    text-align: center !important;
+}
+
+/* Row headers styling */
+.handsontable-container .handsontable th.ht_clone_left {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    font-size: 12px !important;
+    color: #64748b !important;
+}
+
+[data-theme="dark"] .handsontable-container .handsontable th.ht_clone_left {
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%) !important;
+    color: #94a3b8 !important;
+}
+
+/* ========== Design System V2: Animations ========== */
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.4s ease forwards;
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease forwards;
+}
+
+/* Staggered delays for card grids */
+.stagger-1 { animation-delay: 0.05s; opacity: 0; }
+.stagger-2 { animation-delay: 0.1s; opacity: 0; }
+.stagger-3 { animation-delay: 0.15s; opacity: 0; }
+.stagger-4 { animation-delay: 0.2s; opacity: 0; }
+.stagger-5 { animation-delay: 0.25s; opacity: 0; }
+
+/* ========== Design System V2: Compact Utilities ========== */
+
+.p-tight { padding: var(--spacing-tight); }
+.p-compact { padding: var(--spacing-compact); }
+.p-normal { padding: var(--spacing-normal); }
+
+.gap-tight { gap: var(--spacing-tight); }
+.gap-compact { gap: var(--spacing-compact); }
+.gap-normal { gap: var(--spacing-normal); }
+
+.mb-tight { margin-bottom: var(--spacing-tight); }
+.mb-compact { margin-bottom: var(--spacing-compact); }
+.mb-normal { margin-bottom: var(--spacing-normal); }
 """
 
 # ============================================================================
@@ -2861,6 +3298,72 @@ def icon(name: str, size: int = 20, cls: str = ""):
         cls=f"lucide-icon {cls}".strip(),
         style=f"width: {size}px; height: {size}px;"
     )
+
+
+# ============================================================================
+# STATUS BADGE HELPER (Design System V2)
+# ============================================================================
+
+def status_badge_v2(status: str, custom_label: str = None) -> Span:
+    """
+    Render a polished status badge with gradient background.
+
+    Maps raw workflow status values to styled badges with Russian labels.
+
+    Args:
+        status: Raw status value from database (e.g., 'pending_procurement')
+        custom_label: Override the default label
+
+    Returns:
+        Span element with status-badge-v2 classes
+
+    Example:
+        status_badge_v2('pending_procurement')  # Returns amber "Закупки" badge
+        status_badge_v2('approved')             # Returns green "Одобрено" badge
+    """
+    # Status mapping: (Russian label, CSS variant)
+    mapping = {
+        # Workflow statuses
+        'pending_procurement': ('Закупки', 'pending'),
+        'pending_logistics': ('Логистика', 'info'),
+        'pending_customs': ('Таможня', 'purple'),
+        'pending_logistics_and_customs': ('Лог+Там', 'purple'),
+        'pending_sales_review': ('Проверка', 'warning'),
+        'pending_sales': ('Продажи', 'warning'),
+        'pending_review': ('На проверке', 'warning'),
+        'pending_control': ('Контроль', 'info'),
+        'pending_spec_control': ('Контроль спец', 'info'),
+
+        # Final statuses
+        'draft': ('Черновик', 'neutral'),
+        'approved': ('Одобрено', 'success'),
+        'rejected': ('Отклонено', 'error'),
+        'cancelled': ('Отменено', 'neutral'),
+        'completed': ('Завершено', 'success'),
+
+        # Quote statuses
+        'new': ('Новый', 'info'),
+        'sent': ('Отправлено', 'info'),
+        'in_progress': ('В работе', 'active'),
+        'pending': ('Ожидание', 'pending'),
+
+        # Deal statuses
+        'active': ('Активна', 'active'),
+        'won': ('Выиграна', 'success'),
+        'lost': ('Проиграна', 'error'),
+
+        # Spec statuses
+        'spec_draft': ('Черновик', 'neutral'),
+        'spec_approved': ('Одобрено', 'success'),
+    }
+
+    label, variant = mapping.get(status, (status, 'neutral'))
+
+    # Use custom label if provided
+    if custom_label:
+        label = custom_label
+
+    return Span(label, cls=f"status-badge-v2 status-badge-v2--{variant}")
 
 
 # ============================================================================
@@ -5723,36 +6226,10 @@ def get(session):
 
     quotes = result.data or []
 
-    # Map workflow status to unified badge class
-    def get_status_class(status):
-        status_map = {
-            "draft": "neutral",
-            "sent": "info",
-            "approved": "success",
-            "rejected": "error",
-            "in_progress": "progress",
-            "completed": "success",
-            "cancelled": "error"
-        }
-        return status_map.get(status, "neutral")
-
-    # Format status label
-    def get_status_label(status):
-        labels = {
-            "draft": "Черновик",
-            "sent": "Отправлено",
-            "approved": "Согласовано",
-            "rejected": "Отклонено",
-            "in_progress": "В работе",
-            "completed": "Завершено",
-            "cancelled": "Отменено"
-        }
-        return labels.get(status, status.capitalize() if status else "—")
-
     return page_layout("Quotes",
         H1(icon("file-text", size=28), " Коммерческие предложения", cls="page-header"),
 
-        # Unified table container
+        # Enhanced table container with new design system
         Div(
             # Table header with search and actions
             Div(
@@ -5766,54 +6243,55 @@ def get(session):
                     cls="table-header-left"
                 ),
                 Div(
-                    A(icon("plus", size=16), " Новый КП", href="/quotes/new", cls="btn-primary",
-                      style="display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem; background: var(--accent); color: white; border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.875rem;"),
+                    A(icon("plus", size=16), " Новый КП", href="/quotes/new", cls="btn btn--primary",
+                      style="text-decoration: none;"),
                     cls="table-header-right"
                 ),
                 cls="table-header"
             ),
 
-            # Table content
+            # Table content with enhanced styling
             Div(
-                Table(
-                    Thead(Tr(
-                        Th("№ КП"),
-                        Th("Клиент"),
-                        Th("Статус"),
-                        Th("Сумма", cls="col-money"),
-                        Th("Профит", cls="col-money"),
-                        Th("Дата"),
-                        Th("", cls="col-actions")
-                    )),
-                    Tbody(
-                        *[Tr(
-                            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}",
-                                style="color: var(--accent); text-decoration: none; font-weight: 500;")),
-                            Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                            Td(Span(get_status_label(q.get("workflow_status", "draft")),
-                                   cls=f"status-badge status-{get_status_class(q.get('workflow_status', 'draft'))}")),
-                            Td(format_money(q.get("total_amount")), cls="col-money"),
-                            Td(format_money(q.get("total_profit_usd")), cls="col-money",
-                               style="color: #059669; font-weight: 500;"),
-                            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-                            Td(
-                                A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
-                                A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
-                                cls="col-actions"
+                Div(
+                    Table(
+                        Thead(Tr(
+                            Th("№ КП"),
+                            Th("Клиент"),
+                            Th("Статус"),
+                            Th("Сумма", cls="col-money"),
+                            Th("Профит", cls="col-money"),
+                            Th("Дата"),
+                            Th("", cls="col-actions")
+                        )),
+                        Tbody(
+                            *[Tr(
+                                Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
+                                Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                                Td(status_badge_v2(q.get("workflow_status", "draft"))),
+                                Td(format_money(q.get("total_amount")), cls="col-money"),
+                                Td(format_money(q.get("total_profit_usd")), cls="col-money",
+                                   style="color: #059669; font-weight: 500;"),
+                                Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                                Td(
+                                    A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
+                                    A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
+                                    cls="col-actions"
+                                ),
+                                cls="clickable-row",
+                                onclick=f"window.location='/quotes/{q['id']}'"
+                            ) for q in quotes]
+                        ) if quotes else Tbody(Tr(Td(
+                            Div(
+                                Div(icon("file-text", size=24), cls="table-empty-icon"),
+                                Div("Нет коммерческих предложений", cls="table-empty-text"),
+                                A("+ Создать первое КП", href="/quotes/new", style="margin-top: 1rem; display: inline-block;"),
+                                cls="table-empty"
                             ),
-                            cls="clickable-row",
-                            onclick=f"window.location='/quotes/{q['id']}'"
-                        ) for q in quotes]
-                    ) if quotes else Tbody(Tr(Td(
-                        Div(
-                            Div(icon("file-text", size=24), cls="table-empty-icon"),
-                            Div("Нет коммерческих предложений", cls="table-empty-text"),
-                            A("+ Создать первое КП", href="/quotes/new", style="margin-top: 1rem; display: inline-block;"),
-                            cls="table-empty"
-                        ),
-                        colspan="7"
-                    ))),
-                    cls="unified-table"
+                            colspan="7"
+                        ))),
+                        cls="table-enhanced"
+                    ),
+                    cls="table-enhanced-container"
                 ),
                 cls="table-responsive"
             ),
@@ -6285,8 +6763,11 @@ def get(quote_id: str, session):
                 ),
                 cls="table-header"
             ),
-            # Handsontable container
-            Div(id="items-spreadsheet", style="width: 100%; height: 400px; overflow: hidden;"),
+            # Handsontable container with enhanced styling
+            Div(
+                Div(id="items-spreadsheet", style="width: 100%; height: 400px; overflow: hidden;"),
+                cls="handsontable-container"
+            ),
             # Footer with count
             Div(
                 Span(id="footer-count"),
@@ -12102,8 +12583,11 @@ def get(quote_id: str, session):
                     style="font-size: 0.75rem; color: #666; margin-bottom: 0.5rem; display: flex; align-items: center;"
                 ) if can_edit else None,
 
-                # Handsontable container
-                Div(id="items-spreadsheet", style="width: 100%; height: 500px; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px;"),
+                # Handsontable container with enhanced styling
+                Div(
+                    Div(id="items-spreadsheet", style="width: 100%; height: 500px; overflow: hidden;"),
+                    cls="handsontable-container"
+                ),
 
                 # Footer with actions
                 Div(
@@ -14912,8 +15396,11 @@ def get(session, quote_id: str):
         ),
         P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Можно копировать из Excel.",
           style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
-        # Handsontable container
-        Div(id="customs-spreadsheet", style="width: 100%; height: 350px; overflow: hidden;"),
+        # Handsontable container with enhanced styling
+        Div(
+            Div(id="customs-spreadsheet", style="width: 100%; height: 350px; overflow: hidden;"),
+            cls="handsontable-container"
+        ),
         cls="card" if items else None,
         style="margin-bottom: 1rem;"
     ) if items else Div(
