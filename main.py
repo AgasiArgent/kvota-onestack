@@ -6727,6 +6727,9 @@ def get(session, tab: str = None, status_filter: str = None):
 
 @rt("/quotes")
 def get(session):
+    """
+    Quotes List page with design system V2 styling.
+    """
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -6742,85 +6745,170 @@ def get(session):
 
     quotes = result.data or []
 
-    return page_layout("Quotes",
-        H1(icon("file-text", size=28), " Коммерческие предложения", cls="page-header"),
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+    """
+
+    page_title_style = """
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.02em;
+    """
+
+    count_badge_style = """
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+    """
+
+    new_btn_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
+    """
+
+    search_input_style = """
+        padding: 10px 14px 10px 38px;
+        font-size: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #1e293b;
+        min-width: 280px;
+        transition: all 0.2s ease;
+    """
+
+    return page_layout("Коммерческие предложения",
+        # Header card with title and actions
+        Div(
+            Div(
+                icon("file-text", size=26, style="color: #3b82f6;"),
+                H1("Коммерческие предложения", style=page_title_style),
+                Span(f"{len(quotes)}", style=count_badge_style),
+                style="display: flex; align-items: center; gap: 14px;"
+            ),
+            Div(
+                A(
+                    icon("plus", size=16),
+                    Span("Новое КП"),
+                    href="/quotes/new",
+                    style=new_btn_style
+                ),
+            ),
+            style=header_card_style
+        ),
 
         # Enhanced table container with new design system
         Div(
-            # Table header with search and actions
+            # Table header with search
             Div(
                 Div(
+                    icon("search", size=16, style="color: #94a3b8; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);"),
                     Input(
                         type="text",
                         placeholder="Поиск по номеру или клиенту...",
-                        cls="table-search",
-                        id="quotes-search"
+                        id="quotes-search",
+                        style=search_input_style
                     ),
-                    cls="table-header-left"
+                    style="position: relative; display: inline-block;"
                 ),
-                Div(
-                    A(icon("plus", size=16), " Новый КП", href="/quotes/new", cls="btn btn--primary",
-                      style="text-decoration: none;"),
-                    cls="table-header-right"
-                ),
-                cls="table-header"
+                cls="table-header-left"
             ),
-
-            # Table content with enhanced styling
-            Div(
-                Div(
-                    Table(
-                        Thead(Tr(
-                            Th("№ КП"),
-                            Th("Клиент"),
-                            Th("Статус"),
-                            Th("Сумма", cls="col-money"),
-                            Th("Профит", cls="col-money"),
-                            Th("Дата"),
-                            Th("", cls="col-actions")
-                        )),
-                        Tbody(
-                            *[Tr(
-                                Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
-                                Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                                Td(status_badge_v2(q.get("workflow_status", "draft"))),
-                                Td(format_money(q.get("total_amount")), cls="col-money"),
-                                Td(format_money(q.get("total_profit_usd")), cls="col-money",
-                                   style="color: #059669; font-weight: 500;"),
-                                Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
-                                Td(
-                                    A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
-                                    A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
-                                    cls="col-actions"
-                                ),
-                                cls="clickable-row",
-                                onclick=f"window.location='/quotes/{q['id']}'"
-                            ) for q in quotes]
-                        ) if quotes else Tbody(Tr(Td(
-                            Div(
-                                Div(icon("file-text", size=24), cls="table-empty-icon"),
-                                Div("Нет коммерческих предложений", cls="table-empty-text"),
-                                A("+ Создать первое КП", href="/quotes/new", style="margin-top: 1rem; display: inline-block;"),
-                                cls="table-empty"
-                            ),
-                            colspan="7"
-                        ))),
-                        cls="table-enhanced"
-                    ),
-                    cls="table-enhanced-container"
-                ),
-                cls="table-responsive"
-            ),
-
-            # Table footer with count
-            Div(
-                Span(f"Всего: {len(quotes)} КП"),
-                cls="table-footer"
-            ) if quotes else None,
-
-            cls="table-container"
+            cls="table-header"
         ),
-        session=session
+
+        # Table content with enhanced styling
+        Div(
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("№ КП"),
+                        Th("Клиент"),
+                        Th("Статус"),
+                        Th("Сумма", cls="col-money"),
+                        Th("Профит", cls="col-money"),
+                        Th("Дата"),
+                        Th("", cls="col-actions")
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
+                            Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                            Td(status_badge_v2(q.get("workflow_status", "draft"))),
+                            Td(format_money(q.get("total_amount")), cls="col-money"),
+                            Td(format_money(q.get("total_profit_usd")), cls="col-money",
+                               style="color: #059669; font-weight: 500;"),
+                            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                            Td(
+                                A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
+                                A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
+                                cls="col-actions"
+                            ),
+                            cls="clickable-row",
+                            onclick=f"window.location='/quotes/{q['id']}'"
+                        ) for q in quotes]
+                    ) if quotes else Tbody(Tr(Td(
+                        Div(
+                            icon("file-text", size=32, style="color: #94a3b8; margin-bottom: 12px;"),
+                            Div("Нет коммерческих предложений", style="font-size: 15px; font-weight: 500; color: #64748b; margin-bottom: 8px;"),
+                            Div("Создайте первое КП для начала работы", style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;"),
+                            A(
+                                icon("plus", size=14),
+                                Span("Создать первое КП"),
+                                href="/quotes/new",
+                                style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;"
+                            ),
+                            style="text-align: center; padding: 40px 24px;"
+                        ),
+                        colspan="7"
+                    ))),
+                    cls="table-enhanced"
+                ),
+                cls="table-enhanced-container"
+            ),
+            cls="table-responsive"
+        ),
+
+        # Table footer with count
+        Div(
+            Span(f"Всего: {len(quotes)} КП", style="font-size: 13px; color: #64748b;"),
+            cls="table-footer"
+        ) if quotes else None,
+
+        session=session,
+        current_path="/quotes"
     )
 
 
@@ -6830,6 +6918,9 @@ def get(session):
 
 @rt("/customers")
 def get(session):
+    """
+    Customers List page with design system V2 styling.
+    """
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -6845,26 +6936,164 @@ def get(session):
 
     customers = result.data or []
 
-    return page_layout("Customers",
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+    """
+
+    page_title_style = """
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.02em;
+    """
+
+    count_badge_style = """
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 12px;
+        font-weight: 600;
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        color: #059669;
+        border: 1px solid #a7f3d0;
+    """
+
+    new_btn_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
+    """
+
+    search_input_style = """
+        padding: 10px 14px 10px 38px;
+        font-size: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #1e293b;
+        min-width: 280px;
+        transition: all 0.2s ease;
+    """
+
+    return page_layout("Клиенты",
+        # Header card with title and actions
         Div(
-            H1("Customers"),
-            btn_link("Add Customer", href="/customers/new", variant="primary", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            Div(
+                icon("users", size=26, style="color: #10b981;"),
+                H1("Клиенты", style=page_title_style),
+                Span(f"{len(customers)}", style=count_badge_style),
+                style="display: flex; align-items: center; gap: 14px;"
+            ),
+            Div(
+                A(
+                    icon("plus", size=16),
+                    Span("Новый клиент"),
+                    href="/customers/new",
+                    style=new_btn_style
+                ),
+            ),
+            style=header_card_style
         ),
 
-        Table(
-            Thead(Tr(Th("Name"), Th("INN"), Th("Email"), Th("Phone"), Th("Actions"))),
-            Tbody(
-                *[Tr(
-                    Td(c.get("name", "—")),
-                    Td(c.get("inn", "—")),
-                    Td(c.get("email", "—")),
-                    Td(c.get("phone", "—")),
-                    Td(A("View", href=f"/customers/{c['id']}"))
-                ) for c in customers]
-            ) if customers else Tbody(Tr(Td("No customers yet. Add your first customer!", colspan="5", style="text-align: center;")))
+        # Enhanced table container
+        Div(
+            # Table header with search
+            Div(
+                Div(
+                    icon("search", size=16, style="color: #94a3b8; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);"),
+                    Input(
+                        type="text",
+                        placeholder="Поиск по названию, ИНН или email...",
+                        id="customers-search",
+                        style=search_input_style
+                    ),
+                    style="position: relative; display: inline-block;"
+                ),
+                cls="table-header-left"
+            ),
+            cls="table-header"
         ),
-        session=session
+
+        # Table content
+        Div(
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Название"),
+                        Th("ИНН"),
+                        Th("Email"),
+                        Th("Телефон"),
+                        Th("", cls="col-actions")
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(A(c.get("name", "—"), href=f"/customers/{c['id']}", style="font-weight: 500; color: #3b82f6;")),
+                            Td(c.get("inn", "—"), style="font-family: monospace; color: #64748b;"),
+                            Td(c.get("email", "—")),
+                            Td(c.get("phone", "—")),
+                            Td(
+                                A(icon("eye", size=16), href=f"/customers/{c['id']}", cls="table-action-btn", title="Просмотр"),
+                                cls="col-actions"
+                            ),
+                            cls="clickable-row",
+                            onclick=f"window.location='/customers/{c['id']}'"
+                        ) for c in customers]
+                    ) if customers else Tbody(Tr(Td(
+                        Div(
+                            icon("users", size=32, style="color: #94a3b8; margin-bottom: 12px;"),
+                            Div("Нет клиентов", style="font-size: 15px; font-weight: 500; color: #64748b; margin-bottom: 8px;"),
+                            Div("Добавьте первого клиента для начала работы", style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;"),
+                            A(
+                                icon("plus", size=14),
+                                Span("Добавить клиента"),
+                                href="/customers/new",
+                                style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;"
+                            ),
+                            style="text-align: center; padding: 40px 24px;"
+                        ),
+                        colspan="5"
+                    ))),
+                    cls="table-enhanced"
+                ),
+                cls="table-enhanced-container"
+            ),
+            cls="table-responsive"
+        ),
+
+        # Table footer with count
+        Div(
+            Span(f"Всего: {len(customers)} клиентов", style="font-size: 13px; color: #64748b;"),
+            cls="table-footer"
+        ) if customers else None,
+
+        session=session,
+        current_path="/customers"
     )
 
 
