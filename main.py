@@ -13863,17 +13863,35 @@ def get(session, quote_id: str):
         items = invoice.get("items", [])
         total_items_in_invoice = len(items)
 
+        # Country code to name mapping
+        country_names = {
+            "DE": "Германия", "CN": "Китай", "TR": "Турция", "IT": "Италия",
+            "RU": "Россия", "US": "США", "KR": "Корея", "JP": "Япония",
+            "FR": "Франция", "GB": "Великобритания", "ES": "Испания", "PL": "Польша",
+            "CZ": "Чехия", "NL": "Нидерланды", "BE": "Бельгия", "AT": "Австрия",
+            "CH": "Швейцария", "SE": "Швеция", "FI": "Финляндия", "DK": "Дания",
+            "IN": "Индия", "TW": "Тайвань", "VN": "Вьетнам", "TH": "Таиланд",
+            "MY": "Малайзия", "SG": "Сингапур", "AE": "ОАЭ", "SA": "Саудовская Аравия",
+            "OTHER": "Другое",
+        }
+
         # Get origin location text
         origin_city = (
             invoice.get("pickup_location", {}).get("city", "")
             if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("city")
             else ""
         )
-        origin_country = (
+        # Origin country: pickup_location > supplier > invoice.pickup_country
+        raw_origin_country = (
             invoice.get("pickup_location", {}).get("country", "")
             if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("country")
-            else (invoice.get("supplier", {}).get("country", "")) if invoice.get("supplier") else ""
+            else (invoice.get("supplier", {}).get("country", ""))
+            if invoice.get("supplier") and invoice.get("supplier", {}).get("country")
+            else invoice.get("pickup_country", "")
         )
+        # Convert country code to name if needed
+        origin_country = country_names.get(raw_origin_country, raw_origin_country) if raw_origin_country else ""
+
         dest_city = quote.get('delivery_city', '')
         dest_country = quote.get('delivery_country', '')
         delivery_method_text = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мульти"}.get(
