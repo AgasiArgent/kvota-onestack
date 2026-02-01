@@ -15568,8 +15568,8 @@ async def post(session, quote_id: str, request):
 # CUSTOMS ITEM API (bulk save on form submit)
 # ============================================================================
 
-@rt("/customs/{quote_id}/items/bulk")
-async def patch_bulk(session, quote_id: str, request):
+@rt("/customs/{quote_id}/items/bulk", methods=["PATCH"])
+async def customs_items_bulk_patch(session, quote_id: str, request):
     """Bulk update customs items (hs_code, customs_duty) on form submit"""
     redirect = require_login(session)
     if redirect:
