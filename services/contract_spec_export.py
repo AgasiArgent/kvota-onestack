@@ -254,9 +254,13 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
     contract_date = format_date_russian(contract.get("contract_date"))
 
     # Payment terms from calculation variables
-    # advance_from_client is stored as decimal (e.g., 1.0 = 100%, 0.5 = 50%)
-    advance_from_client = calc_vars.get("advance_from_client", 1.0)
-    payment_percent = int(float(advance_from_client) * 100)  # Convert to percentage
+    # advance_from_client can be stored as:
+    # - Percentage (100 = 100%, 50 = 50%) - most common in DB
+    # - Decimal fraction (1.0 = 100%, 0.5 = 50%) - Excel format
+    advance_from_client = calc_vars.get("advance_from_client", 100)
+    advance_val = float(advance_from_client)
+    # If value is <= 1, it's a decimal fraction; otherwise it's already a percentage
+    payment_percent = int(advance_val * 100) if advance_val <= 1 else int(advance_val)
     payment_days = int(calc_vars.get("time_to_advance", 5))  # Days for advance payment
 
     # Delivery time from calculation variables (already calculated: max(production) + max(logistics))
