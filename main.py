@@ -20503,7 +20503,7 @@ def get(session, spec_id: str):
             # Hidden fields
             Input(type="hidden", name="spec_id", value=spec_id),
 
-            # Section 1: Identification
+            # Section 1: Identification & Date
             Div(
                 H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
                 Div(
@@ -20511,24 +20511,15 @@ def get(session, spec_id: str):
                         Label("№ Спецификации", For="specification_number"),
                         Input(name="specification_number", id="specification_number",
                               value=spec.get("specification_number", ""),
-                              placeholder="SPEC-2025-0001",
+                              placeholder="Авто при выборе договора",
                               disabled=not is_editable,
                               style="width: 100%;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("IDN КП", For="proposal_idn"),
-                        Input(name="proposal_idn", id="proposal_idn",
-                              value=spec.get("proposal_idn", ""),
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("IDN-SKU", For="item_ind_sku"),
-                        Input(name="item_ind_sku", id="item_ind_sku",
-                              value=spec.get("item_ind_sku", ""),
-                              placeholder="IDN-SKU identifier",
+                        Label("Дата подписания", For="sign_date"),
+                        Input(name="sign_date", id="sign_date", type="date",
+                              value=spec.get("sign_date", "") or "",
                               disabled=not is_editable,
                               style="width: 100%;"),
                         cls="form-group"
@@ -20550,51 +20541,16 @@ def get(session, spec_id: str):
                         cls="form-group"
                     ),
                     cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                    style="grid-template-columns: repeat(3, 1fr); gap: 1rem;"
                 ),
                 cls="card",
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 2: Dates and Validity
+            # Section 2: Delivery Conditions
             Div(
-                H3("📅 Даты и сроки"),
+                H3(icon("truck", size=20), " Условия поставки", cls="card-header"),
                 Div(
-                    Div(
-                        Label("Дата подписания", For="sign_date"),
-                        Input(name="sign_date", id="sign_date", type="date",
-                              value=spec.get("sign_date", "") or "",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок действия", For="validity_period"),
-                        Input(name="validity_period", id="validity_period",
-                              value=spec.get("validity_period", ""),
-                              placeholder="90 дней",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок готовности", For="readiness_period"),
-                        Input(name="readiness_period", id="readiness_period",
-                              value=spec.get("readiness_period", ""),
-                              placeholder="30-45 дней",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок на логистику", For="logistics_period"),
-                        Input(name="logistics_period", id="logistics_period",
-                              value=spec.get("logistics_period", ""),
-                              placeholder="14-21 дней",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
                     Div(
                         Label("Срок поставки (дней)", For="delivery_days"),
                         Input(name="delivery_days", id="delivery_days", type="number", min="1",
@@ -20621,155 +20577,16 @@ def get(session, spec_id: str):
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 3: Currency and Payment
-            Div(
-                H3(icon("wallet", size=20), " Валюта и оплата", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Валюта спецификации", For="specification_currency"),
-                        Select(
-                            Option("USD", value="USD", selected=spec.get("specification_currency") == "USD"),
-                            Option("EUR", value="EUR", selected=spec.get("specification_currency") == "EUR"),
-                            Option("RUB", value="RUB", selected=spec.get("specification_currency") == "RUB"),
-                            Option("CNY", value="CNY", selected=spec.get("specification_currency") == "CNY"),
-                            name="specification_currency",
-                            id="specification_currency",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Курс к рублю", For="exchange_rate_to_ruble"),
-                        Input(name="exchange_rate_to_ruble", id="exchange_rate_to_ruble",
-                              type="number", step="0.0001",
-                              value=str(spec.get("exchange_rate_to_ruble", "")) if spec.get("exchange_rate_to_ruble") else "",
-                              placeholder="91.5000",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок оплаты после УПД (дней)", For="client_payment_term_after_upd"),
-                        Input(name="client_payment_term_after_upd", id="client_payment_term_after_upd",
-                              type="number", min="0",
-                              value=str(spec.get("client_payment_term_after_upd", "")) if spec.get("client_payment_term_after_upd") is not None else "",
-                              placeholder="0",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Условия оплаты клиента", For="client_payment_terms"),
-                        Input(name="client_payment_terms", id="client_payment_terms",
-                              value=spec.get("client_payment_terms", ""),
-                              placeholder="100% предоплата",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                P(
+                    icon("info", size=14),
+                    " Остальные условия (оплата, адрес, Incoterms) берутся из КП и данных клиента",
+                    style="color: #666; font-size: 0.875rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"
                 ),
                 cls="card",
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 4: Origin and Shipping
-            Div(
-                H3(icon("truck", size=20), " Отгрузка и доставка", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Страна забора груза", For="cargo_pickup_country"),
-                        Input(name="cargo_pickup_country", id="cargo_pickup_country",
-                              value=spec.get("cargo_pickup_country", ""),
-                              placeholder="Китай",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Страна товара к отгрузке", For="goods_shipment_country"),
-                        Input(name="goods_shipment_country", id="goods_shipment_country",
-                              value=spec.get("goods_shipment_country", ""),
-                              placeholder="Китай",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Город доставки в РФ", For="delivery_city_russia"),
-                        Input(name="delivery_city_russia", id="delivery_city_russia",
-                              value=spec.get("delivery_city_russia", ""),
-                              placeholder="Москва",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Тип груза", For="cargo_type"),
-                        Input(name="cargo_type", id="cargo_type",
-                              value=spec.get("cargo_type", ""),
-                              placeholder="Генеральный",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Страна оплаты поставщику", For="supplier_payment_country"),
-                        Input(name="supplier_payment_country", id="supplier_payment_country",
-                              value=spec.get("supplier_payment_country", ""),
-                              placeholder="Китай",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
-                ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 5: Legal Entities (v3.0 enhanced)
-            Div(
-                H3(icon("building-2", size=20), " Юридические лица", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Наше юридическое лицо", For="our_legal_entity"),
-                        Input(name="our_legal_entity", id="our_legal_entity",
-                              value=spec.get("our_legal_entity", ""),
-                              placeholder="ООО \"Наша компания\"",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        # v3.0: Show seller company from quote if available
-                        Small(
-                            f"Из КП: {seller_company_code} - {seller_company_name}",
-                            style="color: #666; display: block; margin-top: 0.25rem;"
-                        ) if seller_company_name else None,
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Юридическое лицо клиента", For="client_legal_entity"),
-                        Input(name="client_legal_entity", id="client_legal_entity",
-                              value=spec.get("client_legal_entity", ""),
-                              placeholder="ООО \"Клиент\"",
-                              disabled=not is_editable,
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
-                ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 6: Contract and Signatory (v3.0 NEW)
+            # Section 3: Contract and Signatory
             Div(
                 H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
                 Div(
