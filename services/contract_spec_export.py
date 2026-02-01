@@ -272,11 +272,12 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
         match = re.search(r'(\d+(?:-\d+)?)', str(logistics_period))
         delivery_days = match.group(1) if match else "30-45"
 
-    # Customer addresses
-    client_name = customer.get("company_name") or customer.get("name", "Покупатель")
-    registration_address = customer.get("address", "не указан")
+    # Customer addresses - handle None/empty gracefully
+    client_name = customer.get("company_name") or customer.get("name") or "Покупатель"
+    registration_address = customer.get("address") or "не указан"
     # Postal address for delivery, fallback to registration address
-    delivery_address = customer.get("postal_address") or registration_address
+    postal_address = customer.get("postal_address")
+    delivery_address = postal_address if postal_address else registration_address
     warehouse_address = delivery_address
 
     # Incoterms from quote.delivery_terms + " 2020"
