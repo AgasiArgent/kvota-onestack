@@ -43,7 +43,7 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
 
     # 2. Fetch quote with related entities
     quote_result = supabase.table("quotes") \
-        .select("*, customers(id, name, inn, address, postal_address), seller_companies(id, name, inn, director_name, legal_address)") \
+        .select("*, customers(id, name, inn, address, postal_address), seller_companies(id, name, inn, general_director_last_name, general_director_first_name, general_director_patronymic, general_director_position, registration_address)") \
         .eq("id", quote_id) \
         .execute()
 
@@ -190,8 +190,13 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
     seller_name = seller_company.get("name") or spec.get("our_legal_entity") or organization.get("name", "Поставщик")
     customer_name = customer.get("company_name") or customer.get("name") or spec.get("client_legal_entity", "Покупатель")
 
-    # Director/signatory names
-    seller_director = seller_company.get("director_name") or organization.get("director_name", "_________________")
+    # Director/signatory names - construct from separate name parts
+    seller_director_parts = [
+        seller_company.get("general_director_last_name", ""),
+        seller_company.get("general_director_first_name", ""),
+        seller_company.get("general_director_patronymic", "")
+    ]
+    seller_director = " ".join(p for p in seller_director_parts if p) or "_________________"
     customer_signatory = signatory.get("name") or customer.get("contact_person", "_________________")
     signatory_position = signatory.get("position", "Генеральный директор")
 
