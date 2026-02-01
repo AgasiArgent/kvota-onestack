@@ -14039,77 +14039,84 @@ def get(session, quote_id: str):
 
                 # RIGHT: Pricing card (elevated)
                 Div(
-                    Div("СТОИМОСТЬ ДОСТАВКИ", style="font-size: 11px; color: #64748b; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 12px;"),
-                    # Pricing rows
+                    # Two-column layout: pricing on left, comment on right
                     Div(
-                        # Row 1
+                        # LEFT: Pricing inputs
                         Div(
-                            Span("Поставщик → Хаб", style=label_style),
-                            Input(name=f"logistics_supplier_to_hub_{invoice_id}", type="number", value=str(s2h),
-                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
-                            Select(
-                                Option("USD", value="USD", selected=s2h_currency == "USD"),
-                                Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
-                                name=f"logistics_supplier_to_hub_currency_{invoice_id}",
-                                disabled=not is_editable, style=select_style
+                            Div("СТОИМОСТЬ ДОСТАВКИ", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;"),
+                            # Row 1
+                            Div(
+                                Span("Поставщик → Хаб", style=label_style),
+                                Input(name=f"logistics_supplier_to_hub_{invoice_id}", type="number", value=str(s2h),
+                                      min="0", step="0.01", disabled=not is_editable, style=input_style),
+                                Select(
+                                    Option("USD", value="USD", selected=s2h_currency == "USD"),
+                                    Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
+                                    Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
+                                    Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
+                                    Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
+                                    name=f"logistics_supplier_to_hub_currency_{invoice_id}",
+                                    disabled=not is_editable, style=select_style
+                                ),
+                                style=input_row_style
                             ),
-                            style=input_row_style
-                        ),
-                        # Row 2
-                        Div(
-                            Span("Хаб → Таможня", style=label_style),
-                            Input(name=f"logistics_hub_to_customs_{invoice_id}", type="number", value=str(h2c),
-                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
-                            Select(
-                                Option("USD", value="USD", selected=h2c_currency == "USD"),
-                                Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
-                                name=f"logistics_hub_to_customs_currency_{invoice_id}",
-                                disabled=not is_editable, style=select_style
+                            # Row 2
+                            Div(
+                                Span("Хаб → Таможня", style=label_style),
+                                Input(name=f"logistics_hub_to_customs_{invoice_id}", type="number", value=str(h2c),
+                                      min="0", step="0.01", disabled=not is_editable, style=input_style),
+                                Select(
+                                    Option("USD", value="USD", selected=h2c_currency == "USD"),
+                                    Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
+                                    Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
+                                    Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
+                                    Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
+                                    name=f"logistics_hub_to_customs_currency_{invoice_id}",
+                                    disabled=not is_editable, style=select_style
+                                ),
+                                style=input_row_style
                             ),
-                            style=input_row_style
-                        ),
-                        # Row 3
-                        Div(
-                            Span("Таможня → Клиент", style=label_style),
-                            Input(name=f"logistics_customs_to_customer_{invoice_id}", type="number", value=str(c2c),
-                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
-                            Select(
-                                Option("USD", value="USD", selected=c2c_currency == "USD"),
-                                Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
-                                name=f"logistics_customs_to_customer_currency_{invoice_id}",
-                                disabled=not is_editable, style=select_style
+                            # Row 3
+                            Div(
+                                Span("Таможня → Клиент", style=label_style),
+                                Input(name=f"logistics_customs_to_customer_{invoice_id}", type="number", value=str(c2c),
+                                      min="0", step="0.01", disabled=not is_editable, style=input_style),
+                                Select(
+                                    Option("USD", value="USD", selected=c2c_currency == "USD"),
+                                    Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
+                                    Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
+                                    Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
+                                    Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
+                                    name=f"logistics_customs_to_customer_currency_{invoice_id}",
+                                    disabled=not is_editable, style=select_style
+                                ),
+                                style=input_row_style
                             ),
-                            style=input_row_style
+                            # Row 4: Days
+                            Div(
+                                Span("Срок доставки", style=label_style),
+                                Input(name=f"logistics_total_days_{invoice_id}", type="number",
+                                      value=str(days) if days else "", min="1", max="365",
+                                      disabled=not is_editable, style=input_style),
+                                Span("дней", style="margin-left: 8px; color: #94a3b8; font-size: 13px;"),
+                                style=input_row_last_style
+                            ),
+                            style="flex: 0 0 auto;"
                         ),
-                        # Row 4: Days
+                        # RIGHT: Comment box
                         Div(
-                            Span("Срок доставки", style=label_style),
-                            Input(name=f"logistics_total_days_{invoice_id}", type="number",
-                                  value=str(days) if days else "", min="1", max="365",
-                                  disabled=not is_editable, style=input_style),
-                            Span("дней", style="margin-left: 8px; color: #94a3b8; font-size: 13px;"),
-                            style=input_row_last_style
+                            Div("КОММЕНТАРИЙ", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 10px;"),
+                            Textarea(
+                                invoice.get("logistics_notes", ""),
+                                name=f"logistics_notes_{invoice_id}",
+                                placeholder="Заметки по доставке, особые условия, контакты перевозчика...",
+                                disabled=not is_editable,
+                                rows="5",
+                                style="width: 100%; height: 100%; min-height: 120px; padding: 10px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; resize: none; flex: 1; font-family: inherit; line-height: 1.5;"
+                            ),
+                            style="flex: 1; min-width: 200px; display: flex; flex-direction: column;"
                         ),
-                    ),
-                    # Comment
-                    Div(
-                        Input(
-                            name=f"logistics_notes_{invoice_id}",
-                            type="text",
-                            value=invoice.get("logistics_notes", ""),
-                            placeholder="Комментарий к доставке...",
-                            disabled=not is_editable,
-                            style="width: 100%; padding: 10px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; margin-top: 12px;"
-                        ),
+                        style="display: flex; gap: 24px;"
                     ),
                     style=pricing_card_style
                 ),
