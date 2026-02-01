@@ -11,11 +11,20 @@ Generates Russian contract specification documents matching the
 """
 
 from decimal import Decimal
-from typing import Dict, Any, List
+from html import escape
+from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
 from services.database import get_supabase
 from services.export_data_mapper import format_date_russian, amount_in_words_russian
+
+
+# Calculation field mappings (Excel column references from calculation engine)
+# These map to specific calculation results in quote_calculation_results.phase_results
+CALC_FIELDS = {
+    "TOTAL_NO_VAT": "AK16",      # Total item price WITHOUT VAT
+    "TOTAL_WITH_VAT": "AL16",    # Total item price WITH VAT (20%)
+}
 
 
 def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:

@@ -13911,7 +13911,7 @@ def get(session, quote_id: str):
             padding: 16px;
             box-shadow: 0 1px 4px rgba(0,0,0,0.06);
             border: 1px solid #e8ecf1;
-            min-width: 200px;
+            flex: 0 0 280px;
             display: flex;
             flex-direction: column;
         """
@@ -13922,6 +13922,7 @@ def get(session, quote_id: str):
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid #e2e8f0;
             flex: 1;
+            min-width: 300px;
         """
         input_row_style = """
             display: flex;
