@@ -4078,13 +4078,17 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("clock", size=24), f" Ожидают согласования ({pending_count})", cls="card-header card-header--accent card-header--orange"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Запрошено"), Th("Действие"))),
-                        Tbody(*approval_rows) if approval_rows else Tbody(Tr(Td("Нет ожидающих", colspan="5", style="text-align: center;")))
-                    ) if approvals else P("Загрузка..."),
-                    A("Открыть все согласования →", href="/quotes?status=pending_approval"),
-                    cls="card", style="border-left: 4px solid #f59e0b; margin-bottom: 1rem;"
+                    H2(icon("clock", size=20), f" Ожидают согласования ({pending_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Запрошено"), Th("Действие"))),
+                            Tbody(*approval_rows) if approval_rows else Tbody(Tr(Td("Нет ожидающих", colspan="5", style="text-align: center;")))
+                        , cls="table-enhanced") if approvals else P("Загрузка..."),
+                        cls="table-enhanced-container"
+                    ),
+                    A("Открыть все согласования →", href="/quotes?status=pending_approval", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #f59e0b; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #f59e0b; padding: 16px;"
                 )
             )
 
@@ -4116,13 +4120,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("package", size=24), f" Закупки: ожидают оценки ({proc_count})", cls="card-header card-header--accent card-header--amber"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
-                        Tbody(*proc_rows)
+                    H2(icon("package", size=20), f" Закупки: ожидают оценки ({proc_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                            Tbody(*proc_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Открыть раздел Закупки →", href="/procurement"),
-                    cls="card", style="border-left: 4px solid #fbbf24; margin-bottom: 1rem;"
+                    A("Открыть раздел Закупки →", href="/procurement", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #fbbf24; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #fbbf24; padding: 16px;"
                 )
             )
 
@@ -4153,13 +4162,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("truck", size=24), f" Логистика: ожидают данных ({log_count})", cls="card-header card-header--accent card-header--blue"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
-                        Tbody(*log_rows)
+                    H2(icon("truck", size=20), f" Логистика: ожидают данных ({log_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                            Tbody(*log_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Открыть раздел Логистика →", href="/logistics"),
-                    cls="card", style="border-left: 4px solid #3b82f6; margin-bottom: 1rem;"
+                    A("Открыть раздел Логистика →", href="/logistics", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #3b82f6; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #3b82f6; padding: 16px;"
                 )
             )
 
@@ -4190,13 +4204,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("shield-check", size=24), f" Таможня: ожидают данных ({cust_count})", cls="card-header card-header--accent card-header--purple"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
-                        Tbody(*cust_rows)
+                    H2(icon("shield-check", size=20), f" Таможня: ожидают данных ({cust_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                            Tbody(*cust_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Открыть раздел Таможня →", href="/customs"),
-                    cls="card", style="border-left: 4px solid #8b5cf6; margin-bottom: 1rem;"
+                    A("Открыть раздел Таможня →", href="/customs", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #8b5cf6; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #8b5cf6; padding: 16px;"
                 )
             )
 
@@ -4227,13 +4246,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("check-circle", size=24), f" Контроль КП: на проверке ({qc_count})", cls="card-header card-header--accent card-header--pink"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
-                        Tbody(*qc_rows)
+                    H2(icon("check-circle", size=20), f" Контроль КП: на проверке ({qc_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                            Tbody(*qc_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Открыть раздел Контроль КП →", href="/quote-control"),
-                    cls="card", style="border-left: 4px solid #ec4899; margin-bottom: 1rem;"
+                    A("Открыть раздел Контроль КП →", href="/quote-control", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #ec4899; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #ec4899; padding: 16px;"
                 )
             )
 
@@ -4257,27 +4281,28 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         if total_spec_work > 0:
             sections.append(
                 Div(
-                    H2(icon("file-text", size=24), f" Спецификации: требуют внимания ({total_spec_work})", cls="card-header card-header--accent card-header--indigo"),
+                    H2(icon("file-text", size=20), f" Спецификации: требуют внимания ({total_spec_work})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
                     Div(
                         Div(
-                            Div(str(pending_spec_quotes), cls="stat-value", style="font-size: 1.5rem; color: #4338ca;"),
-                            Div("КП для создания спец."),
-                            cls="stat-card", style="padding: 0.5rem;"
+                            Div(str(pending_spec_quotes), style="font-size: 20px; font-weight: 700; color: #4338ca;"),
+                            Div("КП для создания спец.", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
+                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
                         ),
                         Div(
-                            Div(str(spec_counts.get('draft', 0)), cls="stat-value", style="font-size: 1.5rem; color: #6366f1;"),
-                            Div("Черновики"),
-                            cls="stat-card", style="padding: 0.5rem;"
+                            Div(str(spec_counts.get('draft', 0)), style="font-size: 20px; font-weight: 700; color: #6366f1;"),
+                            Div("Черновики", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
+                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
                         ),
                         Div(
-                            Div(str(spec_counts.get('pending_review', 0)), cls="stat-value", style="font-size: 1.5rem; color: #818cf8;"),
-                            Div("На проверке"),
-                            cls="stat-card", style="padding: 0.5rem;"
+                            Div(str(spec_counts.get('pending_review', 0)), style="font-size: 20px; font-weight: 700; color: #818cf8;"),
+                            Div("На проверке", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
+                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
                         ),
-                        cls="stats-grid", style="grid-template-columns: repeat(3, 1fr);"
+                        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;"
                     ),
-                    A("Открыть раздел Спецификации →", href="/spec-control"),
-                    cls="card", style="border-left: 4px solid #6366f1; margin-bottom: 1rem;"
+                    A("Открыть раздел Спецификации →", href="/spec-control", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #6366f1; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #6366f1; padding: 16px;"
                 )
             )
 
@@ -4304,13 +4329,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("wallet", size=24), f" Финансы: активные сделки ({active_deals})", cls="card-header card-header--accent card-header--green"),
-                    Table(
-                        Thead(Tr(Th("Сделка #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
-                        Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="4", style="text-align: center;")))
+                    H2(icon("wallet", size=20), f" Финансы: активные сделки ({active_deals})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("Сделка #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                            Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="4", style="text-align: center;"))),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Открыть раздел Финансы →", href="/finance"),
-                    cls="card", style="border-left: 4px solid #10b981; margin-bottom: 1rem;"
+                    A("Открыть раздел Финансы →", href="/finance", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #10b981; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #10b981; padding: 16px;"
                 )
             )
 
@@ -4341,13 +4371,18 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             sections.append(
                 Div(
-                    H2(icon("edit-3", size=24), f" Продажи: ожидают вашего решения ({sales_count})", cls="card-header card-header--accent card-header--red"),
-                    Table(
-                        Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
-                        Tbody(*sales_rows)
+                    H2(icon("edit-3", size=20), f" Продажи: ожидают вашего решения ({sales_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                            Tbody(*sales_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
                     ),
-                    A("Все мои КП →", href="/quotes"),
-                    cls="card", style="border-left: 4px solid #f97316; margin-bottom: 1rem;"
+                    A("Все мои КП →", href="/quotes", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #f97316; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #f97316; padding: 16px;"
                 )
             )
 
@@ -6071,28 +6106,30 @@ def get(session):
 
     role_badges = [
         Span(role_names.get(r, (r, '#6b7280'))[0],
-             style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; background: {role_names.get(r, (r, '#6b7280'))[1]}20; color: {role_names.get(r, (r, '#6b7280'))[1]}; border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}40;")
+             style=f"display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-right: 6px; background: {role_names.get(r, (r, '#6b7280'))[1]}15; color: {role_names.get(r, (r, '#6b7280'))[1]}; border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}30;")
         for r in roles
-    ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
+    ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 13px;")]
 
     # Build content
     content = [
-        # Header
+        # Compact Header
         Div(
-            H1(icon("inbox", size=28), " Мои задачи", cls="page-header"),
-            P(
-                Strong("Ваши роли: "), *role_badges,
-                style="color: #6b7280; margin-bottom: 1rem;"
-            ),
-            # Task count badge
             Div(
+                icon("inbox", size=24),
+                H1("Мои задачи", style="margin: 0; font-size: 20px; font-weight: 600; color: #1e293b;"),
+                # Task count badge - inline with title
                 Span(
                     f"{total_tasks} " + ("задач" if total_tasks == 0 or total_tasks >= 5 else "задачи" if total_tasks >= 2 else "задача"),
-                    style=f"display: inline-block; padding: 0.5rem 1rem; border-radius: 9999px; font-size: 1rem; font-weight: 600; background: {'#fee2e2' if total_tasks > 0 else '#d1fae5'}; color: {'#dc2626' if total_tasks > 0 else '#059669'};"
+                    style=f"display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600; background: {'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' if total_tasks > 0 else 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)'}; color: {'#dc2626' if total_tasks > 0 else '#059669'};"
                 ),
-                style="margin-bottom: 1.5rem;"
+                style="display: flex; align-items: center; gap: 12px;"
             ),
-            style="margin-bottom: 1rem;"
+            Div(
+                Span("Роли:", style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600; margin-right: 8px;"),
+                *role_badges,
+                style="display: flex; align-items: center; flex-wrap: wrap; margin-top: 8px;"
+            ),
+            style="margin-bottom: 20px;"
         ),
     ]
 
@@ -6103,12 +6140,12 @@ def get(session):
         content.append(
             Div(
                 Div(
-                    Span(icon("check-circle", size=48), style="display: block; margin-bottom: 1rem; color: #22c55e;"),
-                    H3("Отлично! Нет задач.", style="margin-bottom: 0.5rem; color: #059669;"),
-                    P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="color: #6b7280;"),
-                    style="text-align: center; padding: 3rem;"
+                    icon("check-circle", size=40, style="color: #22c55e; margin-bottom: 12px;"),
+                    H3("Отлично! Нет задач.", style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #059669;"),
+                    P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="margin: 0; color: #64748b; font-size: 13px;"),
+                    style="text-align: center; padding: 32px 24px;"
                 ),
-                cls="card",
+                cls="card-elevated",
                 style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0;"
             )
         )
