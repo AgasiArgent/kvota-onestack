@@ -15101,7 +15101,8 @@ def get(session, quote_id: str):
         ) if is_editable or customs_done else None,
 
         method="post",
-        action=f"/customs/{quote_id}"
+        action=f"/customs/{quote_id}",
+        id="customs-form"
     )
 
     # Status banner
@@ -15233,13 +15234,14 @@ def get(session, quote_id: str):
             }
         """),
 
-        # Handsontable initialization script for customs
+        # Handsontable initialization script for customs (explicit save, no auto-save)
         Script(f"""
             (function() {{
                 var quoteId = '{quote_id}';
                 var initialData = {items_json};
                 var isEditable = {'true' if is_editable else 'false'};
                 var hot = null;
+                var hasUnsavedChanges = false;
 
                 function updateCount() {{
                     var count = hot ? hot.countRows() : 0;
@@ -15263,35 +15265,42 @@ def get(session, quote_id: str):
                     }}
                 }}
 
-                function saveCell(row, prop, newVal) {{
-                    var rowData = hot.getSourceDataAtRow(row);
-                    if (!rowData || !rowData.id) return;
+                // Save all customs items data (called on form submit)
+                window.saveCustomsItems = function() {{
+                    if (!hot) return Promise.resolve({{ success: true }});
+
+                    var sourceData = hot.getSourceData();
+                    var items = sourceData.map(function(row) {{
+                        return {{
+                            id: row.id,
+                            hs_code: row.hs_code || '',
+                            customs_duty: parseFloat(row.customs_duty) || 0
+                        }};
+                    }}).filter(function(item) {{ return item.id; }});
+
+                    if (items.length === 0) return Promise.resolve({{ success: true }});
 
                     showSaveStatus('saving');
-                    var body = {{}};
-                    body[prop] = newVal;
-
-                    fetch('/customs/' + quoteId + '/items/' + rowData.id, {{
+                    return fetch('/customs/' + quoteId + '/items/bulk', {{
                         method: 'PATCH',
                         headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify(body)
+                        body: JSON.stringify({{ items: items }})
                     }})
                     .then(function(r) {{ return r.json(); }})
                     .then(function(data) {{
                         if (data.success) {{
                             showSaveStatus('saved');
+                            hasUnsavedChanges = false;
                         }} else {{
                             showSaveStatus('error');
                         }}
+                        return data;
                     }})
-                    .catch(function() {{ showSaveStatus('error'); }});
-                }}
-
-                var saveTimeout = null;
-                function debouncedSave(row, prop, newVal) {{
-                    clearTimeout(saveTimeout);
-                    saveTimeout = setTimeout(function() {{ saveCell(row, prop, newVal); }}, 500);
-                }}
+                    .catch(function(err) {{
+                        showSaveStatus('error');
+                        return {{ success: false, error: err.message }};
+                    }});
+                }};
 
                 function initTable() {{
                     var container = document.getElementById('customs-spreadsheet');
@@ -15357,17 +15366,40 @@ def get(session, quote_id: str):
                         manualColumnResize: true,
                         afterChange: function(changes, source) {{
                             if (source === 'loadData' || !changes) return;
-                            changes.forEach(function(change) {{
-                                var row = change[0], prop = change[1], oldVal = change[2], newVal = change[3];
-                                if (oldVal !== newVal && (prop === 'hs_code' || prop === 'customs_duty')) {{
-                                    debouncedSave(row, prop, newVal);
-                                }}
-                            }});
+                            hasUnsavedChanges = true;
                         }}
                     }});
 
                     updateCount();
                     window.customsHot = hot;
+
+                    // Intercept form submission to save items first
+                    var form = document.getElementById('customs-form');
+                    if (form && isEditable) {{
+                        form.addEventListener('submit', function(e) {{
+                            e.preventDefault();
+                            var submitBtn = e.submitter;
+                            var action = submitBtn ? submitBtn.value : 'save';
+
+                            // Save items first, then submit form
+                            window.saveCustomsItems().then(function(result) {{
+                                if (result.success) {{
+                                    // Create hidden input for action and submit
+                                    var actionInput = document.createElement('input');
+                                    actionInput.type = 'hidden';
+                                    actionInput.name = 'action';
+                                    actionInput.value = action;
+                                    form.appendChild(actionInput);
+
+                                    // Remove event listener and submit
+                                    form.removeEventListener('submit', arguments.callee);
+                                    form.submit();
+                                }} else {{
+                                    alert('Ошибка сохранения данных таможни');
+                                }}
+                            }});
+                        }});
+                    }}
                 }}
 
                 if (document.readyState === 'loading') {{
@@ -15533,12 +15565,81 @@ async def post(session, quote_id: str, request):
 
 
 # ============================================================================
-# CUSTOMS ITEM API (Handsontable auto-save)
+# CUSTOMS ITEM API (bulk save on form submit)
 # ============================================================================
+
+@rt("/customs/{quote_id}/items/bulk")
+async def patch_bulk(session, quote_id: str, request):
+    """Bulk update customs items (hs_code, customs_duty) on form submit"""
+    redirect = require_login(session)
+    if redirect:
+        return {"success": False, "error": "Not authenticated"}
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    # Check role
+    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
+        return {"success": False, "error": "Unauthorized"}
+
+    try:
+        body = await request.json()
+    except:
+        return {"success": False, "error": "Invalid JSON"}
+
+    items = body.get("items", [])
+    if not items:
+        return {"success": True}  # Nothing to update
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to org
+    quote_result = supabase.table("quotes") \
+        .select("id, workflow_status, customs_completed_at") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return {"success": False, "error": "Quote not found"}
+
+    quote = quote_result.data[0]
+    workflow_status = quote.get("workflow_status", "draft")
+
+    # Check if editable
+    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
+    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
+        return {"success": False, "error": "Quote not editable"}
+
+    # Update each item
+    for item in items:
+        item_id = item.get("id")
+        if not item_id:
+            continue
+
+        hs_code = item.get("hs_code", "")
+        customs_duty = item.get("customs_duty", 0)
+
+        try:
+            customs_duty = float(customs_duty) if customs_duty else 0
+        except:
+            customs_duty = 0
+
+        supabase.table("quote_items") \
+            .update({
+                "hs_code": hs_code if hs_code else None,
+                "customs_duty": customs_duty
+            }) \
+            .eq("id", item_id) \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+    return {"success": True}
+
 
 @rt("/customs/{quote_id}/items/{item_id}")
 async def patch(session, quote_id: str, item_id: str, request):
-    """Update a single customs item field (for Handsontable auto-save)"""
+    """Update a single customs item field (legacy - kept for compatibility)"""
     redirect = require_login(session)
     if redirect:
         return {"success": False, "error": "Not authenticated"}
