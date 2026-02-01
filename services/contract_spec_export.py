@@ -233,7 +233,7 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
         product_rows += f"""
         <tr>
             <td style="text-align: center;">{i}</td>
-            <td>{item.get('item_ind_sku', '-')}</td>
+            <td>{item.get('idn_sku') or '-'}</td>
             <td>{item.get('product_code', '-')}</td>
             <td>{item.get('product_name', '')}</td>
             <td>{item.get('brand', '-')}</td>
