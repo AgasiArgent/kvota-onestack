@@ -26773,8 +26773,7 @@ def get(session, q: str = "", status: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        flex: 2;
-        min-width: 200px;
+        width: 280px;
     """
 
     select_style = """
@@ -26783,8 +26782,7 @@ def get(session, q: str = "", status: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        flex: 1;
-        min-width: 140px;
+        width: 150px;
     """
 
     return page_layout("Компании-покупатели",
@@ -27581,8 +27579,7 @@ def get(session, q: str = "", status: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        flex: 2;
-        min-width: 200px;
+        width: 280px;
     """
 
     select_style = """
@@ -27591,8 +27588,7 @@ def get(session, q: str = "", status: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        flex: 1;
-        min-width: 140px;
+        width: 150px;
     """
 
     table_card_style = """
@@ -30893,7 +30889,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        min-width: 150px;
+        width: 180px;
     """
 
     input_style = """
@@ -30902,7 +30898,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        min-width: 180px;
+        width: 220px;
     """
 
     table_card_style = """
@@ -31485,7 +31481,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        min-width: 120px;
+        width: 140px;
     """
 
     input_style = """
@@ -31494,7 +31490,7 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
         border-radius: 6px;
         font-size: 14px;
         background: #f8fafc;
-        min-width: 180px;
+        width: 220px;
     """
 
     table_card_style = """
