@@ -14173,12 +14173,15 @@ def get(session, quote_id: str):
         # Invoice-level logistics (v4.0)
         invoice_logistics_section,
 
-        # Action buttons
+        # Action buttons - sticky footer bar
         Div(
-            btn("Сохранить данные", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
-            btn("Завершить логистику", variant="success", icon_name="check", type="submit", name="action", value="complete") if is_editable else None,
-            Span(icon("check-circle", size=16), " Логистика завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if logistics_done else None,
-            style="margin-top: 1rem; display: flex; gap: 0.75rem;"
+            Div(
+                btn("Сохранить данные", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
+                btn("✓ Завершить логистику", variant="success", icon_name=None, type="submit", name="action", value="complete") if is_editable else None,
+                Span(icon("check-circle", size=16), " Логистика завершена", style="color: #22c55e; font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;") if logistics_done else None,
+                style="display: inline-flex; gap: 1rem; align-items: center;"
+            ),
+            style="margin-top: 1.5rem; padding: 1rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;"
         ) if is_editable or logistics_done else None,
 
         method="post",
