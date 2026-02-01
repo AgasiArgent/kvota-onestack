@@ -6394,26 +6394,61 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
 
 def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
     """
-    Build the dashboard tab navigation.
+    Build the dashboard tab navigation with design system styling.
     """
+    # Tab styles following design system
+    tab_base_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: none;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -1px;
+    """
+
+    tab_inactive_style = f"{tab_base_style} color: #64748b; background: transparent;"
+    tab_active_style = f"""
+        {tab_base_style}
+        color: #1e293b;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-color: #e2e8f0;
+        font-weight: 600;
+        box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+    """
+
     tab_links = []
     for tab in tabs:
         is_active = tab["id"] == active_tab
         tab_links.append(
             A(
-                icon(tab.get("icon", "circle"), size=16, cls="tab-icon"),
+                icon(tab.get("icon", "circle"), size=16, color="#3b82f6" if is_active else "#94a3b8"),
                 Span(tab["label"]),
                 href=f"/dashboard?tab={tab['id']}",
-                cls=f"tab tab-lifted {'tab-active' if is_active else ''}",
-                style="font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.375rem;"
+                style=tab_active_style if is_active else tab_inactive_style
             )
         )
+
+    container_style = """
+        display: flex;
+        gap: 4px;
+        padding: 0 4px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        padding: 12px 16px 0 16px;
+        border-radius: 12px 12px 0 0;
+    """
 
     return Div(
         *tab_links,
         role="tablist",
-        cls="tabs tabs-lifted",
-        style="margin-bottom: 1.5rem; border-bottom: 1px solid #e5e7eb;"
+        style=container_style
     )
 
 
@@ -26608,55 +26643,113 @@ def get(session, q: str = "", status: str = ""):
             )
         )
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    stat_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    """
+
+    filter_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        flex: 2;
+        min-width: 200px;
+    """
+
+    select_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        flex: 1;
+        min-width: 140px;
+    """
+
     return page_layout("Компании-покупатели",
-        # Header
+        # Header card with gradient
         Div(
-            H1(icon("building-2", size=28), " Компании-покупатели (закупки)", cls="page-header"),
+            Div(
+                # Title row
+                Div(
+                    icon("building-2", size=24, color="#475569"),
+                    Span(" Компании-покупатели", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Subtitle
+                P("Наши юрлица для закупки товаров у поставщиков",
+                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+                style="flex: 1;"
+            ),
             btn_link("Добавить компанию", href="/buyer-companies/new", variant="success", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
         ),
 
-        # Info alert explaining what this is
-        Div(
-            icon("lightbulb", size=16), " Компании-покупатели — наши юрлица, через которые мы закупаем товар у поставщиков. "
-            "Указываются на уровне позиции КП (quote_item.buyer_company_id).",
-            cls="alert alert-info"
-        ),
-
-        # Stats cards
+        # Stats cards row
         Div(
             Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="card stat-card"
+                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div("Всего компаний", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("active", 0)), cls="stat-value", style="color: #28a745;"),
-                Div("Активных"),
-                cls="card stat-card"
+                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
+                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("inactive", 0)), cls="stat-value", style="color: #dc3545;"),
-                Div("Неактивных"),
-                cls="card stat-card"
+                Div(str(stats.get("inactive", 0)), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
+                Div("Неактивных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
-            cls="stats-grid"
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;"
         ),
 
-        # Filters
+        # Filters card
         Div(
             Form(
                 Div(
-                    Input(name="q", value=q, placeholder="Поиск по названию или коду...", style="flex: 2;"),
-                    Select(*status_options, name="status", style="flex: 1;"),
+                    # Search with icon
+                    Div(
+                        icon("search", size=16, color="#94a3b8"),
+                        Input(name="q", value=q, placeholder="Поиск по названию или коду...",
+                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
+                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
+                    ),
+                    Select(*status_options, name="status", style=select_style),
                     btn("Поиск", variant="primary", icon_name="search", type="submit"),
                     btn_link("Сбросить", href="/buyer-companies", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 0.5rem; align-items: center;"
+                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
                 ),
                 method="get",
                 action="/buyer-companies"
             ),
-            cls="card", style="margin-bottom: 1rem;"
+            style=filter_card_style
         ),
 
         # Table
@@ -27358,64 +27451,123 @@ def get(session, q: str = "", status: str = ""):
             )
         )
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    stat_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    """
+
+    filter_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        flex: 2;
+        min-width: 200px;
+    """
+
+    select_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        flex: 1;
+        min-width: 140px;
+    """
+
+    table_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    """
+
     return page_layout("Компании-продавцы",
-        # Header
+        # Header card with gradient
         Div(
-            H1(icon("building-2", size=28), " Компании-продавцы (наши юрлица)", cls="page-header"),
+            Div(
+                # Title row
+                Div(
+                    icon("store", size=24, color="#475569"),
+                    Span(" Компании-продавцы", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Subtitle
+                P("Наши юрлица для продажи товаров клиентам",
+                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+                style="flex: 1;"
+            ),
             btn_link("Добавить компанию", href="/seller-companies/new", variant="success", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
         ),
 
-        # Info alert
-        Div(
-            icon("info", size=16), " Компании-продавцы — это наши юридические лица, через которые мы продаём товары клиентам. ",
-            "Каждое КП (quote) привязывается к одной компании-продавцу. ",
-            "Примеры: MBR (МАСТЕР БЭРИНГ), RAR (РадРесурс), CMT (ЦМТО1), GES (GESTUS), TEX (TEXCEL).",
-            cls="alert alert-info"
-        ),
-
-        # Stats cards
+        # Stats cards row
         Div(
             Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="stat-card card"
+                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div("Всего компаний", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("active", 0)), cls="stat-value"),
-                Div("Активных"),
-                cls="stat-card card"
+                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
+                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("inactive", 0)), cls="stat-value"),
-                Div("Неактивных"),
-                cls="stat-card card"
+                Div(str(stats.get("inactive", 0)), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
+                Div("Неактивных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
-            cls="stats-grid"
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;"
         ),
 
-        # Filter form
+        # Filters card
         Div(
             Form(
                 Div(
-                    Label(
-                        "Поиск по названию, коду или ИНН:",
-                        Input(type="text", name="q", value=q, placeholder="Например: МАСТЕР или MBR"),
+                    # Search with icon
+                    Div(
+                        icon("search", size=16, color="#94a3b8"),
+                        Input(type="text", name="q", value=q, placeholder="Название, код или ИНН...",
+                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
+                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
                     ),
-                    Label(
-                        "Статус:",
-                        Select(*status_options, name="status"),
-                    ),
-                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
-                    style="display: flex; gap: 1rem; align-items: flex-end;"
+                    Select(*status_options, name="status", style=select_style),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
+                    btn_link("Сбросить", href="/seller-companies", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
                 ),
                 method="get",
                 action="/seller-companies"
             ),
-            cls="card"
+            style=filter_card_style
         ),
 
-        # Companies table
+        # Companies table with styled container
         Div(
             Table(
                 Thead(
@@ -27431,10 +27583,11 @@ def get(session, q: str = "", status: str = ""):
                     )
                 ),
                 Tbody(*company_rows) if company_rows else Tbody(
-                    Tr(Td("Компании-продавцы не найдены", colspan="8", style="text-align: center; color: #666;"))
+                    Tr(Td("Компании-продавцы не найдены. ", A("Добавить первую компанию", href="/seller-companies/new"),
+                          colspan="8", style="text-align: center; padding: 2rem; color: #64748b;"))
                 )
             ),
-            cls="card"
+            style=table_card_style
         ),
 
         session=session
@@ -31147,77 +31300,128 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
             )
         )
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    stat_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    """
+
+    filter_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    """
+
+    select_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        min-width: 120px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        min-width: 180px;
+    """
+
+    table_card_style = """
+        background: #ffffff;
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    """
+
     return page_layout("Справочник локаций",
-        # Header
+        # Header card with gradient
         Div(
-            H1(icon("map-pin", size=28), " Справочник локаций", cls="page-header"),
+            Div(
+                # Title row
+                Div(
+                    icon("map-pin", size=24, color="#475569"),
+                    Span(" Локации", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                # Subtitle
+                P("Точки получения и доставки товаров",
+                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+                style="flex: 1;"
+            ),
             btn_link("Добавить локацию", href="/locations/new", variant="success", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
         ),
 
-        # Info alert
-        Div(
-            icon("info", size=16), " Локации — это точки получения и доставки товаров. ",
-            "Используются в позициях КП (pickup_location_id). ",
-            "Хабы — логистические центры, Таможня — пункты растаможки.",
-            cls="alert alert-info"
-        ),
-
-        # Stats cards
+        # Stats cards row (4 columns)
         Div(
             Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="stat-card card"
+                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div("Всего", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("active", 0)), cls="stat-value", style="color: green;"),
-                Div("Активных"),
-                cls="stat-card card"
+                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
+                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("hubs", 0)), cls="stat-value", style="color: blue;"),
-                Div("Хабов"),
-                cls="stat-card card"
+                Div(str(stats.get("hubs", 0)), style="font-size: 28px; font-weight: 700; color: #3b82f6;"),
+                Div("Хабов", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
             Div(
-                Div(str(stats.get("customs_points", 0)), cls="stat-value", style="color: orange;"),
-                Div("Таможенных"),
-                cls="stat-card card"
+                Div(str(stats.get("customs_points", 0)), style="font-size: 28px; font-weight: 700; color: #f59e0b;"),
+                Div("Таможенных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=stat_card_style
             ),
-            cls="stats-grid"
+            style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;"
         ),
 
-        # Filter form
+        # Filters card
         Div(
             Form(
                 Div(
-                    Label(
-                        "Поиск:",
-                        Input(type="text", name="q", value=q, placeholder="Код, город или страна..."),
+                    # Search with icon
+                    Div(
+                        icon("search", size=16, color="#94a3b8"),
+                        Input(type="text", name="q", value=q, placeholder="Код, город или страна...",
+                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
+                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
                     ),
-                    Label(
-                        "Страна:",
-                        Select(*country_options, name="country"),
-                    ),
-                    Label(
-                        "Тип:",
-                        Select(*type_options, name="type_filter"),
-                    ),
-                    Label(
-                        "Статус:",
-                        Select(*status_options, name="status"),
-                    ),
-                    btn("Найти", variant="secondary", icon_name="search", type="submit"),
-                    style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;"
+                    Select(*country_options, name="country", style=select_style),
+                    Select(*type_options, name="type_filter", style=select_style),
+                    Select(*status_options, name="status", style=select_style),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
+                    btn_link("Сбросить", href="/locations", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
                 ),
                 method="get",
                 action="/locations"
             ),
-            cls="card"
+            style=filter_card_style
         ),
 
-        # Locations table
+        # Locations table with styled container
         Div(
             Table(
                 Thead(
@@ -31232,10 +31436,11 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
                     )
                 ),
                 Tbody(*location_rows) if location_rows else Tbody(
-                    Tr(Td("Локации не найдены. ", A("Добавьте первую локацию", href="/locations/new"), " или ", A("загрузите стандартные", href="/locations/seed"), ".", colspan="7", style="text-align: center; color: #666;"))
+                    Tr(Td("Локации не найдены. ", A("Добавьте первую локацию", href="/locations/new"), " или ", A("загрузите стандартные", href="/locations/seed"), ".",
+                          colspan="7", style="text-align: center; padding: 2rem; color: #64748b;"))
                 )
             ),
-            cls="card"
+            style=table_card_style
         ),
 
         session=session
