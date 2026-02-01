@@ -13863,8 +13863,9 @@ def get(session, quote_id: str):
         items = invoice.get("items", [])
         total_items_in_invoice = len(items)
 
-        # Country code to name mapping
+        # Country code/name to Russian name mapping
         country_names = {
+            # ISO codes
             "DE": "Германия", "CN": "Китай", "TR": "Турция", "IT": "Италия",
             "RU": "Россия", "US": "США", "KR": "Корея", "JP": "Япония",
             "FR": "Франция", "GB": "Великобритания", "ES": "Испания", "PL": "Польша",
@@ -13873,6 +13874,17 @@ def get(session, quote_id: str):
             "IN": "Индия", "TW": "Тайвань", "VN": "Вьетнам", "TH": "Таиланд",
             "MY": "Малайзия", "SG": "Сингапур", "AE": "ОАЭ", "SA": "Саудовская Аравия",
             "OTHER": "Другое",
+            # English names
+            "Germany": "Германия", "China": "Китай", "Turkey": "Турция", "Italy": "Италия",
+            "Russia": "Россия", "United States": "США", "USA": "США",
+            "South Korea": "Корея", "Korea": "Корея", "Japan": "Япония",
+            "France": "Франция", "United Kingdom": "Великобритания", "UK": "Великобритания",
+            "Spain": "Испания", "Poland": "Польша", "Czech Republic": "Чехия",
+            "Netherlands": "Нидерланды", "Belgium": "Бельгия", "Austria": "Австрия",
+            "Switzerland": "Швейцария", "Sweden": "Швеция", "Finland": "Финляндия",
+            "Denmark": "Дания", "India": "Индия", "Taiwan": "Тайвань",
+            "Vietnam": "Вьетнам", "Thailand": "Таиланд", "Malaysia": "Малайзия",
+            "Singapore": "Сингапур", "UAE": "ОАЭ", "Saudi Arabia": "Саудовская Аравия",
         }
 
         # Get origin location text
