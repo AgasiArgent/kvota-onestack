@@ -18673,7 +18673,7 @@ def get(session, spec_id: str):
         return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
 
     # Get approval status for multi-department workflow
-    approval_status = get_approval_status(spec_id, org_id) or {}
+    approval_status = get_spec_approval_status(spec_id, org_id) or {}
 
     # Safe workflow progress bar with error handling
     try:
