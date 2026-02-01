@@ -666,17 +666,17 @@ class TestProcurementAutoTransition:
 
     @patch('services.workflow_service.get_supabase')
     def test_check_all_procurement_complete_all_done(self, mock_supabase):
-        """check_all_procurement_complete returns True when all items complete."""
+        """check_all_procurement_complete returns True when all items complete and priced."""
         from services.workflow_service import check_all_procurement_complete
 
-        # Mock Supabase response - all items completed
+        # Mock Supabase response - all items completed with valid prices
         mock_client = MagicMock()
         mock_supabase.return_value = mock_client
         mock_response = MagicMock()
         mock_response.data = [
-            {"id": "item1", "procurement_status": "completed"},
-            {"id": "item2", "procurement_status": "completed"},
-            {"id": "item3", "procurement_status": "completed"},
+            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
+            {"id": "item2", "product_name": "item2", "procurement_status": "completed", "purchase_price_original": 200.0, "is_unavailable": False},
+            {"id": "item3", "product_name": "item3", "procurement_status": "completed", "purchase_price_original": None, "is_unavailable": True},  # Unavailable is OK
         ]
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
 
@@ -686,6 +686,7 @@ class TestProcurementAutoTransition:
         assert result["total_items"] == 3
         assert result["completed_items"] == 3
         assert result["pending_items"] == 0
+        assert result["items_without_price"] == 0
 
     @patch('services.workflow_service.get_supabase')
     def test_check_all_procurement_complete_partial(self, mock_supabase):
@@ -697,9 +698,9 @@ class TestProcurementAutoTransition:
         mock_supabase.return_value = mock_client
         mock_response = MagicMock()
         mock_response.data = [
-            {"id": "item1", "procurement_status": "completed"},
-            {"id": "item2", "procurement_status": "pending"},
-            {"id": "item3", "procurement_status": "in_progress"},
+            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
+            {"id": "item2", "product_name": "item2", "procurement_status": "pending", "purchase_price_original": None, "is_unavailable": False},
+            {"id": "item3", "product_name": "item3", "procurement_status": "in_progress", "purchase_price_original": None, "is_unavailable": False},
         ]
         mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
 
@@ -758,10 +759,10 @@ class TestProcurementAutoTransition:
             "procurement_completed_at": None
         }
 
-        # Mock items query (all complete)
+        # Mock items query (all complete with valid price)
         mock_items_response = MagicMock()
         mock_items_response.data = [
-            {"id": "item1", "procurement_status": "completed"},
+            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
         ]
 
         # Mock update
