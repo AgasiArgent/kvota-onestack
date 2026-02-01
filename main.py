@@ -19138,6 +19138,17 @@ def get(session, quote_id: str):
                               style="width: 100%;"),
                         cls="form-group"
                     ),
+                    Div(
+                        Label("Тип дней поставки", For="delivery_days_type"),
+                        Select(
+                            Option("рабочих дней", value="рабочих дней", selected=True),
+                            Option("календарных дней", value="календарных дней"),
+                            name="delivery_days_type",
+                            id="delivery_days_type",
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
@@ -19441,6 +19452,7 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
         "cargo_type": kwargs.get("cargo_type") or None,
         "logistics_period": kwargs.get("logistics_period") or None,
+        "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
         "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
@@ -19887,6 +19899,20 @@ def get(session, spec_id: str):
                               style="width: 100%;"),
                         cls="form-group"
                     ),
+                    Div(
+                        Label("Тип дней поставки", For="delivery_days_type"),
+                        Select(
+                            Option("рабочих дней", value="рабочих дней",
+                                   selected=spec.get("delivery_days_type", "рабочих дней") == "рабочих дней"),
+                            Option("календарных дней", value="календарных дней",
+                                   selected=spec.get("delivery_days_type") == "календарных дней"),
+                            name="delivery_days_type",
+                            id="delivery_days_type",
+                            disabled=not is_editable,
+                            style="width: 100%;"
+                        ),
+                        cls="form-group"
+                    ),
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
@@ -20300,6 +20326,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
         "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
         "cargo_type": kwargs.get("cargo_type") or None,
         "logistics_period": kwargs.get("logistics_period") or None,
+        "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
         "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
