@@ -3357,7 +3357,9 @@ def status_badge_v2(status: str, custom_label: str = None) -> Span:
         'spec_approved': ('Одобрено', 'success'),
     }
 
-    label, variant = mapping.get(status, (status, 'neutral'))
+    # Normalize status to lowercase for matching (handles DB values like "Pending_procurement")
+    status_lower = (status or '').lower().strip()
+    label, variant = mapping.get(status_lower, (status or '—', 'neutral'))
 
     # Use custom label if provided
     if custom_label:
