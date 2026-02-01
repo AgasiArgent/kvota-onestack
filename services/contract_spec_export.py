@@ -43,7 +43,7 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
 
     # 2. Fetch quote with related entities
     quote_result = supabase.table("quotes") \
-        .select("*, customers(id, company_name, name, inn, address, postal_address), seller_companies(id, name, inn, director_name, legal_address)") \
+        .select("*, customers(id, name, inn, address, postal_address), seller_companies(id, name, inn, director_name, legal_address)") \
         .eq("id", quote_id) \
         .execute()
 
