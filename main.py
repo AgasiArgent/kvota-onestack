@@ -19743,7 +19743,7 @@ def get(session, spec_id: str):
                         Span(
                             icon("check-circle", size=18) if dept_status.get('approved') else
                             (icon("clock", size=18) if dept_status.get('can_approve') else icon("x-circle", size=18)),
-                            f" {DEPARTMENT_NAMES.get(dept, dept)}",
+                            f" {SPEC_DEPARTMENT_NAMES.get(dept, dept)}",
                             style=f"font-weight: 600; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#6b7280')}; display: inline-flex; align-items: center; gap: 0.25rem;"
                         ),
                         Span(" - Одобрено" if dept_status.get('approved') else
@@ -19777,7 +19777,7 @@ def get(session, spec_id: str):
                         style="margin-top: 0.5rem;"
                     ) if dept_status.get('can_approve') and user_can_approve_department(session, dept) and status == 'pending_review' else
                     (Div(
-                        P(f"Требуется одобрение: {', '.join([DEPARTMENT_NAMES.get(d, d) for d in dept_status.get('blocking_departments', [])])}",
+                        P(f"Требуется одобрение: {', '.join([SPEC_DEPARTMENT_NAMES.get(d, d) for d in dept_status.get('blocking_departments', [])])}",
                           style="font-size: 0.875rem; color: #dc2626; margin-top: 0.5rem;")
                     ) if dept_status.get('blocking_departments') else None))),
 
