@@ -29037,13 +29037,15 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
     customer = customer_result.data[0]
 
     try:
+        # Combine name parts into full name: "Surname Name Patronymic"
+        # Form has: last_name (Фамилия), name (Имя), patronymic (Отчество)
+        full_name_parts = [last_name, name, patronymic]
+        full_name = " ".join(p.strip() for p in full_name_parts if p and p.strip())
+
         # Insert new contact
         result = supabase.table("customer_contacts").insert({
             "customer_id": customer_id,
-            "organization_id": user["org_id"],
-            "name": name,
-            "last_name": last_name or None,
-            "patronymic": patronymic or None,
+            "name": full_name,  # Combined: "Рахал Мамут Иванович"
             "position": position or None,
             "email": email or None,
             "phone": phone or None,
