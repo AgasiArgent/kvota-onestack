@@ -12481,38 +12481,60 @@ def get(quote_id: str, session):
             "pending_procurement": None,
             "pending_logistics": "→ Логистика",
             "pending_customs": "→ Таможня",
-            "completed": "✓ Завершён"
+            "completed": "Завершён"
         }
         status_label = status_labels.get(status)
-        border_color = "#10b981" if is_completed else "#3b82f6"  # Green for completed, blue for pending
+
+        # Gradient card styling based on status
+        if is_completed:
+            card_bg = "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)"
+            border_color = "#10b981"
+            header_icon = icon("check-circle", size=16, color="#10b981")
+        else:
+            card_bg = "linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%)"
+            border_color = "#3b82f6"
+            header_icon = icon("package", size=16, color="#3b82f6")
 
         return Div(
             # Invoice header
             Div(
-                Span(f"{'✅' if is_completed else '📦'} Инвойс #{idx}", style="font-weight: 600; font-size: 1rem;"),
-                Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px;"),
+                Div(
+                    header_icon,
+                    Span(f" Инвойс #{idx}", style="font-weight: 600; font-size: 1rem; margin-left: 6px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #64748b; background: #e2e8f0; padding: 0.125rem 0.5rem; border-radius: 999px;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
             ),
 
             # Supplier → Buyer
             Div(
                 Span(supp, style="font-size: 0.875rem; color: #374151;"),
-                Span(" → ", style="color: #9ca3af;"),
+                Span(" → ", style="color: #94a3b8;"),
                 Span(buyer_name, style="font-size: 0.875rem; color: #374151;"),
                 style="margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
             ),
 
             # Status label for completed invoices
             Div(
-                Span(status_label, style="font-size: 0.75rem; color: #059669; font-weight: 500;"),
-                style="margin-bottom: 0.5rem;"
+                icon("check", size=12, color="#059669"),
+                Span(f" {status_label}", style="font-size: 0.75rem; color: #059669; font-weight: 500;"),
+                style="margin-bottom: 0.5rem; display: flex; align-items: center;"
             ) if status_label else None,
 
             # Currency, weight, items count
             Div(
                 Span(currency, style="font-weight: 500; color: #059669; margin-right: 0.75rem;"),
-                Span(f"{weight or '—'} кг", style="color: #666; margin-right: 0.75rem;") if weight else Span("⚠ вес", style="color: #f59e0b; margin-right: 0.75rem;"),
-                Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500;") if total_sum > 0 else None,
+                Div(
+                    icon("scale", size=12, color="#64748b"),
+                    Span(f" {weight or '—'} кг", style="color: #64748b; margin-left: 2px;"),
+                    style="display: inline-flex; align-items: center; margin-right: 0.75rem;"
+                ) if weight else Div(
+                    icon("alert-triangle", size=12, color="#f59e0b"),
+                    Span(" вес", style="color: #f59e0b; margin-left: 2px;"),
+                    style="display: inline-flex; align-items: center; margin-right: 0.75rem;"
+                ),
+                Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500; color: #1e40af;") if total_sum > 0 else None,
                 style="font-size: 0.75rem; display: flex; align-items: center;"
             ),
 
@@ -12529,22 +12551,30 @@ def get(quote_id: str, session):
 
             # Complete button for pending invoices
             Div(
-                A("✓ Завершить инвойс", href="#",
-                  onclick=f"completeInvoice('{inv['id']}'); return false;",
-                  style="font-size: 0.75rem; color: white; background: #059669; padding: 0.375rem 0.75rem; border-radius: 4px; text-decoration: none; display: inline-block;"),
+                A(
+                    Span(icon("check", size=14, color="white"), style="margin-right: 4px; display: inline-flex; vertical-align: middle;"),
+                    Span("Завершить инвойс"),
+                    href="#",
+                    onclick=f"completeInvoice('{inv['id']}'); return false;",
+                    style="font-size: 0.75rem; color: white; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+                ),
                 style="margin-top: 0.75rem;"
             ) if can_edit and not is_completed else None,
 
             # Reopen button for completed invoices
             Div(
-                A("🔓 Вернуть в работу", href="#",
-                  onclick=f"reopenInvoice('{inv['id']}'); return false;",
-                  style="font-size: 0.75rem; color: #6b7280; text-decoration: underline;"),
+                A(
+                    icon("lock-open", size=12, color="#64748b"),
+                    Span(" Вернуть в работу", style="margin-left: 4px;"),
+                    href="#",
+                    onclick=f"reopenInvoice('{inv['id']}'); return false;",
+                    style="font-size: 0.75rem; color: #64748b; text-decoration: underline; display: inline-flex; align-items: center;"
+                ),
                 style="margin-top: 0.5rem;"
             ) if can_edit and is_completed else None,
 
             cls="card",
-            style=f"padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid {border_color}; cursor: pointer;" + (" opacity: 0.8; background: #f9fafb;" if is_completed else ""),
+            style=f"padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid {border_color}; cursor: pointer; background: {card_bg}; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.04);" + (" opacity: 0.9;" if is_completed else ""),
             id=f"invoice-card-{inv['id']}",
             onclick=f"selectInvoice('{inv['id']}')"
         )
@@ -12559,11 +12589,11 @@ def get(quote_id: str, session):
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "procurement", user.get("roles", [])),
 
-        # Header
+        # Header with gradient styling
         Div(
-            H1(f"Закупки: {quote_idn}", style="margin: 0;"),
+            H1(f"Закупки: {quote_idn}", style="margin: 0; font-size: 1.5rem;"),
             Div(
-                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem; color: #666;"),
+                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem; color: #64748b;"),
                 workflow_status_badge(workflow_status),
                 style="margin-top: 0.5rem;"
             ),
@@ -12573,32 +12603,36 @@ def get(quote_id: str, session):
         # Workflow progress bar
         workflow_progress_bar(workflow_status),
 
-        # Revision banner
+        # Revision banner with icon
         Div(
             Div(
-                Span("↩ Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem;"),
-                style="margin-bottom: 0.5rem;"
+                icon("rotate-ccw", size=18, color="#92400e"),
+                Span(" Возвращено на доработку", style="font-weight: 600; font-size: 1.1rem; margin-left: 6px;"),
+                style="margin-bottom: 0.5rem; display: flex; align-items: center;"
             ),
             Div(
                 Span("Комментарий:", style="font-weight: 500;"),
                 P(revision_comment, style="margin: 0.25rem 0 0; font-style: italic;"),
             ) if revision_comment else None,
             cls="card",
-            style="background: #fef3c7; border: 2px solid #f59e0b; margin-bottom: 1rem;"
+            style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; margin-bottom: 1rem; border-radius: 10px;"
         ) if is_revision else None,
 
-        # Progress bar
+        # Progress bar with gradient card
         Div(
             Div(
-                Span(f"Прогресс: {priced_items}/{total_items} оценено", style="font-weight: 500;"),
-                Span(f" | {assigned_items} назначено на инвойсы", style="color: #666;"),
-                style="margin-bottom: 0.5rem;"
+                icon("trending-up", size=16, color="#64748b"),
+                Span(f" Прогресс: ", style="font-weight: 500; margin-left: 6px;"),
+                Span(f"{priced_items}/{total_items}", style="font-weight: 600; color: #1e40af;"),
+                Span(" оценено", style="color: #64748b;"),
+                Span(f" | {assigned_items} назначено", style="color: #64748b;"),
+                style="margin-bottom: 0.5rem; display: flex; align-items: center;"
             ),
             Div(
-                Div(style=f"width: {(priced_items/total_items*100) if total_items > 0 else 0}%; height: 8px; background: #22c55e; border-radius: 999px;"),
-                style="width: 100%; height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden;"
+                Div(style=f"width: {(priced_items/total_items*100) if total_items > 0 else 0}%; height: 8px; background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%); border-radius: 999px;"),
+                style="width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden;"
             ),
-            cls="card", style="padding: 1rem; margin-bottom: 1rem;"
+            cls="card", style="padding: 1rem; margin-bottom: 1rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 10px;"
         ),
 
         # Warning if not in correct status
@@ -12612,14 +12646,15 @@ def get(quote_id: str, session):
         Div(
             # Left panel - Invoices
             Div(
-                # Header with add button
+                # Section header with icon
                 Div(
-                    H3("Инвойсы", style="margin: 0;"),
-                    A(icon("plus", size=16), " Новый",
+                    icon("file-text", size=16, color="#64748b"),
+                    Span(" ИНВОЙСЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    A(icon("plus", size=14), " Новый",
                       href="#", onclick="openCreateInvoiceModal(); return false;",
-                      style="font-size: 0.875rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
+                      style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem; margin-left: auto;"
                     ) if can_edit else None,
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                    style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
                 ),
 
                 # Invoice cards (always has id for HTMX target)
@@ -12627,46 +12662,53 @@ def get(quote_id: str, session):
                     *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
                     id="invoices-list"
                 ) if invoices else Div(
-                    P("Нет инвойсов", style="color: #666; text-align: center;"),
-                    P("Создайте инвойс, чтобы начать", style="color: #9ca3af; text-align: center; font-size: 0.875rem;"),
-                    style="padding: 2rem 0;",
+                    icon("inbox", size=24, color="#94a3b8"),
+                    P("Нет инвойсов", style="color: #64748b; text-align: center; margin: 0.5rem 0 0;"),
+                    P("Создайте инвойс, чтобы начать", style="color: #94a3b8; text-align: center; font-size: 0.875rem; margin: 0.25rem 0 0;"),
+                    style="padding: 2rem 0; text-align: center;",
                     id="invoices-list"
                 ),
 
-                # Unassigned items count
+                # Unassigned items count with icon
                 Div(
                     Div(
-                        Span(f"⚠ Без инвойса: {unassigned_count}", style="font-weight: 500; color: #92400e;"),
-                        style="padding: 0.5rem 0.75rem; background: #fef3c7; border-radius: 6px; text-align: center;"
+                        icon("alert-triangle", size=14, color="#92400e"),
+                        Span(f" Без инвойса: {unassigned_count}", style="font-weight: 500; color: #92400e; margin-left: 4px;"),
+                        style="padding: 0.5rem 0.75rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 6px; text-align: center; display: flex; align-items: center; justify-content: center;"
                     ),
                     style="margin-top: 1rem;"
                 ) if unassigned_count > 0 else None,
 
-                style="width: 280px; flex-shrink: 0; padding-right: 1.5rem; border-right: 1px solid #e5e7eb;",
+                style="width: 280px; flex-shrink: 0; padding-right: 1.5rem; border-right: 1px solid #e2e8f0;",
                 id="invoices-panel"
             ),
 
             # Right panel - Items table
             Div(
-                # Header
+                # Section header with icon
                 Div(
-                    H3(f"Позиции ({total_items})", style="margin: 0;"),
                     Div(
-                        Span(id="selection-count", style="margin-right: 1rem; color: #666;"),
-                        A(icon("download", size=16), " Excel",
+                        icon("package", size=16, color="#64748b"),
+                        Span(f" ПОЗИЦИИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                        Span(f" ({total_items})", style="font-size: 11px; color: #94a3b8;"),
+                        style="display: flex; align-items: center;"
+                    ),
+                    Div(
+                        Span(id="selection-count", style="margin-right: 1rem; color: #64748b;"),
+                        A(icon("download", size=14), " Excel",
                           href=f"/procurement/{quote_id}/export",
-                          style="font-size: 0.875rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
+                          style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
                 ),
 
-                # Copy-paste hint
+                # Copy-paste hint with better styling
                 Div(
-                    icon("clipboard", size=14),
+                    icon("clipboard", size=14, color="#64748b"),
                     Span(" Ctrl+V для вставки цен из Excel", style="margin-left: 0.5rem;"),
-                    style="font-size: 0.75rem; color: #666; margin-bottom: 0.5rem; display: flex; align-items: center;"
+                    style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem; display: flex; align-items: center;"
                 ) if can_edit else None,
 
                 # Handsontable container with enhanced styling
@@ -12687,7 +12729,7 @@ def get(quote_id: str, session):
                 id="items-panel"
             ),
 
-            style="display: flex; gap: 0;",
+            style="display: flex; gap: 0; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 1.25rem;",
             cls="card"
         ),
 
@@ -12700,20 +12742,25 @@ def get(quote_id: str, session):
                 cls="fixed inset-0 bg-black/50 z-[999]",
                 style="display: none;"
             ),
-            # Modal box (on top of backdrop)
+            # Modal box with gradient styling
             Div(
                 Div(
-                    H3("Новый инвойс", cls="font-bold text-lg"),
+                    Div(
+                        icon("file-plus", size=18, color="#3b82f6"),
+                        Span(" Новый инвойс", style="font-weight: 600; font-size: 1.125rem; margin-left: 8px;"),
+                        style="display: flex; align-items: center;"
+                    ),
                     A("×", href="#", onclick="closeCreateInvoiceModal(); return false;",
                       cls="text-2xl text-gray-500 hover:text-gray-700 no-underline"),
                     cls="flex justify-between items-center mb-4"
                 ),
 
-                # Selected items indicator
+                # Selected items indicator with icon
                 Div(
-                    Span("📦 Выбрано позиций: ", cls="text-gray-600"),
-                    Span("0", id="modal-selected-count", cls="font-bold text-blue-600"),
-                    cls="mb-4 p-3 bg-blue-50 rounded-lg text-sm"
+                    icon("package", size=16, color="#3b82f6"),
+                    Span(" Выбрано позиций: ", style="color: #64748b; margin-left: 6px;"),
+                    Span("0", id="modal-selected-count", style="font-weight: 600; color: #1e40af;"),
+                    style="margin-bottom: 1rem; padding: 0.75rem; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 8px; font-size: 0.875rem; display: flex; align-items: center;"
                 ),
 
                 Form(
@@ -12838,10 +12885,14 @@ def get(quote_id: str, session):
                 cls="fixed inset-0 bg-black/50 z-[999]",
                 style="display: none;"
             ),
-            # Modal box (on top of backdrop)
+            # Modal box with gradient styling
             Div(
                 Div(
-                    H3("Редактировать инвойс", cls="font-bold text-lg"),
+                    Div(
+                        icon("edit", size=18, color="#3b82f6"),
+                        Span(" Редактировать инвойс", style="font-weight: 600; font-size: 1.125rem; margin-left: 8px;"),
+                        style="display: flex; align-items: center;"
+                    ),
                     A("×", href="#", onclick="closeEditInvoiceModal(); return false;",
                       cls="text-2xl text-gray-500 hover:text-gray-700 no-underline"),
                     cls="flex justify-between items-center mb-4"
@@ -15485,33 +15536,52 @@ def get(session, quote_id: str):
             style="margin-bottom: 1rem; border-left: 3px solid " + (status_color if has_customs else "#e5e7eb") + ";"
         )
 
+    # ==========================================================================
+    # CUSTOMS PAGE STYLING (Logistics-inspired compact design)
+    # ==========================================================================
+    customs_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 16px;
+        margin-bottom: 12px;
+    """
+    customs_section_header_style = "font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"
+    customs_input_row_style = "display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9;"
+    customs_field_label_style = "font-size: 13px; color: #64748b; width: 140px; font-weight: 500;"
+    customs_input_style = "width: 90px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+
     # Build the item-level customs section with Handsontable
     item_customs_section = Div(
-        # Header
+        # Section header with gradient accent
         Div(
-            Div(
-                H3(icon("package", size=20), " Таможня по позициям", style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
-                Span(id="customs-items-count", style="margin-left: 0.5rem; color: #666;"),
-                style="display: flex; align-items: center;"
-            ),
-            Div(
-                Span(id="customs-save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
-                style="display: flex; align-items: center;"
-            ),
-            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+            Span(icon("package", size=14), style="color: #64748b;"),
+            Span("ТАМОЖНЯ ПО ПОЗИЦИЯМ", style=customs_section_header_style[len("font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; "):]),
+            Span(id="customs-items-count", style="margin-left: 0.5rem; color: #64748b; font-size: 12px;"),
+            style=customs_section_header_style
         ),
-        P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Можно копировать из Excel.",
-          style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
+        # Status and description row
+        Div(
+            P("Заполните код ТН ВЭД и процент пошлины для каждой позиции. Можно копировать из Excel.",
+              style="color: #64748b; margin: 0 0 12px 0; font-size: 13px;"),
+            Span(id="customs-save-status", style="font-size: 12px; color: #64748b;"),
+            style="display: flex; justify-content: space-between; align-items: center;"
+        ),
         # Handsontable container with enhanced styling
         Div(
             Div(id="customs-spreadsheet", style="width: 100%; height: 350px; overflow: hidden;"),
             cls="handsontable-container"
         ),
-        cls="card" if items else None,
-        style="margin-bottom: 1rem;"
+        style=customs_card_style
     ) if items else Div(
-        P("Нет позиций в КП для таможенного оформления.", style="color: #666;"),
-        cls="card"
+        Div(
+            Span(icon("package", size=14), style="color: #64748b;"),
+            Span("ТАМОЖНЯ ПО ПОЗИЦИЯМ", style=customs_section_header_style[len("font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; "):]),
+            style=customs_section_header_style
+        ),
+        P("Нет позиций в КП для таможенного оформления.", style="color: #64748b; font-size: 13px;"),
+        style=customs_card_style
     )
 
     # Helper to create currency options for brokerage fields
@@ -15519,16 +15589,32 @@ def get(session, quote_id: str):
         currencies = [("RUB", "₽ RUB"), ("USD", "$ USD"), ("EUR", "€ EUR"), ("CNY", "¥ CNY"), ("TRY", "₺ TRY")]
         return [Option(label, value=code, selected=(code == selected_currency)) for code, label in currencies]
 
-    # Quote-level costs section (customs/brokerage expenses)
+    # Quote-level costs section (customs/brokerage expenses) - with gradient styling
+    customs_costs_card_style = """
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border-radius: 12px;
+        border: 1px solid #fcd34d;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 16px;
+        margin-bottom: 12px;
+    """
+    customs_costs_input_style = "width: 90px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: white;"
+    customs_costs_select_style = "width: 70px; padding: 8px 6px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: white; margin-left: 6px;"
+
     quote_level_costs_section = Div(
-        H3(icon("wallet", size=20), " Общие расходы на КП", style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem;"),
+        # Section header
+        Div(
+            Span(icon("wallet", size=14), style="color: #b45309;"),
+            Span("ОБЩИЕ РАСХОДЫ НА КП", style="font-size: 11px; font-weight: 600; color: #b45309; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+            style="display: flex; align-items: center; margin-bottom: 12px;"
+        ),
         P("Укажите общие расходы на всю квоту. Выберите валюту для каждого поля.",
-          style="color: #666; margin-bottom: 1rem; font-size: 0.875rem;"),
+          style="color: #92400e; margin: 0 0 16px 0; font-size: 13px;"),
         Div(
             # Row 1: brokerage_hub + brokerage_customs
             Div(
                 Div(
-                    Label("Брокерские (хаб)", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Span("Брокерские (хаб)", style=customs_field_label_style),
                     Div(
                         Input(
                             name="brokerage_hub",
@@ -15537,21 +15623,20 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="flex: 1; min-width: 80px;"
+                            style=customs_costs_input_style
                         ),
                         Select(
                             *brokerage_currency_options(brokerage_hub_currency),
                             name="brokerage_hub_currency",
                             disabled=not is_editable,
-                            style="width: 90px; margin-left: 0.5rem;"
+                            style=customs_costs_select_style
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    Small("Брокерские услуги на хабе", style="color: #999;"),
-                    style="flex: 1;"
+                    style=customs_input_row_style
                 ),
                 Div(
-                    Label("Брокерские (таможня)", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Span("Брокерские (таможня)", style=customs_field_label_style),
                     Div(
                         Input(
                             name="brokerage_customs",
@@ -15560,25 +15645,24 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="flex: 1; min-width: 80px;"
+                            style=customs_costs_input_style
                         ),
                         Select(
                             *brokerage_currency_options(brokerage_customs_currency),
                             name="brokerage_customs_currency",
                             disabled=not is_editable,
-                            style="width: 90px; margin-left: 0.5rem;"
+                            style=customs_costs_select_style
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    Small("Брокерские услуги на таможне", style="color: #999;"),
-                    style="flex: 1;"
+                    style=customs_input_row_style
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;"
             ),
             # Row 2: warehousing_at_customs + customs_documentation
             Div(
                 Div(
-                    Label("СВХ", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Span("СВХ", style=customs_field_label_style),
                     Div(
                         Input(
                             name="warehousing_at_customs",
@@ -15587,21 +15671,20 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="flex: 1; min-width: 80px;"
+                            style=customs_costs_input_style
                         ),
                         Select(
                             *brokerage_currency_options(warehousing_at_customs_currency),
                             name="warehousing_at_customs_currency",
                             disabled=not is_editable,
-                            style="width: 90px; margin-left: 0.5rem;"
+                            style=customs_costs_select_style
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    Small("Стоимость склада временного хранения", style="color: #999;"),
-                    style="flex: 1;"
+                    style=customs_input_row_style
                 ),
                 Div(
-                    Label("Сертификаты/документация", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Span("Документация", style=customs_field_label_style),
                     Div(
                         Input(
                             name="customs_documentation",
@@ -15610,25 +15693,24 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="flex: 1; min-width: 80px;"
+                            style=customs_costs_input_style
                         ),
                         Select(
                             *brokerage_currency_options(customs_documentation_currency),
                             name="customs_documentation_currency",
                             disabled=not is_editable,
-                            style="width: 90px; margin-left: 0.5rem;"
+                            style=customs_costs_select_style
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    Small("Сертификация, документация", style="color: #999;"),
-                    style="flex: 1;"
+                    style=customs_input_row_style
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px;"
             ),
-            # Row 3: brokerage_extra (full width)
+            # Row 3: brokerage_extra (half width)
             Div(
                 Div(
-                    Label("Дополнительные брокерские", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
+                    Span("Доп. брокерские", style=customs_field_label_style),
                     Div(
                         Input(
                             name="brokerage_extra",
@@ -15637,41 +15719,43 @@ def get(session, quote_id: str):
                             min="0",
                             step="0.01",
                             disabled=not is_editable,
-                            style="flex: 1; min-width: 80px;"
+                            style=customs_costs_input_style
                         ),
                         Select(
                             *brokerage_currency_options(brokerage_extra_currency),
                             name="brokerage_extra_currency",
                             disabled=not is_editable,
-                            style="width: 90px; margin-left: 0.5rem;"
+                            style=customs_costs_select_style
                         ),
                         style="display: flex; align-items: center;"
                     ),
-                    Small("Дополнительные брокерские расходы", style="color: #999;"),
+                    style="display: flex; align-items: center; padding: 8px 0;"
                 ),
-                style="width: 50%;"
+                style="margin-top: 8px; width: 50%;"
             ),
         ),
-        cls="card",
-        style="margin-bottom: 1rem; background-color: #fffbeb; border-left: 3px solid #f59e0b;"
+        style=customs_costs_card_style
     )
 
-    # Quote-level notes section
+    # Quote-level notes section - with gradient styling
     quote_level_section = Div(
-        H3(icon("message-square", size=20), " Примечания", cls="card-header"),
+        # Section header
         Div(
-            Label("Примечания таможенника",
-                Textarea(
-                    quote.get("customs_notes") or "",
-                    name="customs_notes",
-                    rows="3",
-                    disabled=not is_editable,
-                    style="width: 100%;"
-                ),
-                style="display: block;"
+            Span(icon("message-square", size=14), style="color: #64748b;"),
+            Span("ПРИМЕЧАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+            style="display: flex; align-items: center; margin-bottom: 12px;"
+        ),
+        Div(
+            Span("Примечания таможенника", style="font-size: 13px; color: #64748b; font-weight: 500; display: block; margin-bottom: 8px;"),
+            Textarea(
+                quote.get("customs_notes") or "",
+                name="customs_notes",
+                rows="3",
+                disabled=not is_editable,
+                style="width: 100%; padding: 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; resize: vertical;"
             ),
         ),
-        cls="card"
+        style=customs_card_style
     )
 
     # Form wrapper (only for quote-level costs - items saved via Handsontable)
@@ -15777,45 +15861,52 @@ def get(session, quote_id: str):
         success_banner,
         status_banner,
 
-        # Quote summary with customs stats (v3.0)
+        # Quote summary with customs stats (v3.0) - gradient styling
         Div(
-            H3(icon("file-text", size=20), " Сводка по КП", cls="card-header"),
+            # Section header
+            Div(
+                Span(icon("file-text", size=14), style="color: #64748b;"),
+                Span("СВОДКА ПО КП", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 12px;"
+            ),
             Div(
                 Div(
                     Div(str(total_items), cls="stat-value"),
-                    Div("Позиций"),
+                    Div("Позиций", style="font-size: 12px; color: #64748b;"),
                     cls="stat-card-mini"
                 ),
                 Div(
                     Div(f"{items_with_hs}/{total_items}", cls="stat-value"),
-                    Div("Заполнено ТН ВЭД"),
+                    Div("Заполнено ТН ВЭД", style="font-size: 12px; color: #64748b;"),
                     cls="stat-card-mini"
                 ),
                 Div(
                     Div(f"{items_with_customs}/{total_items}", cls="stat-value"),
-                    Div("С пошлиной"),
+                    Div("С пошлиной", style="font-size: 12px; color: #64748b;"),
                     cls="stat-card-mini"
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+                style="display: flex; gap: 12px; margin-bottom: 12px;"
             ),
             # Progress bar
             Div(
                 Div(
-                    Div(style=f"width: {progress_percent}%; height: 100%; background-color: {'#22c55e' if progress_percent == 100 else '#3b82f6'};"),
-                    style="background-color: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden;"
+                    Div(style=f"width: {progress_percent}%; height: 100%; background: linear-gradient(90deg, {'#22c55e' if progress_percent == 100 else '#3b82f6'} 0%, {'#4ade80' if progress_percent == 100 else '#60a5fa'} 100%); border-radius: 4px;"),
+                    style="background-color: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;"
                 ),
-                P(f"Прогресс: {progress_percent}% ({items_with_hs} из {total_items} позиций)", style="margin-top: 0.25rem; font-size: 0.875rem; color: #666;"),
-                style="margin-top: 0.5rem;"
+                P(f"Прогресс: {progress_percent}% ({items_with_hs} из {total_items} позиций)", style="margin-top: 6px; font-size: 12px; color: #64748b;"),
             ),
-            cls="card"
+            cls="customs-summary-card"
         ),
 
-        # Instructions
+        # Instructions - gradient info card
         Div(
-            H3(icon("info", size=20), " Инструкция", cls="card-header"),
-            P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить расходы' для сохранения. Можно копировать из Excel.", style="margin-bottom: 0;"),
-            cls="card",
-            style="background-color: #f0f9ff; border-left: 4px solid #3b82f6;"
+            Div(
+                Span(icon("info", size=14), style="color: #1e40af;"),
+                Span("ИНСТРУКЦИЯ", style="font-size: 11px; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 8px;"
+            ),
+            P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить расходы' для сохранения. Можно копировать из Excel.", style="margin: 0; font-size: 13px; color: #1e40af;"),
+            style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-radius: 12px; border: 1px solid #93c5fd; padding: 16px; margin-bottom: 12px;"
         ) if is_editable else None,
 
         # Items table (Handsontable - explicit save on button click)
@@ -15827,18 +15918,27 @@ def get(session, quote_id: str):
         # Transition history (Feature #88)
         workflow_transition_history(quote_id),
 
-        # Additional styles
+        # Additional styles - enhanced with gradient design
         Style("""
             .stat-card-mini {
-                background: #f9fafb;
+                background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
                 padding: 0.75rem 1rem;
-                border-radius: 4px;
+                border-radius: 8px;
                 text-align: center;
+                border: 1px solid #e2e8f0;
             }
             .stat-card-mini .stat-value {
                 font-size: 1.5rem;
                 font-weight: bold;
-                color: #1f2937;
+                color: #1e40af;
+            }
+            .customs-summary-card {
+                background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+                border-radius: 12px;
+                border: 1px solid #e2e8f0;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                padding: 16px;
+                margin-bottom: 12px;
             }
         """),
 
