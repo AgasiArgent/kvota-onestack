@@ -3,16 +3,17 @@ Contract-style Specification PDF Export Service
 
 Generates Russian contract specification documents matching the
 "Индутех Спецификация №1" format with:
-- Header referencing contract
+- Header referencing contract (positioned top-right)
 - Items table with 8 columns (№, IDN-SKU, Артикул, Название, Бренд, Кол-во, Цена, Сумма)
 - Totals with amounts in words
-- Fixed delivery conditions template with variable substitution
+- Numbered delivery conditions (1., 2., 3., etc.)
 - Signature blocks for both parties
 
 IMPORTANT: Delivery conditions use FIXED template text - only variable values change.
 This matches standard Russian contract language that shouldn't be edited by users.
 """
 
+import re
 from decimal import Decimal
 from html import escape
 from typing import Dict, Any, List, Tuple, Optional
@@ -21,6 +22,7 @@ from datetime import datetime
 from services.database import get_supabase
 from services.export_data_mapper import (
     format_date_russian,
+    format_date_russian_long,
     amount_in_words_russian,
     format_number_russian,
     get_currency_symbol,
@@ -31,8 +33,11 @@ from services.export_data_mapper import (
 # Calculation field mappings (Excel column references from calculation engine)
 CALC_FIELDS = {
     "TOTAL_NO_VAT": "AK16",      # Total item price WITHOUT VAT
-    "TOTAL_WITH_VAT": "AL16",    # Total item price WITH VAT (20%)
+    "TOTAL_WITH_VAT": "AL16",    # Total item price WITH VAT
 }
+
+# VAT rate (updated to 22% as per Russian tax law 2025)
+VAT_RATE = 22
 
 
 # ============================================================================
@@ -53,7 +58,7 @@ DELIVERY_CONDITIONS_TEMPLATE = {
 
     "warehouse": "Продукция поставляется на склад Покупателя, расположенный по адресу: {warehouse_address}.",
 
-    "delivery_time": "Срок поставки Продукции {delivery_days} рабочих дней с даты комплектации на складе поставщика.",
+    "delivery_time": "Срок поставки Продукции {delivery_days} {days_type} с даты комплектации на складе поставщика.",
 
     "consignee": """Грузополучатель – {client_name}:
 - адрес регистрации: {registration_address}
@@ -99,13 +104,13 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
     Fetch all data needed for contract-style specification PDF.
 
     Returns dict with specification, quote, items, customer, seller_company,
-    contract, signatory, calculation totals, and calculation variables.
+    contract, signatory, calculation totals, calculation variables, and spec_count.
     """
     supabase = get_supabase()
 
     # 1. Fetch specification with contract
     spec_result = supabase.table("specifications") \
-        .select("*, customer_contracts(contract_number, contract_date)") \
+        .select("*, customer_contracts(id, contract_number, contract_date)") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -116,6 +121,23 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
     spec = spec_result.data[0]
     contract = spec.get("customer_contracts") or {}
     quote_id = spec.get("quote_id")
+    contract_id = contract.get("id")
+
+    # 1a. Count specifications for this contract (for "Приложение № X")
+    spec_count = 1
+    if contract_id:
+        count_result = supabase.table("specifications") \
+            .select("id, created_at") \
+            .eq("contract_id", contract_id) \
+            .order("created_at") \
+            .execute()
+
+        if count_result.data:
+            # Find position of current spec in the list
+            for i, s in enumerate(count_result.data, 1):
+                if s["id"] == spec_id:
+                    spec_count = i
+                    break
 
     # 2. Fetch quote with related entities
     quote_result = supabase.table("quotes") \
@@ -201,6 +223,7 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
         "calculations": calculations,
         "organization": organization,
         "calc_variables": calc_variables,
+        "spec_count": spec_count,
     }
 
 
@@ -233,13 +256,14 @@ def _calculate_totals(items: List[Dict], currency: str) -> Dict[str, float]:
 def _build_delivery_conditions(data: Dict[str, Any]) -> str:
     """
     Build delivery conditions HTML from fixed template + variable values.
+    Returns NUMBERED list (1., 2., 3., etc.) as in the docx template.
 
     Uses DELIVERY_CONDITIONS_TEMPLATE with variable substitution from:
     - contract: contract_number, contract_date
     - calc_variables: advance_from_client, time_to_advance, delivery_time
     - customer: name, address, postal_address
     - quote: delivery_terms (+ " 2020" for incoterms)
-    - spec: logistics_period (fallback for delivery days)
+    - spec: delivery_days_type (рабочих/календарных)
 
     Returns HTML string with all delivery conditions.
     """
@@ -251,35 +275,29 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
 
     # Extract variable values
     contract_number = contract.get("contract_number", "б/н")
-    contract_date = format_date_russian(contract.get("contract_date"))
+    contract_date = format_date_russian_long(contract.get("contract_date"))
 
     # Payment terms from calculation variables
-    # advance_from_client can be stored as:
-    # - Percentage (100 = 100%, 50 = 50%) - most common in DB
-    # - Decimal fraction (1.0 = 100%, 0.5 = 50%) - Excel format
+    # advance_from_client can be stored as percentage (100) or decimal (1.0)
     advance_from_client = calc_vars.get("advance_from_client", 100)
     advance_val = float(advance_from_client)
-    # If value is <= 1, it's a decimal fraction; otherwise it's already a percentage
     payment_percent = int(advance_val * 100) if advance_val <= 1 else int(advance_val)
-    payment_days = int(calc_vars.get("time_to_advance", 5))  # Days for advance payment
+    payment_days = int(calc_vars.get("time_to_advance", 5))
 
-    # Delivery time from calculation variables (already calculated: max(production) + max(logistics))
-    # Fallback to logistics_period from spec if not available
+    # Delivery time from calculation variables (sum of max production + max logistics from calc engine)
     delivery_days_val = calc_vars.get("delivery_time")
     if delivery_days_val:
         delivery_days = int(delivery_days_val)
     else:
-        # Parse from logistics_period string (e.g., "30-45 рабочих дней" -> "30-45")
-        logistics_period = spec.get("logistics_period", "30-45")
-        # Extract numeric part
-        import re
-        match = re.search(r'(\d+(?:-\d+)?)', str(logistics_period))
-        delivery_days = match.group(1) if match else "30-45"
+        # Default fallback
+        delivery_days = 30
+
+    # Days type (рабочих/календарных) from spec
+    days_type = spec.get("delivery_days_type", "рабочих дней")
 
     # Customer addresses - handle None/empty gracefully
     client_name = customer.get("company_name") or customer.get("name") or "Покупатель"
     registration_address = customer.get("address") or "не указан"
-    # Postal address for delivery, fallback to registration address
     postal_address = customer.get("postal_address")
     delivery_address = postal_address if postal_address else registration_address
     warehouse_address = delivery_address
@@ -288,41 +306,42 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
     delivery_terms = quote.get("delivery_terms", "DDP")
     incoterms = f"{delivery_terms} 2020" if delivery_terms else "DDP 2020"
 
-    # Build conditions HTML using fixed templates
-    conditions_parts = []
+    # Build numbered conditions list
+    conditions = []
 
     # 1. Quality
-    conditions_parts.append(f"<p>{escape(DELIVERY_CONDITIONS_TEMPLATE['quality'])}</p>")
+    conditions.append(DELIVERY_CONDITIONS_TEMPLATE["quality"])
 
     # 2. Transport
-    conditions_parts.append(f"<p>{escape(DELIVERY_CONDITIONS_TEMPLATE['transport'])}</p>")
+    conditions.append(DELIVERY_CONDITIONS_TEMPLATE["transport"])
 
-    # 3. Payment terms (with variable substitution)
+    # 3. Payment terms
     payment_text = DELIVERY_CONDITIONS_TEMPLATE["payment"].format(
         contract_number=contract_number,
         contract_date=contract_date,
         payment_percent=payment_percent,
         payment_days=payment_days
     )
-    conditions_parts.append(f"<p>{escape(payment_text)}</p>")
+    conditions.append(payment_text)
 
     # 4. Partial delivery
-    conditions_parts.append(f"<p>{escape(DELIVERY_CONDITIONS_TEMPLATE['partial'])}</p>")
+    conditions.append(DELIVERY_CONDITIONS_TEMPLATE["partial"])
 
     # 5. Responsibility
-    conditions_parts.append(f"<p>{escape(DELIVERY_CONDITIONS_TEMPLATE['responsibility'])}</p>")
+    conditions.append(DELIVERY_CONDITIONS_TEMPLATE["responsibility"])
 
     # 6. Warehouse address
     warehouse_text = DELIVERY_CONDITIONS_TEMPLATE["warehouse"].format(
         warehouse_address=warehouse_address
     )
-    conditions_parts.append(f"<p>{escape(warehouse_text)}</p>")
+    conditions.append(warehouse_text)
 
     # 7. Delivery time
     delivery_time_text = DELIVERY_CONDITIONS_TEMPLATE["delivery_time"].format(
-        delivery_days=delivery_days
+        delivery_days=delivery_days,
+        days_type=days_type
     )
-    conditions_parts.append(f"<p>{escape(delivery_time_text)}</p>")
+    conditions.append(delivery_time_text)
 
     # 8. Consignee (multiline)
     consignee_text = DELIVERY_CONDITIONS_TEMPLATE["consignee"].format(
@@ -330,17 +349,22 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
         registration_address=registration_address,
         delivery_address=delivery_address
     )
-    # Convert newlines to <br> for HTML
-    consignee_html = escape(consignee_text).replace('\n', '<br>')
-    conditions_parts.append(f"<p>{consignee_html}</p>")
+    conditions.append(consignee_text)
 
     # 9. Incoterms
     incoterms_text = DELIVERY_CONDITIONS_TEMPLATE["incoterms"].format(
         incoterms=incoterms
     )
-    conditions_parts.append(f"<p>{escape(incoterms_text)}</p>")
+    conditions.append(incoterms_text)
 
-    return "\n".join(conditions_parts)
+    # Build numbered HTML list
+    html_parts = []
+    for i, condition in enumerate(conditions, 1):
+        # Convert newlines to <br> for multiline conditions
+        condition_html = escape(condition).replace('\n', '<br>')
+        html_parts.append(f'<p>{i}. {condition_html}</p>')
+
+    return "\n".join(html_parts)
 
 
 def generate_contract_spec_html(data: Dict[str, Any]) -> str:
@@ -369,14 +393,15 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
     signatory = data["signatory"]
     calculations = data["calculations"]
     organization = data["organization"]
+    spec_count = data.get("spec_count", 1)
 
     # Specification fields
     spec_number = spec.get("specification_number") or "б/н"
-    spec_date = format_date_russian(spec.get("specification_date") or spec.get("sign_date"))
+    spec_date = format_date_russian_long(spec.get("specification_date") or spec.get("sign_date"))
 
     # Contract fields
     contract_number = contract.get("contract_number", "б/н")
-    contract_date = format_date_russian(contract.get("contract_date"))
+    contract_date = format_date_russian_long(contract.get("contract_date"))
 
     # Company names
     seller_name = seller_company.get("name") or spec.get("our_legal_entity") or organization.get("name", "Поставщик")
@@ -480,9 +505,17 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
                 margin: 0.5cm 0;
                 text-transform: uppercase;
             }}
+            .appendix-header {{
+                text-align: right;
+                margin-bottom: 0.5cm;
+                font-size: 10pt;
+            }}
+            .appendix-header p {{
+                margin: 0.05cm 0;
+            }}
             .header {{
                 text-align: center;
-                margin-bottom: 1cm;
+                margin-bottom: 0.5cm;
             }}
             .header p {{
                 margin: 0.1cm 0;
@@ -552,22 +585,22 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
         </style>
     </head>
     <body>
-        <div class="header">
-            <p>Приложение № {escape(str(spec_number))}</p>
+        <div class="appendix-header">
+            <p>Приложение № {spec_count}</p>
             <p>к договору поставки № {escape(str(contract_number))}</p>
-            <p>от «{contract_date}» г.</p>
+            <p>от {contract_date}</p>
         </div>
 
-        <h1>СПЕЦИФИКАЦИЯ №{escape(str(spec_number))}</h1>
+        <h1>СПЕЦИФИКАЦИЯ № {spec_count}</h1>
 
         <div class="header">
-            <p>к договору поставки № {escape(str(contract_number))} от «{contract_date}» г.</p>
+            <p>к договору поставки № {escape(str(contract_number))} от {contract_date}</p>
             <p>между {escape(seller_name)} и {escape(customer_name)}</p>
         </div>
 
         <div class="date-row">
             <span>г. Москва</span>
-            <span>«{spec_date}» г.</span>
+            <span>{spec_date}</span>
         </div>
 
         <table>
@@ -579,8 +612,8 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
                     <th style="width: 24%;">Наименование продукции</th>
                     <th style="width: 10%;">Бренд</th>
                     <th style="width: 6%;">Кол-во</th>
-                    <th style="width: 14%;">Цена в т.ч. НДС (20%)</th>
-                    <th style="width: 14%;">Общая стоимость в т.ч. НДС (20%)</th>
+                    <th style="width: 14%;">Цена в т.ч. НДС ({VAT_RATE}%)</th>
+                    <th style="width: 14%;">Общая стоимость в т.ч. НДС ({VAT_RATE}%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -593,7 +626,7 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
             <p>- общее количество поставляемой Продукции по настоящей Спецификации составляет {total_qty} ({qty_words}) {unit_form} Продукции.</p>
             <p>- общая сумма поставки Продукции по настоящей Спецификации:</p>
             <p style="margin-left: 1cm;"><strong>{format_number_russian(total_with_vat)} ({amount_words}),</strong></p>
-            <p style="margin-left: 1cm;">в т.ч. НДС 20% - {format_number_russian(vat_amount)}.</p>
+            <p style="margin-left: 1cm;">в т.ч. НДС {VAT_RATE}% - {format_number_russian(vat_amount)}.</p>
         </div>
 
         <div class="conditions">

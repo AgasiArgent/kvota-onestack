@@ -231,6 +231,36 @@ def format_date_russian(dt: Optional[datetime] = None) -> str:
     return dt.strftime("%d.%m.%Y")
 
 
+def format_date_russian_long(dt: Optional[datetime] = None) -> str:
+    """
+    Format date in long Russian style: «01» февраля 2026 г.
+
+    Used for contract specification documents.
+    """
+    if dt is None:
+        dt = datetime.now()
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        except ValueError:
+            # Try parsing as date only
+            from datetime import date
+            dt = datetime.strptime(dt[:10], "%Y-%m-%d")
+
+    # Russian month names in genitive case (родительный падеж)
+    months_genitive = {
+        1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+        5: "мая", 6: "июня", 7: "июля", 8: "августа",
+        9: "сентября", 10: "октября", 11: "ноября", 12: "декабря"
+    }
+
+    day = dt.day
+    month = months_genitive[dt.month]
+    year = dt.year
+
+    return f"«{day:02d}» {month} {year} г."
+
+
 def amount_in_words_russian(amount: float, currency: str = "RUB") -> str:
     """
     Convert amount to Russian words (прописью).
