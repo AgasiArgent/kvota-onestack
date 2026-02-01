@@ -13864,102 +13864,186 @@ def get(session, quote_id: str):
         total_items_in_invoice = len(items)
 
         # Get origin location text
-        origin_text = (
-            (invoice.get("pickup_location", {}).get("city", "") + ", " + invoice.get("pickup_location", {}).get("country", ""))
+        origin_city = (
+            invoice.get("pickup_location", {}).get("city", "")
             if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("city")
-            else (invoice.get("supplier", {}).get("country", "—")) if invoice.get("supplier") else "—"
+            else ""
         )
-        dest_text = f"{quote.get('delivery_city', '—')}, {quote.get('delivery_country', '—')}"
+        origin_country = (
+            invoice.get("pickup_location", {}).get("country", "")
+            if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("country")
+            else (invoice.get("supplier", {}).get("country", "")) if invoice.get("supplier") else ""
+        )
+        dest_city = quote.get('delivery_city', '')
+        dest_country = quote.get('delivery_country', '')
         delivery_method_text = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мульти"}.get(
             quote.get("delivery_method", ""), "—"
         )
+        delivery_method_icon = {"air": "✈", "auto": "🚛", "sea": "🚢", "multimodal": "📦"}.get(
+            quote.get("delivery_method", ""), "📦"
+        )
+
+        # Styles
+        card_style = f"""
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            overflow: hidden;
+        """
+        header_style = f"""
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: {'linear-gradient(90deg, #f0fdf4 0%, #fafbfc 100%)' if has_logistics else '#fafbfc'};
+            border-bottom: 1px solid #e2e8f0;
+        """
+        body_style = """
+            display: flex;
+            padding: 16px;
+            gap: 20px;
+        """
+        route_card_style = """
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid #e8ecf1;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+        """
+        pricing_card_style = """
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+            flex: 1;
+        """
+        input_row_style = """
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+        """
+        input_row_last_style = """
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+        """
+        label_style = """
+            font-size: 13px;
+            color: #64748b;
+            width: 90px;
+            font-weight: 500;
+        """
+        input_style = """
+            width: 90px;
+            padding: 8px 10px;
+            font-size: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #f8fafc;
+            transition: all 0.2s;
+        """
+        select_style = """
+            padding: 8px 6px;
+            font-size: 13px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #f8fafc;
+            margin-left: 8px;
+            color: #64748b;
+            cursor: pointer;
+        """
 
         return Div(
             # Invoice header
             Div(
                 Div(
-                    Span(status_icon_elem, style=f"color: {status_color}; margin-right: 0.25rem;"),
-                    Strong(icon("file-text", size=16), f" {invoice_number}"),
-                    Span(f" — {inv_currency}", style="color: #666; margin-left: 0.5rem;"),
-                    style="flex: 1; display: flex; align-items: center;"
+                    Span(status_icon_elem, style=f"color: {status_color}; margin-right: 8px;"),
+                    Span(invoice_number, style="font-weight: 600; color: #1e293b; font-size: 14px;"),
+                    Span(f"  •  {inv_currency}", style="color: #94a3b8; font-size: 13px; margin-left: 4px;"),
+                    style="display: flex; align-items: center;"
                 ),
-                Span(f"#{idx+1}", style="color: #999; font-size: 0.875rem;"),
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb;"
+                Span(f"#{idx+1}", style="color: #94a3b8; font-size: 12px; font-weight: 500; background: #f1f5f9; padding: 2px 8px; border-radius: 4px;"),
+                style=header_style
             ),
 
-            # Two-column layout: Route info (left) + Pricing (right)
+            # Two-column layout
             Div(
-                # LEFT COLUMN: Route and shipment info
+                # LEFT: Route visualization
                 Div(
-                    # Route card
+                    # Origin
+                    Div(
+                        Div("ОТКУДА", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;"),
+                        Div(origin_city or origin_country or "—", style="font-size: 15px; color: #059669; font-weight: 600;"),
+                        Div(origin_country if origin_city else "", style="font-size: 12px; color: #64748b;") if origin_city else None,
+                        style="margin-bottom: 12px;"
+                    ),
+                    # Arrow
                     Div(
                         Div(
-                            Span(origin_text, style="color: #059669; font-weight: 500;"),
-                            style="margin-bottom: 2px;"
+                            Span("", style="display: block; width: 2px; height: 20px; background: linear-gradient(to bottom, #059669, #3b82f6); margin: 0 auto;"),
+                            Span("▼", style="color: #3b82f6; font-size: 8px; display: block; text-align: center; margin-top: -2px;"),
                         ),
-                        Div(
-                            Span("↓", style="color: #999; font-size: 1.1rem;"),
-                            style="margin: 2px 0;"
-                        ),
-                        Div(
-                            Span(dest_text, style="color: #3b82f6; font-weight: 500;"),
-                            style="margin-bottom: 4px;"
-                        ),
-                        Div(
-                            Span(icon("truck", size=12), f" {delivery_method_text}",
-                                 style="color: #d97706; font-weight: 600; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 2px;"),
-                            style="margin-top: 4px;"
-                        ),
-                        style="background: #fef3c7; padding: 0.5rem; border-radius: 4px; border-left: 3px solid #f59e0b; text-align: center;"
+                        style="padding: 4px 0;"
                     ),
-                    # Weight/volume badges
+                    # Destination
+                    Div(
+                        Div("КУДА", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;"),
+                        Div(dest_city or dest_country or "—", style="font-size: 15px; color: #3b82f6; font-weight: 600;"),
+                        Div(dest_country if dest_city else "", style="font-size: 12px; color: #64748b;") if dest_city else None,
+                        style="margin-bottom: 12px;"
+                    ),
+                    # Delivery method badge
+                    Div(
+                        Span(f"{delivery_method_icon} {delivery_method_text}",
+                             style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-block;"),
+                        style="margin-top: auto; padding-top: 8px; border-top: 1px solid #f1f5f9;"
+                    ),
+                    # Weight & items
                     Div(
                         Div(
-                            icon("scale", size=12),
-                            Span(f" {weight} кг" if weight > 0 else " —", style="font-weight: 600;" + (" color: #059669;" if weight > 0 else " color: #999;")),
-                            style="display: flex; align-items: center; gap: 2px; font-size: 0.8rem;"
+                            Span(f"{weight} кг" if weight > 0 else "—", style=f"font-weight: 600; color: {'#059669' if weight > 0 else '#94a3b8'};"),
+                            style="font-size: 13px;"
                         ),
+                        Span("•", style="color: #cbd5e1; margin: 0 8px;"),
                         Div(
-                            icon("package", size=12),
-                            Span(f" {total_items_in_invoice} поз.", style="color: #666;"),
-                            style="display: flex; align-items: center; gap: 2px; font-size: 0.8rem;"
+                            Span(f"{total_items_in_invoice} поз.", style="color: #64748b;"),
+                            style="font-size: 13px;"
                         ),
-                        style="display: flex; gap: 1rem; margin-top: 0.5rem; justify-content: center;"
+                        style="display: flex; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0;"
                     ),
-                    # Items list (collapsed)
+                    # Expandable items
                     Details(
-                        Summary(
-                            Span("▸ позиции", style="cursor: pointer; color: #3b82f6; font-size: 0.75rem;"),
-                        ),
+                        Summary(Span("Показать товары", style="font-size: 12px; color: #3b82f6; cursor: pointer;")),
                         Div(
                             *[Div(
-                                Span(f"• {item.get('brand', '—')} — {item.get('product_name', '—')[:30]}", style="flex: 1; font-size: 0.75rem;"),
-                                Span(f"×{item.get('quantity', 0)}", style="color: #666; font-size: 0.75rem;"),
-                                style="display: flex; justify-content: space-between; padding: 2px 0;"
+                                Span(f"{item.get('brand', '—')} — {item.get('product_name', '—')[:25]}", style="flex: 1; color: #475569;"),
+                                Span(f"×{item.get('quantity', 0)}", style="color: #94a3b8; font-weight: 500;"),
+                                style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;"
                             ) for item in items],
-                            style="background: #f9fafb; padding: 0.5rem; border-radius: 4px; margin-top: 0.25rem;"
+                            style="margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 6px;"
                         ),
-                        style="margin-top: 0.5rem;"
-                    ),
-                    style="flex: 0 0 180px; padding-right: 1rem; border-right: 1px solid #e5e7eb;"
+                        style="margin-top: 8px;"
+                    ) if items else None,
+                    style=route_card_style
                 ),
 
-                # RIGHT COLUMN: Pricing inputs
+                # RIGHT: Pricing card (elevated)
                 Div(
-                    # Segment pricing in vertical layout
+                    Div("СТОИМОСТЬ ДОСТАВКИ", style="font-size: 11px; color: #64748b; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 12px;"),
+                    # Pricing rows
                     Div(
-                        # Row 1: Supplier → Hub
+                        # Row 1
                         Div(
-                            Span("П → Хаб", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
-                            Input(
-                                name=f"logistics_supplier_to_hub_{invoice_id}",
-                                type="number",
-                                value=str(s2h),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
-                            ),
+                            Span("Поставщик → Хаб", style=label_style),
+                            Input(name=f"logistics_supplier_to_hub_{invoice_id}", type="number", value=str(s2h),
+                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
                             Select(
                                 Option("USD", value="USD", selected=s2h_currency == "USD"),
                                 Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
@@ -13967,23 +14051,15 @@ def get(session, quote_id: str):
                                 Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
                                 Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
                                 name=f"logistics_supplier_to_hub_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                                disabled=not is_editable, style=select_style
                             ),
-                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                            style=input_row_style
                         ),
-                        # Row 2: Hub → Customs
+                        # Row 2
                         Div(
-                            Span("Хаб → Там", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
-                            Input(
-                                name=f"logistics_hub_to_customs_{invoice_id}",
-                                type="number",
-                                value=str(h2c),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
-                            ),
+                            Span("Хаб → Таможня", style=label_style),
+                            Input(name=f"logistics_hub_to_customs_{invoice_id}", type="number", value=str(h2c),
+                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
                             Select(
                                 Option("USD", value="USD", selected=h2c_currency == "USD"),
                                 Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
@@ -13991,23 +14067,15 @@ def get(session, quote_id: str):
                                 Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
                                 Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
                                 name=f"logistics_hub_to_customs_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                                disabled=not is_editable, style=select_style
                             ),
-                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                            style=input_row_style
                         ),
-                        # Row 3: Customs → Customer
+                        # Row 3
                         Div(
-                            Span("Там → Кл", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
-                            Input(
-                                name=f"logistics_customs_to_customer_{invoice_id}",
-                                type="number",
-                                value=str(c2c),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="width: 80px; padding: 4px 6px; font-size: 0.875rem;"
-                            ),
+                            Span("Таможня → Клиент", style=label_style),
+                            Input(name=f"logistics_customs_to_customer_{invoice_id}", type="number", value=str(c2c),
+                                  min="0", step="0.01", disabled=not is_editable, style=input_style),
                             Select(
                                 Option("USD", value="USD", selected=c2c_currency == "USD"),
                                 Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
@@ -14015,46 +14083,36 @@ def get(session, quote_id: str):
                                 Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
                                 Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
                                 name=f"logistics_customs_to_customer_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                style="width: 58px; padding: 4px 2px; font-size: 0.8rem; margin-left: 4px;"
+                                disabled=not is_editable, style=select_style
                             ),
-                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                            style=input_row_style
                         ),
                         # Row 4: Days
                         Div(
-                            Span("Дней", style="font-size: 0.75rem; color: #666; width: 60px; display: inline-block;"),
-                            Input(
-                                name=f"logistics_total_days_{invoice_id}",
-                                type="number",
-                                value=str(days) if days else "",
-                                min="1",
-                                max="365",
-                                disabled=not is_editable,
-                                style="width: 60px; padding: 4px 6px; font-size: 0.875rem;"
-                            ),
-                            style="display: flex; align-items: center; margin-bottom: 6px;"
+                            Span("Срок доставки", style=label_style),
+                            Input(name=f"logistics_total_days_{invoice_id}", type="number",
+                                  value=str(days) if days else "", min="1", max="365",
+                                  disabled=not is_editable, style=input_style),
+                            Span("дней", style="margin-left: 8px; color: #94a3b8; font-size: 13px;"),
+                            style=input_row_last_style
                         ),
-                        style="background: #f9fafb; padding: 0.5rem; border-radius: 4px;"
                     ),
-                    # Comment input
+                    # Comment
                     Div(
                         Input(
                             name=f"logistics_notes_{invoice_id}",
                             type="text",
                             value=invoice.get("logistics_notes", ""),
-                            placeholder="💬 Комментарий...",
+                            placeholder="Комментарий к доставке...",
                             disabled=not is_editable,
-                            style="width: 100%; padding: 4px 8px; font-size: 0.8rem;"
+                            style="width: 100%; padding: 10px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; margin-top: 12px;"
                         ),
-                        style="margin-top: 6px;"
                     ),
-                    style="flex: 1; padding-left: 1rem;"
+                    style=pricing_card_style
                 ),
-                style="display: flex; align-items: flex-start;"
+                style=body_style
             ),
-
-            cls="card",
-            style="margin-bottom: 0.75rem; border-left: 3px solid " + (status_color if has_logistics else "#e5e7eb") + "; padding: 0.75rem;"
+            style=card_style
         )
 
     # Build the invoice-level logistics form
