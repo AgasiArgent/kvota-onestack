@@ -119,7 +119,7 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
 
     # 2. Fetch quote with related entities
     quote_result = supabase.table("quotes") \
-        .select("*, customers(id, name, inn, address, postal_address, contact_person), seller_companies(id, name, inn, general_director_last_name, general_director_first_name, general_director_patronymic, general_director_position, registration_address)") \
+        .select("*, customers(id, name, inn, address, postal_address), seller_companies(id, name, inn, general_director_last_name, general_director_first_name, general_director_patronymic, general_director_position, registration_address)") \
         .eq("id", quote_id) \
         .execute()
 
@@ -387,7 +387,8 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
     seller_director = format_signatory_name(seller_director_full)
 
     # Customer signatory - format as "Surname N.P."
-    customer_signatory_full = signatory.get("name") or customer.get("contact_person", "")
+    # Signatory comes from customer_contacts table (fetched in step 6)
+    customer_signatory_full = signatory.get("name", "")
     customer_signatory = format_signatory_name(customer_signatory_full)
     signatory_position = signatory.get("position", "Генеральный директор")
 
