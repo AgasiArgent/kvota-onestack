@@ -19493,7 +19493,7 @@ def get(session, spec_id: str):
 
     # Fetch quote with customer
     quote_result = supabase.table("quotes") \
-        .select("*, customers(id, company_name, name, address, postal_address)") \
+        .select("*, customers(id, name, address, postal_address)") \
         .eq("id", quote_id) \
         .execute()
 
