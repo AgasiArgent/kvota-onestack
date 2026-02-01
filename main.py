@@ -17016,33 +17016,63 @@ def get(session, quote_id: str, preset: str = None):
 
     needs_approval = len(needs_approval_reasons) > 0
 
-    # Build checklist items with auto-detected status (compact design)
+    # Build checklist items with auto-detected status (modern card design)
     def checklist_item(name, description, value, status="info", details=None):
-        """Create a compact checklist item with status indicator."""
-        status_colors = {
-            "ok": ("#dcfce7", "#166534", "✓"),
-            "warning": ("#fef3c7", "#92400e", "⚠"),
-            "error": ("#fee2e2", "#991b1b", "✗"),
-            "info": ("#dbeafe", "#1e40af", "ℹ"),
+        """Create a modern checklist card with status indicator using Lucide icons."""
+        status_config = {
+            "ok": {
+                "bg": "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
+                "border": "#86efac",
+                "text": "#166534",
+                "icon_name": "check-circle",
+                "icon_color": "#22c55e"
+            },
+            "warning": {
+                "bg": "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
+                "border": "#fcd34d",
+                "text": "#92400e",
+                "icon_name": "alert-triangle",
+                "icon_color": "#f59e0b"
+            },
+            "error": {
+                "bg": "linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)",
+                "border": "#fca5a5",
+                "text": "#991b1b",
+                "icon_name": "x-circle",
+                "icon_color": "#ef4444"
+            },
+            "info": {
+                "bg": "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                "border": "#93c5fd",
+                "text": "#1e40af",
+                "icon_name": "info",
+                "icon_color": "#3b82f6"
+            },
         }
-        bg, text_color, status_icon = status_colors.get(status, status_colors["info"])
+        cfg = status_config.get(status, status_config["info"])
 
-        # Compact single-line layout: icon + name + value
+        # Extract item number from name (e.g., "1. Тип сделки" -> "1")
+        item_name = name.split(". ", 1)[-1] if ". " in name else name
+
         return Div(
-            # Header row: status icon + name
+            # Header: status icon + name
             Div(
-                Span(status_icon, style=f"color: {text_color}; font-weight: bold; font-size: 0.9rem; min-width: 1.25rem;"),
-                Span(name, style="font-weight: 500; font-size: 0.8125rem; color: #374151;"),
-                style="display: flex; align-items: center; gap: 0.25rem; margin-bottom: 0.25rem;"
+                icon(cfg["icon_name"], size=16, color=cfg["icon_color"]),
+                Span(item_name, style=f"font-weight: 600; font-size: 0.8125rem; color: #374151; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 0.5rem;"
             ),
-            # Value row with background
+            # Value
             Div(
-                Span(str(value) if value else "—", style="font-weight: 600; font-size: 0.8125rem;"),
-                Span(f" · {details}" if details else "", style="color: #666; font-size: 0.75rem;") if details else None,
-                style=f"padding: 0.375rem 0.5rem; background: {bg}; border-radius: 4px; font-size: 0.8125rem;"
+                Span(str(value) if value else "—", style=f"font-weight: 600; font-size: 0.875rem; color: {cfg['text']};"),
+                style="margin-bottom: 0.25rem;"
             ),
+            # Details (if present)
+            Div(
+                Span(details, style="color: #64748b; font-size: 0.75rem;"),
+                style="margin-top: 0.25rem;"
+            ) if details else None,
             title=description,  # Description as tooltip
-            style="padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; cursor: help;"
+            style=f"padding: 0.75rem; background: {cfg['bg']}; border: 1px solid {cfg['border']}; border-radius: 8px; cursor: help; box-shadow: 0 1px 3px rgba(0,0,0,0.04);"
         )
 
     # Generate checklist
@@ -17255,10 +17285,14 @@ def get(session, quote_id: str, preset: str = None):
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "control", user.get("roles", [])),
 
-        # Header
+        # Header with gradient styling
         Div(
-            H1(icon("file-text", size=28), f" Проверка КП {quote.get('idn_quote', '')}", cls="page-header"),
-            P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #666;"),
+            Div(
+                icon("clipboard-check", size=24, color="#1e40af"),
+                H1(f" Проверка КП {quote.get('idn_quote', '')}", style="margin: 0; margin-left: 8px; font-size: 1.5rem;"),
+                style="display: flex; align-items: center;"
+            ),
+            P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #64748b; margin-top: 0.5rem;"),
             style="margin-bottom: 1rem;"
         ),
 
@@ -17271,51 +17305,68 @@ def get(session, quote_id: str, preset: str = None):
         # Approval requirements banner
         approval_banner,
 
-        # Quote summary card
+        # Quote summary card with gradient styling
         Div(
-            H3("Сводка по КП"),
+            # Section header
+            Div(
+                icon("file-text", size=16, color="#64748b"),
+                Span(" СВОДКА ПО КП", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+            # Summary grid with 5 columns
             Div(
                 Div(
-                    Strong("Тип сделки: "), deal_type_display,
-                    style="margin-bottom: 0.5rem;"
+                    Span("ТИП СДЕЛКИ", style="font-size: 11px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;"),
+                    Span(deal_type_display, style="font-weight: 600; color: #1e40af;"),
                 ),
                 Div(
-                    Strong("Incoterms: "), incoterms or "—",
-                    style="margin-bottom: 0.5rem;"
+                    Span("INCOTERMS", style="font-size: 11px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;"),
+                    Span(incoterms or "—", style="font-weight: 600; color: #1e40af;"),
                 ),
                 Div(
-                    Strong("Валюта: "), currency,
-                    style="margin-bottom: 0.5rem;"
+                    Span("ВАЛЮТА", style="font-size: 11px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;"),
+                    Span(currency, style="font-weight: 600; color: #1e40af;"),
                 ),
                 Div(
-                    Strong("Наценка: "), f"{markup}%",
-                    style="margin-bottom: 0.5rem;"
+                    Span("НАЦЕНКА", style="font-size: 11px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;"),
+                    Span(f"{markup}%", style="font-weight: 600; color: #1e40af;"),
                 ),
                 Div(
-                    Strong("Позиций: "), str(len(items)),
-                    style="margin-bottom: 0.5rem;"
+                    Span("ПОЗИЦИЙ", style="font-size: 11px; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;"),
+                    Span(str(len(items)), style="font-weight: 600; color: #1e40af;"),
                 ),
-                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.5rem;"
+                style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem;"
             ),
             cls="card",
-            style="margin-bottom: 1rem;"
+            style="margin-bottom: 1rem; padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Checklist (compact 2-column grid)
+        # Checklist (modern 3-column grid)
         Div(
-            H3(icon("check-square", size=20), " Чек-лист проверки", cls="card-header"),
-            P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #666; margin-bottom: 0.75rem; font-size: 0.875rem;"),
+            # Section header
+            Div(
+                icon("check-square", size=16, color="#64748b"),
+                Span(" ЧЕК-ЛИСТ ПРОВЕРКИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+            P("Проверьте все пункты перед одобрением или возвратом КП", style="color: #64748b; margin-bottom: 1rem; font-size: 0.8125rem;"),
             Div(
                 *checklist_items,
-                style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;"
+                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;"
             ),
-            cls="card"
+            cls="card",
+            style="padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Detailed Calculation Results Table with Preset Selector
         Div(
-            H3(icon("calculator", size=20), " Детали расчёта по позициям", cls="card-header"),
-            P("Промежуточные значения расчёта для каждой позиции", style="color: #666; margin-bottom: 1rem;"),
+            # Section header
+            Div(
+                icon("calculator", size=16, color="#64748b"),
+                Span(" ДЕТАЛИ РАСЧЁТА ПО ПОЗИЦИЯМ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+            P("Промежуточные значения расчёта для каждой позиции", style="color: #64748b; margin-bottom: 1rem; font-size: 0.8125rem;"),
 
             # Preset selector (links include #calc-table anchor to preserve scroll position)
             Div(
@@ -17386,13 +17437,18 @@ def get(session, quote_id: str, preset: str = None):
 
             id="calc-table",
             cls="card",
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if calc_items_data or calc_summary else None,
 
         # Invoice verification detail (v3.0 Feature UI-022)
         Div(
-            H3("🧾 Проверка инвойсов поставщиков"),
-            P("Сверка сумм и позиций с инвойсами в реестре", style="color: #666; margin-bottom: 1rem;"),
+            # Section header
+            Div(
+                icon("receipt", size=16, color="#64748b"),
+                Span(" ПРОВЕРКА ИНВОЙСОВ ПОСТАВЩИКОВ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+            P("Сверка сумм и позиций с инвойсами в реестре", style="color: #64748b; margin-bottom: 1rem; font-size: 0.8125rem;"),
             # Summary stats
             Div(
                 Div(
@@ -17455,28 +17511,42 @@ def get(session, quote_id: str, preset: str = None):
                 style="margin-top: 1rem; text-align: right;"
             ),
             cls="card",
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if invoicing_summary.total_items > 0 else None,
 
         # Action buttons (only if can edit)
         Div(
-            H3("Действия"),
+            # Section header
+            Div(
+                icon("zap", size=16, color="#64748b"),
+                Span(" ДЕЙСТВИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
             Div(
                 # Return for revision button
-                A("↩ Вернуть на доработку", href=f"/quote-control/{quote_id}/return",
-                  role="button", style="background: #f59e0b; border-color: #f59e0b;"),
+                A(
+                    icon("rotate-ccw", size=16, color="white"),
+                    Span(" Вернуть на доработку", style="margin-left: 6px;"),
+                    href=f"/quote-control/{quote_id}/return",
+                    role="button",
+                    style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                ),
                 # Approve or send for approval
-                A((icon("check", size=16), " Одобрить") if not needs_approval else (icon("clock", size=16), " Отправить на согласование"),
-                  href=f"/quote-control/{quote_id}/approve" if not needs_approval else f"/quote-control/{quote_id}/request-approval",
-                  role="button", style="background: #22c55e; border-color: #22c55e;") if workflow_status == "pending_quote_control" else None,
+                A(
+                    icon("check" if not needs_approval else "clock", size=16, color="white"),
+                    Span(" Одобрить" if not needs_approval else " Отправить на согласование", style="margin-left: 6px;"),
+                    href=f"/quote-control/{quote_id}/approve" if not needs_approval else f"/quote-control/{quote_id}/request-approval",
+                    role="button",
+                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                ) if workflow_status == "pending_quote_control" else None,
                 style="display: flex; gap: 1rem; flex-wrap: wrap;"
             ),
             cls="card",
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if can_edit else Div(
-            P("Редактирование недоступно в текущем статусе", style="color: #666; text-align: center;"),
+            P("Редактирование недоступно в текущем статусе", style="color: #64748b; text-align: center;"),
             cls="card",
-            style="margin-top: 1rem;"
+            style="margin-top: 1rem; padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Link to quote details
