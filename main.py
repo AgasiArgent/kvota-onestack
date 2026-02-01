@@ -13983,8 +13983,8 @@ def get(session, quote_id: str):
                     # Origin
                     Div(
                         Div("ОТКУДА", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;"),
-                        Div(origin_city or origin_country or "—", style="font-size: 15px; color: #059669; font-weight: 600;"),
-                        Div(origin_country if origin_city else "", style="font-size: 12px; color: #64748b;") if origin_city else None,
+                        Div(origin_city, style="font-size: 15px; color: #059669; font-weight: 600;") if origin_city else None,
+                        Div(origin_country or "—", style=f"font-size: {'12px' if origin_city else '15px'}; color: {'#64748b' if origin_city else '#059669'}; font-weight: {'400' if origin_city else '600'};"),
                         style="margin-bottom: 12px;"
                     ),
                     # Arrow
@@ -13998,8 +13998,8 @@ def get(session, quote_id: str):
                     # Destination
                     Div(
                         Div("КУДА", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;"),
-                        Div(dest_city or dest_country or "—", style="font-size: 15px; color: #3b82f6; font-weight: 600;"),
-                        Div(dest_country if dest_city else "", style="font-size: 12px; color: #64748b;") if dest_city else None,
+                        Div(dest_city, style="font-size: 15px; color: #3b82f6; font-weight: 600;") if dest_city else None,
+                        Div(dest_country or "—", style=f"font-size: {'12px' if dest_city else '15px'}; color: {'#64748b' if dest_city else '#3b82f6'}; font-weight: {'400' if dest_city else '600'};"),
                         style="margin-bottom: 12px;"
                     ),
                     # Delivery method badge
