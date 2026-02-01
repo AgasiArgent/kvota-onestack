@@ -284,13 +284,14 @@ def _build_delivery_conditions(data: Dict[str, Any]) -> str:
     payment_percent = int(advance_val * 100) if advance_val <= 1 else int(advance_val)
     payment_days = int(calc_vars.get("time_to_advance", 5))
 
-    # Delivery time from calculation variables (sum of max production + max logistics from calc engine)
-    delivery_days_val = calc_vars.get("delivery_time")
+    # Delivery days from spec (pre-filled from calc_variables.delivery_time, can be overwritten by user)
+    delivery_days_val = spec.get("delivery_days")
     if delivery_days_val:
         delivery_days = int(delivery_days_val)
     else:
-        # Default fallback
-        delivery_days = 30
+        # Fallback to calc_variables.delivery_time if spec.delivery_days not set
+        calc_delivery = calc_vars.get("delivery_time")
+        delivery_days = int(calc_delivery) if calc_delivery else 30
 
     # Days type (рабочих/календарных) from spec
     days_type = spec.get("delivery_days_type", "рабочих дней")

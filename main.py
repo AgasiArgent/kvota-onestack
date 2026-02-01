@@ -20129,6 +20129,20 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         except Exception as e:
             print(f"Error auto-generating specification number: {e}")
 
+    # Pre-fill delivery_days from calc_variables.delivery_time
+    delivery_days = safe_int(kwargs.get("delivery_days"))
+    if not delivery_days:
+        try:
+            calc_vars_result = supabase.table("quote_calculation_variables") \
+                .select("variables") \
+                .eq("quote_id", quote_id) \
+                .execute()
+            if calc_vars_result.data:
+                variables = calc_vars_result.data[0].get("variables", {})
+                delivery_days = safe_int(variables.get("delivery_time"))
+        except Exception as e:
+            print(f"Error fetching delivery_time from calc_variables: {e}")
+
     # Build specification data
     spec_data = {
         "quote_id": quote_id,
@@ -20149,6 +20163,7 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
         "cargo_type": kwargs.get("cargo_type") or None,
         "logistics_period": kwargs.get("logistics_period") or None,
+        "delivery_days": delivery_days,  # Pre-filled from calc_variables.delivery_time
         "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
@@ -21023,6 +21038,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
         "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
         "cargo_type": kwargs.get("cargo_type") or None,
         "logistics_period": kwargs.get("logistics_period") or None,
+        "delivery_days": safe_int(kwargs.get("delivery_days")),
         "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
