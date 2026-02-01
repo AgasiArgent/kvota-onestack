@@ -13925,126 +13925,103 @@ def get(session, quote_id: str):
                 )
             ),
 
-            # Logistics cost inputs (v4.0 - invoice level with multi-currency support)
+            # Logistics cost inputs (v4.0 - compact inline design)
             Div(
-                H4(icon("truck", size=18), " Стоимость логистики по сегментам", style="margin: 0 0 0.75rem; font-size: 0.95rem; color: #374151; display: flex; align-items: center; gap: 0.5rem;"),
+                # Compact inline segment pricing row
                 Div(
                     # Supplier → Hub
-                    Div(
-                        Label("Поставщик → Хаб", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
-                        Div(
-                            Input(
-                                name=f"logistics_supplier_to_hub_{invoice_id}",
-                                type="number",
-                                value=str(s2h),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="flex: 1; min-width: 0;"
-                            ),
-                            Select(
-                                Option("USD", value="USD", selected=s2h_currency == "USD"),
-                                Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
-                                name=f"logistics_supplier_to_hub_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                title="Валюта",
-                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
-                            ),
-                            style="display: flex; gap: 0.25rem;"
-                        ),
-                        style="flex: 1; min-width: 120px;"
+                    Span("П→Хаб:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
+                    Input(
+                        name=f"logistics_supplier_to_hub_{invoice_id}",
+                        type="number",
+                        value=str(s2h),
+                        min="0",
+                        step="0.01",
+                        disabled=not is_editable,
+                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
                     ),
+                    Select(
+                        Option("USD", value="USD", selected=s2h_currency == "USD"),
+                        Option("EUR", value="EUR", selected=s2h_currency == "EUR"),
+                        Option("RUB", value="RUB", selected=s2h_currency == "RUB"),
+                        Option("CNY", value="CNY", selected=s2h_currency == "CNY"),
+                        Option("TRY", value="TRY", selected=s2h_currency == "TRY"),
+                        name=f"logistics_supplier_to_hub_currency_{invoice_id}",
+                        disabled=not is_editable,
+                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
+                    ),
+                    Span("│", style="color: #ddd; margin: 0 8px;"),
                     # Hub → Customs
-                    Div(
-                        Label("Хаб → Таможня", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
-                        Div(
-                            Input(
-                                name=f"logistics_hub_to_customs_{invoice_id}",
-                                type="number",
-                                value=str(h2c),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="flex: 1; min-width: 0;"
-                            ),
-                            Select(
-                                Option("USD", value="USD", selected=h2c_currency == "USD"),
-                                Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
-                                name=f"logistics_hub_to_customs_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                title="Валюта",
-                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
-                            ),
-                            style="display: flex; gap: 0.25rem;"
-                        ),
-                        style="flex: 1; min-width: 120px;"
+                    Span("Хаб→Там:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
+                    Input(
+                        name=f"logistics_hub_to_customs_{invoice_id}",
+                        type="number",
+                        value=str(h2c),
+                        min="0",
+                        step="0.01",
+                        disabled=not is_editable,
+                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
                     ),
+                    Select(
+                        Option("USD", value="USD", selected=h2c_currency == "USD"),
+                        Option("EUR", value="EUR", selected=h2c_currency == "EUR"),
+                        Option("RUB", value="RUB", selected=h2c_currency == "RUB"),
+                        Option("CNY", value="CNY", selected=h2c_currency == "CNY"),
+                        Option("TRY", value="TRY", selected=h2c_currency == "TRY"),
+                        name=f"logistics_hub_to_customs_currency_{invoice_id}",
+                        disabled=not is_editable,
+                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
+                    ),
+                    Span("│", style="color: #ddd; margin: 0 8px;"),
                     # Customs → Customer
-                    Div(
-                        Label("Таможня → Клиент", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
-                        Div(
-                            Input(
-                                name=f"logistics_customs_to_customer_{invoice_id}",
-                                type="number",
-                                value=str(c2c),
-                                min="0",
-                                step="0.01",
-                                disabled=not is_editable,
-                                style="flex: 1; min-width: 0;"
-                            ),
-                            Select(
-                                Option("USD", value="USD", selected=c2c_currency == "USD"),
-                                Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
-                                Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
-                                Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
-                                Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
-                                name=f"logistics_customs_to_customer_currency_{invoice_id}",
-                                disabled=not is_editable,
-                                title="Валюта",
-                                style="width: 75px; flex-shrink: 0; padding: 0.5rem 0.25rem; font-size: 0.875rem;"
-                            ),
-                            style="display: flex; gap: 0.25rem;"
-                        ),
-                        style="flex: 1; min-width: 120px;"
+                    Span("Там→Кл:", style="font-size: 0.8rem; color: #666; margin-right: 4px; white-space: nowrap;"),
+                    Input(
+                        name=f"logistics_customs_to_customer_{invoice_id}",
+                        type="number",
+                        value=str(c2c),
+                        min="0",
+                        step="0.01",
+                        disabled=not is_editable,
+                        style="width: 70px; padding: 4px 6px; font-size: 0.875rem;"
                     ),
-                    # Total days
-                    Div(
-                        Label("Дней", style="display: block; font-size: 0.875rem; margin-bottom: 0.25rem;"),
-                        Input(
-                            name=f"logistics_total_days_{invoice_id}",
-                            type="number",
-                            value=str(days) if days else "",
-                            min="1",
-                            max="365",
-                            disabled=not is_editable,
-                            style="width: 100%;"
-                        ),
-                        style="flex: 0 0 70px;"
+                    Select(
+                        Option("USD", value="USD", selected=c2c_currency == "USD"),
+                        Option("EUR", value="EUR", selected=c2c_currency == "EUR"),
+                        Option("RUB", value="RUB", selected=c2c_currency == "RUB"),
+                        Option("CNY", value="CNY", selected=c2c_currency == "CNY"),
+                        Option("TRY", value="TRY", selected=c2c_currency == "TRY"),
+                        name=f"logistics_customs_to_customer_currency_{invoice_id}",
+                        disabled=not is_editable,
+                        style="width: 58px; padding: 4px 2px; font-size: 0.8rem;"
                     ),
-                    style="display: flex; gap: 0.75rem; flex-wrap: wrap;"
+                    Span("│", style="color: #ddd; margin: 0 8px;"),
+                    # Days
+                    Span("Дней:", style="font-size: 0.8rem; color: #666; margin-right: 4px;"),
+                    Input(
+                        name=f"logistics_total_days_{invoice_id}",
+                        type="number",
+                        value=str(days) if days else "",
+                        min="1",
+                        max="365",
+                        disabled=not is_editable,
+                        style="width: 50px; padding: 4px 6px; font-size: 0.875rem;"
+                    ),
+                    style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"
                 ),
-                # Comments field
+                # Compact single-line comments
                 Div(
-                    Label("💬 Комментарий логиста",
-                        Textarea(
-                            invoice.get("logistics_notes", ""),
-                            name=f"logistics_notes_{invoice_id}",
-                            rows="2",
-                            placeholder="Примечания, особенности доставки...",
-                            disabled=not is_editable,
-                            style="width: 100%; margin-top: 0.25rem;"
-                        ),
-                        style="display: block; font-size: 0.875rem; font-weight: 500; color: #374151;"
+                    Span("💬", style="margin-right: 6px; font-size: 0.9rem;"),
+                    Input(
+                        name=f"logistics_notes_{invoice_id}",
+                        type="text",
+                        value=invoice.get("logistics_notes", ""),
+                        placeholder="Комментарий...",
+                        disabled=not is_editable,
+                        style="flex: 1; padding: 4px 8px; font-size: 0.875rem;"
                     ),
-                    style="margin-top: 0.75rem;"
+                    style="display: flex; align-items: center; margin-top: 8px;"
                 ),
-                style="background: #f9fafb; padding: 1rem; border-radius: 4px;"
+                style="background: #f9fafb; padding: 0.75rem; border-radius: 4px;"
             ),
 
             cls="card",
@@ -14155,69 +14132,8 @@ def get(session, quote_id: str):
         success_banner,
         status_banner,
 
-        # Quote summary with v4.0 invoice-based stats
-        Div(
-            H3(icon("file-text", size=20), " Сводка по КП", cls="card-header"),
-            Div(
-                Div(
-                    Div(str(total_invoices), cls="stat-value"),
-                    Div("Инвойсов"),
-                    cls="stat-card-mini"
-                ),
-                Div(
-                    Div(f"{invoices_with_logistics}/{total_invoices}" if total_invoices > 0 else "0", cls="stat-value"),
-                    Div("Готово"),
-                    cls="stat-card-mini"
-                ),
-                Div(
-                    Div(str(total_items), cls="stat-value"),
-                    Div("Позиций всего"),
-                    cls="stat-card-mini"
-                ),
-                Div(
-                    Div(f"{total_weight:.1f}", cls="stat-value"),
-                    Div("Общий вес (кг)"),
-                    cls="stat-card-mini"
-                ),
-                Div(
-                    Div(f"{total_volume:.2f}", cls="stat-value"),
-                    Div("Общий объём (м³)"),
-                    cls="stat-card-mini"
-                ) if total_volume > 0 else None,
-                Div(
-                    Div(str(len(unique_countries)), cls="stat-value"),
-                    Div("Стран отправки"),
-                    cls="stat-card-mini"
-                ),
-                Div(
-                    Div(format_money(total_logistics_cost, currency), cls="stat-value", style="font-size: 1.25rem;"),
-                    Div("Итого логистика"),
-                    cls="stat-card-mini",
-                    style="background: #dbeafe;"
-                ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;"
-            ),
-            cls="card"
-        ),
-
-        # Logistics form with item-level editing
+        # Logistics form with item-level editing (v4.0 compact design)
         logistics_form,
-
-        # Additional styles
-        Style("""
-            .stat-card-mini {
-                background: #f9fafb;
-                padding: 0.75rem 1rem;
-                border-radius: 4px;
-                text-align: center;
-                min-width: 100px;
-            }
-            .stat-card-mini .stat-value {
-                font-size: 1.5rem;
-                font-weight: bold;
-                color: #1f2937;
-            }
-        """),
 
         # Transition history (Feature #88)
         workflow_transition_history(quote_id),
