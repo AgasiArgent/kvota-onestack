@@ -16,7 +16,13 @@ from typing import Dict, Any, List, Tuple
 from datetime import datetime
 
 from services.database import get_supabase
-from services.export_data_mapper import format_date_russian, amount_in_words_russian
+from services.export_data_mapper import (
+    format_date_russian,
+    amount_in_words_russian,
+    format_number_russian,
+    get_currency_symbol,
+    qty_in_words,
+)
 
 
 # Calculation field mappings (Excel column references from calculation engine)
@@ -69,17 +75,20 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
 
     items = items_result.data or []
 
-    # 4. Fetch calculation results for each item
-    for item in items:
-        calc_result = supabase.table("quote_calculation_results") \
-            .select("phase_results") \
-            .eq("quote_item_id", item["id"]) \
+    # 4. Fetch calculation results for all items in ONE batch query (N+1 fix)
+    if items:
+        item_ids = [item["id"] for item in items]
+        calc_results = supabase.table("quote_calculation_results") \
+            .select("quote_item_id, phase_results") \
+            .in_("quote_item_id", item_ids) \
             .execute()
 
-        if calc_result.data:
-            item["calc"] = calc_result.data[0].get("phase_results", {})
-        else:
-            item["calc"] = {}
+        # Create lookup dict for O(1) access
+        calc_lookup = {r["quote_item_id"]: r.get("phase_results", {}) for r in (calc_results.data or [])}
+
+        # Merge calculation results into items
+        for item in items:
+            item["calc"] = calc_lookup.get(item["id"], {})
 
     # 5. Fetch calculation summary
     summary_result = supabase.table("quote_calculation_summaries") \
@@ -134,10 +143,10 @@ def _calculate_totals(items: List[Dict], currency: str) -> Dict[str, float]:
 
     for item in items:
         calc = item.get("calc", {})
-        qty = item.get("quantity", 1)
+        qty = max(item.get("quantity") or 1, 1)  # Ensure qty is at least 1
         totals["total_qty"] += qty
-        totals["total_no_vat"] += Decimal(str(calc.get("AK16", 0)))
-        totals["total_with_vat"] += Decimal(str(calc.get("AL16", 0)))
+        totals["total_no_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_NO_VAT"], 0)))
+        totals["total_with_vat"] += Decimal(str(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0)))
 
     totals["vat_amount"] = totals["total_with_vat"] - totals["total_no_vat"]
 
@@ -149,21 +158,8 @@ def _calculate_totals(items: List[Dict], currency: str) -> Dict[str, float]:
     }
 
 
-def _format_number_russian(value: float) -> str:
-    """Format number with Russian decimal separator: 1 234,56"""
-    formatted = f"{value:,.2f}"
-    # Replace comma with space (thousands) and period with comma (decimals)
-    formatted = formatted.replace(",", " ").replace(".", ",")
-    return formatted
-
-
-def _qty_in_words(qty: int) -> str:
-    """Convert quantity to Russian words."""
-    try:
-        from num2words import num2words
-        return num2words(qty, lang='ru')
-    except Exception:
-        return str(qty)
+# Note: format_number_russian, qty_in_words moved to export_data_mapper.py
+# Import via: from services.export_data_mapper import format_number_russian, qty_in_words
 
 
 def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[str, str]) -> str:
@@ -211,7 +207,7 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
 
     # Currency
     spec_currency = spec.get("specification_currency") or quote.get("currency", "RUB")
-    currency_symbol = {"RUB": "₽", "USD": "$", "EUR": "€", "CNY": "¥", "TRY": "₺"}.get(spec_currency, spec_currency)
+    currency_symbol = get_currency_symbol(spec_currency)
 
     # Calculate totals
     if calculations:
@@ -228,11 +224,11 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
     product_rows = ""
     for i, item in enumerate(items, 1):
         calc = item.get("calc", {})
-        qty = item.get("quantity", 1)
+        qty = max(item.get("quantity") or 1, 1)  # Ensure qty is at least 1 (division by zero fix)
 
-        # Price with VAT per unit = AL16 / quantity
-        item_total_vat = float(calc.get("AL16", 0))
-        price_per_unit_vat = item_total_vat / qty if qty > 0 else 0
+        # Price with VAT per unit = TOTAL_WITH_VAT / quantity
+        item_total_vat = float(calc.get(CALC_FIELDS["TOTAL_WITH_VAT"], 0))
+        price_per_unit_vat = item_total_vat / qty  # Safe: qty is always >= 1
 
         product_rows += f"""
         <tr>
@@ -242,8 +238,8 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
             <td>{item.get('product_name', '')}</td>
             <td>{item.get('brand', '-')}</td>
             <td style="text-align: center;">{qty}</td>
-            <td style="text-align: right;">{_format_number_russian(price_per_unit_vat)} {currency_symbol}</td>
-            <td style="text-align: right;">{_format_number_russian(item_total_vat)} {currency_symbol}</td>
+            <td style="text-align: right;">{format_number_russian(price_per_unit_vat)} {currency_symbol}</td>
+            <td style="text-align: right;">{format_number_russian(item_total_vat)} {currency_symbol}</td>
         </tr>
         """
 
@@ -253,7 +249,7 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
     total_qty = totals["total_qty"]
 
     amount_words = amount_in_words_russian(float(total_with_vat), spec_currency)
-    qty_words = _qty_in_words(total_qty)
+    qty_words = qty_in_words(total_qty)
 
     # Unit form for quantity
     last_digit = total_qty % 10
@@ -267,36 +263,36 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
     else:
         unit_form = "штук (единиц)"
 
-    # Build delivery conditions section from user-edited fields
+    # Build delivery conditions section from user-edited fields (with HTML escaping for XSS protection)
     conditions_html = ""
     if delivery_conditions.get("quality"):
-        conditions_html += f"<p>{delivery_conditions['quality']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['quality'])}</p>"
     if delivery_conditions.get("transport"):
-        conditions_html += f"<p>{delivery_conditions['transport']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['transport'])}</p>"
     if delivery_conditions.get("currency_note"):
-        conditions_html += f"<p>{delivery_conditions['currency_note']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['currency_note'])}</p>"
     if delivery_conditions.get("payment_terms_text"):
-        conditions_html += f"<p>{delivery_conditions['payment_terms_text']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['payment_terms_text'])}</p>"
     if delivery_conditions.get("partial_delivery"):
-        conditions_html += f"<p>{delivery_conditions['partial_delivery']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['partial_delivery'])}</p>"
     if delivery_conditions.get("delivery_responsibility"):
-        conditions_html += f"<p>{delivery_conditions['delivery_responsibility']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['delivery_responsibility'])}</p>"
     if delivery_conditions.get("warehouse_address"):
-        conditions_html += f"<p>{delivery_conditions['warehouse_address']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['warehouse_address'])}</p>"
     if delivery_conditions.get("delivery_time"):
-        conditions_html += f"<p>{delivery_conditions['delivery_time']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['delivery_time'])}</p>"
 
-    # Consignee section
+    # Consignee section (with HTML escaping)
     consignee_html = ""
     if delivery_conditions.get("consignee_legal") or delivery_conditions.get("consignee_delivery"):
         consignee_html = f"""
-        <p><strong>Грузополучатель – {customer_name}:</strong></p>
-        <p>- {delivery_conditions.get('consignee_legal', '')}</p>
-        <p>- {delivery_conditions.get('consignee_delivery', '')}</p>
+        <p><strong>Грузополучатель – {escape(customer_name)}:</strong></p>
+        <p>- {escape(delivery_conditions.get('consignee_legal', ''))}</p>
+        <p>- {escape(delivery_conditions.get('consignee_delivery', ''))}</p>
         """
 
     if delivery_conditions.get("incoterms"):
-        conditions_html += f"<p>{delivery_conditions['incoterms']}</p>"
+        conditions_html += f"<p>{escape(delivery_conditions['incoterms'])}</p>"
 
     html = f"""
     <!DOCTYPE html>
@@ -432,8 +428,8 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
             <p><strong>Итог:</strong></p>
             <p>- общее количество поставляемой Продукции по настоящей Спецификации составляет {total_qty} ({qty_words}) {unit_form} Продукции.</p>
             <p>- общая сумма поставки Продукции по настоящей Спецификации:</p>
-            <p style="margin-left: 1cm;"><strong>{_format_number_russian(total_with_vat)} ({amount_words}),</strong></p>
-            <p style="margin-left: 1cm;">в т.ч. НДС 20% - {_format_number_russian(vat_amount)}.</p>
+            <p style="margin-left: 1cm;"><strong>{format_number_russian(total_with_vat)} ({amount_words}),</strong></p>
+            <p style="margin-left: 1cm;">в т.ч. НДС 20% - {format_number_russian(vat_amount)}.</p>
         </div>
 
         <div class="conditions">
@@ -471,7 +467,7 @@ def generate_contract_spec_html(data: Dict[str, Any], delivery_conditions: Dict[
     return html
 
 
-def generate_contract_spec_pdf(spec_id: str, org_id: str, delivery_conditions: Dict[str, str]) -> bytes:
+def generate_contract_spec_pdf(spec_id: str, org_id: str, delivery_conditions: Dict[str, str]) -> Tuple[bytes, str]:
     """
     Generate contract-style specification PDF.
 
@@ -481,7 +477,7 @@ def generate_contract_spec_pdf(spec_id: str, org_id: str, delivery_conditions: D
         delivery_conditions: Dict with 11 user-edited delivery condition strings
 
     Returns:
-        PDF file as bytes
+        Tuple of (PDF file as bytes, specification_number for filename)
     """
     try:
         from weasyprint import HTML
@@ -494,7 +490,11 @@ def generate_contract_spec_pdf(spec_id: str, org_id: str, delivery_conditions: D
 
         # Generate PDF
         pdf_bytes = HTML(string=html).write_pdf()
-        return pdf_bytes
+
+        # Return spec_number along with PDF bytes to avoid redundant DB fetch in route
+        spec_number = data["specification"].get("specification_number") or data["specification"].get("proposal_idn") or "spec"
+
+        return pdf_bytes, spec_number
 
     except ImportError:
         raise ImportError("weasyprint is required for PDF generation. Install with: pip install weasyprint")

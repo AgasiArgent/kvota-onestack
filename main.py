@@ -19482,6 +19482,13 @@ def get(session, spec_id: str):
     if not user_has_any_role(session, ["spec_controller", "admin"]):
         return Div("Нет доступа", cls="text-red-600")
 
+    # UUID validation
+    import uuid
+    try:
+        uuid.UUID(spec_id)
+    except ValueError:
+        return Div("Неверный ID спецификации", cls="text-red-600")
+
     supabase = get_supabase()
 
     # Fetch specification with contract
@@ -19602,6 +19609,13 @@ def post(session, spec_id: str,
     if not user_has_any_role(session, ["spec_controller", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    # UUID validation
+    import uuid
+    try:
+        uuid.UUID(spec_id)
+    except ValueError:
+        return RedirectResponse("/spec-control", status_code=303)
+
     try:
         from services.contract_spec_export import generate_contract_spec_pdf
 
@@ -19613,16 +19627,9 @@ def post(session, spec_id: str,
             "consignee_delivery": consignee_delivery, "incoterms": incoterms,
         }
 
-        pdf_bytes = generate_contract_spec_pdf(spec_id, org_id, delivery_conditions)
+        # Service now returns tuple (pdf_bytes, spec_number) - no redundant DB fetch needed
+        pdf_bytes, spec_number = generate_contract_spec_pdf(spec_id, org_id, delivery_conditions)
 
-        supabase = get_supabase()
-        spec_result = supabase.table("specifications") \
-            .select("specification_number, proposal_idn") \
-            .eq("id", spec_id) \
-            .eq("organization_id", org_id) \
-            .execute()
-
-        spec_number = spec_result.data[0].get("specification_number") or spec_result.data[0].get("proposal_idn") or "spec" if spec_result.data else "spec"
         safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
 
         from starlette.responses import Response

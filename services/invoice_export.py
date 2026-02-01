@@ -10,29 +10,17 @@ from decimal import Decimal
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
-from services.export_data_mapper import ExportData, format_date_russian, amount_in_words_russian
+from services.export_data_mapper import (
+    ExportData,
+    format_date_russian,
+    amount_in_words_russian,
+    format_number_russian,
+    get_currency_symbol,
+)
 
 
-def get_currency_symbol(currency: str) -> str:
-    """Get currency symbol for display"""
-    return {
-        "RUB": "₽",
-        "USD": "$",
-        "EUR": "€",
-        "CNY": "¥",
-        "TRY": "₺"
-    }.get(currency, currency)
-
-
-def format_number_russian(value: float) -> str:
-    """Format number with Russian decimal separator: 1 234,56"""
-    if value is None:
-        return "0,00"
-    # Format with thousand separator and 2 decimals
-    formatted = f"{value:,.2f}"
-    # Replace comma with space (thousands) and period with comma (decimals)
-    formatted = formatted.replace(",", " ").replace(".", ",")
-    return formatted
+# Note: get_currency_symbol and format_number_russian are now consolidated
+# in export_data_mapper.py to avoid code duplication
 
 
 def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None) -> str:

@@ -289,3 +289,59 @@ def amount_in_words_russian(amount: float, currency: str = "RUB") -> str:
 
     except ImportError:
         return f"{amount:,.2f} {currency}"
+
+
+def format_number_russian(value: float) -> str:
+    """
+    Format number with Russian decimal separator: 1 234,56
+
+    Uses space as thousands separator and comma as decimal separator.
+
+    Args:
+        value: Number to format (handles None)
+
+    Returns:
+        Formatted string like "1 234,56"
+    """
+    if value is None:
+        return "0,00"
+    formatted = f"{value:,.2f}"
+    # Replace comma with space (thousands) and period with comma (decimals)
+    formatted = formatted.replace(",", " ").replace(".", ",")
+    return formatted
+
+
+def get_currency_symbol(currency: str) -> str:
+    """
+    Get currency symbol for display.
+
+    Args:
+        currency: ISO currency code (RUB, USD, EUR, CNY, TRY)
+
+    Returns:
+        Currency symbol or the code itself if not in mapping
+    """
+    return {
+        "RUB": "₽",
+        "USD": "$",
+        "EUR": "€",
+        "CNY": "¥",
+        "TRY": "₺",
+    }.get(currency, currency)
+
+
+def qty_in_words(qty: int) -> str:
+    """
+    Convert quantity to Russian words.
+
+    Args:
+        qty: Integer quantity
+
+    Returns:
+        Number in Russian words (e.g., "пятнадцать")
+    """
+    try:
+        from num2words import num2words
+        return num2words(qty, lang='ru')
+    except ImportError:
+        return str(qty)
