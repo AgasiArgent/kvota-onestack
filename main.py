@@ -12193,18 +12193,28 @@ def get(quote_id: str, session):
                         cls="flex gap-4 mb-4"
                     ),
 
-                    # Action buttons
+                    # Error message container
+                    Div(id="create-invoice-error", cls="text-red-500 text-sm mt-2 hidden"),
+
+                    # Action buttons - use flex-none to prevent button stretching
                     Div(
-                        btn("Создать инвойс", variant="primary", type="submit", icon_name="check"),
-                        btn("Отмена", variant="ghost", type="button", onclick="closeCreateInvoiceModal()"),
+                        Button(
+                            icon("check", size=16),
+                            "Создать",
+                            type="button",
+                            onclick="submitCreateInvoiceForm()",
+                            cls="flex-none btn btn--primary"
+                        ),
+                        Button(
+                            "Отмена",
+                            type="button",
+                            onclick="closeCreateInvoiceModal()",
+                            cls="flex-none btn btn--ghost"
+                        ),
                         cls="flex gap-3 justify-end mt-6"
                     ),
 
-                    id="create-invoice-form",
-                    hx_post=f"/api/procurement/{quote_id}/invoices",
-                    hx_target="#invoices-list",
-                    hx_swap="innerHTML",
-                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'post') { closeCreateInvoiceModal(); location.reload(); }"
+                    id="create-invoice-form"
                 ),
 
                 id="create-invoice-modal-box",
@@ -12352,6 +12362,36 @@ def get(quote_id: str, session):
                 document.getElementById('create-invoice-form').reset();
                 document.getElementById('modal-item-ids').value = '';
                 document.getElementById('modal-selected-count').textContent = '0';
+                document.getElementById('create-invoice-error').classList.add('hidden');
+            }};
+
+            window.submitCreateInvoiceForm = function() {{
+                var form = document.getElementById('create-invoice-form');
+                var errEl = document.getElementById('create-invoice-error');
+                errEl.classList.add('hidden');
+
+                var formData = new FormData(form);
+
+                fetch('/api/procurement/{quote_id}/invoices', {{
+                    method: 'POST',
+                    body: formData
+                }})
+                .then(function(response) {{
+                    return response.json();
+                }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        closeCreateInvoiceModal();
+                        location.reload();
+                    }} else {{
+                        errEl.textContent = data.error || 'Ошибка создания инвойса';
+                        errEl.classList.remove('hidden');
+                    }}
+                }})
+                .catch(function(err) {{
+                    errEl.textContent = 'Ошибка сети: ' + err.message;
+                    errEl.classList.remove('hidden');
+                }});
             }};
 
             window.openEditInvoiceModal = function(invoiceId) {{
@@ -12694,8 +12734,8 @@ async def api_create_invoice(quote_id: str, session, request):
             .eq("quote_id", quote_id) \
             .execute()
 
-        # Return updated invoice list HTML
-        return await render_invoices_list(quote_id, org_id, session)
+        # Return success JSON
+        return JSONResponse({"success": True, "invoice_id": invoice_id})
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
