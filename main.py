@@ -14219,9 +14219,12 @@ def get(session, quote_id: str):
     revision_comment = quote.get("revision_comment")
     is_revision = revision_department == "logistics" and workflow_status == "pending_logistics"
 
-    # Check if logistics is editable
-    editable_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    is_editable = workflow_status in editable_statuses and quote.get("logistics_completed_at") is None
+    # Check if quote is ready for logistics (procurement must be done first)
+    ready_for_logistics_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "pending_sales_review"]
+    is_ready_for_logistics = workflow_status in ready_for_logistics_statuses
+
+    # Check if logistics is editable (only when ready and not completed)
+    is_editable = is_ready_for_logistics and quote.get("logistics_completed_at") is None
     logistics_done = quote.get("logistics_completed_at") is not None
 
     # Fetch invoices for this quote
@@ -14674,12 +14677,22 @@ def get(session, quote_id: str):
         action=f"/logistics/{quote_id}"
     )
 
-    # Status banner
+    # Status banners
+    # Not ready for logistics (still in procurement/draft)
+    not_ready_banner = Div(
+        P(icon("clock", size=16), " КП ещё не готово для логистики. Ожидается завершение этапа закупок.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+        P(f"Текущий статус: {STATUS_NAMES.get(workflow_status, workflow_status)}",
+          style="margin: 0.5rem 0 0; font-size: 0.875rem; color: #666;"),
+        style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if not is_ready_for_logistics and not logistics_done else None
+
+    # Other non-editable status
     status_banner = Div(
         P(icon("alert-triangle", size=16), f" Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование логистики недоступно.",
           style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
-    ) if not is_editable and not logistics_done else None
+    ) if is_ready_for_logistics and not is_editable and not logistics_done else None
 
     success_banner = Div(
         P(icon("check-circle", size=16), " Логистика по данному КП завершена.",
@@ -14746,6 +14759,7 @@ def get(session, quote_id: str):
         ) if is_revision else None,
 
         # Status banners
+        not_ready_banner,
         success_banner,
         status_banner,
 
@@ -14795,9 +14809,9 @@ async def post(session, quote_id: str, request):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
-    # Check if editable
-    editable_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    if workflow_status not in editable_statuses or quote.get("logistics_completed_at"):
+    # Check if quote is ready for logistics (procurement must be done first)
+    ready_statuses = ["pending_logistics", "pending_customs", "pending_logistics_and_customs", "pending_sales_review"]
+    if workflow_status not in ready_statuses or quote.get("logistics_completed_at"):
         return RedirectResponse(f"/logistics/{quote_id}", status_code=303)
 
     # Get form data
@@ -15196,14 +15210,16 @@ def get(session, quote_id: str):
     customs_documentation_currency = calc_vars.get("customs_documentation_currency", "RUB")
     brokerage_extra_currency = calc_vars.get("brokerage_extra_currency", "RUB")
 
-    # Check if customs is editable
-    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    is_editable = workflow_status in editable_statuses and quote.get("customs_completed_at") is None
+    # Check if quote is ready for customs (procurement must be done first)
+    ready_for_customs_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "pending_sales_review"]
+    is_ready_for_customs = workflow_status in ready_for_customs_statuses
+
+    # Check if customs is editable (only when ready and not completed)
+    is_editable = is_ready_for_customs and quote.get("customs_completed_at") is None
     customs_done = quote.get("customs_completed_at") is not None
 
-    # Check if customs can be completed (only after procurement is done)
-    completable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs"]
-    can_complete_customs = workflow_status in completable_statuses and not customs_done
+    # Check if customs can be completed
+    can_complete_customs = is_ready_for_customs and not customs_done
 
     # v3.0: Fetch pickup location info for items
     pickup_location_map = {}
@@ -15602,12 +15618,22 @@ def get(session, quote_id: str):
         id="customs-form"
     )
 
-    # Status banner
+    # Status banners
+    # Not ready for customs (still in procurement/draft)
+    not_ready_banner = Div(
+        P(icon("clock", size=16), " КП ещё не готово для таможни. Ожидается завершение этапа закупок.",
+          style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+        P(f"Текущий статус: {STATUS_NAMES.get(workflow_status, workflow_status)}",
+          style="margin: 0.5rem 0 0; font-size: 0.875rem; color: #666;"),
+        style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if not is_ready_for_customs and not customs_done else None
+
+    # Other non-editable status
     status_banner = Div(
         P(icon("alert-triangle", size=16), f" Данный КП в статусе '{STATUS_NAMES.get(workflow_status, workflow_status)}' — редактирование таможни недоступно.",
           style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
         style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
-    ) if not is_editable and not customs_done else None
+    ) if is_ready_for_customs and not is_editable and not customs_done else None
 
     success_banner = Div(
         P(icon("check-circle", size=16), " Таможня по данному КП завершена.",
@@ -15663,6 +15689,7 @@ def get(session, quote_id: str):
         ) if is_revision else None,
 
         # Status banners
+        not_ready_banner,
         success_banner,
         status_banner,
 
@@ -15954,9 +15981,9 @@ async def post(session, quote_id: str, request):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
-    # Check if editable
-    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
+    # Check if quote is ready for customs (procurement must be done first)
+    ready_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "pending_sales_review"]
+    if workflow_status not in ready_statuses or quote.get("customs_completed_at"):
         return RedirectResponse(f"/customs/{quote_id}", status_code=303)
 
     # Get all items for this quote
@@ -16103,10 +16130,10 @@ async def api_customs_items_bulk_update(quote_id: str, session, request):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
-    # Check if editable
-    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
-        return {"success": False, "error": "Quote not editable"}
+    # Check if quote is ready for customs (procurement must be done first)
+    ready_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "pending_sales_review"]
+    if workflow_status not in ready_statuses or quote.get("customs_completed_at"):
+        return {"success": False, "error": "Quote not editable - waiting for procurement"}
 
     # Update each item
     for item in items:
@@ -16168,10 +16195,10 @@ async def patch(session, quote_id: str, item_id: str, request):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
-    # Check if editable
-    editable_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "draft", "pending_procurement"]
-    if workflow_status not in editable_statuses or quote.get("customs_completed_at"):
-        return {"success": False, "error": "Quote not editable"}
+    # Check if quote is ready for customs (procurement must be done first)
+    ready_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "pending_sales_review"]
+    if workflow_status not in ready_statuses or quote.get("customs_completed_at"):
+        return {"success": False, "error": "Quote not editable - waiting for procurement"}
 
     # Verify item belongs to quote
     item_result = supabase.table("quote_items") \
