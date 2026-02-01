@@ -409,11 +409,10 @@ class TestInvoiceDataValidation:
             if func_start == -1:
                 pytest.skip("api_create_invoice function not found")
 
-            func_body = content[func_start:func_start + 2500]
+            func_body = content[func_start:func_start + 3000]
 
-            # Should have auto-generation logic
-            assert 'if not invoice_number' in func_body or 'not invoice_number' in func_body
-            assert 'INV-' in func_body, "Should generate invoice number with INV- prefix"
+            # Should have auto-generation logic (always generates, no user input)
+            assert 'invoice_number = f"INV-' in func_body or 'INV-' in func_body, "Should generate invoice number with INV- prefix"
 
 
 # ============================================================================
