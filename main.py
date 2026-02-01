@@ -3195,8 +3195,41 @@ def feedback_button():
     )
 
 
-def page_layout(title, *content, session=None, current_path: str = ""):
-    """Standard page layout wrapper with sidebar navigation and theme support"""
+def page_layout(title, *content, session=None, current_path: str = "", hide_nav: bool = False):
+    """Standard page layout wrapper with sidebar navigation and theme support.
+
+    Args:
+        title: Page title
+        *content: Page content elements
+        session: User session data
+        current_path: Current path for nav highlighting
+        hide_nav: If True, hides sidebar and shows full-width content (for login, etc.)
+    """
+    # Build body content based on hide_nav flag
+    if hide_nav:
+        body_content = Body(
+            *content,
+            # Initialize Lucide icons for standalone pages
+            Script("""
+                document.addEventListener('DOMContentLoaded', function() {
+                    if (typeof lucide !== 'undefined') {
+                        lucide.createIcons();
+                    }
+                });
+            """)
+        )
+    else:
+        body_content = Body(
+            Div(
+                sidebar(session or {}, current_path),
+                Main(Div(*content, cls="container"), cls="main-content"),
+                cls="app-layout"
+            ),
+            # Feedback components (floating button + modal)
+            feedback_button(),
+            feedback_modal()
+        )
+
     return Html(
         Head(
             Title(f"{title} - Kvota"),
@@ -3246,16 +3279,7 @@ def page_layout(title, *content, session=None, current_path: str = ""):
                 });
             """)
         ),
-        Body(
-            Div(
-                sidebar(session or {}, current_path),
-                Main(Div(*content, cls="container"), cls="main-content"),
-                cls="app-layout"
-            ),
-            # Feedback components (floating button + modal)
-            feedback_button(),
-            feedback_modal()
-        ),
+        body_content,
         data_theme="light"  # Default theme
     )
 
@@ -3833,19 +3857,157 @@ def get(session):
     if session.get("user"):
         return RedirectResponse("/dashboard", status_code=303)
 
-    return page_layout("Login",
+    # Design system styles for login page
+    login_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+        padding: 40px;
+        max-width: 420px;
+        margin: 0 auto;
+    """
+
+    logo_section_style = """
+        text-align: center;
+        margin-bottom: 32px;
+    """
+
+    logo_icon_style = """
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        border-radius: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    """
+
+    title_style = """
+        font-size: 24px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0 0 6px 0;
+        letter-spacing: -0.02em;
+    """
+
+    subtitle_style = """
+        font-size: 14px;
+        color: #64748b;
+        margin: 0;
+    """
+
+    label_style = """
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 12px 14px;
+        font-size: 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #1e293b;
+        transition: all 0.2s ease;
+        box-sizing: border-box;
+    """
+
+    input_group_style = "margin-bottom: 20px;"
+
+    submit_btn_style = """
+        width: 100%;
+        padding: 14px 20px;
+        font-size: 15px;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 28px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    """
+
+    page_bg_style = """
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+    """
+
+    return page_layout("Вход — OneStack",
         Div(
-            H1("Login"),
-            Form(
-                Label("Email", Input(name="email", type="email", placeholder="your@email.com", required=True)),
-                Label("Password", Input(name="password", type="password", required=True)),
-                btn("Sign In", variant="primary", icon_name="log-in", type="submit", full_width=True),
-                method="post",
-                action="/login"
+            Div(
+                # Logo section
+                Div(
+                    Div(
+                        icon("layers", size=28, style="color: white;"),
+                        style=logo_icon_style
+                    ),
+                    H1("OneStack", style=title_style),
+                    P("Система управления коммерческими предложениями", style=subtitle_style),
+                    style=logo_section_style
+                ),
+
+                # Form
+                Form(
+                    # Email field
+                    Div(
+                        Label("Электронная почта", style=label_style, **{"for": "email"}),
+                        Input(
+                            name="email",
+                            type="email",
+                            id="email",
+                            placeholder="your@email.com",
+                            required=True,
+                            style=input_style
+                        ),
+                        style=input_group_style
+                    ),
+                    # Password field
+                    Div(
+                        Label("Пароль", style=label_style, **{"for": "password"}),
+                        Input(
+                            name="password",
+                            type="password",
+                            id="password",
+                            required=True,
+                            style=input_style
+                        ),
+                        style=input_group_style
+                    ),
+                    # Submit button
+                    Button(
+                        icon("log-in", size=18),
+                        Span("Войти в систему"),
+                        type="submit",
+                        style=submit_btn_style
+                    ),
+                    method="post",
+                    action="/login"
+                ),
+                style=login_card_style
             ),
-            cls="card", style="max-width: 400px; margin: 2rem auto;"
+            style=page_bg_style
         ),
-        session=session
+        session=session,
+        hide_nav=True
     )
 
 
@@ -3892,22 +4054,180 @@ def post(email: str, password: str, session):
     except Exception as e:
         error_msg = str(e)
         if "Invalid login credentials" in error_msg:
-            error_msg = "Invalid email or password"
+            error_msg = "Неверный email или пароль"
 
-        return page_layout("Login",
+        # Design system styles for login page (same as GET)
+        login_card_style = """
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 16px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+            padding: 40px;
+            max-width: 420px;
+            margin: 0 auto;
+        """
+
+        logo_section_style = """
+            text-align: center;
+            margin-bottom: 32px;
+        """
+
+        logo_icon_style = """
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        """
+
+        title_style = """
+            font-size: 24px;
+            font-weight: 700;
+            color: #1e293b;
+            margin: 0 0 6px 0;
+            letter-spacing: -0.02em;
+        """
+
+        subtitle_style = """
+            font-size: 14px;
+            color: #64748b;
+            margin: 0;
+        """
+
+        label_style = """
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        """
+
+        input_style = """
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 14px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #1e293b;
+            transition: all 0.2s ease;
+            box-sizing: border-box;
+        """
+
+        input_group_style = "margin-bottom: 20px;"
+
+        submit_btn_style = """
+            width: 100%;
+            padding: 14px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 28px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        """
+
+        page_bg_style = """
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+        """
+
+        error_alert_style = """
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 16px;
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border: 1px solid #fecaca;
+            border-radius: 10px;
+            color: #dc2626;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 24px;
+        """
+
+        return page_layout("Вход — OneStack",
             Div(
-                Div(error_msg, cls="alert alert-error"),
-                H1("Login"),
-                Form(
-                    Label("Email", Input(name="email", type="email", value=email, required=True)),
-                    Label("Password", Input(name="password", type="password", required=True)),
-                    btn("Sign In", variant="primary", icon_name="log-in", type="submit", full_width=True),
-                    method="post",
-                    action="/login"
+                Div(
+                    # Logo section
+                    Div(
+                        Div(
+                            icon("layers", size=28, style="color: white;"),
+                            style=logo_icon_style
+                        ),
+                        H1("OneStack", style=title_style),
+                        P("Система управления коммерческими предложениями", style=subtitle_style),
+                        style=logo_section_style
+                    ),
+
+                    # Error alert
+                    Div(
+                        icon("alert-circle", size=18),
+                        Span(error_msg),
+                        style=error_alert_style
+                    ),
+
+                    # Form
+                    Form(
+                        # Email field
+                        Div(
+                            Label("Электронная почта", style=label_style, **{"for": "email"}),
+                            Input(
+                                name="email",
+                                type="email",
+                                id="email",
+                                value=email,
+                                required=True,
+                                style=input_style
+                            ),
+                            style=input_group_style
+                        ),
+                        # Password field
+                        Div(
+                            Label("Пароль", style=label_style, **{"for": "password"}),
+                            Input(
+                                name="password",
+                                type="password",
+                                id="password",
+                                required=True,
+                                style=input_style
+                            ),
+                            style=input_group_style
+                        ),
+                        # Submit button
+                        Button(
+                            icon("log-in", size=18),
+                            Span("Войти в систему"),
+                            type="submit",
+                            style=submit_btn_style
+                        ),
+                        method="post",
+                        action="/login"
+                    ),
+                    style=login_card_style
                 ),
-                cls="card", style="max-width: 400px; margin: 2rem auto;"
+                style=page_bg_style
             ),
-            session=session
+            session=session,
+            hide_nav=True
         )
 
 
@@ -3920,18 +4240,97 @@ def get(session):
 @rt("/unauthorized")
 def get(session):
     """Page shown when user doesn't have required role"""
-    return page_layout("Access Denied",
+    # Design system styles
+    card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+        padding: 48px 40px;
+        max-width: 480px;
+        margin: 0 auto;
+        text-align: center;
+    """
+
+    icon_container_style = """
+        width: 72px;
+        height: 72px;
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border-radius: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+        border: 1px solid #fecaca;
+    """
+
+    title_style = """
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 0 0 12px 0;
+        letter-spacing: -0.02em;
+    """
+
+    text_style = """
+        font-size: 14px;
+        color: #64748b;
+        margin: 0 0 8px 0;
+        line-height: 1.6;
+    """
+
+    btn_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        text-decoration: none;
+        margin-top: 24px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    """
+
+    page_bg_style = """
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+    """
+
+    return page_layout("Доступ запрещён — OneStack",
         Div(
-            H1(icon("shield-x", size=28), " Access Denied", cls="page-header"),
-            P("You don't have permission to access this page."),
-            P("Contact your administrator if you believe this is an error."),
             Div(
-                A("← Back to Dashboard", href="/dashboard", cls="button"),
-                style="margin-top: 1rem;"
+                # Error icon
+                Div(
+                    icon("shield-x", size=36, style="color: #dc2626;"),
+                    style=icon_container_style
+                ),
+                # Title
+                H1("Доступ запрещён", style=title_style),
+                # Description
+                P("У вас нет прав для доступа к этой странице.", style=text_style),
+                P("Обратитесь к администратору, если считаете это ошибкой.", style=text_style),
+                # Back button
+                A(
+                    icon("arrow-left", size=16),
+                    Span("Вернуться на главную"),
+                    href="/tasks",
+                    style=btn_style
+                ),
+                style=card_style
             ),
-            cls="card", style="max-width: 500px; margin: 2rem auto; text-align: center;"
+            style=page_bg_style
         ),
-        session=session
+        session=session,
+        hide_nav=True
     )
 
 
@@ -6081,6 +6480,9 @@ def get(session):
     """
     Unified Task Inbox - shows all pending tasks for the user.
     This is the main entry point instead of dashboard tabs.
+
+    Design System V2: Matches calculate page patterns with gradient cards,
+    section headers with icons, and refined spacing.
     """
     redirect = require_login(session)
     if redirect:
@@ -6100,11 +6502,55 @@ def get(session):
     # Get task sections for all roles
     task_sections = _get_role_tasks_sections(user_id, org_id, roles, supabase)
 
-    # Role badges
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    page_title_style = """
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.02em;
+    """
+
+    task_count_badge_style = f"""
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 14px;
+        border-radius: 9999px;
+        font-size: 13px;
+        font-weight: 600;
+        background: {'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' if total_tasks > 0 else 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)'};
+        color: {'#dc2626' if total_tasks > 0 else '#059669'};
+        border: 1px solid {'#fecaca' if total_tasks > 0 else '#a7f3d0'};
+    """
+
+    roles_label_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        font-weight: 600;
+        margin-right: 10px;
+    """
+
+    # Role badges with refined styling
     role_names = {
         'sales': ('Продажи', '#f97316'),
-        'procurement': ('Закупки', '#fbbf24'),
+        'sales_manager': ('Менеджер продаж', '#ea580c'),
+        'procurement': ('Закупки', '#eab308'),
         'logistics': ('Логистика', '#3b82f6'),
+        'head_of_logistics': ('Рук. логистики', '#2563eb'),
         'customs': ('Таможня', '#8b5cf6'),
         'quote_controller': ('Контроль КП', '#ec4899'),
         'spec_controller': ('Спецификации', '#6366f1'),
@@ -6115,30 +6561,56 @@ def get(session):
 
     role_badges = [
         Span(role_names.get(r, (r, '#6b7280'))[0],
-             style=f"display: inline-block; padding: 4px 10px; border-radius: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-right: 6px; background: {role_names.get(r, (r, '#6b7280'))[1]}15; color: {role_names.get(r, (r, '#6b7280'))[1]}; border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}30;")
+             style=f"""
+                display: inline-block;
+                padding: 5px 12px;
+                border-radius: 8px;
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-weight: 600;
+                margin-right: 8px;
+                margin-bottom: 4px;
+                background: {role_names.get(r, (r, '#6b7280'))[1]}12;
+                color: {role_names.get(r, (r, '#6b7280'))[1]};
+                border: 1px solid {role_names.get(r, (r, '#6b7280'))[1]}25;
+             """)
         for r in roles
     ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 13px;")]
 
+    # Empty state card style
+    empty_state_style = """
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        border-radius: 12px;
+        border: 1px solid #a7f3d0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        text-align: center;
+        padding: 40px 32px;
+    """
+
     # Build content
     content = [
-        # Compact Header
+        # Header card with gradient background
         Div(
             Div(
-                icon("inbox", size=24),
-                H1("Мои задачи", style="margin: 0; font-size: 20px; font-weight: 600; color: #1e293b;"),
-                # Task count badge - inline with title
-                Span(
-                    f"{total_tasks} " + ("задач" if total_tasks == 0 or total_tasks >= 5 else "задачи" if total_tasks >= 2 else "задача"),
-                    style=f"display: inline-flex; align-items: center; padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600; background: {'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)' if total_tasks > 0 else 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)'}; color: {'#dc2626' if total_tasks > 0 else '#059669'};"
+                # Title row with icon and count
+                Div(
+                    icon("inbox", size=26, style="color: #3b82f6;"),
+                    H1("Мои задачи", style=page_title_style),
+                    Span(
+                        f"{total_tasks} " + ("задач" if total_tasks == 0 or total_tasks >= 5 else "задачи" if total_tasks >= 2 else "задача"),
+                        style=task_count_badge_style
+                    ),
+                    style="display: flex; align-items: center; gap: 14px;"
                 ),
-                style="display: flex; align-items: center; gap: 12px;"
+                # Roles row
+                Div(
+                    Span("Роли:", style=roles_label_style),
+                    *role_badges,
+                    style="display: flex; align-items: center; flex-wrap: wrap; margin-top: 12px;"
+                ),
             ),
-            Div(
-                Span("Роли:", style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600; margin-right: 8px;"),
-                *role_badges,
-                style="display: flex; align-items: center; flex-wrap: wrap; margin-top: 8px;"
-            ),
-            style="margin-bottom: 20px;"
+            style=header_card_style
         ),
     ]
 
@@ -6148,14 +6620,10 @@ def get(session):
     else:
         content.append(
             Div(
-                Div(
-                    icon("check-circle", size=40, style="color: #22c55e; margin-bottom: 12px;"),
-                    H3("Отлично! Нет задач.", style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #059669;"),
-                    P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="margin: 0; color: #64748b; font-size: 13px;"),
-                    style="text-align: center; padding: 32px 24px;"
-                ),
-                cls="card-elevated",
-                style="background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0;"
+                icon("check-circle", size=48, style="color: #22c55e; margin-bottom: 16px;"),
+                H3("Отлично! Нет задач.", style="margin: 0 0 10px 0; font-size: 18px; font-weight: 600; color: #059669;"),
+                P("Все задачи выполнены. Новые задачи появятся здесь автоматически.", style="margin: 0; color: #64748b; font-size: 14px; line-height: 1.5;"),
+                style=empty_state_style
             )
         )
 
