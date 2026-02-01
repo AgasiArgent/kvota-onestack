@@ -30087,12 +30087,13 @@ def get(contract_id: str, session):
             cls="card"
         ) if contract.notes else "",
 
-        # Specifications link
+        # Specifications info
         Div(
             H3("📑 Спецификации по договору"),
-            P(f"По данному договору создано {specs_count} спецификаций."),
+            P(f"По данному договору создано {specs_count} спецификаций.") if specs_count > 0 else
+            P("По данному договору ещё нет спецификаций.", style="color: #666;"),
             P("Следующий номер спецификации: ", Strong(f"№{contract.next_specification_number}")),
-            btn_link("Смотреть спецификации", href=f"/specifications?contract_id={contract_id}", variant="secondary", icon_name="arrow-right"),
+            btn_link("К контролю спецификаций", href="/dashboard?tab=spec-control", variant="secondary", icon_name="arrow-right"),
             cls="card"
         ),
 
