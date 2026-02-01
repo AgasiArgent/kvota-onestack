@@ -9365,6 +9365,10 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
     calc_inputs = []
     for item in items:
+        # Skip unavailable items - they shouldn't be included in calculation
+        if item.get('is_unavailable'):
+            continue
+
         # Get item's purchase currency
         item_currency = item.get('purchase_currency') or item.get('currency_of_base_price', 'USD')
 
