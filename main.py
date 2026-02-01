@@ -15445,20 +15445,10 @@ async def post(session, quote_id: str, request):
         except:
             return default
 
-    # Update customs data for each item (extra costs now at quote level)
-    for item in items:
-        item_id = item["id"]
-        hs_code = form_data.get(f"hs_code_{item_id}", "")
-        customs_duty = form_data.get(f"customs_duty_{item_id}", "0")
-
-        # Update item with hs_code and duty only (extra costs moved to quote level)
-        supabase.table("quote_items") \
-            .update({
-                "hs_code": hs_code if hs_code else None,
-                "customs_duty": safe_decimal(customs_duty)
-            }) \
-            .eq("id", item_id) \
-            .execute()
+    # NOTE: Item-level customs data (hs_code, customs_duty) is saved via
+    # Handsontable auto-save (PATCH /customs/{quote_id}/items/{item_id}).
+    # DO NOT add a loop here to update item fields from form_data - the form
+    # doesn't contain these fields and it would overwrite saved data with nulls.
 
     # Save customs notes at quote level
     if customs_notes:
