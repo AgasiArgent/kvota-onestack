@@ -19460,6 +19460,185 @@ def get(session, spec_id: str):
 
 
 # ============================================================================
+# Contract-style Specification Export with Pre-Export Modal
+# ============================================================================
+
+@rt("/spec-control/{spec_id}/export-modal")
+def get(session, spec_id: str):
+    """Export modal with editable delivery conditions."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return Div("Нет доступа", cls="text-red-600")
+
+    supabase = get_supabase()
+
+    # Fetch specification with contract
+    spec_result = supabase.table("specifications") \
+        .select("*, customer_contracts(contract_number, contract_date)") \
+        .eq("id", spec_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not spec_result.data:
+        return Div("Спецификация не найдена", cls="text-red-600")
+
+    spec = spec_result.data[0]
+    quote_id = spec.get("quote_id")
+
+    # Fetch quote with customer
+    quote_result = supabase.table("quotes") \
+        .select("*, customers(id, company_name, name, address, postal_address)") \
+        .eq("id", quote_id) \
+        .execute()
+
+    quote = quote_result.data[0] if quote_result.data else {}
+    customer = quote.get("customers") or {}
+
+    # Fetch incoterms
+    vars_result = supabase.table("quote_calculation_variables") \
+        .select("variables") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    calc_vars = vars_result.data[0].get("variables", {}) if vars_result.data else {}
+    incoterms_val = calc_vars.get("offer_incoterms", "DDP 2020")
+
+    # Pre-fill values
+    spec_number = spec.get("specification_number") or "б/н"
+    customer_company = customer.get("company_name") or customer.get("name", "")
+    customer_address = customer.get("address", "")
+    customer_postal = customer.get("postal_address") or customer_address
+    spec_currency = spec.get("specification_currency") or quote.get("currency", "RUB")
+    exchange_rate = spec.get("exchange_rate_to_ruble")
+    payment_terms = spec.get("client_payment_terms") or "100% предоплата"
+    logistics_period = spec.get("logistics_period") or "30-45 рабочих дней"
+
+    # Default values for editable fields
+    defaults = {
+        "quality": "Требования к качеству: международные стандарты качества, стандарты, установленные заводом-изготовителем.",
+        "transport": "Цены по настоящей Спецификации указаны с учетом транспортных расходов.",
+        "currency_note": f"Цена и стоимость Продукции согласована Сторонами в {spec_currency}." + (f" Курс к рублю: {exchange_rate}" if exchange_rate and spec_currency != "RUB" else ""),
+        "payment_terms_text": f"Форма оплаты: перечисление на расчетный счет Поставщика. {payment_terms}.",
+        "partial_delivery": "Поставка Продукции может производиться партиями.",
+        "delivery_responsibility": "Поставка осуществляется силами и за счет Поставщика.",
+        "warehouse_address": f"Продукция поставляется по адресу: {customer_postal}",
+        "delivery_time": f"Срок поставки: {logistics_period} с даты комплектации.",
+        "consignee_legal": f"Грузополучатель – {customer_company}: юр. адрес: {customer_address}",
+        "consignee_delivery": f"адрес доставки – {customer_postal}",
+        "incoterms": f"Условия поставки: {incoterms_val}.",
+    }
+
+    modal = Div(
+        Div(onclick="document.getElementById('export-modal-container').innerHTML = '';",
+            style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;"),
+        Div(
+            H3(f"Экспорт спецификации №{spec_number}", style="margin-bottom: 1rem;"),
+            P("Редактируйте условия поставки:", style="color: #666; margin-bottom: 1rem;"),
+            Form(
+                Input(type="hidden", name="spec_id", value=spec_id),
+                Div(Label("1. Качество:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["quality"], name="quality", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("2. Транспорт:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["transport"], name="transport", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("3. Валюта:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["currency_note"], name="currency_note", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("4. Оплата:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["payment_terms_text"], name="payment_terms_text", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("5. Частичная поставка:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["partial_delivery"], name="partial_delivery", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("6. Ответственность:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["delivery_responsibility"], name="delivery_responsibility", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("7. Адрес склада:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["warehouse_address"], name="warehouse_address", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("8. Срок поставки:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["delivery_time"], name="delivery_time", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("9. Юр. адрес:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["consignee_legal"], name="consignee_legal", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("10. Адрес доставки:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["consignee_delivery"], name="consignee_delivery", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(Label("11. Incoterms:", style="font-weight: 500; display: block;"),
+                    Textarea(defaults["incoterms"], name="incoterms", rows="2", style="width: 100%; margin-bottom: 0.5rem;")),
+                Div(
+                    btn("Отмена", variant="ghost", type="button",
+                        onclick="document.getElementById('export-modal-container').innerHTML = '';"),
+                    btn("Сформировать PDF", variant="primary", icon_name="download", type="submit"),
+                    style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;"
+                ),
+                action=f"/spec-control/{spec_id}/generate-contract-pdf",
+                method="POST",
+            ),
+            style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 1000; width: 90%; max-width: 700px; max-height: 85vh; overflow-y: auto;"
+        ),
+    )
+    return modal
+
+
+@rt("/spec-control/{spec_id}/generate-contract-pdf")
+def post(session, spec_id: str,
+         quality: str = "", transport: str = "", currency_note: str = "",
+         payment_terms_text: str = "", partial_delivery: str = "",
+         delivery_responsibility: str = "", warehouse_address: str = "",
+         delivery_time: str = "", consignee_legal: str = "",
+         consignee_delivery: str = "", incoterms: str = ""):
+    """Generate contract-style specification PDF."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    try:
+        from services.contract_spec_export import generate_contract_spec_pdf
+
+        delivery_conditions = {
+            "quality": quality, "transport": transport, "currency_note": currency_note,
+            "payment_terms_text": payment_terms_text, "partial_delivery": partial_delivery,
+            "delivery_responsibility": delivery_responsibility, "warehouse_address": warehouse_address,
+            "delivery_time": delivery_time, "consignee_legal": consignee_legal,
+            "consignee_delivery": consignee_delivery, "incoterms": incoterms,
+        }
+
+        pdf_bytes = generate_contract_spec_pdf(spec_id, org_id, delivery_conditions)
+
+        supabase = get_supabase()
+        spec_result = supabase.table("specifications") \
+            .select("specification_number, proposal_idn") \
+            .eq("id", spec_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+
+        spec_number = spec_result.data[0].get("specification_number") or spec_result.data[0].get("proposal_idn") or "spec" if spec_result.data else "spec"
+        safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
+
+        from starlette.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="Specification_{safe_spec_number}.pdf"'}
+        )
+
+    except Exception as e:
+        print(f"Error generating contract specification PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return page_layout("Ошибка",
+            H1("Ошибка генерации PDF"),
+            Div(f"Ошибка: {str(e)}", cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"),
+            A("← Назад", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+
+# ============================================================================
 # Feature #71: Upload signed specification scan
 # ============================================================================
 
