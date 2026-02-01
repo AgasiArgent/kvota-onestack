@@ -2368,18 +2368,21 @@ def check_all_procurement_complete(quote_id: str) -> Dict:
     """
     Check if all procurement items for a quote are complete.
 
-    This function checks if ALL quote_items (not just one user's brands)
-    have procurement_status = 'completed'.
+    This function checks:
+    1. ALL quote_items have procurement_status = 'completed'
+    2. ALL items that are NOT marked as unavailable have purchase_price_original > 0
 
     Args:
         quote_id: UUID of the quote
 
     Returns:
         Dict with:
-        - is_complete: bool - True if all items are complete
+        - is_complete: bool - True if all items are complete and valid
         - total_items: int - Total number of items
         - completed_items: int - Number of completed items
         - pending_items: int - Number of pending items
+        - items_without_price: int - Items missing price (not unavailable)
+        - validation_error: str - Specific error message if validation fails
 
     Example:
         >>> status = check_all_procurement_complete(quote_id)
@@ -2389,9 +2392,9 @@ def check_all_procurement_complete(quote_id: str) -> Dict:
     supabase = get_supabase()
 
     try:
-        # Get all items for this quote
+        # Get all items for this quote with price and availability info
         items_response = supabase.table("quote_items") \
-            .select("id, procurement_status") \
+            .select("id, procurement_status, purchase_price_original, is_unavailable, product_name") \
             .eq("quote_id", quote_id) \
             .execute()
 
@@ -2401,11 +2404,35 @@ def check_all_procurement_complete(quote_id: str) -> Dict:
         completed_items = sum(1 for i in items if i.get("procurement_status") == "completed")
         pending_items = total_items - completed_items
 
+        # Check that all non-unavailable items have a price > 0
+        items_without_price = []
+        for item in items:
+            is_unavailable = item.get("is_unavailable", False)
+            price = item.get("purchase_price_original")
+            has_valid_price = price is not None and float(price) > 0
+
+            if not is_unavailable and not has_valid_price:
+                items_without_price.append(item.get("product_name", item.get("id")))
+
+        # Determine if complete
+        all_completed = completed_items == total_items and total_items > 0
+        all_priced = len(items_without_price) == 0
+
+        validation_error = None
+        if not all_completed:
+            validation_error = f"{pending_items} из {total_items} позиций ещё не обработаны"
+        elif not all_priced:
+            validation_error = f"{len(items_without_price)} поз. без цены и не отмечены как недоступные: {', '.join(items_without_price[:3])}"
+            if len(items_without_price) > 3:
+                validation_error += f" и ещё {len(items_without_price) - 3}"
+
         return {
-            "is_complete": completed_items == total_items and total_items > 0,
+            "is_complete": all_completed and all_priced,
             "total_items": total_items,
             "completed_items": completed_items,
-            "pending_items": pending_items
+            "pending_items": pending_items,
+            "items_without_price": len(items_without_price),
+            "validation_error": validation_error
         }
 
     except Exception as e:
@@ -2414,6 +2441,7 @@ def check_all_procurement_complete(quote_id: str) -> Dict:
             "total_items": 0,
             "completed_items": 0,
             "pending_items": 0,
+            "items_without_price": 0,
             "error": str(e)
         }
 
@@ -2501,15 +2529,20 @@ def complete_procurement(
             from_status=current_status
         )
 
-    # Check if ALL procurement items are complete
+    # Check if ALL procurement items are complete and valid
     completion_status = check_all_procurement_complete(quote_id)
 
     if not completion_status["is_complete"]:
-        pending = completion_status["pending_items"]
-        total = completion_status["total_items"]
+        # Use detailed validation error if available
+        error_msg = completion_status.get("validation_error")
+        if not error_msg:
+            pending = completion_status["pending_items"]
+            total = completion_status["total_items"]
+            error_msg = f"Not all procurement items are complete. {pending} of {total} items still pending."
+
         return TransitionResult(
             success=False,
-            error_message=f"Not all procurement items are complete. {pending} of {total} items still pending.",
+            error_message=error_msg,
             quote_id=quote_id,
             from_status=current_status
         )
