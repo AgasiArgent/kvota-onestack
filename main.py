@@ -9761,111 +9761,137 @@ def get(quote_id: str, session):
     def get_var(key, default):
         return saved_vars.get(key, default)
 
-    # Build seller company section based on whether it's set
-    if seller_company_info:
-        seller_company_section = Div(
-            Label("Компания-продавец",
-                Div(
-                    Strong(seller_company_display),
-                    # Hidden input to pass seller_company name to preview/calculation
-                    Input(type="hidden", name="seller_company", value=seller_company_name),
-                    style="padding: 0.5rem; background: #f5f5f5; border-radius: 4px;"
-                ),
-                Small(
-                    A("Изменить в настройках КП", href=f"/quotes/{quote_id}/edit", style="font-size: 0.85rem;"),
-                    style="display: block; margin-top: 0.25rem;"
-                )
-            )
-        )
-    else:
-        seller_company_section = Div(
-            Label("Компания-продавец",
-                Div(
-                    "Не выбрана",
-                    style="padding: 0.5rem; background: #fff3cd; border-radius: 4px; color: #856404;"
-                ),
-                Small(
-                    A("Выбрать в настройках КП", href=f"/quotes/{quote_id}/edit", style="font-size: 0.85rem; font-weight: bold;"),
-                    style="display: block; margin-top: 0.25rem;"
-                )
-            ),
-            Input(type="hidden", name="seller_company", value=""),
-        )
-
     # Check for partial recalculation
     partial_recalc = quote.get("partial_recalc")
 
-    return page_layout(f"Calculate - {quote.get('idn_quote', '')}",
-        H1(f"Calculate {quote.get('idn_quote', '')}"),
-        P(f"Customer: {quote.get('customers', {}).get('name', '-')} | Currency: {currency} | {len(items)} products",
-          style="color: #666;"),
+    # ==========================================================================
+    # COMPACT CALCULATE PAGE STYLING (Logistics-inspired design)
+    # ==========================================================================
+    # Inline styles for compact logistics-style layout
+    card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 16px;
+        margin-bottom: 12px;
+    """
+    label_style = "font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;"
+    input_row_style = "display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9;"
+    input_row_last_style = "display: flex; align-items: center; padding: 8px 0;"
+    input_style = "width: 100px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+    input_wide_style = "width: 140px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+    select_style = "width: 120px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+    select_currency_style = "width: 70px; padding: 8px 6px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+    section_title_style = "font-size: 13px; font-weight: 600; color: #374151; margin: 0 0 12px 0; display: flex; align-items: center; gap: 6px;"
+    field_label_style = "font-size: 13px; color: #64748b; width: 140px; font-weight: 500;"
+    value_style = "font-size: 14px; font-weight: 600; color: #1e40af;"
 
-        # Partial recalculation banner - shown when returning from client for price-only changes
+    # Build seller company display
+    seller_company_hidden = Input(type="hidden", name="seller_company", value=seller_company_name if seller_company_info else "")
+    if seller_company_info:
+        seller_display = Span(seller_company_display, style="font-weight: 600; color: #1e40af;")
+    else:
+        seller_display = Span("Не выбрана", style="color: #d97706; font-weight: 500;")
+
+    return page_layout(f"Calculate - {quote.get('idn_quote', '')}",
+        # Compact header
         Div(
             Div(
-                Span("🔄 Частичный пересчёт: только наценка", style="font-weight: 600; font-size: 1.1rem;"),
-                style="margin-bottom: 0.5rem;"
+                icon("calculator", size=20),
+                Span(f"Расчёт {quote.get('idn_quote', '')}", style="font-size: 1.25rem; font-weight: 600; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
             ),
             Div(
-                P("Клиент запросил изменение цены. Данные закупки, логистики и таможни сохранены.", style="margin: 0 0 0.5rem;"),
-                P("После сохранения расчёта КП автоматически вернётся клиенту.", style="margin: 0; font-size: 0.875rem; color: #666;"),
+                Span(quote.get('customers', {}).get('name', '—') if quote.get('customers') else '—', style="font-weight: 500;"),
+                Span(" • ", style="color: #94a3b8;"),
+                Span(f"{currency}", style="color: #3b82f6; font-weight: 600;"),
+                Span(" • ", style="color: #94a3b8;"),
+                Span(f"{len(items)} поз.", style="color: #64748b;"),
+                style="font-size: 13px; margin-top: 4px;"
             ),
-            cls="card",
-            style="background: #f0fdf4; border: 2px solid #22c55e; margin-bottom: 1rem;"
+            style="margin-bottom: 16px;"
+        ),
+
+        # Partial recalculation banner
+        Div(
+            icon("refresh-cw", size=16),
+            Span(" Частичный пересчёт: только наценка", style="font-weight: 600; margin-left: 6px;"),
+            Span(" — данные закупки, логистики и таможни сохранены", style="font-size: 12px; color: #065f46; margin-left: 8px;"),
+            style="background: linear-gradient(90deg, #dcfce7 0%, #f0fdf4 100%); border: 1px solid #86efac; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; color: #166534;"
         ) if partial_recalc == "price" else None,
 
         # Main form with HTMX live preview
         Form(
             Div(
-                # Left column: Variables
+                # Left column: Compact form cards
                 Div(
-                    # Company & Deal Type
+                    # === COMPANY & PRICING CARD (Combined) ===
                     Div(
-                        H3("Company Settings"),
-                        seller_company_section,
+                        # Section: Company
                         Div(
-                            Label("Sale Type",
-                                Select(
-                                    Option("Поставка", value="поставка", selected=True),
-                                    Option("Транзит", value="транзит"),
-                                    name="offer_sale_type"
-                                )
-                            ),
-                            Label("Incoterms",
-                                Select(
-                                    Option("DDP", value="DDP", selected=get_var('offer_incoterms', 'DDP') == "DDP"),
-                                    Option("DAP", value="DAP", selected=get_var('offer_incoterms', '') == "DAP"),
-                                    Option("CIF", value="CIF", selected=get_var('offer_incoterms', '') == "CIF"),
-                                    Option("FOB", value="FOB", selected=get_var('offer_incoterms', '') == "FOB"),
-                                    Option("EXW", value="EXW", selected=get_var('offer_incoterms', '') == "EXW"),
-                                    name="offer_incoterms"
-                                )
-                            ),
-                            cls="form-row"
+                            Span(icon("building-2", size=14), style="color: #64748b;"),
+                            Span("Компания и условия", style=section_title_style[len("font-size: 13px; font-weight: 600; color: #374151; margin: 0 0 12px 0; "):]),
+                            style=section_title_style
                         ),
-                        cls="card"
-                    ),
+                        # Row: Seller Company
+                        Div(
+                            Span("Продавец", style=field_label_style),
+                            seller_display,
+                            A("изменить", href=f"/quotes/{quote_id}/edit", style="font-size: 11px; margin-left: 8px; color: #94a3b8;"),
+                            seller_company_hidden,
+                            style=input_row_style
+                        ),
+                        # Row: Sale Type + Incoterms
+                        Div(
+                            Span("Тип сделки", style=field_label_style),
+                            Select(
+                                Option("Поставка", value="поставка", selected=True),
+                                Option("Транзит", value="транзит"),
+                                name="offer_sale_type",
+                                style=select_style
+                            ),
+                            Span("Incoterms", style=f"{field_label_style} margin-left: 20px; width: 80px;"),
+                            Select(
+                                Option("DDP", value="DDP", selected=get_var('offer_incoterms', 'DDP') == "DDP"),
+                                Option("DAP", value="DAP", selected=get_var('offer_incoterms', '') == "DAP"),
+                                Option("CIF", value="CIF", selected=get_var('offer_incoterms', '') == "CIF"),
+                                Option("FOB", value="FOB", selected=get_var('offer_incoterms', '') == "FOB"),
+                                Option("EXW", value="EXW", selected=get_var('offer_incoterms', '') == "EXW"),
+                                name="offer_incoterms",
+                                style="width: 80px; padding: 8px 6px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+                            ),
+                            style=input_row_style
+                        ),
 
-                    # Pricing (Sales Manager fields only)
-                    Div(
-                        H3("Pricing"),
+                        # Divider
+                        Div(style="height: 1px; background: #e2e8f0; margin: 12px 0;"),
+
+                        # Section: Pricing
                         Div(
-                            Label("Валюта КП",
-                                Select(
-                                    Option("RUB", value="RUB", selected=currency == "RUB"),
-                                    Option("USD", value="USD", selected=currency == "USD"),
-                                    Option("EUR", value="EUR", selected=currency == "EUR"),
-                                    Option("CNY", value="CNY", selected=currency == "CNY"),
-                                    name="currency"
-                                ),
-                                Small("Валюта итоговой цены для клиента", style="color: #666; display: block; margin-top: 0.25rem;")
-                            ),
-                            Label("Markup %",
-                                Input(name="markup", type="number", value=str(get_var('markup', 15)), min="0", max="100", step="0.1")
-                            ),
-                            cls="form-row"
+                            Span(icon("percent", size=14), style="color: #64748b;"),
+                            Span("Цена и наценка", style=section_title_style[len("font-size: 13px; font-weight: 600; color: #374151; margin: 0 0 12px 0; "):]),
+                            style=section_title_style
                         ),
-                        # Hidden fields: other departments' data passed through but not shown
+                        # Row: Currency + Markup
+                        Div(
+                            Span("Валюта КП", style=field_label_style),
+                            Select(
+                                Option("RUB", value="RUB", selected=currency == "RUB"),
+                                Option("USD", value="USD", selected=currency == "USD"),
+                                Option("EUR", value="EUR", selected=currency == "EUR"),
+                                Option("CNY", value="CNY", selected=currency == "CNY"),
+                                name="currency",
+                                style=select_currency_style
+                            ),
+                            Span("Наценка", style=f"{field_label_style} margin-left: 20px; width: 80px;"),
+                            Input(name="markup", type="number", value=str(get_var('markup', 15)), min="0", max="100", step="0.1",
+                                  style="width: 70px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; text-align: right;"),
+                            Span("%", style="margin-left: 4px; color: #64748b; font-size: 14px;"),
+                            style=input_row_last_style
+                        ),
+
+                        # Hidden fields
                         Input(type="hidden", name="supplier_discount", value=str(get_var('supplier_discount', 0))),
                         Input(type="hidden", name="exchange_rate", value=str(get_var('exchange_rate', 1.0))),
                         Input(type="hidden", name="delivery_time", value=str(get_var('delivery_time', 30))),
@@ -9883,89 +9909,106 @@ def get(quote_id: str, session):
                         Input(type="hidden", name="brokerage_extra", value=str(get_var('brokerage_extra', 0))),
                         Input(type="hidden", name="brokerage_extra_currency", value=str(get_var('brokerage_extra_currency', 'RUB'))),
                         Input(type="hidden", name="advance_to_supplier", value=str(get_var('advance_to_supplier', 100))),
-                        cls="card"
+
+                        style=card_style
                     ),
 
-                    # Payment Terms (Sales Manager fields only)
+                    # === PAYMENT TERMS CARD ===
                     Div(
-                        H3("Payment Terms"),
                         Div(
-                            Label("Client Advance %",
-                                Input(name="advance_from_client", type="number", value=str(get_var('advance_from_client', 100)), min="0", max="100", step="1")
-                            ),
-                            cls="form-group"
+                            Span(icon("credit-card", size=14), style="color: #64748b;"),
+                            Span("Условия оплаты", style=section_title_style[len("font-size: 13px; font-weight: 600; color: #374151; margin: 0 0 12px 0; "):]),
+                            style=section_title_style
+                        ),
+                        # Row: All payment fields inline
+                        Div(
+                            Span("Аванс клиента", style=field_label_style),
+                            Input(name="advance_from_client", type="number", value=str(get_var('advance_from_client', 100)), min="0", max="100", step="1",
+                                  style="width: 60px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; text-align: right;"),
+                            Span("%", style="margin-left: 4px; color: #64748b; font-size: 14px;"),
+                            style=input_row_style
                         ),
                         Div(
-                            Label("Days to Advance",
-                                Input(name="time_to_advance", type="number", value=str(get_var('time_to_advance', 0)), min="0")
-                            ),
-                            Label("Days to Final Payment",
-                                Input(name="time_to_advance_on_receiving", type="number", value=str(get_var('time_to_advance_on_receiving', 0)), min="0")
-                            ),
-                            cls="form-row"
+                            Span("До аванса", style=field_label_style),
+                            Input(name="time_to_advance", type="number", value=str(get_var('time_to_advance', 0)), min="0",
+                                  style="width: 60px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; text-align: right;"),
+                            Span("дн.", style="margin-left: 4px; color: #64748b; font-size: 14px;"),
+                            Span("До расчёта", style=f"{field_label_style} margin-left: 20px; width: 80px;"),
+                            Input(name="time_to_advance_on_receiving", type="number", value=str(get_var('time_to_advance_on_receiving', 0)), min="0",
+                                  style="width: 60px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; text-align: right;"),
+                            Span("дн.", style="margin-left: 4px; color: #64748b; font-size: 14px;"),
+                            style=input_row_last_style
                         ),
-                        cls="card"
+                        style=card_style
                     ),
 
-                    # DM Fee (LPR reward)
+                    # === DM FEE CARD ===
                     Div(
-                        H3("DM Fee (LPR)"),
                         Div(
-                            Label("Fee Type",
-                                Select(
-                                    Option("Fixed", value="fixed", selected=get_var('dm_fee_type', 'fixed') == "fixed"),
-                                    Option("Percentage", value="percentage", selected=get_var('dm_fee_type', '') == "percentage"),
-                                    name="dm_fee_type"
-                                )
-                            ),
-                            Label("Fee Value",
-                                Input(name="dm_fee_value", type="number", value=str(get_var('dm_fee_value', 0)), min="0", step="0.01")
-                            ),
-                            Label("Валюта (для Fixed)",
-                                Select(
-                                    Option("RUB", value="RUB", selected=get_var('dm_fee_currency', 'RUB') == "RUB"),
-                                    Option("USD", value="USD", selected=get_var('dm_fee_currency', '') == "USD"),
-                                    Option("EUR", value="EUR", selected=get_var('dm_fee_currency', '') == "EUR"),
-                                    name="dm_fee_currency"
-                                )
-                            ),
-                            cls="form-row"
+                            Span(icon("award", size=14), style="color: #64748b;"),
+                            Span("Вознаграждение (LPR)", style=section_title_style[len("font-size: 13px; font-weight: 600; color: #374151; margin: 0 0 12px 0; "):]),
+                            style=section_title_style
                         ),
-                        Small("Для Percentage валюта = валюте КП", style="color: #666; margin-top: 0.25rem; display: block;"),
-                        cls="card"
+                        Div(
+                            Span("Тип", style=field_label_style),
+                            Select(
+                                Option("Фикс.", value="fixed", selected=get_var('dm_fee_type', 'fixed') == "fixed"),
+                                Option("%", value="percentage", selected=get_var('dm_fee_type', '') == "percentage"),
+                                name="dm_fee_type",
+                                style="width: 70px; padding: 8px 6px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc;"
+                            ),
+                            Span("Сумма", style=f"{field_label_style} margin-left: 16px; width: 60px;"),
+                            Input(name="dm_fee_value", type="number", value=str(get_var('dm_fee_value', 0)), min="0", step="0.01",
+                                  style="width: 80px; padding: 8px 10px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; text-align: right;"),
+                            Select(
+                                Option("RUB", value="RUB", selected=get_var('dm_fee_currency', 'RUB') == "RUB"),
+                                Option("USD", value="USD", selected=get_var('dm_fee_currency', '') == "USD"),
+                                Option("EUR", value="EUR", selected=get_var('dm_fee_currency', '') == "EUR"),
+                                name="dm_fee_currency",
+                                style="width: 65px; padding: 8px 6px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; margin-left: 4px;"
+                            ),
+                            style=input_row_last_style
+                        ),
+                        Span("Для % — валюта = валюте КП", style="font-size: 11px; color: #94a3b8; margin-top: 4px; display: block;"),
+                        style=card_style
                     ),
 
-                    style="flex: 1;"
+                    style="flex: 1; min-width: 380px; max-width: 550px;"
                 ),
 
                 # Right column: Preview
                 Div(
                     Div(
-                        H3("Live Preview"),
-                        P("Adjust values on the left. Preview updates automatically.", style="color: #666; font-size: 0.875rem;"),
                         Div(
-                            P("Enter values and click below to preview, or wait for auto-update."),
-                            cls="alert alert-info",
+                            Span(icon("eye", size=14), style="color: #64748b;"),
+                            Span("Предпросмотр", style="font-size: 13px; font-weight: 600; color: #374151; margin-left: 6px;"),
+                            style="display: flex; align-items: center; margin-bottom: 8px;"
+                        ),
+                        Span("Автообновление при изменении полей", style="font-size: 11px; color: #94a3b8; display: block; margin-bottom: 12px;"),
+                        Div(
+                            P("Введите данные слева для расчёта", style="margin: 0; font-size: 13px;"),
+                            style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); padding: 12px; border-radius: 8px; color: #1e40af;",
                             id="preview-panel"
                         ),
-                        btn("Update Preview", variant="secondary", icon_name="refresh-cw", type="button",
+                        btn("Обновить", variant="secondary", icon_name="refresh-cw", type="button", size="sm",
                             hx_post=f"/quotes/{quote_id}/preview",
                             hx_target="#preview-panel",
-                            hx_include="closest form"
+                            hx_include="closest form",
+                            style="margin-top: 12px;"
                         ),
-                        cls="card", style="position: sticky; top: 1rem;"
+                        style=f"{card_style} position: sticky; top: 16px;"
                     ),
-                    style="flex: 1; min-width: 400px;"
+                    style="flex: 1; min-width: 320px;"
                 ),
 
-                style="display: flex; gap: 1rem; flex-wrap: wrap;"
+                style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;"
             ),
 
-            # Actions
+            # Actions - compact
             Div(
-                btn("Save Calculation", variant="success", icon_name="check", type="submit", size="lg"),
-                btn_link("Cancel", href=f"/quotes/{quote_id}", variant="secondary"),
-                cls="form-actions", style="margin-top: 1rem; padding: 1rem; background: white; border-radius: 8px;"
+                btn("Сохранить расчёт", variant="success", icon_name="check", type="submit"),
+                btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
+                style="display: flex; gap: 12px; margin-top: 16px; padding: 12px 16px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 10px; border: 1px solid #e2e8f0;"
             ),
 
             method="post",
