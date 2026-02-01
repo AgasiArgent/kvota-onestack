@@ -25787,87 +25787,172 @@ def get(session, q: str = "", country: str = "", status: str = ""):
             )
         )
 
-    return page_layout("Поставщики",
-        # Header
-        H1(icon("package", size=28), " Поставщики", cls="page-header"),
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+    """
 
-        # Stats cards
+    page_title_style = """
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+        letter-spacing: -0.02em;
+    """
+
+    new_btn_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        color: white;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border: none;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
+    """
+
+    stat_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        padding: 16px 20px;
+        text-align: center;
+        min-width: 120px;
+    """
+
+    filter_input_style = """
+        padding: 8px 12px;
+        font-size: 13px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: #f8fafc;
+        color: #1e293b;
+    """
+
+    return page_layout("Поставщики",
+        # Header card with title and actions
         Div(
             Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="card stat-card"
+                icon("package", size=26, style="color: #f59e0b;"),
+                H1("Поставщики", style=page_title_style),
+                style="display: flex; align-items: center; gap: 14px;"
             ),
             Div(
-                Div(str(stats.get("active", 0)), cls="stat-value", style="color: #28a745;"),
-                Div("Активных"),
-                cls="card stat-card"
+                A(
+                    icon("plus", size=16),
+                    Span("Добавить"),
+                    href="/suppliers/new",
+                    style=new_btn_style
+                ),
             ),
-            Div(
-                Div(str(stats.get("inactive", 0)), cls="stat-value", style="color: #dc3545;"),
-                Div("Неактивных"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
+            style=header_card_style
         ),
 
-        # Unified Table Container
+        # Stats cards row
+        Div(
+            Div(
+                Div(str(stats.get("total", 0)), style="font-size: 24px; font-weight: 700; color: #1e293b;"),
+                Div("Всего", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;"),
+                style=stat_card_style
+            ),
+            Div(
+                Div(str(stats.get("active", 0)), style="font-size: 24px; font-weight: 700; color: #059669;"),
+                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;"),
+                style=stat_card_style
+            ),
+            Div(
+                Div(str(stats.get("inactive", 0)), style="font-size: 24px; font-weight: 700; color: #dc2626;"),
+                Div("Неактивных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;"),
+                style=stat_card_style
+            ),
+            style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;"
+        ),
+
+        # Table Container
         Div(
             # Table header with filters
             Div(
                 Div(
                     Form(
-                        Input(name="q", value=q, placeholder="Поиск по названию или коду...", cls="table-search"),
-                        Select(*country_options, name="country", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
-                        Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
+                        Input(name="q", value=q, placeholder="Поиск по названию или коду...", style=filter_input_style + "min-width: 220px;"),
+                        Select(*country_options, name="country", style=filter_input_style),
+                        Select(*status_options, name="status", style=filter_input_style),
                         btn("Поиск", variant="secondary", icon_name="search", type="submit", size="sm"),
                         method="get",
                         action="/suppliers",
-                        style="display: flex; gap: 0.5rem; align-items: center;"
+                        style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;"
                     ),
                     cls="table-header-left"
-                ),
-                Div(
-                    btn_link("Добавить", href="/suppliers/new", variant="primary", icon_name="plus"),
-                    cls="table-header-right"
                 ),
                 cls="table-header"
             ),
             # Table
             Div(
-                Table(
-                    Thead(
-                        Tr(
-                            Th("КОД"),
-                            Th("НАЗВАНИЕ"),
-                            Th("ЛОКАЦИЯ"),
-                            Th("ИНН"),
-                            Th("КОНТАКТ"),
-                            Th("EMAIL"),
-                            Th("СТАТУС"),
-                            Th("", cls="col-actions")
-                        )
+                Div(
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("КОД"),
+                                Th("НАЗВАНИЕ"),
+                                Th("ЛОКАЦИЯ"),
+                                Th("ИНН"),
+                                Th("КОНТАКТ"),
+                                Th("EMAIL"),
+                                Th("СТАТУС"),
+                                Th("", cls="col-actions")
+                            )
+                        ),
+                        Tbody(*supplier_rows) if supplier_rows else Tbody(
+                            Tr(Td(
+                                Div(
+                                    icon("package", size=32, style="color: #94a3b8; margin-bottom: 12px;"),
+                                    Div("Поставщики не найдены", style="font-size: 15px; font-weight: 500; color: #64748b; margin-bottom: 8px;"),
+                                    A(
+                                        icon("plus", size=14),
+                                        Span("Добавить поставщика"),
+                                        href="/suppliers/new",
+                                        style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;"
+                                    ),
+                                    style="text-align: center; padding: 40px 24px;"
+                                ),
+                                colspan="8"
+                            ))
+                        ),
+                        cls="table-enhanced"
                     ),
-                    Tbody(*supplier_rows) if supplier_rows else Tbody(
-                        Tr(Td(
-                            "Поставщики не найдены. ",
-                            A("Добавить первого поставщика", href="/suppliers/new"),
-                            colspan="8", style="text-align: center; padding: 2rem;"
-                        ))
-                    ),
-                    cls="unified-table"
+                    cls="table-enhanced-container"
                 ),
                 cls="table-responsive"
             ),
             # Table footer
             Div(
-                Span(f"Всего: {len(suppliers)} поставщиков"),
+                Span(f"Всего: {len(suppliers)} поставщиков", style="font-size: 13px; color: #64748b;"),
                 cls="table-footer"
             ),
             cls="table-container"
         ),
 
-        session=session
+        session=session,
+        current_path="/suppliers"
     )
 
 
