@@ -29820,13 +29820,15 @@ def get(session, customer_id: str = ""):
 
     from services.customer_service import get_all_customers, get_customer
 
-    # Get customers for dropdown
-    customers = get_all_customers(organization_id=org_id, is_active=True, limit=200)
-
     # Pre-select customer if provided
     selected_customer = None
     if customer_id:
         selected_customer = get_customer(customer_id)
+
+    # Get customers for dropdown (only if no customer pre-selected)
+    customers = []
+    if not selected_customer:
+        customers = get_all_customers(organization_id=org_id, limit=200)
 
     # Generate suggested contract number
     from datetime import date
@@ -29838,12 +29840,22 @@ def get(session, customer_id: str = ""):
 
         Div(
             Form(
-                # Customer selection
+                # Customer - show as read-only if pre-selected, otherwise dropdown
                 Div(
                     Label("Клиент *", For="customer_id"),
+                    # If customer is pre-selected, show as read-only with hidden input
+                    Div(
+                        Input(type="hidden", name="customer_id", value=customer_id),
+                        Div(
+                            selected_customer.name if selected_customer else "",
+                            style="padding: 0.5rem 0.75rem; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px; color: #374151;"
+                        ),
+                        style="width: 100%;"
+                    ) if selected_customer else
+                    # Otherwise show dropdown
                     Select(
-                        Option("-- Выберите клиента --", value="", disabled=True, selected=not customer_id),
-                        *[Option(c.name, value=c.id, selected=(customer_id == c.id)) for c in customers],
+                        Option("-- Выберите клиента --", value="", disabled=True, selected=True),
+                        *[Option(c.name, value=c.id) for c in customers],
                         name="customer_id",
                         id="customer_id",
                         required=True,
