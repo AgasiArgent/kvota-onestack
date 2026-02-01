@@ -11855,6 +11855,7 @@ def get(quote_id: str, session):
             'quantity': item.get('quantity', 1),
             'price': item.get('purchase_price_original') or '',
             'production_time': item.get('production_time_days') or '',
+            'is_unavailable': item.get('is_unavailable', False),
             'invoice_id': item.get('invoice_id') or '',
             'invoice_label': f"#{invoices.index(inv)+1}" if inv else '',
         })
@@ -11896,6 +11897,8 @@ def get(quote_id: str, session):
         currency_sym = currency_symbols.get(currency, currency)
         weight = inv.get("total_weight_kg")
         volume = inv.get("total_volume_m3")
+        status = inv.get("status", "pending_procurement")
+        is_completed = status != "pending_procurement"
 
         # Count items in this invoice
         items_in_invoice = len([i for i in my_items if i.get("invoice_id") == inv["id"]])
@@ -11906,10 +11909,20 @@ def get(quote_id: str, session):
             for item in my_items if item.get("invoice_id") == inv["id"]
         )
 
+        # Status indicator and styling
+        status_labels = {
+            "pending_procurement": None,
+            "pending_logistics": "→ Логистика",
+            "pending_customs": "→ Таможня",
+            "completed": "✓ Завершён"
+        }
+        status_label = status_labels.get(status)
+        border_color = "#10b981" if is_completed else "#3b82f6"  # Green for completed, blue for pending
+
         return Div(
             # Invoice header
             Div(
-                Span(f"📦 Инвойс #{idx}", style="font-weight: 600; font-size: 1rem;"),
+                Span(f"{'✅' if is_completed else '📦'} Инвойс #{idx}", style="font-weight: 600; font-size: 1rem;"),
                 Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
             ),
@@ -11922,6 +11935,12 @@ def get(quote_id: str, session):
                 style="margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
             ),
 
+            # Status label for completed invoices
+            Div(
+                Span(status_label, style="font-size: 0.75rem; color: #059669; font-weight: 500;"),
+                style="margin-bottom: 0.5rem;"
+            ) if status_label else None,
+
             # Currency, weight, items count
             Div(
                 Span(currency, style="font-weight: 500; color: #059669; margin-right: 0.75rem;"),
@@ -11930,19 +11949,35 @@ def get(quote_id: str, session):
                 style="font-size: 0.75rem; display: flex; align-items: center;"
             ),
 
-            # Action buttons
+            # Action buttons for pending invoices
             Div(
                 A("Редактировать", href="#", cls="text-blue-600 text-sm",
                   onclick=f"openEditInvoiceModal('{inv['id']}'); return false;",
                   style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;"),
                 A("Назначить ↓", href="#", cls="text-green-600 text-sm",
                   onclick=f"assignSelectedToInvoice('{inv['id']}'); return false;",
-                  style="font-size: 0.75rem; color: #059669;") if can_edit else None,
+                  style="font-size: 0.75rem; color: #059669;"),
                 style="margin-top: 0.5rem;"
-            ) if can_edit else None,
+            ) if can_edit and not is_completed else None,
+
+            # Complete button for pending invoices
+            Div(
+                A("✓ Завершить инвойс", href="#",
+                  onclick=f"completeInvoice('{inv['id']}'); return false;",
+                  style="font-size: 0.75rem; color: white; background: #059669; padding: 0.375rem 0.75rem; border-radius: 4px; text-decoration: none; display: inline-block;"),
+                style="margin-top: 0.75rem;"
+            ) if can_edit and not is_completed else None,
+
+            # Reopen button for completed invoices
+            Div(
+                A("🔓 Вернуть в работу", href="#",
+                  onclick=f"reopenInvoice('{inv['id']}'); return false;",
+                  style="font-size: 0.75rem; color: #6b7280; text-decoration: underline;"),
+                style="margin-top: 0.5rem;"
+            ) if can_edit and is_completed else None,
 
             cls="card",
-            style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid #3b82f6; cursor: pointer;",
+            style=f"padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid {border_color}; cursor: pointer;" + (" opacity: 0.8; background: #f9fafb;" if is_completed else ""),
             id=f"invoice-card-{inv['id']}",
             onclick=f"selectInvoice('{inv['id']}')"
         )
@@ -12485,7 +12520,8 @@ def get(quote_id: str, session):
                         updates.push({{
                             id: row.id,
                             purchase_price_original: row.price ? parseFloat(row.price) : null,
-                            production_time_days: row.production_time ? parseInt(row.production_time) : null
+                            production_time_days: row.production_time ? parseInt(row.production_time) : null,
+                            is_unavailable: row.is_unavailable || false
                         }});
                     }}
                 }}
@@ -12558,6 +12594,60 @@ def get(quote_id: str, session):
                 }});
             }};
 
+            // Complete invoice - moves to logistics/customs
+            window.completeInvoice = function(invoiceId) {{
+                if (!confirm('Завершить инвойс и передать в логистику/таможню?')) return;
+
+                // First save all changes
+                window.saveAllChanges(false)
+                    .then(function(saveResult) {{
+                        if (!saveResult.success) {{
+                            alert('Ошибка сохранения: ' + (saveResult.error || 'Неизвестная ошибка'));
+                            return;
+                        }}
+                        // Then complete the invoice
+                        return fetch('/api/procurement/' + quoteId + '/invoices/' + invoiceId + '/complete', {{
+                            method: 'POST'
+                        }});
+                    }})
+                    .then(function(r) {{
+                        if (!r) return;
+                        return r.json();
+                    }})
+                    .then(function(data) {{
+                        if (!data) return;
+                        if (data.success) {{
+                            alert('Инвойс завершён и передан в логистику/таможню!');
+                            location.reload();
+                        }} else {{
+                            alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                        }}
+                    }})
+                    .catch(function(err) {{
+                        alert('Ошибка сети: ' + err.message);
+                    }});
+            }};
+
+            // Reopen invoice - returns to procurement
+            window.reopenInvoice = function(invoiceId) {{
+                if (!confirm('Вернуть инвойс в работу?')) return;
+
+                fetch('/api/procurement/' + quoteId + '/invoices/' + invoiceId + '/reopen', {{
+                    method: 'POST'
+                }})
+                .then(function(r) {{ return r.json(); }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        location.reload();
+                    }} else {{
+                        alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+                    }}
+                }})
+                .catch(function(err) {{
+                    alert('Ошибка сети: ' + err.message);
+                }});
+            }};
+
             // Update selection count
             function updateSelectionCount() {{
                 if (!hot) return;
@@ -12577,11 +12667,21 @@ def get(quote_id: str, session):
                 var columns = [
                     {{data: 'selected', type: 'checkbox', width: 40, readOnly: !canEdit}},
                     {{data: 'brand', type: 'text', readOnly: true, width: 100}},
-                    {{data: 'product_name', type: 'text', readOnly: true, width: 250}},
-                    {{data: 'quantity', type: 'numeric', readOnly: true, width: 60}},
-                    {{data: 'price', type: 'numeric', width: 90, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
-                    {{data: 'production_time', type: 'numeric', width: 70, readOnly: !canEdit}},
-                    {{data: 'invoice_label', type: 'text', readOnly: true, width: 80,
+                    {{data: 'product_name', type: 'text', readOnly: true, width: 200}},
+                    {{data: 'quantity', type: 'numeric', readOnly: true, width: 50}},
+                    {{data: 'price', type: 'numeric', width: 80, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
+                    {{data: 'production_time', type: 'numeric', width: 50, readOnly: !canEdit}},
+                    {{data: 'is_unavailable', type: 'checkbox', width: 50, readOnly: !canEdit,
+                      renderer: function(instance, td, row, col, prop, value) {{
+                          Handsontable.renderers.CheckboxRenderer.apply(this, arguments);
+                          td.style.textAlign = 'center';
+                          if (value) {{
+                              td.parentNode.style.backgroundColor = '#fef2f2';
+                          }}
+                          return td;
+                      }}
+                    }},
+                    {{data: 'invoice_label', type: 'text', readOnly: true, width: 70,
                       renderer: function(instance, td, row, col, prop, value) {{
                           td.innerHTML = value || '<span style="color:#f59e0b">—</span>';
                           td.style.textAlign = 'center';
@@ -12599,7 +12699,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Н/Д', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -12847,6 +12947,153 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+@rt("/api/procurement/{quote_id}/invoices/{invoice_id}/complete", methods=["POST"])
+async def api_complete_invoice(quote_id: str, invoice_id: str, session):
+    """Complete an invoice - moves it to logistics/customs stage."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+    user_id = user["id"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    supabase = get_supabase()
+
+    # Verify quote belongs to user's organization
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
+    # Get invoice
+    invoice_result = supabase.table("invoices") \
+        .select("*") \
+        .eq("id", invoice_id) \
+        .eq("quote_id", quote_id) \
+        .single() \
+        .execute()
+
+    if not invoice_result.data:
+        return JSONResponse({"success": False, "error": "Invoice not found"}, status_code=404)
+
+    invoice = invoice_result.data
+
+    # Check invoice is in pending_procurement status
+    if invoice.get("status") != "pending_procurement":
+        return JSONResponse({"success": False, "error": "Invoice is not in procurement stage"}, status_code=400)
+
+    # Get items in this invoice
+    items_result = supabase.table("quote_items") \
+        .select("id, purchase_price_original, is_unavailable") \
+        .eq("invoice_id", invoice_id) \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    items = items_result.data or []
+
+    if not items:
+        return JSONResponse({"success": False, "error": "Invoice has no items"}, status_code=400)
+
+    # Validate: all items must have price OR be marked unavailable
+    items_without_price = []
+    for item in items:
+        has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
+        is_unavailable = item.get("is_unavailable", False)
+        if not has_price and not is_unavailable:
+            items_without_price.append(item["id"])
+
+    if items_without_price:
+        return JSONResponse({
+            "success": False,
+            "error": f"Не все позиции оценены. {len(items_without_price)} поз. без цены и не отмечены как недоступные."
+        }, status_code=400)
+
+    try:
+        # Update invoice status
+        supabase.table("invoices") \
+            .update({
+                "status": "pending_logistics",
+                "procurement_completed_at": "now()",
+                "procurement_completed_by": user_id
+            }) \
+            .eq("id", invoice_id) \
+            .execute()
+
+        return JSONResponse({"success": True, "new_status": "pending_logistics"})
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@rt("/api/procurement/{quote_id}/invoices/{invoice_id}/reopen", methods=["POST"])
+async def api_reopen_invoice(quote_id: str, invoice_id: str, session):
+    """Reopen an invoice - returns it to procurement stage."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    supabase = get_supabase()
+
+    # Verify quote belongs to user's organization
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .single() \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
+    # Get invoice
+    invoice_result = supabase.table("invoices") \
+        .select("*") \
+        .eq("id", invoice_id) \
+        .eq("quote_id", quote_id) \
+        .single() \
+        .execute()
+
+    if not invoice_result.data:
+        return JSONResponse({"success": False, "error": "Invoice not found"}, status_code=404)
+
+    invoice = invoice_result.data
+
+    # Only allow reopening if not yet fully completed (customs done)
+    if invoice.get("status") == "completed":
+        return JSONResponse({"success": False, "error": "Cannot reopen fully completed invoice"}, status_code=400)
+
+    try:
+        # Update invoice status back to procurement
+        supabase.table("invoices") \
+            .update({
+                "status": "pending_procurement",
+                "procurement_completed_at": None,
+                "procurement_completed_by": None
+            }) \
+            .eq("id", invoice_id) \
+            .execute()
+
+        return JSONResponse({"success": True, "new_status": "pending_procurement"})
+
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
 @rt("/api/procurement/{quote_id}/items/assign", methods=["POST"])
 async def api_assign_items_to_invoice(quote_id: str, session, request):
     """Bulk assign items to an invoice."""
@@ -12978,6 +13225,10 @@ async def api_bulk_update_items(quote_id: str, session, request):
 
             if "production_time_days" in item and item["production_time_days"] is not None:
                 update_data["production_time_days"] = item["production_time_days"]
+
+            # Support is_unavailable checkbox
+            if "is_unavailable" in item:
+                update_data["is_unavailable"] = bool(item["is_unavailable"])
 
             # Note: supplier_country is now set at invoice level, not per-item
 
@@ -18969,6 +19220,11 @@ def get(session, spec_id: str):
                     disabled=not is_editable) if is_editable and status == "pending_review" else None,
                 # Feature #70: PDF Preview button
                 btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
+                # Contract-style specification export with pre-export modal
+                btn("Экспорт PDF", variant="primary", icon_name="download",
+                    **{"hx-get": f"/spec-control/{spec_id}/export-modal",
+                       "hx-target": "#export-modal-container",
+                       "hx-swap": "innerHTML"}),
                 btn_link("Назад к спецификациям", href="/spec-control", variant="ghost", icon_name="arrow-left"),
                 style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;"
             ),
@@ -18979,6 +19235,9 @@ def get(session, spec_id: str):
 
         # Transition history (Feature #88) - uses quote_id from the spec
         workflow_transition_history(quote_id) if quote_id else None,
+
+        # Modal container for export PDF
+        Div(id="export-modal-container"),
 
         session=session
     )
