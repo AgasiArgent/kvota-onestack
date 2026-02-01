@@ -19889,28 +19889,21 @@ def get(session, quote_id: str):
             Input(type="hidden", name="quote_id", value=quote_id),
             Input(type="hidden", name="organization_id", value=org_id),
 
-            # Section 1: Identification
+            # Section 1: Identification & Date
             Div(
                 H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
                 Div(
                     Div(
                         Label("№ Спецификации", For="specification_number"),
                         Input(name="specification_number", id="specification_number",
-                              placeholder="SPEC-2025-0001",
+                              placeholder="Авто при выборе договора",
                               style="width: 100%;"),
+                        Small("Заполнится автоматически при выборе договора", style="color: #666;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("IDN КП", For="proposal_idn"),
-                        Input(name="proposal_idn", id="proposal_idn",
-                              value=prefill.get("proposal_idn", ""),
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("IDN-SKU", For="item_ind_sku"),
-                        Input(name="item_ind_sku", id="item_ind_sku",
-                              placeholder="IDN-SKU identifier",
+                        Label("Дата подписания", For="sign_date"),
+                        Input(name="sign_date", id="sign_date", type="date",
                               style="width: 100%;"),
                         cls="form-group"
                     ),
@@ -19930,43 +19923,16 @@ def get(session, quote_id: str):
                         cls="form-group"
                     ),
                     cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                    style="grid-template-columns: repeat(3, 1fr); gap: 1rem;"
                 ),
                 cls="card",
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 2: Dates and Validity
+            # Section 2: Delivery Conditions
             Div(
-                H3("📅 Даты и сроки"),
+                H3(icon("truck", size=20), " Условия поставки", cls="card-header"),
                 Div(
-                    Div(
-                        Label("Дата подписания", For="sign_date"),
-                        Input(name="sign_date", id="sign_date", type="date",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок действия", For="validity_period"),
-                        Input(name="validity_period", id="validity_period",
-                              placeholder="90 дней",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок готовности", For="readiness_period"),
-                        Input(name="readiness_period", id="readiness_period",
-                              placeholder="30-45 дней",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок на логистику", For="logistics_period"),
-                        Input(name="logistics_period", id="logistics_period",
-                              placeholder="14-21 дней",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
                     Div(
                         Label("Срок поставки (дней)", For="delivery_days"),
                         Input(name="delivery_days", id="delivery_days", type="number", min="1",
@@ -19989,138 +19955,16 @@ def get(session, quote_id: str):
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 3: Currency and Payment
-            Div(
-                H3(icon("wallet", size=20), " Валюта и оплата", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Валюта спецификации", For="specification_currency"),
-                        Select(
-                            Option("USD", value="USD", selected=prefill.get("specification_currency") == "USD"),
-                            Option("EUR", value="EUR", selected=prefill.get("specification_currency") == "EUR"),
-                            Option("RUB", value="RUB", selected=prefill.get("specification_currency") == "RUB"),
-                            Option("CNY", value="CNY", selected=prefill.get("specification_currency") == "CNY"),
-                            name="specification_currency",
-                            id="specification_currency",
-                            style="width: 100%;"
-                        ),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Курс к рублю", For="exchange_rate_to_ruble"),
-                        Input(name="exchange_rate_to_ruble", id="exchange_rate_to_ruble",
-                              type="number", step="0.0001",
-                              placeholder="91.5000",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Срок оплаты после УПД (дней)", For="client_payment_term_after_upd"),
-                        Input(name="client_payment_term_after_upd", id="client_payment_term_after_upd",
-                              type="number", min="0",
-                              placeholder="0",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Условия оплаты клиента", For="client_payment_terms"),
-                        Input(name="client_payment_terms", id="client_payment_terms",
-                              placeholder="100% предоплата",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                P(
+                    icon("info", size=14),
+                    " Остальные условия (оплата, адрес, Incoterms) берутся из КП и данных клиента",
+                    style="color: #666; font-size: 0.875rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"
                 ),
                 cls="card",
                 style="margin-bottom: 1.5rem;"
             ),
 
-            # Section 4: Origin and Shipping
-            Div(
-                H3(icon("truck", size=20), " Отгрузка и доставка", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Страна забора груза", For="cargo_pickup_country"),
-                        Input(name="cargo_pickup_country", id="cargo_pickup_country",
-                              value=prefill.get("cargo_pickup_country", ""),
-                              placeholder="Китай",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Страна товара к отгрузке", For="goods_shipment_country"),
-                        Input(name="goods_shipment_country", id="goods_shipment_country",
-                              placeholder="Китай",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Город доставки в РФ", For="delivery_city_russia"),
-                        Input(name="delivery_city_russia", id="delivery_city_russia",
-                              value=prefill.get("delivery_city_russia", ""),
-                              placeholder="Москва",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Тип груза", For="cargo_type"),
-                        Input(name="cargo_type", id="cargo_type",
-                              placeholder="Генеральный",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Страна оплаты поставщику", For="supplier_payment_country"),
-                        Input(name="supplier_payment_country", id="supplier_payment_country",
-                              placeholder="Китай",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
-                ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 5: Legal Entities (v3.0 enhanced)
-            Div(
-                H3(icon("building-2", size=20), " Юридические лица", cls="card-header"),
-                Div(
-                    Div(
-                        Label("Наше юридическое лицо", For="our_legal_entity"),
-                        Input(name="our_legal_entity", id="our_legal_entity",
-                              value=prefill.get("our_legal_entity", ""),
-                              placeholder="ООО \"Наша компания\"",
-                              style="width: 100%;"),
-                        # v3.0: Show seller company from quote if available
-                        Small(
-                            f"Из КП: {seller_company.get('supplier_code', '')} - {seller_company_name}",
-                            style="color: #666; display: block; margin-top: 0.25rem;"
-                        ) if seller_company_name else None,
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Юридическое лицо клиента", For="client_legal_entity"),
-                        Input(name="client_legal_entity", id="client_legal_entity",
-                              value=prefill.get("client_legal_entity", ""),
-                              placeholder="ООО \"Клиент\"",
-                              style="width: 100%;"),
-                        cls="form-group"
-                    ),
-                    cls="grid",
-                    style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
-                ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Section 6: Contract and Signatory (v3.0 NEW)
+            # Section 3: Contract and Signatory
             Div(
                 H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
                 Div(
@@ -26829,17 +26673,17 @@ def get(session, q: str = "", status: str = ""):
         Div(
             Form(
                 Div(
-                    # Search with icon
-                    Div(
-                        icon("search", size=16, color="#94a3b8"),
-                        Input(name="q", value=q, placeholder="Поиск по названию или коду...",
-                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
-                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
-                    ),
-                    Select(*status_options, name="status", style=select_style),
-                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    btn_link("Сбросить", href="/buyer-companies", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
+                    # Search input
+                    Input(name="q", value=q, placeholder="Поиск по названию или коду...",
+                          style=f"{input_style} margin-right: 12px;"),
+                    # Status filter
+                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
+                    # Buttons
+                    Button(icon("search", size=14), " Поиск", type="submit",
+                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
+                    A(icon("x", size=14), " Сбросить", href="/buyer-companies",
+                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
+                    style="display: flex; align-items: center;"
                 ),
                 method="get",
                 action="/buyer-companies"
@@ -27642,17 +27486,17 @@ def get(session, q: str = "", status: str = ""):
         Div(
             Form(
                 Div(
-                    # Search with icon
-                    Div(
-                        icon("search", size=16, color="#94a3b8"),
-                        Input(type="text", name="q", value=q, placeholder="Название, код или ИНН...",
-                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
-                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
-                    ),
-                    Select(*status_options, name="status", style=select_style),
-                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    btn_link("Сбросить", href="/seller-companies", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
+                    # Search input
+                    Input(type="text", name="q", value=q, placeholder="Название, код или ИНН...",
+                          style=f"{input_style} margin-right: 12px;"),
+                    # Status filter
+                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
+                    # Buttons
+                    Button(icon("search", size=14), " Поиск", type="submit",
+                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
+                    A(icon("x", size=14), " Сбросить", href="/seller-companies",
+                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
+                    style="display: flex; align-items: center;"
                 ),
                 method="get",
                 action="/seller-companies"
@@ -30957,18 +30801,18 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         Div(
             Form(
                 Div(
-                    # Search with icon
-                    Div(
-                        icon("search", size=16, color="#94a3b8"),
-                        Input(type="text", name="q", value=q, placeholder="Номер договора...",
-                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
-                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
-                    ),
-                    Select(*customer_options, name="customer_id", style=select_style),
-                    Select(*status_options, name="status", style=select_style),
-                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    btn_link("Сбросить", href="/customer-contracts", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
+                    # Search input
+                    Input(type="text", name="q", value=q, placeholder="Номер договора...",
+                          style=f"{input_style} margin-right: 12px;"),
+                    # Filters
+                    Select(*customer_options, name="customer_id", style=f"{select_style} margin-right: 8px;"),
+                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
+                    # Buttons
+                    Button(icon("search", size=14), " Поиск", type="submit",
+                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
+                    A(icon("x", size=14), " Сбросить", href="/customer-contracts",
+                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
+                    style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px 0;"
                 ),
                 method="get",
                 action="/customer-contracts"
@@ -31549,19 +31393,19 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
         Div(
             Form(
                 Div(
-                    # Search with icon
-                    Div(
-                        icon("search", size=16, color="#94a3b8"),
-                        Input(type="text", name="q", value=q, placeholder="Код, город или страна...",
-                              style="border: none; background: transparent; outline: none; width: 100%; padding: 0; font-size: 14px;"),
-                        style=f"display: flex; align-items: center; gap: 10px; {input_style}"
-                    ),
-                    Select(*country_options, name="country", style=select_style),
-                    Select(*type_options, name="type_filter", style=select_style),
-                    Select(*status_options, name="status", style=select_style),
-                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
-                    btn_link("Сбросить", href="/locations", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;"
+                    # Search input
+                    Input(type="text", name="q", value=q, placeholder="Код, город или страна...",
+                          style=f"{input_style} margin-right: 12px;"),
+                    # Filters
+                    Select(*country_options, name="country", style=f"{select_style} margin-right: 8px;"),
+                    Select(*type_options, name="type_filter", style=f"{select_style} margin-right: 8px;"),
+                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
+                    # Buttons
+                    Button(icon("search", size=14), " Поиск", type="submit",
+                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
+                    A(icon("x", size=14), " Сбросить", href="/locations",
+                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
+                    style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px 0;"
                 ),
                 method="get",
                 action="/locations"
