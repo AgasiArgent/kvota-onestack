@@ -6662,13 +6662,20 @@ def get(quote_id: str, session):
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
 
-        # Compact inline-editable details card
+        # Compact inline-editable details card with gradient styling
         Div(
+            # Section header: ДЕТАЛИ КП
+            Div(
+                icon("file-text", size=16, color="#64748b"),
+                Span(" ДЕТАЛИ КП", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+
             # Row 1: Customer and Seller Company
             Div(
                 # Customer dropdown
                 Div(
-                    Label("Клиент *", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("КЛИЕНТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Select(
                         Option("Выберите клиента...", value="", selected=(not quote.get("customer_id"))),
                         *[Option(
@@ -6678,7 +6685,7 @@ def get(quote_id: str, session):
                         ) for c in customers],
                         name="customer_id",
                         id="inline-customer",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;" + (" border-color: #f59e0b;" if not quote.get("customer_id") else ""),
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;" + (" border-color: #f59e0b; background: #fffbeb;" if not quote.get("customer_id") else ""),
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "customer_id", value: event.target.value}',
@@ -6688,7 +6695,7 @@ def get(quote_id: str, session):
                 ),
                 # Seller Company dropdown
                 Div(
-                    Label("Продавец", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("ПРОДАВЕЦ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Select(
                         Option("—", value=""),
                         *[Option(
@@ -6698,7 +6705,7 @@ def get(quote_id: str, session):
                         ) for sc in seller_companies],
                         name="seller_company_id",
                         id="inline-seller",
-                        style="width: 100%; padding: 0.5rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem;",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "seller_company_id", value: event.target.value}',
@@ -6706,19 +6713,27 @@ def get(quote_id: str, session):
                     ),
                     style="flex: 1; min-width: 200px;"
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1rem;"
+                style="display: flex; gap: 1rem; margin-bottom: 1.25rem;"
             ),
+
+            # Section header: ДОСТАВКА
+            Div(
+                icon("truck", size=16, color="#64748b"),
+                Span(" ДОСТАВКА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+
             # Row 2: Delivery City, Country, Method, Terms (flexbox)
             Div(
                 # Delivery City
                 Div(
-                    Label("Город доставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("ГОРОД", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Input(
                         type="text",
                         value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
-                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_city", value: event.target.value}',
@@ -6728,13 +6743,13 @@ def get(quote_id: str, session):
                 ),
                 # Delivery Country
                 Div(
-                    Label("Страна", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("СТРАНА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Input(
                         type="text",
                         value=quote.get("delivery_country") or "",
                         placeholder="Россия",
                         name="delivery_country",
-                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px;",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_country", value: event.target.value}',
@@ -6744,26 +6759,26 @@ def get(quote_id: str, session):
                 ),
                 # Delivery Method
                 Div(
-                    Label("Способ доставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("СПОСОБ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Select(
                         Option("—", value=""),
                         *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
                         name="delivery_method",
-                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: event.target.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1 1 200px; min-width: 200px;"
+                    style="flex: 1 1 160px; min-width: 160px;"
                 ),
                 # Delivery Terms
                 Div(
-                    Label("Условия поставки", style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.25rem; display: block;"),
+                    Label("УСЛОВИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Select(
                         *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
                         name="delivery_terms",
-                        style="width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box; min-height: 40px; background-color: white;",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_terms", value: event.target.value}',
@@ -6773,34 +6788,35 @@ def get(quote_id: str, session):
                 ),
                 style="display: flex; flex-wrap: wrap; gap: 1rem;"
             ),
-            cls="card", style="padding: 1rem; margin-bottom: 1rem;"
+            cls="card", style="padding: 1.25rem; margin-bottom: 1rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Products (Handsontable spreadsheet)
+        # Products (Handsontable spreadsheet) with gradient styling
         Div(
-            # Header with action buttons (all on one row for drafts)
+            # Section header with icon
             Div(
                 Div(
-                    H4(f"Позиции", style="margin: 0;", id="items-title"),
-                    Span(id="items-count", style="margin-left: 0.5rem; color: #666;"),
-                    cls="table-header-left", style="display: flex; align-items: center;"
+                    icon("package", size=16, color="#64748b"),
+                    Span(" ПОЗИЦИИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    Span(id="items-count", style="margin-left: 0.5rem; font-size: 11px; color: #94a3b8;"),
+                    style="display: flex; align-items: center;"
                 ),
                 Div(
                     # Show totals only for non-draft quotes
                     (Span(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
-                        style="font-weight: 600; color: #059669; margin-right: 1rem;") if quote.get('total_amount') and workflow_status != 'draft' else None),
-                    Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #666;"),
+                        style="font-weight: 600; color: #1e40af; margin-right: 1rem;") if quote.get('total_amount') and workflow_status != 'draft' else None),
+                    Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #64748b;"),
                     # Add row button
-                    A(icon("plus", size=16), " Добавить строку", id="btn-add-row", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;"),
+                    A(icon("plus", size=16), " Добавить", id="btn-add-row", role="button", cls="secondary", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; margin-right: 0.5rem; text-decoration: none; font-size: 0.8125rem;"),
                     # Import button
-                    A(icon("upload", size=16), " Загрузить из файла", id="btn-import", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;"),
+                    A(icon("upload", size=16), " Загрузить", id="btn-import", role="button", cls="secondary", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; margin-right: 0.5rem; text-decoration: none; font-size: 0.8125rem;"),
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
                     # Draft workflow buttons (only for draft status)
-                    (A(icon("save", size=16), " Сохранить", id="btn-save-draft", role="button", cls="secondary", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; margin-right: 0.5rem; text-decoration: none;", onclick="showSaveConfirmation()") if workflow_status == 'draft' else None),
-                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", cls="btn-submit-disabled", style="padding: 0.5rem 1rem; display: inline-flex; align-items: center; gap: 0.5rem; text-decoration: none; border-radius: 8px;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
-                    cls="table-header-right", style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
+                    (A(icon("save", size=16), " Сохранить", id="btn-save-draft", role="button", cls="secondary", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; margin-right: 0.5rem; text-decoration: none; font-size: 0.8125rem;", onclick="showSaveConfirmation()") if workflow_status == 'draft' else None),
+                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", cls="btn-submit-disabled", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; text-decoration: none; border-radius: 6px; font-size: 0.8125rem;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
+                    style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
                 ),
-                cls="table-header"
+                style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0;"
             ),
             # Handsontable container with enhanced styling
             Div(
@@ -6809,10 +6825,10 @@ def get(quote_id: str, session):
             ),
             # Footer with count
             Div(
-                Span(id="footer-count"),
-                cls="table-footer"
+                Span(id="footer-count", style="color: #64748b;"),
+                style="padding: 0.5rem 1rem; border-top: 1px solid #e2e8f0; font-size: 0.8125rem;"
             ),
-            cls="table-container", style="margin: 0;"
+            style="margin: 0; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;"
         ),
         # Handsontable initialization script - EXPLICIT SAVE ONLY (no auto-save)
         Script(f"""
