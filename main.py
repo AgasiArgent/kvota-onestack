@@ -29797,6 +29797,193 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
     )
 
 
+# ============================================================================
+# UI-009b: Create Customer Contract
+# ============================================================================
+
+@rt("/customer-contracts/new")
+def get(session, customer_id: str = ""):
+    """Form for creating a new customer contract."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания договоров.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.customer_service import get_all_customers, get_customer
+
+    # Get customers for dropdown
+    customers = get_all_customers(organization_id=org_id, is_active=True, limit=200)
+
+    # Pre-select customer if provided
+    selected_customer = None
+    if customer_id:
+        selected_customer = get_customer(customer_id)
+
+    # Generate suggested contract number
+    from datetime import date
+    today = date.today()
+    suggested_number = f"ДП-{today.strftime('%Y%m%d')}"
+
+    return page_layout("Новый договор",
+        H1(icon("file-plus", size=28), " Новый договор", cls="page-header"),
+
+        Div(
+            Form(
+                # Customer selection
+                Div(
+                    Label("Клиент *", For="customer_id"),
+                    Select(
+                        Option("-- Выберите клиента --", value="", disabled=True, selected=not customer_id),
+                        *[Option(c.name, value=c.id, selected=(customer_id == c.id)) for c in customers],
+                        name="customer_id",
+                        id="customer_id",
+                        required=True,
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # Contract number
+                Div(
+                    Label("Номер договора *", For="contract_number"),
+                    Input(
+                        name="contract_number",
+                        id="contract_number",
+                        type="text",
+                        value=suggested_number,
+                        required=True,
+                        placeholder="Например: ДП-001/2025",
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # Contract date
+                Div(
+                    Label("Дата договора *", For="contract_date"),
+                    Input(
+                        name="contract_date",
+                        id="contract_date",
+                        type="date",
+                        value=today.isoformat(),
+                        required=True,
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # Status
+                Div(
+                    Label("Статус", For="status"),
+                    Select(
+                        Option("Действующий", value="active", selected=True),
+                        Option("Приостановлен", value="suspended"),
+                        Option("Расторгнут", value="terminated"),
+                        name="status",
+                        id="status",
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # Notes
+                Div(
+                    Label("Примечания", For="notes"),
+                    Textarea(
+                        name="notes",
+                        id="notes",
+                        rows="3",
+                        placeholder="Дополнительная информация о договоре...",
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # Buttons
+                Div(
+                    btn("Создать договор", variant="success", icon_name="save", type="submit"),
+                    btn_link("Отмена", href="/customer-contracts", variant="secondary", icon_name="x"),
+                    style="display: flex; gap: 0.5rem; margin-top: 1rem;"
+                ),
+
+                method="post",
+                action="/customer-contracts/new"
+            ),
+            cls="card"
+        ),
+
+        session=session
+    )
+
+
+@rt("/customer-contracts/new")
+def post(session, customer_id: str, contract_number: str, contract_date: str, status: str = "active", notes: str = ""):
+    """Handle new contract creation."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания договоров.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.customer_contract_service import create_contract
+    from datetime import date
+
+    try:
+        # Parse date
+        contract_date_obj = date.fromisoformat(contract_date) if contract_date else date.today()
+
+        # Create contract
+        contract = create_contract(
+            organization_id=org_id,
+            customer_id=customer_id,
+            contract_number=contract_number.strip(),
+            contract_date=contract_date_obj,
+            status=status,
+            notes=notes.strip() if notes else None
+        )
+
+        if contract:
+            # Success - redirect to contract detail
+            return RedirectResponse(f"/customer-contracts/{contract.id}", status_code=303)
+        else:
+            return page_layout("Ошибка",
+                Div("Не удалось создать договор.", cls="alert alert-error"),
+                btn_link("Назад", href="/customer-contracts/new", variant="secondary"),
+                session=session
+            )
+
+    except ValueError as e:
+        return page_layout("Ошибка",
+            Div(f"Ошибка: {str(e)}", cls="alert alert-error"),
+            btn_link("Назад", href=f"/customer-contracts/new?customer_id={customer_id}", variant="secondary"),
+            session=session
+        )
+    except Exception as e:
+        print(f"Error creating contract: {e}")
+        return page_layout("Ошибка",
+            Div(f"Ошибка создания договора: {str(e)}", cls="alert alert-error"),
+            btn_link("Назад", href="/customer-contracts/new", variant="secondary"),
+            session=session
+        )
+
+
 @rt("/customer-contracts/{contract_id}")
 def get(contract_id: str, session):
     """Customer contract detail view page."""
