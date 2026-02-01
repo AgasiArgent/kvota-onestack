@@ -10803,26 +10803,27 @@ def get(quote_id: str, session):
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "documents", user_roles),
 
-        # Header
+        # Header with modern styling
         Div(
-            H1(
-                icon("folder", size=24),
-                f" Документы КП {quote_number}",
-                style="display: flex; align-items: center; gap: 0.5rem;"
+            Div(
+                icon("folder", size=24, color="#1e40af"),
+                H1(f" Документы КП {quote_number}",
+                   style="display: inline; margin: 0; margin-left: 8px; font-size: 1.5rem;"),
+                style="display: flex; align-items: center;"
             ),
-            P(f"Клиент: {customer_name}", style="color: var(--text-secondary); margin-top: 0.25rem;"),
+            P(f"Клиент: {customer_name}", style="color: #64748b; margin-top: 0.5rem;"),
             style="margin-bottom: 1.5rem;"
         ),
 
-        # Info card
+        # Info card with gradient styling
         Div(
             P(
-                icon("info", size=16),
+                icon("info", size=16, color="#3b82f6"),
                 " Здесь можно загружать и просматривать все документы по КП: документы самого КП, сканы инвойсов и сертификаты на товары.",
-                style="display: flex; align-items: flex-start; gap: 0.5rem; margin: 0; color: var(--text-secondary);"
+                style="display: flex; align-items: flex-start; gap: 0.5rem; margin: 0; color: #64748b; font-size: 0.875rem;"
             ),
             cls="card",
-            style="background: var(--accent-light); border-left: 4px solid var(--accent); margin-bottom: 1.5rem;"
+            style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-left: 4px solid #3b82f6; margin-bottom: 1.5rem; padding: 1rem; border-radius: 8px;"
         ),
 
         # Documents section with hierarchical binding
@@ -32209,18 +32210,23 @@ def _quote_documents_section(
             style="margin-bottom: 1rem; padding: 1rem; background: white; border: 1px solid #e5e7eb; border-radius: 8px;"
         ) if can_upload else None,
 
-        # Documents table
+        # Documents table with gradient container
         Div(
-            H4(I(cls="fa-solid fa-folder-open", style="margin-right: 0.5rem;"), f"Документы ({len(documents)})"),
+            # Section header
+            Div(
+                icon("folder-open", size=16, color="#64748b"),
+                Span(f" ДОКУМЕНТЫ ({len(documents)})", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
             Table(
                 Thead(
                     Tr(
-                        Th("Файл", style="width: 15%;"),
-                        Th("Тип", style="width: 12%;"),
-                        Th("Привязка", style="width: 10%;"),
-                        Th("Описание", style="width: 18%;"),
-                        Th("Размер", style="width: 8%;"),
-                        Th("Дата", style="width: 10%;"),
+                        Th("Файл", style="width: 15%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
+                        Th("Тип", style="width: 12%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
+                        Th("Привязка", style="width: 10%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
+                        Th("Описание", style="width: 18%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
+                        Th("Размер", style="width: 8%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
+                        Th("Дата", style="width: 10%; color: #64748b; font-size: 0.75rem; text-transform: uppercase;"),
                         Th("", style="width: 10%;"),
                     )
                 ),
@@ -32228,7 +32234,7 @@ def _quote_documents_section(
                 cls="table",
                 style="width: 100%;"
             ),
-            style="overflow-x: auto;"
+            style="overflow-x: auto; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 1.25rem; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         cls="documents-section",
