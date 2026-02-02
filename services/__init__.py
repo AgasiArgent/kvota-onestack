@@ -301,37 +301,6 @@ from .plan_fact_service import (
     get_payment_registration_preview,
     get_variance_summary,
 )
-from .idn_service import (
-    # Data classes (Feature #IDN-001, #IDN-002)
-    ParsedQuoteIDN,
-    ParsedItemIDN,
-    IDNGenerationResult,
-    # Parsing functions
-    parse_quote_idn,
-    parse_item_idn,
-    # Validation functions
-    is_valid_quote_idn,
-    is_valid_item_idn,
-    validate_seller_code,
-    validate_inn,
-    # Quote IDN generation (Feature #IDN-001)
-    generate_quote_idn,
-    assign_idn_to_quote,
-    get_quote_idn,
-    get_quote_by_idn,
-    # Item IDN generation (Feature #IDN-002)
-    generate_item_idn,
-    regenerate_item_idns_for_quote,
-    get_item_idn,
-    get_item_by_idn,
-    # Utility functions
-    extract_quote_idn_from_item_idn,
-    format_item_position,
-    get_year_from_idn,
-    get_customer_inn_from_idn,
-    get_seller_code_from_idn,
-    get_next_expected_sequence,
-)
 from .supplier_service import (
     # Data class (Feature #API-001)
     Supplier,
@@ -1141,30 +1110,6 @@ __all__ = [
     "bulk_register_payments",
     "get_payment_registration_preview",
     "get_variance_summary",
-    # IDN service (Feature #IDN-001, #IDN-002)
-    "ParsedQuoteIDN",
-    "ParsedItemIDN",
-    "IDNGenerationResult",
-    "parse_quote_idn",
-    "parse_item_idn",
-    "is_valid_quote_idn",
-    "is_valid_item_idn",
-    "validate_seller_code",
-    "validate_inn",
-    "generate_quote_idn",
-    "assign_idn_to_quote",
-    "get_quote_idn",
-    "get_quote_by_idn",
-    "generate_item_idn",
-    "regenerate_item_idns_for_quote",
-    "get_item_idn",
-    "get_item_by_idn",
-    "extract_quote_idn_from_item_idn",
-    "format_item_position",
-    "get_year_from_idn",
-    "get_customer_inn_from_idn",
-    "get_seller_code_from_idn",
-    "get_next_expected_sequence",
     # Supplier service (Feature #API-001)
     "Supplier",
     "validate_supplier_code",
