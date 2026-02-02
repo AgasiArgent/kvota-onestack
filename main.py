@@ -3265,12 +3265,12 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
                     if (typeof lucide !== 'undefined') {
                         lucide.createIcons();
                     }
-                });
-                // Also reinitialize after HTMX swaps
-                document.body.addEventListener('htmx:afterSwap', function() {
-                    if (typeof lucide !== 'undefined') {
-                        lucide.createIcons();
-                    }
+                    // Also reinitialize after HTMX swaps (must be inside DOMContentLoaded so document.body exists)
+                    document.body.addEventListener('htmx:afterSwap', function() {
+                        if (typeof lucide !== 'undefined') {
+                            lucide.createIcons();
+                        }
+                    });
                 });
             """)
         ),
