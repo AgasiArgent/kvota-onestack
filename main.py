@@ -22129,7 +22129,7 @@ def post(session, spec_id: str):
         # Get quote data for total amount calculation
         quote_id = spec.get("quote_id")
         quote_result = supabase.table("quotes") \
-            .select("id, client_name, calculated_total_client_price") \
+            .select("id, calculated_total_client_price, customers(id, name)") \
             .eq("id", quote_id) \
             .execute()
 
@@ -22227,7 +22227,7 @@ def post(session, spec_id: str):
             H1(icon("check-circle", size=28), " Сделка успешно создана", cls="page-header"),
             Div(
                 H3(f"Номер сделки: {deal_number}"),
-                P(f"Клиент: {quote.get('client_name', 'N/A')}"),
+                P(f"Клиент: {quote.get('customers', {}).get('name', 'N/A') if quote.get('customers') else 'N/A'}"),
                 P(f"Сумма: {total_amount:,.2f} {currency}"),
                 P(f"Дата подписания: {sign_date}"),
                 cls="card",
