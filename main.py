@@ -21499,68 +21499,6 @@ def get(session, spec_id: str):
                 style="background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); border: 1px solid #fde047; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
-            # Feature #71: Section 7 - Signed Scan Upload (visible when status is approved or signed)
-            Div(
-                Div(
-                    icon("pen-tool", size=16, color="#64748b"),
-                    Span("ПОДПИСАННЫЙ СКАН", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
-                ),
-                # Show current scan if exists
-                Div(
-                    P(
-                        icon("check-circle", size=14, color="#16a34a"), " Скан загружен: ",
-                        A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
-                          href=spec.get("signed_scan_url", "#"),
-                          target="_blank",
-                          style="color: #6366f1; font-weight: 500;"),
-                        style="margin-bottom: 0; display: flex; align-items: center; gap: 6px; font-size: 14px;"
-                    ),
-                    style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border: 1px solid #86efac; border-left: 4px solid #22c55e; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;"
-                ) if spec.get("signed_scan_url") else None,
-                # Upload form (separate form from main form due to enctype)
-                P(
-                    "Загрузите скан подписанной спецификации (PDF, JPG, PNG, до 10 МБ).",
-                    style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
-                ) if not spec.get("signed_scan_url") else P(
-                    "Вы можете загрузить новый скан для замены текущего.",
-                    style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
-                ),
-                Form(
-                    Input(type="file", name="signed_scan", id="signed_scan",
-                          accept=".pdf,.jpg,.jpeg,.png",
-                          style="margin-bottom: 12px; font-size: 14px;"),
-                    btn("Загрузить скан", variant="primary", icon_name="upload", type="submit"),
-                    action=f"/spec-control/{spec_id}/upload-signed",
-                    method="POST",
-                    enctype="multipart/form-data"
-                ),
-                # Feature #72: Confirm Signature button (visible when approved + has signed scan)
-                Div(
-                    Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
-                    P(
-                        icon("file-text", size=14, color="#16a34a"), " Скан загружен. Подтвердите подпись для создания сделки.",
-                        style="margin-bottom: 12px; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
-                    ),
-                    Form(
-                        btn("Подтвердить подпись и создать сделку", variant="success", icon_name="check", type="submit", full_width=True),
-                        action=f"/spec-control/{spec_id}/confirm-signature",
-                        method="POST"
-                    ),
-                    style="margin-top: 16px;"
-                ) if status == "approved" and spec.get("signed_scan_url") else None,
-                # Info for already signed specs
-                Div(
-                    Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
-                    P(
-                        icon("check-circle", size=14, color="#16a34a"), " Спецификация подписана. Сделка создана.",
-                        style="margin-bottom: 0; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
-                    ),
-                    style="margin-top: 16px;"
-                ) if status == "signed" else None,
-                style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
-            ) if status in ["approved", "signed"] else None,
-
             # Action buttons (simplified workflow: draft -> approved -> signed)
             Div(
                 btn("Сохранить", variant="primary", icon_name="save", type="submit", name="action", value="save",
@@ -21579,6 +21517,69 @@ def get(session, spec_id: str):
             action=f"/spec-control/{spec_id}",
             method="POST"
         ),
+
+        # Feature #71: Section 7 - Signed Scan Upload (OUTSIDE main form - HTML doesn't support nested forms)
+        # Visible when status is approved or signed
+        Div(
+            Div(
+                icon("pen-tool", size=16, color="#64748b"),
+                Span("ПОДПИСАННЫЙ СКАН", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+            ),
+            # Show current scan if exists
+            Div(
+                P(
+                    icon("check-circle", size=14, color="#16a34a"), " Скан загружен: ",
+                    A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
+                      href=spec.get("signed_scan_url", "#"),
+                      target="_blank",
+                      style="color: #6366f1; font-weight: 500;"),
+                    style="margin-bottom: 0; display: flex; align-items: center; gap: 6px; font-size: 14px;"
+                ),
+                style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border: 1px solid #86efac; border-left: 4px solid #22c55e; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;"
+            ) if spec.get("signed_scan_url") else None,
+            # Upload form (standalone - not nested)
+            P(
+                "Загрузите скан подписанной спецификации (PDF, JPG, PNG, до 10 МБ).",
+                style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
+            ) if not spec.get("signed_scan_url") else P(
+                "Вы можете загрузить новый скан для замены текущего.",
+                style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
+            ),
+            Form(
+                Input(type="file", name="signed_scan", id="signed_scan",
+                      accept=".pdf,.jpg,.jpeg,.png",
+                      style="margin-bottom: 12px; font-size: 14px;"),
+                btn("Загрузить скан", variant="primary", icon_name="upload", type="submit"),
+                action=f"/spec-control/{spec_id}/upload-signed",
+                method="POST",
+                enctype="multipart/form-data"
+            ),
+            # Feature #72: Confirm Signature button (visible when approved + has signed scan)
+            Div(
+                Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
+                P(
+                    icon("file-text", size=14, color="#16a34a"), " Скан загружен. Подтвердите подпись для создания сделки.",
+                    style="margin-bottom: 12px; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
+                ),
+                Form(
+                    btn("Подтвердить подпись и создать сделку", variant="success", icon_name="check", type="submit", full_width=True),
+                    action=f"/spec-control/{spec_id}/confirm-signature",
+                    method="POST"
+                ),
+                style="margin-top: 16px;"
+            ) if status == "approved" and spec.get("signed_scan_url") else None,
+            # Info for already signed specs
+            Div(
+                Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
+                P(
+                    icon("check-circle", size=14, color="#16a34a"), " Спецификация подписана. Сделка создана.",
+                    style="margin-bottom: 0; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
+                ),
+                style="margin-top: 16px;"
+            ) if status == "signed" else None,
+            style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        ) if status in ["approved", "signed"] else None,
 
         # Transition history (Feature #88) - uses quote_id from the spec
         workflow_transition_history(quote_id) if quote_id else None,
