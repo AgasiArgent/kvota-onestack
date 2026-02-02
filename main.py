@@ -21482,6 +21482,7 @@ def get(session, spec_id: str):
                 btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
                 # Contract-style specification export (direct download - no modal)
                 btn_link("Экспорт PDF", href=f"/spec-control/{spec_id}/export-pdf", variant="primary", icon_name="download"),
+                btn_link("DOCX (Beta)", href=f"/spec-control/{spec_id}/export-docx", variant="secondary", icon_name="file-text"),
                 btn_link("Назад", href="/dashboard?tab=spec-control", variant="ghost", icon_name="arrow-left"),
                 style="margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap;"
             ),
@@ -21764,6 +21765,62 @@ def get(session, spec_id: str):
         traceback.print_exc()
         return page_layout("Ошибка",
             H1("Ошибка генерации PDF"),
+            Div(f"Ошибка: {str(e)}", cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"),
+            A("← Назад", href=f"/spec-control/{spec_id}"),
+            session=session
+        )
+
+
+@rt("/spec-control/{spec_id}/export-docx")
+def get(session, spec_id: str):
+    """
+    Download specification as DOCX (Beta).
+
+    Uses same data as PDF export but generates editable Word document.
+    Beta feature - allows users to edit the document if needed.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["spec_controller", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # UUID validation
+    import uuid
+    try:
+        uuid.UUID(spec_id)
+    except ValueError:
+        return RedirectResponse("/spec-control", status_code=303)
+
+    try:
+        from services.contract_spec_docx import generate_contract_spec_docx
+        from services.contract_spec_export import fetch_contract_spec_data
+
+        # Generate DOCX
+        docx_bytes = generate_contract_spec_docx(spec_id, org_id)
+
+        # Get spec number for filename
+        data = fetch_contract_spec_data(spec_id, org_id)
+        spec_number = data["specification"].get("specification_number") or data["specification"].get("proposal_idn") or "spec"
+        safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
+
+        from starlette.responses import Response
+        return Response(
+            content=docx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="Specification_{safe_spec_number}.docx"'}
+        )
+
+    except Exception as e:
+        print(f"Error generating contract specification DOCX: {e}")
+        import traceback
+        traceback.print_exc()
+        return page_layout("Ошибка",
+            H1("Ошибка генерации DOCX"),
             Div(f"Ошибка: {str(e)}", cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"),
             A("← Назад", href=f"/spec-control/{spec_id}"),
             session=session
@@ -26775,86 +26832,158 @@ def get(supplier_id: str, session):
             session=session
         )
 
-    status_class = "status-approved" if supplier.is_active else "status-rejected"
     status_text = "Активен" if supplier.is_active else "Неактивен"
 
     return page_layout(f"Поставщик: {supplier.name}",
-        # Header with actions
+        # Header card with gradient
         Div(
-            H1(icon("package", size=28), f" {supplier.name}", cls="page-header"),
             Div(
-                A(icon("edit", size=16), " Редактировать", href=f"/suppliers/{supplier_id}/edit", role="button"),
-                btn_link("К списку", href="/suppliers", variant="secondary", icon_name="arrow-left"),
-                style="display: flex; gap: 0.5rem;"
+                Div(
+                    A(icon("arrow-left", size=18), " Поставщики", href="/suppliers",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Div(
+                        icon("package", size=24, color="#6366f1"),
+                        H1(supplier.name, style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        Span(supplier.supplier_code, style="font-family: monospace; font-size: 14px; padding: 4px 10px; background: #eff6ff; color: #3b82f6; border-radius: 6px; font-weight: 600;"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if supplier.is_active else '#dc2626'}; background: {'#dcfce7' if supplier.is_active else '#fee2e2'};"),
+                        btn_link("Редактировать", href=f"/suppliers/{supplier_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
             ),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Main info card
+        # Main info cards grid
         Div(
+            # Card 1: Main Info
             Div(
-                H3("Основная информация", cls="card-header"),
-                Table(
-                    Tr(Th("Код поставщика:"), Td(
-                        Strong(supplier.supplier_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
-                    )),
-                    Tr(Th("Название:"), Td(supplier.name)),
-                    Tr(Th("Статус:"), Td(Span(status_text, cls=f"status-badge {status_class}"))),
-                    style="width: auto;"
+                Div(
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
-                style="flex: 1;"
+                Div(
+                    Div(
+                        Span("Код поставщика", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(supplier.supplier_code, style="font-weight: 600; color: #3b82f6; font-family: monospace; font-size: 16px;"),
+                    ),
+                    Div(
+                        Span("Название", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(supplier.name, style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
+                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
+            # Card 2: Location
             Div(
-                H3("Локация", cls="card-header"),
-                Table(
-                    Tr(Th("Страна:"), Td(supplier.country or "—")),
-                    Tr(Th("Город:"), Td(supplier.city or "—")),
-                    style="width: auto;"
+                Div(
+                    icon("map-pin", size=16, color="#64748b"),
+                    Span("ЛОКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
-                style="flex: 1;"
+                Div(
+                    Div(
+                        Span("Страна", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(supplier.country or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Город", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(supplier.city or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
+                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            cls="card", style="display: flex; gap: 2rem;"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"
         ),
 
         # Legal info (if Russian supplier)
         Div(
-            H3("Юридические данные", cls="card-header"),
-            Table(
-                Tr(Th("ИНН:"), Td(supplier.inn or "—")),
-                Tr(Th("КПП:"), Td(supplier.kpp or "—")),
+            Div(
+                icon("file-text", size=16, color="#64748b"),
+                Span("ЮРИДИЧЕСКИЕ ДАННЫЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
             ),
-            cls="card"
+            Div(
+                Div(
+                    Span("ИНН", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(supplier.inn or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                Div(
+                    Span("КПП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(supplier.kpp or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;"
+            ),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if supplier.inn or supplier.kpp else "",
 
         # Contact info
         Div(
-            H3("Контактная информация", cls="card-header"),
-            Table(
-                Tr(Th("Контактное лицо:"), Td(supplier.contact_person or "—")),
-                Tr(Th("Email:"), Td(
-                    A(supplier.contact_email, href=f"mailto:{supplier.contact_email}")
-                    if supplier.contact_email else "—"
-                )),
-                Tr(Th("Телефон:"), Td(
-                    A(supplier.contact_phone, href=f"tel:{supplier.contact_phone}")
-                    if supplier.contact_phone else "—"
-                )),
+            Div(
+                icon("user", size=16, color="#64748b"),
+                Span("КОНТАКТНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
             ),
-            cls="card"
+            Div(
+                Div(
+                    Span("Контактное лицо", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(supplier.contact_person or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                Div(
+                    Span("Email", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(
+                        A(supplier.contact_email, href=f"mailto:{supplier.contact_email}", style="color: #6366f1;")
+                        if supplier.contact_email else "—",
+                        style="font-weight: 500; color: #1e293b; font-size: 14px;"
+                    ),
+                ),
+                Div(
+                    Span("Телефон", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(
+                        A(supplier.contact_phone, href=f"tel:{supplier.contact_phone}", style="color: #6366f1;")
+                        if supplier.contact_phone else "—",
+                        style="font-weight: 500; color: #1e293b; font-size: 14px;"
+                    ),
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;"
+            ),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Payment terms
         Div(
-            H3("Условия оплаты", cls="card-header"),
-            P(supplier.default_payment_terms or "Не указаны"),
-            cls="card"
+            Div(
+                icon("credit-card", size=16, color="#64748b"),
+                Span("УСЛОВИЯ ОПЛАТЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"
+            ),
+            P(supplier.default_payment_terms or "Не указаны", style="font-size: 14px; color: #1e293b;"),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if supplier.default_payment_terms else "",
 
         # Metadata
         Div(
-            P(f"Создан: {supplier.created_at.strftime('%d.%m.%Y %H:%M') if supplier.created_at else '—'}"),
-            P(f"Обновлён: {supplier.updated_at.strftime('%d.%m.%Y %H:%M') if supplier.updated_at else '—'}"),
-            style="color: #666; font-size: 0.875rem;"
+            Div(
+                Span("Создан", style="font-size: 11px; color: #94a3b8; text-transform: uppercase;"),
+                Span(f"{supplier.created_at.strftime('%d.%m.%Y %H:%M') if supplier.created_at else '—'}", style="font-size: 13px; color: #64748b; margin-left: 8px;"),
+                style="display: flex; align-items: center; gap: 4px;"
+            ),
+            Div(
+                Span("Обновлён", style="font-size: 11px; color: #94a3b8; text-transform: uppercase;"),
+                Span(f"{supplier.updated_at.strftime('%d.%m.%Y %H:%M') if supplier.updated_at else '—'}", style="font-size: 13px; color: #64748b; margin-left: 8px;"),
+                style="display: flex; align-items: center; gap: 4px;"
+            ),
+            style="display: flex; gap: 24px; padding: 12px 0; border-top: 1px solid #e2e8f0;"
         ),
 
         session=session
@@ -29765,11 +29894,30 @@ def get(customer_id: str, session, request, tab: str = "general"):
         return tab_content
 
     return page_layout(f"Клиент: {customer.name}",
-        # Minimal header - just back link
+        # Header card with gradient
         Div(
-            A(icon("arrow-left", size=16), " Клиенты", href="/customers",
-              style="color: #64748b; text-decoration: none; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
-            style="margin-bottom: 0.75rem;"
+            Div(
+                Div(
+                    A(icon("arrow-left", size=18), " Клиенты", href="/customers",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Div(
+                        icon("building", size=24, color="#10b981"),
+                        H1(customer.name, style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span("Активен" if customer.is_active else "Неактивен",
+                             style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if customer.is_active else '#dc2626'}; background: {'#dcfce7' if customer.is_active else '#fee2e2'};"),
+                        btn_link("Редактировать", href=f"/customers/{customer_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Tabs navigation (DaisyUI)
