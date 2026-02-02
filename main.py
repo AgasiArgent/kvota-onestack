@@ -3329,6 +3329,65 @@ def icon(name: str, size: int = 20, cls: str = "", color: str = "", style: str =
 
 
 # ============================================================================
+# DISMISSIBLE HINT HELPER
+# ============================================================================
+
+def dismissible_hint(hint_id: str, *content, variant: str = "info"):
+    """
+    Render a dismissible hint that can be closed by the user.
+    Once dismissed, it won't appear again (stored in localStorage).
+
+    Args:
+        hint_id: Unique identifier for the hint (used as localStorage key)
+        *content: Content to display inside the hint
+        variant: Alert variant ('info', 'success', 'warning', 'error')
+
+    Example:
+        dismissible_hint("contacts-editing",
+            icon("lightbulb", size=16), " Click on a field to edit it.",
+            variant="info"
+        )
+    """
+    element_id = f"hint-{hint_id}"
+    storage_key = f"hint_dismissed_{hint_id}"
+
+    # Close button handler: hide element and save to localStorage
+    close_handler = f"""
+        document.getElementById('{element_id}').style.display = 'none';
+        localStorage.setItem('{storage_key}', 'true');
+    """
+
+    # Script to check localStorage on load and hide if already dismissed
+    init_script = Script(f"""
+        (function() {{
+            if (localStorage.getItem('{storage_key}') === 'true') {{
+                var el = document.getElementById('{element_id}');
+                if (el) el.style.display = 'none';
+            }}
+        }})();
+    """)
+
+    return Div(
+        Div(
+            Div(*content, style="flex: 1;"),
+            Span(
+                icon("x", size=16),
+                onclick=close_handler,
+                style="cursor: pointer; padding: 4px; margin: -4px; opacity: 0.6; transition: opacity 0.15s;",
+                onmouseover="this.style.opacity='1'",
+                onmouseout="this.style.opacity='0.6'",
+                title="Скрыть подсказку"
+            ),
+            style="display: flex; align-items: center; gap: 12px;"
+        ),
+        init_script,
+        id=element_id,
+        cls=f"alert alert-{variant}",
+        style="margin: 1rem 0;"
+    )
+
+
+# ============================================================================
 # STATUS BADGE HELPER (Design System V2)
 # ============================================================================
 
@@ -30286,13 +30345,14 @@ def get(customer_id: str, session, request, tab: str = "general"):
             contacts_rows.append(_render_contact_row(contact, customer_id))
 
         tab_content = Div(
-            Div(
+            dismissible_hint(
+                "contacts-editing",
                 icon("lightbulb", size=16), " Кликните на поле для редактирования. В колонке СТАТУС: ",
                 Span(icon("pen-tool", size=14), style="color: #10b981; display: inline-flex;"),
                 " подписант, ",
                 Span(icon("star", size=14), style="color: #f59e0b; display: inline-flex;"),
                 " основной контакт.",
-                cls="alert alert-info", style="margin: 1rem 0;"
+                variant="info"
             ),
             Div(
                 Div(
