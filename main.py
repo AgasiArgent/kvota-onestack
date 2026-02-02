@@ -12985,17 +12985,17 @@ def workflow_progress_bar(status_str: str):
             # Completed step - green
             circle_style = "background: #22c55e; color: white; border: 2px solid #22c55e;"
             text_style = "color: #22c55e; font-weight: 500;"
-            icon = "✓"
+            step_icon = "✓"
         elif is_current:
             # Current step - blue with pulse animation
             circle_style = "background: #3b82f6; color: white; border: 2px solid #3b82f6; animation: pulse 2s infinite;"
             text_style = "color: #3b82f6; font-weight: 600;"
-            icon = str(idx + 1)
+            step_icon = str(idx + 1)
         else:
             # Future step - gray
             circle_style = "background: #e5e7eb; color: #9ca3af; border: 2px solid #e5e7eb;"
             text_style = "color: #9ca3af;"
-            icon = str(idx + 1)
+            step_icon = str(idx + 1)
 
         # Connector line (not for first step)
         connector = None
@@ -13008,7 +13008,7 @@ def workflow_progress_bar(status_str: str):
         step = Div(
             # Circle with number or checkmark
             Div(
-                icon,
+                step_icon,
                 style=f"width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; {circle_style}"
             ),
             # Label
