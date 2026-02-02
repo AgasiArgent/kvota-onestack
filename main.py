@@ -15272,6 +15272,13 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             .eq("id", invoice_id) \
             .execute()
 
+        # Mark all items in this invoice as procurement completed
+        # This is required for quote workflow transition check
+        supabase.table("quote_items") \
+            .update({"procurement_status": "completed"}) \
+            .eq("invoice_id", invoice_id) \
+            .execute()
+
         # Check if ALL items in quote are now in completed invoices
         # If yes, auto-transition the quote workflow
         all_invoices = supabase.table("invoices") \
