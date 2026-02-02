@@ -3882,6 +3882,48 @@ def format_money(value, currency="RUB"):
     return f"{symbol}{value:,.0f}"
 
 
+def build_export_filename(doc_type: str, customer_name: str, quote_number: str, ext: str = "pdf") -> str:
+    """
+    Build human-readable export filename.
+
+    Format: {doc_type}_{company}_{date}_{number}.{ext}
+    Example: invoice_AcmeCorp_2024-02-02_44.pdf
+
+    Args:
+        doc_type: Document type (invoice, specification, etc.)
+        customer_name: Customer/company name
+        quote_number: Full quote number like "КП-2024-044"
+        ext: File extension (pdf, xlsx)
+
+    Returns:
+        Safe filename string
+    """
+    import re
+    from datetime import date
+
+    # Extract numeric suffix from quote number (e.g., "044" from "КП-2024-044")
+    number_match = re.search(r'(\d+)$', quote_number or '')
+    short_number = number_match.group(1).lstrip('0') or '0' if number_match else '0'
+
+    # Sanitize company name: keep alphanumeric and some safe chars
+    safe_name = customer_name or "Unknown"
+    # Remove common legal suffixes to shorten
+    safe_name = re.sub(r'\s*(ООО|ОАО|ЗАО|ИП|LLC|Inc|Ltd|Corp)\.?\s*', '', safe_name, flags=re.IGNORECASE)
+    # Keep only safe characters
+    safe_name = re.sub(r'[^\w\s-]', '', safe_name)
+    # Replace spaces with nothing (CamelCase style) or underscore
+    safe_name = safe_name.replace(' ', '')
+    # Truncate if too long
+    safe_name = safe_name[:30] if len(safe_name) > 30 else safe_name
+    # Fallback if empty after sanitization
+    safe_name = safe_name or "Company"
+
+    # Today's date
+    today = date.today().isoformat()
+
+    return f"{doc_type}_{safe_name}_{today}_{short_number}.{ext}"
+
+
 def status_badge(status):
     """Status badge component with DaisyUI styling"""
     # Map old status classes to DaisyUI badge types
@@ -12373,7 +12415,13 @@ def get(quote_id: str, session):
             # Fallback to old template if no specification exists yet
             data = fetch_export_data(quote_id, org_id)
             pdf_bytes = generate_specification_pdf(data)
-            filename = f"specification_{data.quote.get('quote_number', quote_id)}.pdf"
+            customer_name = data.customer.get('company_name') or data.customer.get('name') or ''
+            filename = build_export_filename(
+                doc_type="specification",
+                customer_name=customer_name,
+                quote_number=data.quote.get('quote_number', ''),
+                ext="pdf"
+            )
 
         # Return as file download
         from starlette.responses import Response
@@ -12414,7 +12462,13 @@ def get(quote_id: str, session):
 
         # Return as file download
         from starlette.responses import Response
-        filename = f"invoice_{data.quote.get('quote_number', quote_id)}.pdf"
+        customer_name = data.customer.get('company_name') or data.customer.get('name') or ''
+        filename = build_export_filename(
+            doc_type="invoice",
+            customer_name=customer_name,
+            quote_number=data.quote.get('quote_number', ''),
+            ext="pdf"
+        )
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
@@ -16034,8 +16088,12 @@ def get(quote_id: str, session):
 
     # Return as file download
     from starlette.responses import Response
-    quote_number = quote.get("idn_quote", quote_id[:8])
-    filename = f"procurement_request_{quote_number}.xlsx"
+    filename = build_export_filename(
+        doc_type="procurement",
+        customer_name=customer_name,
+        quote_number=quote.get("idn_quote", ''),
+        ext="xlsx"
+    )
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
