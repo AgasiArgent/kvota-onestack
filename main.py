@@ -27025,18 +27025,91 @@ def _supplier_form(supplier=None, error=None, session=None):
     title = "Редактирование поставщика" if is_edit else "Новый поставщик"
     action_url = f"/suppliers/{supplier.id}/edit" if is_edit else "/suppliers/new"
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
     return page_layout(title,
         # Error alert
-        Div(error, cls="alert alert-error") if error else "",
+        Div(
+            icon("alert-circle", size=16, color="#dc2626"),
+            Span(error, style="margin-left: 8px;"),
+            style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
+        ) if error else "",
 
-        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", cls="page-header"),
+        # Header card with gradient
+        Div(
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#64748b"),
+                    Span("Поставщики", style="margin-left: 6px;"),
+                    href="/suppliers",
+                    style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("truck" if not is_edit else "edit", size=24, color="#6366f1"),
+                    Span(title, style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    style="display: flex; align-items: center;"
+                ),
+            ),
+            style=header_card_style
+        ),
 
+        # Form card
         Div(
             Form(
-                # Main info section
-                H3("Основная информация", cls="card-header"),
+                # Section: Main info
                 Div(
-                    Label("Код поставщика *",
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Код поставщика *", style=label_style),
                         Input(
                             name="supplier_code",
                             value=supplier.supplier_code if supplier else "",
@@ -27045,137 +27118,146 @@ def _supplier_form(supplier=None, error=None, session=None):
                             maxlength="3",
                             pattern="[A-Z]{3}",
                             title="3 заглавные латинские буквы",
-                            style="text-transform: uppercase; font-family: monospace; font-weight: bold;"
+                            style=f"{input_style} text-transform: uppercase; font-family: monospace; font-weight: bold;"
                         ),
-                        Small("3 заглавные латинские буквы (например: CMT, RAR)", style="color: #666; display: block;")
+                        Small("3 заглавные латинские буквы (например: CMT, RAR)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    Label("Название компании *",
+                    Div(
+                        Label("Название компании *", style=label_style),
                         Input(
                             name="name",
                             value=supplier.name if supplier else "",
                             placeholder="China Manufacturing Ltd",
-                            required=True
-                        )
-                    ),
-                    cls="form-row"
-                ),
-
-                # Location section
-                H3("Локация", cls="card-header"),
-                Div(
-                    Label("Страна",
-                        Input(
-                            name="country",
-                            value=supplier.country if supplier else "",
-                            placeholder="Китай"
-                        )
-                    ),
-                    Label("Город",
-                        Input(
-                            name="city",
-                            value=supplier.city if supplier else "",
-                            placeholder="Гуанчжоу"
-                        )
-                    ),
-                    cls="form-row"
-                ),
-
-                # Legal info (Russian suppliers)
-                H3("Юридические данные (для российских поставщиков)", cls="card-header"),
-                Div(
-                    Label("ИНН",
-                        Input(
-                            name="inn",
-                            value=supplier.inn if supplier else "",
-                            placeholder="1234567890",
-                            pattern="\\d{10}(\\d{2})?",
-                            title="10 или 12 цифр"
+                            required=True,
+                            style=input_style
                         ),
-                        Small("10 цифр для юрлиц, 12 для ИП", style="color: #666; display: block;")
+                        style="flex: 2;"
                     ),
-                    Label("КПП",
-                        Input(
-                            name="kpp",
-                            value=supplier.kpp if supplier else "",
-                            placeholder="123456789",
-                            pattern="\\d{9}",
-                            title="9 цифр"
-                        ),
-                        Small("9 цифр", style="color: #666; display: block;")
-                    ),
-                    cls="form-row"
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Contact info section
-                H3("Контактная информация", cls="card-header"),
+                # Section: Location
                 Div(
-                    Label("Контактное лицо",
-                        Input(
-                            name="contact_person",
-                            value=supplier.contact_person if supplier else "",
-                            placeholder="Иван Иванов"
-                        )
-                    ),
-                    Label("Email",
-                        Input(
-                            name="contact_email",
-                            type="email",
-                            value=supplier.contact_email if supplier else "",
-                            placeholder="contact@supplier.com"
-                        )
-                    ),
-                    cls="form-row"
+                    icon("map-pin", size=16, color="#64748b"),
+                    Span("ЛОКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
                 ),
                 Div(
-                    Label("Телефон",
-                        Input(
-                            name="contact_phone",
-                            value=supplier.contact_phone if supplier else "",
-                            placeholder="+7 999 123 4567"
-                        )
+                    Div(
+                        Label("Страна", style=label_style),
+                        Input(name="country", value=supplier.country if supplier else "", placeholder="Китай", style=input_style),
+                        style="flex: 1;"
                     ),
-                    Div(cls="form-placeholder"),  # Empty placeholder for alignment
-                    cls="form-row"
+                    Div(
+                        Label("Город", style=label_style),
+                        Input(name="city", value=supplier.city if supplier else "", placeholder="Гуанчжоу", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Payment terms section
-                H3("Условия работы", cls="card-header"),
-                Label("Условия оплаты по умолчанию",
+                # Section: Legal info
+                Div(
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ЮРИДИЧЕСКИЕ ДАННЫЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Div(
+                        Label("ИНН", style=label_style),
+                        Input(name="inn", value=supplier.inn if supplier else "", placeholder="1234567890", pattern="\\d{10}(\\d{2})?", title="10 или 12 цифр", style=input_style),
+                        Small("10 цифр для юрлиц, 12 для ИП", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("КПП", style=label_style),
+                        Input(name="kpp", value=supplier.kpp if supplier else "", placeholder="123456789", pattern="\\d{9}", title="9 цифр", style=input_style),
+                        Small("9 цифр", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
+                ),
+
+                # Section: Contact info
+                Div(
+                    icon("phone", size=16, color="#64748b"),
+                    Span("КОНТАКТНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Div(
+                        Label("Контактное лицо", style=label_style),
+                        Input(name="contact_person", value=supplier.contact_person if supplier else "", placeholder="Иван Иванов", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Email", style=label_style),
+                        Input(name="contact_email", type="email", value=supplier.contact_email if supplier else "", placeholder="contact@supplier.com", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("Телефон", style=label_style),
+                        Input(name="contact_phone", value=supplier.contact_phone if supplier else "", placeholder="+7 999 123 4567", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(style="flex: 1;"),  # Spacer for alignment
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
+                ),
+
+                # Section: Payment terms
+                Div(
+                    icon("credit-card", size=16, color="#64748b"),
+                    Span("УСЛОВИЯ РАБОТЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Label("Условия оплаты по умолчанию", style=label_style),
                     Textarea(
                         supplier.default_payment_terms if supplier else "",
                         name="default_payment_terms",
                         placeholder="50% предоплата, 50% по готовности",
-                        rows="3"
-                    )
+                        rows="3",
+                        style=f"{input_style} resize: vertical;"
+                    ),
+                    style="margin-bottom: 20px;"
                 ),
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", cls="card-header"),
+                    Div(
+                        icon("toggle-left", size=16, color="#64748b"),
+                        Span("СТАТУС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style=f"{section_header_style} margin-top: 24px;"
+                    ),
                     Label(
                         Input(
                             type="checkbox",
                             name="is_active",
                             checked=supplier.is_active if supplier else True,
-                            value="true"
+                            value="true",
+                            style="accent-color: #6366f1; margin-right: 8px;"
                         ),
-                        " Активный поставщик",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        Span("Активный поставщик", style="font-size: 14px; color: #1e293b;"),
+                        style="display: flex; align-items: center; cursor: pointer;"
                     ),
-                    Small("Неактивные поставщики не отображаются в выпадающих списках", style="color: #666;"),
+                    Small("Неактивные поставщики не отображаются в выпадающих списках", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 6px;"),
                 ) if is_edit else "",
 
                 # Form actions
                 Div(
-                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
                     btn_link("Отмена", href="/suppliers" if not is_edit else f"/suppliers/{supplier.id}", variant="secondary", icon_name="x"),
-                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
+                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
                 method="post",
                 action=action_url
             ),
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -27857,25 +27939,98 @@ def _buyer_company_form(company=None, error=None, session=None):
     title = "Редактирование компании-покупателя" if is_edit else "Новая компания-покупатель"
     action_url = f"/buyer-companies/{company.id}/edit" if is_edit else "/buyer-companies/new"
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
     return page_layout(title,
         # Error alert
-        Div(error, cls="alert alert-error") if error else "",
+        Div(
+            icon("alert-circle", size=16, color="#dc2626"),
+            Span(error, style="margin-left: 8px;"),
+            style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
+        ) if error else "",
 
-        H1(icon("edit" if is_edit else "plus", size=28), f" {title}", cls="page-header"),
+        # Header card with gradient
+        Div(
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#64748b"),
+                    Span("Компании-покупатели", style="margin-left: 6px;"),
+                    href="/buyer-companies",
+                    style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("building-2" if not is_edit else "edit", size=24, color="#3b82f6"),
+                    Span(title, style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    style="display: flex; align-items: center;"
+                ),
+            ),
+            style=header_card_style
+        ),
 
         # Info alert
         Div(
-            icon("lightbulb", size=16), " Компания-покупатель — наше юридическое лицо, через которое мы закупаем товар у поставщиков. "
-            "Привязывается к позиции КП (quote_item).",
-            cls="alert alert-info"
+            icon("lightbulb", size=16, color="#0369a1"),
+            Span(" Компания-покупатель — наше юридическое лицо, через которое мы закупаем товар у поставщиков. Привязывается к позиции КП.", style="margin-left: 8px;"),
+            style="background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
         ),
 
+        # Form card
         Div(
             Form(
-                # Main info section
-                H3("Основная информация", cls="card-header"),
+                # Section: Main info
                 Div(
-                    Label("Код компании *",
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Код компании *", style=label_style),
                         Input(
                             name="company_code",
                             value=company.company_code if company else "",
@@ -27884,131 +28039,130 @@ def _buyer_company_form(company=None, error=None, session=None):
                             maxlength="3",
                             pattern="[A-Z]{3}",
                             title="3 заглавные латинские буквы",
-                            style="text-transform: uppercase; font-family: monospace; font-weight: bold;"
+                            style=f"{input_style} text-transform: uppercase; font-family: monospace; font-weight: bold;"
                         ),
-                        Small("3 заглавные латинские буквы (например: ZAK, CMT)", style="color: #666; display: block;")
+                        Small("3 заглавные латинские буквы (например: ZAK, CMT)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    Label("Название компании *",
-                        Input(
-                            name="name",
-                            value=company.name if company else "",
-                            placeholder='ООО "Закупки"',
-                            required=True
-                        )
+                    Div(
+                        Label("Название компании *", style=label_style),
+                        Input(name="name", value=company.name if company else "", placeholder='ООО "Закупки"', required=True, style=input_style),
+                        style="flex: 2;"
                     ),
-                    cls="form-row"
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Label("Страна",
-                        Input(
-                            name="country",
-                            value=company.country if company else "Россия",
-                            placeholder="Россия"
-                        )
+                    Div(
+                        Label("Страна", style=label_style),
+                        Input(name="country", value=company.country if company else "Россия", placeholder="Россия", style=input_style),
+                        style="flex: 1;"
                     ),
-                    Div(cls="form-placeholder"),  # Empty placeholder for alignment
-                    cls="form-row"
+                    Div(style="flex: 1;"),  # Spacer
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Legal info section (required for Russian legal entity)
-                H3("Юридические данные", cls="card-header"),
+                # Section: Legal info
                 Div(
-                    Label("ИНН *",
-                        Input(
-                            name="inn",
-                            value=company.inn if company else "",
-                            placeholder="1234567890",
-                            pattern="\\d{10}",
-                            title="10 цифр для юридического лица",
-                            required=True
-                        ),
-                        Small("10 цифр (ИНН юридического лица)", style="color: #666; display: block;")
-                    ),
-                    Label("КПП",
-                        Input(
-                            name="kpp",
-                            value=company.kpp if company else "",
-                            placeholder="123456789",
-                            pattern="\\d{9}",
-                            title="9 цифр"
-                        ),
-                        Small("9 цифр", style="color: #666; display: block;")
-                    ),
-                    cls="form-row"
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ЮРИДИЧЕСКИЕ ДАННЫЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
                 ),
                 Div(
-                    Label("ОГРН",
-                        Input(
-                            name="ogrn",
-                            value=company.ogrn if company else "",
-                            placeholder="1234567890123",
-                            pattern="\\d{13}",
-                            title="13 цифр"
-                        ),
-                        Small("13 цифр", style="color: #666; display: block;")
+                    Div(
+                        Label("ИНН *", style=label_style),
+                        Input(name="inn", value=company.inn if company else "", placeholder="1234567890", pattern="\\d{10}", title="10 цифр для юридического лица", required=True, style=input_style),
+                        Small("10 цифр (ИНН юридического лица)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    Div(cls="form-placeholder"),
-                    cls="form-row"
+                    Div(
+                        Label("КПП", style=label_style),
+                        Input(name="kpp", value=company.kpp if company else "", placeholder="123456789", pattern="\\d{9}", title="9 цифр", style=input_style),
+                        Small("9 цифр", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("ОГРН", style=label_style),
+                        Input(name="ogrn", value=company.ogrn if company else "", placeholder="1234567890123", pattern="\\d{13}", title="13 цифр", style=input_style),
+                        Small("13 цифр", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    Div(style="flex: 1;"),  # Spacer
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Registration address
-                H3("Юридический адрес", cls="card-header"),
-                Label("Адрес регистрации",
+                # Section: Registration address
+                Div(
+                    icon("map-pin", size=16, color="#64748b"),
+                    Span("ЮРИДИЧЕСКИЙ АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Label("Адрес регистрации", style=label_style),
                     Textarea(
                         company.registration_address if company else "",
                         name="registration_address",
                         placeholder="123456, г. Москва, ул. Примерная, д. 1",
-                        rows="2"
-                    )
+                        rows="2",
+                        style=f"{input_style} resize: vertical;"
+                    ),
+                    style="margin-bottom: 20px;"
                 ),
 
-                # Director information
-                H3("Руководство (для документов)", cls="card-header"),
+                # Section: Director info
                 Div(
-                    Label("Должность руководителя",
-                        Input(
-                            name="general_director_position",
-                            value=company.general_director_position if company else "Генеральный директор",
-                            placeholder="Генеральный директор"
-                        )
+                    icon("user", size=16, color="#64748b"),
+                    Span("РУКОВОДСТВО (ДЛЯ ДОКУМЕНТОВ)", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Div(
+                        Label("Должность руководителя", style=label_style),
+                        Input(name="general_director_position", value=company.general_director_position if company else "Генеральный директор", placeholder="Генеральный директор", style=input_style),
+                        style="flex: 1;"
                     ),
-                    Label("ФИО руководителя",
-                        Input(
-                            name="general_director_name",
-                            value=company.general_director_name if company else "",
-                            placeholder="Иванов Иван Иванович"
-                        )
+                    Div(
+                        Label("ФИО руководителя", style=label_style),
+                        Input(name="general_director_name", value=company.general_director_name if company else "", placeholder="Иванов Иван Иванович", style=input_style),
+                        style="flex: 1;"
                     ),
-                    cls="form-row"
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", cls="card-header"),
+                    Div(
+                        icon("toggle-left", size=16, color="#64748b"),
+                        Span("СТАТУС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style=f"{section_header_style} margin-top: 24px;"
+                    ),
                     Label(
                         Input(
                             type="checkbox",
                             name="is_active",
                             checked=company.is_active if company else True,
-                            value="true"
+                            value="true",
+                            style="accent-color: #3b82f6; margin-right: 8px;"
                         ),
-                        " Активная компания",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        Span("Активная компания", style="font-size: 14px; color: #1e293b;"),
+                        style="display: flex; align-items: center; cursor: pointer;"
                     ),
-                    Small("Неактивные компании не отображаются в выпадающих списках", style="color: #666;"),
+                    Small("Неактивные компании не отображаются в выпадающих списках", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 6px;"),
                 ) if is_edit else "",
 
                 # Form actions
                 Div(
-                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
                     btn_link("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", variant="secondary", icon_name="x"),
-                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
+                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
                 method="post",
                 action=action_url
             ),
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -28704,30 +28858,98 @@ def _seller_company_form(
     title = f"Редактировать: {company.name}" if is_edit else "Новая компания-продавец"
     action_url = f"/seller-companies/{company.id}/edit" if is_edit else "/seller-companies/new"
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+        border-radius: 12px;
+        border: 1px solid #fde68a;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
     return page_layout(title,
-        # Header
+        # Error alert
         Div(
-            H1(icon("building-2", size=28), f" {title}", cls="page-header"),
-            cls="card"
+            icon("alert-circle", size=16, color="#dc2626"),
+            Span(error, style="margin-left: 8px;"),
+            style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
+        ) if error else "",
+
+        # Header card with gradient (orange theme for seller)
+        Div(
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#92400e"),
+                    Span("Компании-продавцы", style="margin-left: 6px;"),
+                    href="/seller-companies",
+                    style="display: inline-flex; align-items: center; color: #92400e; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("store" if not is_edit else "edit", size=24, color="#d97706"),
+                    Span(title, style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    style="display: flex; align-items: center;"
+                ),
+            ),
+            style=header_card_style
         ),
 
         # Info alert
         Div(
-            icon("info", size=16), " Компания-продавец — это наше юридическое лицо, от имени которого мы продаём товары клиентам. ",
-            "Код компании (3 буквы) используется для генерации IDN коммерческого предложения.",
-            cls="alert alert-info"
+            icon("lightbulb", size=16, color="#0369a1"),
+            Span(" Компания-продавец — это наше юридическое лицо, от имени которого мы продаём товары клиентам. Код компании (3 буквы) используется для генерации IDN коммерческого предложения.", style="margin-left: 8px;"),
+            style="background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
         ),
 
-        # Error message
-        Div(icon("x-circle", size=16), f" {error}", cls="alert alert-error") if error else "",
-
-        # Form
+        # Form card
         Div(
             Form(
-                # Basic information
-                H3("Основная информация", cls="card-header"),
+                # Section: Main info
                 Div(
-                    Label("Код компании *",
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Код компании *", style=label_style),
                         Input(
                             name="supplier_code",
                             value=company.supplier_code if company else "",
@@ -28736,130 +28958,130 @@ def _seller_company_form(
                             maxlength="3",
                             required=True,
                             title="3 буквы латиницей (например, MBR, CMT, GES)",
-                            style="text-transform: uppercase;"
+                            style=f"{input_style} text-transform: uppercase; font-family: monospace; font-weight: bold;"
                         ),
-                        Small("3 буквы латиницей (используется в IDN)", style="color: #666; display: block;")
+                        Small("3 буквы латиницей (используется в IDN)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    Label("Название компании *",
-                        Input(
-                            name="name",
-                            value=company.name if company else "",
-                            placeholder="ООО «МАСТЕР БЭРИНГ»",
-                            required=True
-                        )
+                    Div(
+                        Label("Название компании *", style=label_style),
+                        Input(name="name", value=company.name if company else "", placeholder="ООО «МАСТЕР БЭРИНГ»", required=True, style=input_style),
+                        style="flex: 2;"
                     ),
-                    cls="form-row"
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("Страна", style=label_style),
+                        Input(name="country", value=company.country if company else "Россия", placeholder="Россия", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(style="flex: 1;"),  # Spacer
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Country
+                # Section: Legal info
                 Div(
-                    Label("Страна",
-                        Input(
-                            name="country",
-                            value=company.country if company else "Россия",
-                            placeholder="Россия"
-                        )
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ЮРИДИЧЕСКИЕ РЕКВИЗИТЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                # Info note about legal IDs
+                Div(
+                    icon("info", size=14, color="#0369a1"),
+                    Span(" ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.", style="margin-left: 6px;"),
+                    style="background: #f0f9ff; color: #0369a1; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; display: flex; align-items: center;"
+                ),
+                Div(
+                    Div(
+                        Label("ИНН", style=label_style),
+                        Input(name="inn", value=company.inn if company else "", placeholder="1234567890 или 123456789012", pattern="\\d{10}|\\d{12}", title="10 цифр для юрлица или 12 цифр для ИП", style=input_style),
+                        Small("10 цифр (юрлицо) или 12 цифр (ИП)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    Div(cls="form-placeholder"),
-                    cls="form-row"
+                    Div(
+                        Label("КПП", style=label_style),
+                        Input(name="kpp", value=company.kpp if company else "", placeholder="123456789", pattern="\\d{9}", title="9 цифр (только для юрлиц)", style=input_style),
+                        Small("9 цифр (только для юрлиц)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("ОГРН", style=label_style),
+                        Input(name="ogrn", value=company.ogrn if company else "", placeholder="1234567890123 или 123456789012345", pattern="\\d{13}|\\d{15}", title="13 цифр для юрлица или 15 цифр для ИП", style=input_style),
+                        Small("13 цифр (юрлицо) или 15 цифр (ИП)", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
+                    Div(style="flex: 1;"),  # Spacer
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
-                # Legal identifiers
-                H3("Юридические реквизиты", cls="card-header"),
+                # Section: Registration address
                 Div(
-                    icon("info", size=16), " ИНН: 10 цифр для юрлиц, 12 цифр для ИП. ОГРН: 13 цифр для юрлиц, 15 цифр для ИП.",
-                    cls="alert alert-info", style="margin-bottom: 1rem;"
+                    icon("map-pin", size=16, color="#64748b"),
+                    Span("ЮРИДИЧЕСКИЙ АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
                 ),
                 Div(
-                    Label("ИНН",
-                        Input(
-                            name="inn",
-                            value=company.inn if company else "",
-                            placeholder="1234567890 или 123456789012",
-                            pattern="\\d{10}|\\d{12}",
-                            title="10 цифр для юрлица или 12 цифр для ИП"
-                        ),
-                        Small("10 цифр (юрлицо) или 12 цифр (ИП)", style="color: #666; display: block;")
-                    ),
-                    Label("КПП",
-                        Input(
-                            name="kpp",
-                            value=company.kpp if company else "",
-                            placeholder="123456789",
-                            pattern="\\d{9}",
-                            title="9 цифр (только для юрлиц)"
-                        ),
-                        Small("9 цифр (только для юрлиц)", style="color: #666; display: block;")
-                    ),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("ОГРН",
-                        Input(
-                            name="ogrn",
-                            value=company.ogrn if company else "",
-                            placeholder="1234567890123 или 123456789012345",
-                            pattern="\\d{13}|\\d{15}",
-                            title="13 цифр для юрлица или 15 цифр для ИП"
-                        ),
-                        Small("13 цифр (юрлицо) или 15 цифр (ИП)", style="color: #666; display: block;")
-                    ),
-                    Div(cls="form-placeholder"),
-                    cls="form-row"
-                ),
-
-                # Registration address
-                H3("Юридический адрес", cls="card-header"),
-                Label("Адрес регистрации",
+                    Label("Адрес регистрации", style=label_style),
                     Textarea(
                         company.registration_address if company else "",
                         name="registration_address",
                         placeholder="123456, г. Москва, ул. Примерная, д. 1, офис 100",
-                        rows="2"
-                    )
+                        rows="2",
+                        style=f"{input_style} resize: vertical;"
+                    ),
+                    style="margin-bottom: 20px;"
                 ),
 
-                # Director information
-                H3("Руководство (для документов)", cls="card-header"),
+                # Section: Director info
                 Div(
-                    Label("Должность руководителя",
-                        Input(
-                            name="general_director_position",
-                            value=company.general_director_position if company else "Генеральный директор",
-                            placeholder="Генеральный директор"
-                        )
+                    icon("user", size=16, color="#64748b"),
+                    Span("РУКОВОДСТВО (ДЛЯ ДОКУМЕНТОВ)", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Div(
+                        Label("Должность руководителя", style=label_style),
+                        Input(name="general_director_position", value=company.general_director_position if company else "Генеральный директор", placeholder="Генеральный директор", style=input_style),
+                        style="flex: 1;"
                     ),
-                    Label("ФИО руководителя",
-                        Input(
-                            name="general_director_name",
-                            value=company.general_director_name if company else "",
-                            placeholder="Иванов Иван Иванович"
-                        )
+                    Div(
+                        Label("ФИО руководителя", style=label_style),
+                        Input(name="general_director_name", value=company.general_director_name if company else "", placeholder="Иванов Иван Иванович", style=input_style),
+                        style="flex: 1;"
                     ),
-                    cls="form-row"
+                    style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
                 # Status (for edit mode)
                 Div(
-                    H3("Статус", cls="card-header"),
+                    Div(
+                        icon("toggle-left", size=16, color="#64748b"),
+                        Span("СТАТУС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style=f"{section_header_style} margin-top: 24px;"
+                    ),
                     Label(
                         Input(
                             type="checkbox",
                             name="is_active",
                             checked=company.is_active if company else True,
-                            value="true"
+                            value="true",
+                            style="accent-color: #d97706; margin-right: 8px;"
                         ),
-                        " Активная компания",
-                        style="display: flex; align-items: center; gap: 0.5rem;"
+                        Span("Активная компания", style="font-size: 14px; color: #1e293b;"),
+                        style="display: flex; align-items: center; cursor: pointer;"
                     ),
-                    Small("Неактивные компании не отображаются в выпадающих списках при создании КП", style="color: #666;"),
+                    Small("Неактивные компании не отображаются в выпадающих списках при создании КП", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 6px;"),
                 ) if is_edit else "",
 
                 # Form actions
                 Div(
-                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
                     btn_link("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", variant="secondary", icon_name="x"),
-                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
+                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
                 method="post",
@@ -32544,31 +32766,108 @@ def _location_form(location=None, error=None, session=None):
     title = f"Редактирование: {location.display_name or location.city or location.country}" if is_edit else "Новая локация"
     action_url = f"/locations/{location.id}/edit" if is_edit else "/locations/new"
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        border-radius: 12px;
+        border: 1px solid #a7f3d0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
+    checkbox_card_style = """
+        padding: 14px 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #f8fafc;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    """
+
     return page_layout(title,
-        # Header
+        # Error alert
         Div(
-            H1(icon("map-pin", size=28), f" {title}", cls="page-header"),
-            cls="card"
+            icon("alert-circle", size=16, color="#dc2626"),
+            Span(error, style="margin-left: 8px;"),
+            style="background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
+        ) if error else "",
+
+        # Header card with gradient (green theme for locations)
+        Div(
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#047857"),
+                    Span("Локации", style="margin-left: 6px;"),
+                    href="/locations",
+                    style="display: inline-flex; align-items: center; color: #047857; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("map-pin" if not is_edit else "edit", size=24, color="#059669"),
+                    Span(title, style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    style="display: flex; align-items: center;"
+                ),
+            ),
+            style=header_card_style
         ),
 
         # Info alert
         Div(
-            icon("info", size=16), " Локация — это точка получения или доставки товаров. ",
-            "Код (2-5 букв) используется для быстрого поиска. ",
-            "Отметьте как хаб или таможенный пункт при необходимости.",
-            cls="alert alert-info"
+            icon("lightbulb", size=16, color="#0369a1"),
+            Span(" Локация — это точка получения или доставки товаров. Код (2-5 букв) используется для быстрого поиска. Отметьте как хаб или таможенный пункт при необходимости.", style="margin-left: 8px;"),
+            style="background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center;"
         ),
 
-        # Error message
-        Div(icon("x-circle", size=16), f" {error}", cls="alert alert-error") if error else "",
-
-        # Form
+        # Form card
         Div(
             Form(
-                # Basic information
-                H3("Основная информация", cls="card-header"),
+                # Section: Main info
                 Div(
-                    Label("Код (2-5 букв)",
+                    icon("map", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Код (2-5 букв)", style=label_style),
                         Input(
                             name="code",
                             value=location.code if location else "",
@@ -32576,57 +32875,61 @@ def _location_form(location=None, error=None, session=None):
                             pattern="[A-Za-z]{2,5}",
                             title="2-5 латинских букв",
                             maxlength="5",
-                            style="text-transform: uppercase;"
+                            style=f"{input_style} text-transform: uppercase; font-family: monospace; font-weight: bold;"
                         ),
-                        Small("Необязательно. Например: MSK, SPB, SH, GZ", style="color: #666;"),
+                        Small("Необязательно. Например: MSK, SPB, SH, GZ", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    Div(style="flex: 2;"),  # Spacer
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Label("Страна *",
-                        Input(
-                            name="country",
-                            value=location.country if location else "Россия",
-                            placeholder="Россия",
-                            required=True
-                        ),
+                    Div(
+                        Label("Страна *", style=label_style),
+                        Input(name="country", value=location.country if location else "Россия", placeholder="Россия", required=True, style=input_style),
+                        style="flex: 1;"
                     ),
-                    Label("Город",
-                        Input(
-                            name="city",
-                            value=location.city if location else "",
-                            placeholder="Москва"
-                        ),
+                    Div(
+                        Label("Город", style=label_style),
+                        Input(name="city", value=location.city if location else "", placeholder="Москва", style=input_style),
+                        style="flex: 1;"
                     ),
-                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Label("Адрес (полный)",
-                        Textarea(
-                            location.address if location else "",
-                            name="address",
-                            placeholder="ул. Примерная, д. 1, склад №5",
-                            rows="2"
-                        ),
+                    Label("Адрес (полный)", style=label_style),
+                    Textarea(
+                        location.address if location else "",
+                        name="address",
+                        placeholder="ул. Примерная, д. 1, склад №5",
+                        rows="2",
+                        style=f"{input_style} resize: vertical;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    style="margin-bottom: 20px;"
                 ),
 
-                # Classification
-                H3("Классификация", style="margin-top: 1.5rem;"),
+                # Section: Classification
+                Div(
+                    icon("tag", size=16, color="#64748b"),
+                    Span("КЛАССИФИКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
                 Div(
                     Label(
                         Input(
                             type="checkbox",
                             name="is_hub",
                             value="1",
-                            checked=location.is_hub if location else False
+                            checked=location.is_hub if location else False,
+                            style="accent-color: #059669; margin-right: 10px;"
                         ),
-                        icon("building-2", size=14), " Логистический хаб",
+                        icon("building-2", size=16, color="#64748b"),
+                        Span(" Логистический хаб", style="font-weight: 500; color: #1e293b; margin-left: 4px;"),
                         Br(),
-                        Small("Центр консолидации и отправки грузов", style="color: #666;"),
+                        Small("Центр консолидации и отправки грузов", style="color: #94a3b8; font-size: 12px; margin-left: 30px; display: block; margin-top: 2px;"),
+                        style="cursor: pointer; display: block;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    style=checkbox_card_style
                 ),
                 Div(
                     Label(
@@ -32634,55 +32937,68 @@ def _location_form(location=None, error=None, session=None):
                             type="checkbox",
                             name="is_customs_point",
                             value="1",
-                            checked=location.is_customs_point if location else False
+                            checked=location.is_customs_point if location else False,
+                            style="accent-color: #059669; margin-right: 10px;"
                         ),
-                        icon("shield-check", size=14), " Таможенный пункт",
+                        icon("shield-check", size=16, color="#64748b"),
+                        Span(" Таможенный пункт", style="font-weight: 500; color: #1e293b; margin-left: 4px;"),
                         Br(),
-                        Small("Пункт таможенного оформления", style="color: #666;"),
+                        Small("Пункт таможенного оформления", style="color: #94a3b8; font-size: 12px; margin-left: 30px; display: block; margin-top: 2px;"),
+                        style="cursor: pointer; display: block;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    style=checkbox_card_style
                 ),
 
-                # Notes
-                H3("Примечания", style="margin-top: 1.5rem;"),
+                # Section: Notes
                 Div(
-                    Label("Заметки",
-                        Textarea(
-                            location.notes if location else "",
-                            name="notes",
-                            placeholder="Дополнительная информация о локации...",
-                            rows="3"
-                        ),
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ПРИМЕЧАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=f"{section_header_style} margin-top: 24px;"
+                ),
+                Div(
+                    Label("Заметки", style=label_style),
+                    Textarea(
+                        location.notes if location else "",
+                        name="notes",
+                        placeholder="Дополнительная информация о локации...",
+                        rows="3",
+                        style=f"{input_style} resize: vertical;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    style="margin-bottom: 20px;"
                 ),
 
                 # Status (edit only)
                 Div(
-                    H3("Статус", cls="card-header"),
+                    Div(
+                        icon("toggle-left", size=16, color="#64748b"),
+                        Span("СТАТУС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style=f"{section_header_style} margin-top: 24px;"
+                    ),
                     Label(
                         Input(
                             type="checkbox",
                             name="is_active",
                             value="1",
-                            checked=location.is_active if location else True
+                            checked=location.is_active if location else True,
+                            style="accent-color: #059669; margin-right: 8px;"
                         ),
-                        " Активна",
+                        Span("Активная локация", style="font-size: 14px; color: #1e293b;"),
+                        style="display: flex; align-items: center; cursor: pointer;"
                     ),
-                    style="margin-bottom: 1rem;"
+                    Small("Неактивные локации не отображаются в выпадающих списках", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 6px;"),
                 ) if is_edit else "",
 
-                # Submit buttons
+                # Form actions
                 Div(
-                    btn("Сохранить", variant="primary", icon_name="save", type="submit"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
                     btn_link("Отмена", href="/locations" if not is_edit else f"/locations/{location.id}", variant="secondary", icon_name="x"),
-                    cls="form-actions", style="margin-top: 1.5rem; display: flex; gap: 0.5rem;"
+                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
                 method="post",
                 action=action_url
             ),
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -33095,106 +33411,193 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
             )
         )
 
+    # Design system styles
+    input_style = "width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+    select_style = "padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; min-width: 150px;"
+    th_style = "text-align: left; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"
+    td_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
     return page_layout("Инвойсы поставщиков",
-        # Header
-        Div(
-            H1(icon("file-text", size=28), " Реестр инвойсов поставщиков", cls="page-header"),
-            btn_link("Добавить инвойс", href="/supplier-invoices/new", variant="success", icon_name="plus"),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Info alert
-        Div(
-            icon("pin", size=16), " Реестр инвойсов отслеживает все счета от поставщиков, их статусы оплаты и сроки.",
-            cls="alert alert-info",
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Stats cards
+        # Header card with gradient
         Div(
             Div(
-                Div(str(summary.total), cls="stat-value"),
-                Div("Всего"),
-                cls="card stat-card"
+                Div(
+                    icon("receipt", size=24, color="#6366f1"),
+                    Span("Реестр инвойсов поставщиков", style="font-size: 22px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    Span(f"{len(invoices)}", style="background: #e0e7ff; color: #4f46e5; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; margin-left: 12px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                btn_link("Добавить инвойс", href="/supplier-invoices/new", variant="primary", icon_name="plus"),
+                style="display: flex; justify-content: space-between; align-items: center;"
             ),
-            Div(
-                Div(str(summary.pending), cls="stat-value", style="color: #ffc107;"),
-                Div("Ожидает оплаты"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(summary.partially_paid), cls="stat-value", style="color: #17a2b8;"),
-                Div("Частично оплачено"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(summary.paid), cls="stat-value", style="color: #28a745;"),
-                Div("Оплачено"),
-                cls="card stat-card"
-            ),
-            Div(
-                Div(str(summary.overdue), cls="stat-value", style="color: #dc3545;"),
-                Div("Просрочено"),
-                cls="card stat-card"
-            ),
-            cls="stats-grid"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Summary amounts
+        # Stats cards grid
+        Div(
+            # Total
+            Div(
+                Div(
+                    icon("file-text", size=20, color="#64748b"),
+                    style="margin-bottom: 8px;"
+                ),
+                Div(str(summary.total), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div("Всего инвойсов", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            # Pending
+            Div(
+                Div(
+                    icon("clock", size=20, color="#f59e0b"),
+                    style="margin-bottom: 8px;"
+                ),
+                Div(str(summary.pending), style="font-size: 28px; font-weight: 700; color: #f59e0b;"),
+                Div("Ожидает оплаты", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            # Partially paid
+            Div(
+                Div(
+                    icon("pie-chart", size=20, color="#0ea5e9"),
+                    style="margin-bottom: 8px;"
+                ),
+                Div(str(summary.partially_paid), style="font-size: 28px; font-weight: 700; color: #0ea5e9;"),
+                Div("Частично оплачено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            # Paid
+            Div(
+                Div(
+                    icon("check-circle", size=20, color="#22c55e"),
+                    style="margin-bottom: 8px;"
+                ),
+                Div(str(summary.paid), style="font-size: 28px; font-weight: 700; color: #22c55e;"),
+                Div("Оплачено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            # Overdue
+            Div(
+                Div(
+                    icon("alert-triangle", size=20, color="#ef4444"),
+                    style="margin-bottom: 8px;"
+                ),
+                Div(str(summary.overdue), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
+                Div("Просрочено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px;"
+        ),
+
+        # Summary amounts card
         Div(
             Div(
-                Strong("К оплате: "),
-                Span(f"{summary.pending_amount:,.2f} ₽", style="color: #dc3545;"),
-                " | ",
-                Strong("Оплачено: "),
-                Span(f"{summary.paid_amount:,.2f} ₽", style="color: #28a745;"),
-                " | ",
-                Strong("Всего: "),
-                Span(f"{summary.total_amount:,.2f} ₽"),
+                Div(
+                    icon("wallet", size=16, color="#64748b"),
+                    Span("СВОДКА ПО СУММАМ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 8px;"),
+                    style="display: flex; align-items: center; margin-bottom: 12px;"
+                ),
+                Div(
+                    Span("К оплате: ", style="color: #64748b;"),
+                    Span(f"{summary.pending_amount:,.2f} ₽", style="color: #ef4444; font-weight: 600;"),
+                    Span(" • ", style="color: #cbd5e1; margin: 0 12px;"),
+                    Span("Оплачено: ", style="color: #64748b;"),
+                    Span(f"{summary.paid_amount:,.2f} ₽", style="color: #22c55e; font-weight: 600;"),
+                    Span(" • ", style="color: #cbd5e1; margin: 0 12px;"),
+                    Span("Всего: ", style="color: #64748b;"),
+                    Span(f"{summary.total_amount:,.2f} ₽", style="color: #1e293b; font-weight: 600;"),
+                    style="font-size: 15px;"
+                ),
             ),
-            cls="card", style="margin-bottom: 1rem; text-align: center; padding: 1rem;"
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Filters
+        # Filters card
         Div(
             Form(
                 Div(
-                    Input(name="q", value=q, placeholder="Поиск по номеру инвойса...", style="flex: 2;"),
-                    Select(*supplier_options, name="supplier_id", style="flex: 2;"),
-                    Select(*status_options, name="status", style="flex: 1;"),
+                    icon("search", size=16, color="#64748b"),
+                    Span("ФИЛЬТРЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 8px;"),
+                    style="display: flex; align-items: center; margin-bottom: 12px;"
+                ),
+                Div(
+                    Input(name="q", value=q, placeholder="Поиск по номеру инвойса...", style=f"{input_style} flex: 2;"),
+                    Select(*supplier_options, name="supplier_id", style=f"{select_style} flex: 2;"),
+                    Select(*status_options, name="status", style=f"{select_style} flex: 1;"),
                     btn("Поиск", variant="primary", icon_name="search", type="submit"),
                     btn_link("Сбросить", href="/supplier-invoices", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 0.5rem; align-items: center;"
+                    style="display: flex; gap: 12px; align-items: center;"
                 ),
                 method="get",
                 action="/supplier-invoices"
             ),
-            cls="card", style="margin-bottom: 1rem;"
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Table
-        Table(
-            Thead(
-                Tr(
-                    Th("№ Инвойса"),
-                    Th("Поставщик"),
-                    Th("Дата"),
-                    Th("Срок оплаты"),
-                    Th("Сумма", style="text-align: right;"),
-                    Th("Оплачено", style="text-align: right;"),
-                    Th("Остаток", style="text-align: right;"),
-                    Th("Статус"),
-                    Th("Действия")
-                )
+        # Table card
+        Div(
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("№ Инвойса", style=th_style),
+                            Th("Поставщик", style=th_style),
+                            Th("Дата", style=th_style),
+                            Th("Срок оплаты", style=th_style),
+                            Th("Сумма", style=f"{th_style} text-align: right;"),
+                            Th("Оплачено", style=f"{th_style} text-align: right;"),
+                            Th("Остаток", style=f"{th_style} text-align: right;"),
+                            Th("Статус", style=th_style),
+                            Th("", style=th_style)
+                        )
+                    ),
+                    Tbody(*[
+                        Tr(
+                            Td(
+                                A(
+                                    Strong(inv.invoice_number),
+                                    href=f"/supplier-invoices/{inv.id}",
+                                    style="font-family: monospace; color: #6366f1; text-decoration: none; font-weight: 600;"
+                                ),
+                                style=td_style
+                            ),
+                            Td(f"{inv.supplier_code or ''} - {inv.supplier_name or '—'}" if inv.supplier_name else "—", style=td_style),
+                            Td(inv.invoice_date.strftime("%d.%m.%Y") if inv.invoice_date else "—", style=td_style),
+                            Td(
+                                inv.due_date.strftime("%d.%m.%Y") if inv.due_date else "—",
+                                Span(icon("alert-triangle", size=14), title="Просрочено!", style="color: #ef4444; margin-left: 6px;") if inv.is_overdue else "",
+                                style=td_style
+                            ),
+                            Td(f"{inv.total_amount:,.2f}" if inv.total_amount else "0.00", Span(f" {inv.currency}", style="color: #94a3b8;"), style=f"{td_style} text-align: right; font-weight: 500;"),
+                            Td(f"{inv.paid_amount:,.2f}" if inv.paid_amount else "0.00", Span(f" {inv.currency}", style="color: #94a3b8;"), style=f"{td_style} text-align: right; color: #22c55e; font-weight: 500;"),
+                            Td(
+                                f"{(inv.total_amount or 0) - (inv.paid_amount or 0):,.2f}",
+                                Span(f" {inv.currency}", style="color: #94a3b8;"),
+                                style=f"{td_style} text-align: right; color: {'#ef4444' if (inv.total_amount or 0) - (inv.paid_amount or 0) > 0 else '#64748b'}; font-weight: 500;"
+                            ),
+                            Td(status_badge(inv.status), style=td_style),
+                            Td(
+                                A(icon("eye", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 8px;"),
+                                A(icon("edit", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
+                                style=f"{td_style} text-align: right;"
+                            )
+                        )
+                        for inv in invoices
+                    ]) if invoice_rows else Tbody(
+                        Tr(Td(
+                            Div(
+                                icon("inbox", size=40, color="#cbd5e1"),
+                                Div("Инвойсы не найдены", style="font-size: 16px; font-weight: 500; color: #64748b; margin-top: 12px;"),
+                                A("Добавить первый инвойс", href="/supplier-invoices/new", style="color: #6366f1; font-size: 14px; margin-top: 8px; display: inline-block;"),
+                                style="text-align: center; padding: 40px 20px;"
+                            ),
+                            colspan="9"
+                        ))
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="overflow-x: auto;"
             ),
-            Tbody(*invoice_rows) if invoice_rows else Tbody(
-                Tr(Td(
-                    "Инвойсы не найдены. ",
-                    A("Добавить первый инвойс", href="/supplier-invoices/new"),
-                    colspan="9", style="text-align: center; padding: 2rem;"
-                ))
-            ),
-            cls="table"
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;"
         ),
 
         session=session
@@ -33343,59 +33746,188 @@ def get(invoice_id: str, session):
             Div("Платежи ещё не зарегистрированы.", cls="alert alert-warning")
         )
 
+    # Design system styles
+    section_header_style = "display: flex; align-items: center; gap: 8px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+    label_style = "font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 4px;"
+    value_style = "font-size: 14px; font-weight: 500; color: #1e293b;"
+    th_style = "text-align: left; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"
+    td_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
     return page_layout(f"Инвойс {invoice.invoice_number}",
-        # Header
+        # Header card with gradient
         Div(
-            A("← К реестру инвойсов", href="/supplier-invoices"),
-            H1(icon("file-text", size=28), f" Инвойс {invoice.invoice_number}", cls="page-header"),
-            Span(status_text, cls=f"status-badge {status_cls}", style="font-size: 1.2rem;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#64748b"),
+                    Span("К реестру инвойсов", style="margin-left: 6px;"),
+                    href="/supplier-invoices",
+                    style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("receipt", size=24, color="#6366f1"),
+                    Span(f"Инвойс {invoice.invoice_number}", style="font-size: 22px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    status_badge(invoice.status),
+                    style="display: flex; align-items: center; gap: 12px;"
+                ),
+                Div(
+                    Span(f"Поставщик: {invoice.supplier_code or ''} - {invoice.supplier_name or '—'}", style="color: #64748b; font-size: 14px;"),
+                    style="margin-top: 4px;"
+                ),
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Main info card
+        # Two column layout for main info
         Div(
+            # Left column - Invoice info
             Div(
-                H3("Основная информация", cls="card-header"),
-                Table(
-                    Tr(Td(Strong("Номер инвойса:")), Td(invoice.invoice_number)),
-                    Tr(Td(Strong("Поставщик:")), Td(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}")),
-                    Tr(Td(Strong("Дата инвойса:")), Td(invoice_date_str)),
-                    Tr(Td(Strong("Срок оплаты:")), Td(due_date_str, Span(icon("alert-triangle", size=14), " Просрочено!", style="color: #dc3545; display: inline-flex; align-items: center; gap: 0.25rem;") if invoice.is_overdue else "")),
-                    style="border: none;"
+                Div(
+                    icon("info", size=16, color="#64748b"),
+                    Span("ИНФОРМАЦИЯ ОБ ИНВОЙСЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
                 ),
-                cls="col"
+                Div(
+                    Div(
+                        Span("Номер инвойса", style=label_style),
+                        Span(invoice.invoice_number, style=f"{value_style} font-family: monospace;"),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Span("Поставщик", style=label_style),
+                        Span(f"{invoice.supplier_code or ''} - {invoice.supplier_name or '—'}", style=value_style),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Span("Дата инвойса", style=label_style),
+                        Span(invoice_date_str, style=value_style),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Span("Срок оплаты", style=label_style),
+                        Span(due_date_str, style=value_style),
+                        Span(
+                            icon("alert-triangle", size=14, color="#ef4444"),
+                            " Просрочено!",
+                            style="color: #ef4444; font-size: 12px; font-weight: 600; margin-left: 8px;"
+                        ) if invoice.is_overdue else "",
+                    ),
+                ),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
+            # Right column - Financial info
             Div(
-                H3("Финансы"),
-                Table(
-                    Tr(Td(Strong("Сумма:")), Td(f"{total_amount:,.2f} {invoice.currency}", style="font-size: 1.2rem;")),
-                    Tr(Td(Strong("Оплачено:")), Td(f"{paid_amount:,.2f} {invoice.currency}", style="color: #28a745;")),
-                    Tr(Td(Strong("Остаток:")), Td(f"{remaining:,.2f} {invoice.currency}", style="color: #dc3545;" if remaining > 0 else "")),
-                    style="border: none;"
+                Div(
+                    icon("wallet", size=16, color="#64748b"),
+                    Span("ФИНАНСЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style=section_header_style
                 ),
-                cls="col"
+                Div(
+                    Div(
+                        Span("Сумма", style=label_style),
+                        Span(f"{total_amount:,.2f} {invoice.currency}", style="font-size: 20px; font-weight: 600; color: #1e293b;"),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Span("Оплачено", style=label_style),
+                        Span(f"{paid_amount:,.2f} {invoice.currency}", style="font-size: 18px; font-weight: 600; color: #22c55e;"),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Span("Остаток", style=label_style),
+                        Span(f"{remaining:,.2f} {invoice.currency}", style=f"font-size: 18px; font-weight: 600; color: {'#ef4444' if remaining > 0 else '#22c55e'};"),
+                    ),
+                ),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            cls="grid", style="margin-bottom: 1.5rem;"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;"
         ),
 
         # Items section (if any)
-        Div(*items_section, cls="card", style="margin-bottom: 1rem;") if items_section else "",
+        Div(
+            Div(
+                icon("package", size=16, color="#64748b"),
+                Span("ПОЗИЦИИ ИНВОЙСА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                Span(f"{len(invoice.items)}", style="background: #e0e7ff; color: #4f46e5; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;"),
+                style=section_header_style
+            ),
+            Table(
+                Thead(Tr(
+                    Th("Описание", style=th_style),
+                    Th("Кол-во", style=f"{th_style} text-align: center;"),
+                    Th("Цена за ед.", style=f"{th_style} text-align: right;"),
+                    Th("Сумма", style=f"{th_style} text-align: right;"),
+                )),
+                Tbody(*[
+                    Tr(
+                        Td(item.description or "—", style=td_style),
+                        Td(str(item.quantity or 0), style=f"{td_style} text-align: center;"),
+                        Td(f"{item.unit_price or 0:,.2f}", style=f"{td_style} text-align: right;"),
+                        Td(f"{(item.quantity or 0) * (item.unit_price or 0):,.2f}", style=f"{td_style} text-align: right; font-weight: 500;"),
+                    )
+                    for item in invoice.items
+                ]),
+                style="width: 100%; border-collapse: collapse;"
+            ),
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        ) if hasattr(invoice, 'items') and invoice.items else "",
 
         # Payments section
-        Div(*payments_section, cls="card", style="margin-bottom: 1rem;"),
-
-        # Notes
         Div(
-            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
-            P(invoice.notes or "Нет примечаний"),
-            cls="card", style="margin-bottom: 1rem;"
+            Div(
+                Div(
+                    icon("credit-card", size=16, color="#64748b"),
+                    Span("ПЛАТЕЖИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    Span(f"{len(payments)}", style="background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;"),
+                    style="display: flex; align-items: center; gap: 8px;"
+                ),
+                btn_link("Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", variant="primary", size="sm", icon_name="plus"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+            ),
+            Table(
+                Thead(Tr(
+                    Th("Дата", style=th_style),
+                    Th("Тип", style=th_style),
+                    Th("Сумма", style=f"{th_style} text-align: right;"),
+                    Th("Плательщик", style=th_style),
+                    Th("Документ", style=th_style),
+                    Th("Примечание", style=th_style),
+                )),
+                Tbody(*[
+                    Tr(
+                        Td(p.payment_date.strftime("%d.%m.%Y") if p.payment_date else "—", style=td_style),
+                        Td(get_payment_type_name(p.payment_type), style=td_style),
+                        Td(f"{p.amount:,.2f} {p.currency}", style=f"{td_style} text-align: right; font-weight: 500; color: #22c55e;"),
+                        Td(p.buyer_company_name or "—", style=td_style),
+                        Td(p.payment_document or "—", style=f"{td_style} font-family: monospace; font-size: 13px;"),
+                        Td(p.notes or "—", style=f"{td_style} color: #64748b;"),
+                    )
+                    for p in payments
+                ]),
+                style="width: 100%; border-collapse: collapse;"
+            ) if payment_rows else Div(
+                icon("inbox", size=32, color="#cbd5e1"),
+                Div("Платежи ещё не зарегистрированы", style="font-size: 14px; color: #64748b; margin-top: 8px;"),
+                style="text-align: center; padding: 32px 20px; color: #94a3b8;"
+            ),
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        ),
+
+        # Notes section
+        Div(
+            Div(
+                icon("message-square", size=16, color="#64748b"),
+                Span("ПРИМЕЧАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style=section_header_style
+            ),
+            P(invoice.notes or "Нет примечаний", style="color: #64748b; font-size: 14px; line-height: 1.6;"),
+            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if invoice.notes else "",
 
         # Actions
         Div(
-            A(icon("edit", size=16), " Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", role="button"),
-            A(icon("credit-card", size=16), " Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", role="button", cls="outline"),
-            style="display: flex; gap: 1rem;"
+            btn_link("Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", variant="secondary", icon_name="edit"),
+            btn_link("Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", variant="primary", icon_name="credit-card"),
+            style="display: flex; gap: 12px;"
         ),
 
         session=session
