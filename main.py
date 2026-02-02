@@ -15232,7 +15232,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
 
     # Get items in this invoice
     items_result = supabase.table("quote_items") \
-        .select("id, purchase_price_original, is_unavailable") \
+        .select("id, purchase_price_original, production_time_days, is_unavailable") \
         .eq("invoice_id", invoice_id) \
         .eq("quote_id", quote_id) \
         .execute()
