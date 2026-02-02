@@ -15265,7 +15265,49 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             .eq("id", invoice_id) \
             .execute()
 
-        return JSONResponse({"success": True, "new_status": "pending_logistics"})
+        # Check if ALL items in quote are now in completed invoices
+        # If yes, auto-transition the quote workflow
+        all_invoices = supabase.table("invoices") \
+            .select("id, status") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        all_items = supabase.table("quote_items") \
+            .select("id, invoice_id") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        invoices_data = all_invoices.data or []
+        items_data = all_items.data or []
+
+        # Get IDs of completed invoices (not pending_procurement)
+        completed_invoice_ids = set(
+            inv["id"] for inv in invoices_data
+            if inv.get("status") != "pending_procurement"
+        )
+
+        # Check: all items must have invoice_id AND that invoice must be completed
+        all_items_in_completed_invoices = all(
+            item.get("invoice_id") and item.get("invoice_id") in completed_invoice_ids
+            for item in items_data
+        ) if items_data else False
+
+        workflow_transitioned = False
+        if all_items_in_completed_invoices:
+            # All items are in completed invoices - transition quote workflow
+            try:
+                user_roles = user.get("roles", [])
+                result = complete_procurement(quote_id, user_id, user_roles)
+                workflow_transitioned = result.success if result else False
+            except Exception as workflow_err:
+                # Log but don't fail - invoice was completed successfully
+                print(f"Auto-transition failed: {workflow_err}")
+
+        return JSONResponse({
+            "success": True,
+            "new_status": "pending_logistics",
+            "workflow_transitioned": workflow_transitioned
+        })
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
