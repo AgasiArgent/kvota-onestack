@@ -21434,7 +21434,7 @@ def get(session, spec_id: str):
                             method="POST"
                         ),
                         style="margin-top: 0.5rem;"
-                    ) if dept_status.get('can_approve') and user_can_approve_department(session, dept) and status == 'pending_review' else
+                    ) if dept_status.get('can_approve') and user_can_approve_spec_department(session, dept) and status == 'pending_review' else
                     (Div(
                         P(f"Требуется одобрение: {', '.join([SPEC_DEPARTMENT_NAMES.get(d, d) for d in dept_status.get('blocking_departments', [])])}",
                           style="font-size: 0.875rem; color: #dc2626; margin-top: 0.5rem;")
@@ -21759,11 +21759,11 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
         # Check if user has permission for this department
-        if not user_can_approve_department(session, department):
+        if not user_can_approve_spec_department(session, department):
             return RedirectResponse("/unauthorized", status_code=303)
 
         # Approve the department
-        approve_department(spec_id, org_id, department, user_id, comments)
+        approve_spec_department(spec_id, org_id, department, user_id, comments)
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
