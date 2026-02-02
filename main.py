@@ -25043,7 +25043,7 @@ def get(user_id: str, session):
     # Get current user roles
     current_roles = get_user_role_codes(user_id, org_id)
 
-    # Build role checkboxes
+    # Build role checkboxes with modern card styling
     role_inputs = []
     for r in all_roles:
         checked = r.code in current_roles
@@ -25059,48 +25059,99 @@ def get(user_id: str, session):
             "top_manager": "#f97316"
         }.get(r.code, "#6b7280")
 
+        card_bg = f"{color}10" if checked else "#f8fafc"
+        card_border = color if checked else "#e2e8f0"
+
         role_inputs.append(
             Label(
-                Input(type="checkbox", name="roles", value=r.code, checked=checked),
-                Span(r.name, style=f"color: {color}; font-weight: 600; margin-left: 8px;"),
-                Span(f" ({r.code})", style="color: #6b7280; font-size: 0.875rem;"),
-                Br(),
-                Span(r.description or "", style="color: #9ca3af; font-size: 0.875rem; margin-left: 28px;") if r.description else None,
-                style="display: block; margin-bottom: 12px; cursor: pointer;"
+                Div(
+                    Div(
+                        Input(type="checkbox", name="roles", value=r.code, checked=checked, style="width: 16px; height: 16px; accent-color: " + color + ";"),
+                        style="margin-right: 12px; display: flex; align-items: center;"
+                    ),
+                    Div(
+                        Div(
+                            Span(r.name, style=f"color: {color}; font-weight: 600; font-size: 14px;"),
+                            Span(f" ({r.code})", style="color: #94a3b8; font-size: 12px; margin-left: 4px;"),
+                        ),
+                        Span(r.description or "", style="color: #64748b; font-size: 12px; display: block; margin-top: 2px;") if r.description else None,
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; align-items: flex-start;"
+                ),
+                style=f"display: block; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; background: {card_bg}; border: 1px solid {card_border}; transition: all 0.15s ease;"
             )
         )
 
     return page_layout(f"Управление ролями",
-        H1("Управление ролями пользователя"),
-        P(f"ID: {user_id[:8]}...", style="color: #6b7280;"),
-
-        # Current roles display
+        # Modern gradient header card
         Div(
-            H4("Текущие роли:", style="margin-bottom: 8px;"),
-            Div(
-                *[Span(code, style="background: #10b981; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.875rem; margin-right: 4px;") for code in current_roles]
-                if current_roles else [Span("Нет ролей", style="color: #9ca3af;")]
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К списку пользователей",
+                href="/admin?tab=users",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
-            style="background: #f0fdf4; padding: 12px; border-radius: 8px; margin-bottom: 24px;"
+            # Header content
+            Div(
+                Div(
+                    icon("shield", size=28, color="#6366f1"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Управление ролями", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    Span(f"ID: {user_id[:8]}...", style="color: #64748b; font-size: 13px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
-        # Role management form
-        Form(
-            H3("Выберите роли:"),
-            Div(
-                *role_inputs,
-                style="margin-bottom: 16px;"
-            ),
-            Input(type="hidden", name="user_id", value=user_id),
-            btn("Сохранить роли", variant="primary", icon_name="check", type="submit"),
-            method="POST",
-            action=f"/admin/users/{user_id}/roles"
-        ),
-
-        # Navigation
+        # Two-column layout
         Div(
-            btn_link("Назад к списку", href="/admin/users", variant="secondary", icon_name="arrow-left"),
-            style="margin-top: 24px;"
+            # Left column - Current roles
+            Div(
+                Div(
+                    icon("user-check", size=14, color="#64748b"),
+                    Span("ТЕКУЩИЕ РОЛИ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    *[Span(code, style="display: inline-block; background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; margin: 0 6px 6px 0;") for code in current_roles]
+                    if current_roles else [Span("Нет назначенных ролей", style="color: #94a3b8; font-size: 14px;")]
+                ),
+                Div(
+                    Span(f"{len(current_roles)} ", style="font-weight: 600; color: #1e293b;"),
+                    Span("из ", style="color: #64748b;"),
+                    Span(f"{len(all_roles)} ", style="font-weight: 600; color: #1e293b;"),
+                    Span("ролей назначено", style="color: #64748b;"),
+                    style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 13px;"
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            # Right column - Role selection form
+            Form(
+                Div(
+                    icon("settings", size=14, color="#64748b"),
+                    Span("ВЫБОР РОЛЕЙ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    *role_inputs,
+                    style="max-height: 400px; overflow-y: auto; padding-right: 8px;"
+                ),
+                Input(type="hidden", name="user_id", value=user_id),
+                Div(
+                    btn("Сохранить роли", variant="primary", icon_name="check", type="submit"),
+                    style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #e2e8f0;"
+                ),
+                method="POST",
+                action=f"/admin/users/{user_id}/roles",
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;"
         ),
 
         session=session
@@ -25289,88 +25340,144 @@ def get(session):
             )
         ))
 
-    # Build unassigned brands list
+    # Build unassigned brands list with modern styling
     unassigned_items = []
     for brand in unassigned_brands:
         unassigned_items.append(
             Div(
-                Span(brand, style="font-weight: 500; margin-right: 12px;"),
+                Span(brand, style="font-weight: 600; color: #1e293b; margin-right: 12px;"),
                 btn_link("Назначить", href=f"/admin/brands/new?brand={brand}", variant="secondary", size="sm"),
-                style="display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #f3f4f6;"
+                style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 6px; background: white; border-radius: 8px; border: 1px solid #e2e8f0;"
             )
         )
 
-    return page_layout("Управление брендами",
-        H1("Управление брендами"),
-        P("Назначение брендов менеджерам по закупкам", style="color: #6b7280;"),
+    # Table styles
+    th_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    td_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
 
-        # Stats
+    return page_layout("Управление брендами",
+        # Modern gradient header card
+        Div(
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К администрированию",
+                href="/admin",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
+            ),
+            # Header content with action button
+            Div(
+                Div(
+                    Div(
+                        icon("tag", size=28, color="#8b5cf6"),
+                        style="width: 48px; height: 48px; background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                    ),
+                    Div(
+                        H1("Управление брендами", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        P("Назначение брендов менеджерам по закупкам", style="margin: 0; color: #64748b; font-size: 14px;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; align-items: center; flex: 1;"
+                ),
+                btn_link("Добавить назначение", href="/admin/brands/new", variant="success", icon_name="plus"),
+                style="display: flex; align-items: center; justify-content: space-between;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
+        ),
+
+        # Stats grid
         Div(
             Div(
-                Div(str(len(assignments)), cls="stat-value", style="color: #10b981;"),
-                Div("Назначено брендов", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                Span(str(len(assignments)), style="font-size: 28px; font-weight: 700; color: #10b981; display: block;"),
+                Span("Назначено брендов", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
             Div(
-                Div(str(len(unassigned_brands)), cls="stat-value", style="color: #f59e0b;"),
-                Div("Без назначения", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                Span(str(len(unassigned_brands)), style="font-size: 28px; font-weight: 700; color: #f59e0b; display: block;"),
+                Span("Без назначения", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
             Div(
-                Div(str(len(procurement_users)), cls="stat-value", style="color: #3b82f6;"),
-                Div("Менеджеров закупок", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                Span(str(len(procurement_users)), style="font-size: 28px; font-weight: 700; color: #3b82f6; display: block;"),
+                Span("Менеджеров закупок", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
             Div(
-                Div(str(len(all_quote_brands)), cls="stat-value", style="color: #8b5cf6;"),
-                Div("Всего брендов в КП", style="font-size: 0.875rem;"),
-                cls="card", style="text-align: center; padding: 16px;"
+                Span(str(len(all_quote_brands)), style="font-size: 28px; font-weight: 700; color: #8b5cf6; display: block;"),
+                Span("Всего брендов в КП", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
             style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;"
         ),
 
         # Unassigned brands section
         Div(
-            H3("Бренды без назначения", style="margin-bottom: 12px;"),
+            Div(
+                icon("alert-circle", size=14, color="#d97706"),
+                Span("БРЕНДЫ БЕЗ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #d97706; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center;"
+            ),
             Div(
                 *unassigned_items if unassigned_items else [
-                    P("Все бренды из КП назначены менеджерам ✓", style="color: #10b981;")
+                    Div(
+                        icon("check-circle", size=16, color="#10b981"),
+                        Span(" Все бренды из КП назначены менеджерам", style="color: #10b981; font-size: 14px; margin-left: 8px;"),
+                        style="display: flex; align-items: center;"
+                    )
                 ],
                 style="max-height: 200px; overflow-y: auto;"
             ),
-            cls="card", style="margin-bottom: 24px; border-left: 4px solid #f59e0b;" if unassigned_items else "margin-bottom: 24px;"
+            style=f"background: {'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' if unassigned_items else 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid {'#fcd34d' if unassigned_items else '#86efac'};"
         ) if all_quote_brands else None,
 
-        # Add new assignment button
+        # Current assignments table section
         Div(
-            btn_link("Добавить назначение", href="/admin/brands/new", variant="success", icon_name="plus"),
-            style="margin-bottom: 24px;"
-        ),
-
-        # Current assignments table
-        Div(
-            H3("Текущие назначения"),
-            Table(
-                Thead(Tr(
-                    Th("Бренд"),
-                    Th("Менеджер"),
-                    Th("Всего брендов"),
-                    Th("Дата назначения"),
-                    Th("Действия")
-                )),
-                Tbody(*assignment_rows) if assignment_rows else Tbody(
-                    Tr(Td("Нет назначений", colspan="5", style="text-align: center; color: #9ca3af;"))
-                ),
-                cls="striped"
+            Div(
+                icon("list", size=14, color="#64748b"),
+                Span("ТЕКУЩИЕ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
             ),
-            cls="card"
-        ),
-
-        # Navigation
-        Div(
-            btn_link("Управление пользователями", href="/admin/users", variant="secondary", icon_name="arrow-left"),
-            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="home"),
-            style="margin-top: 24px; display: flex; gap: 12px;"
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Бренд", style=th_style),
+                        Th("Менеджер", style=th_style),
+                        Th("Всего брендов", style=th_style),
+                        Th("Дата назначения", style=th_style),
+                        Th("Действия", style=th_style)
+                    )),
+                    Tbody(*[Tr(
+                        Td(Span(a.brand, style="font-weight: 600; color: #8b5cf6;"), style=td_style),
+                        Td(a.user_id[:8] + "...", style=td_style),
+                        Td(str(assignment_counts.get(a.user_id, 0)), style=td_style),
+                        Td(a.created_at.strftime("%Y-%m-%d") if a.created_at else "-", style=td_style),
+                        Td(
+                            Div(
+                                btn_link("Изменить", href=f"/admin/brands/{a.id}/edit", variant="secondary", size="sm"),
+                                Form(
+                                    btn("Удалить", variant="danger", size="sm", type="submit"),
+                                    method="POST",
+                                    action=f"/admin/brands/{a.id}/delete",
+                                    style="display: inline;"
+                                ),
+                                style="display: flex; align-items: center; gap: 8px;"
+                            ),
+                            style=td_style
+                        )
+                    ) for a in assignments]) if assignment_rows else Tbody(
+                        Tr(Td(
+                            Div(
+                                icon("inbox", size=32, color="#94a3b8"),
+                                P("Нет назначений", style="color: #64748b; margin: 8px 0 0 0;"),
+                                style="text-align: center; padding: 32px;"
+                            ),
+                            colspan="5"
+                        ))
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
         ),
 
         session=session
@@ -25422,36 +25529,89 @@ def get(session, brand: str = None):
         for u in procurement_users
     ]
 
-    return page_layout("Новое назначение бренда",
-        H1("Новое назначение бренда"),
+    # Form input styles
+    input_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+    label_style = "display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;"
+    select_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
 
-        Form(
-            Label(
-                "Название бренда",
-                Input(type="text", name="brand", value=brand or "", required=True,
-                      placeholder="Например: BOSCH"),
+    return page_layout("Новое назначение бренда",
+        # Modern gradient header card
+        Div(
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К списку брендов",
+                href="/admin/brands",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
-            Label(
-                "Менеджер по закупкам",
-                Select(
-                    Option("— Выберите менеджера —", value="", disabled=True, selected=True),
-                    *user_options,
-                    name="user_id",
-                    required=True
-                ) if user_options else Div(
-                    P("Нет пользователей с ролью 'procurement'", style="color: #ef4444;"),
-                    P("Сначала назначьте роль менеджера по закупкам на ",
-                      A("странице пользователей", href="/admin/users"), ".")
-                )
+            # Header content
+            Div(
+                Div(
+                    icon("plus-circle", size=28, color="#10b981"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Новое назначение бренда", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    P("Назначьте бренд менеджеру по закупкам", style="margin: 0; color: #64748b; font-size: 14px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
             ),
-            btn("Создать назначение", variant="primary", icon_name="plus", type="submit") if user_options else None,
-            method="POST",
-            action="/admin/brands/new"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
+        # Form card
         Div(
-            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
-            style="margin-top: 24px;"
+            Form(
+                Div(
+                    icon("tag", size=14, color="#64748b"),
+                    Span("ДАННЫЕ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center;"
+                ),
+
+                # Brand name
+                Div(
+                    Label("Название бренда *", fr="brand", style=label_style),
+                    Input(type="text", name="brand", id="brand", value=brand or "", required=True,
+                          placeholder="Например: BOSCH", style=input_style),
+                    style="margin-bottom: 16px;"
+                ),
+
+                # Manager select
+                Div(
+                    Label("Менеджер по закупкам *", fr="user_id", style=label_style),
+                    Select(
+                        Option("— Выберите менеджера —", value="", disabled=True, selected=True),
+                        *user_options,
+                        name="user_id",
+                        id="user_id",
+                        required=True,
+                        style=select_style
+                    ) if user_options else Div(
+                        Div(
+                            icon("alert-triangle", size=16, color="#ef4444"),
+                            Span(" Нет пользователей с ролью 'procurement'", style="color: #ef4444; font-size: 14px; margin-left: 8px;"),
+                            style="display: flex; align-items: center; margin-bottom: 8px;"
+                        ),
+                        P("Сначала назначьте роль менеджера по закупкам на ",
+                          A("странице пользователей", href="/admin?tab=users", style="color: #3b82f6; text-decoration: underline;"), ".",
+                          style="color: #64748b; font-size: 13px; margin: 0;"),
+                        style="padding: 16px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;"
+                    ),
+                    style="margin-bottom: 20px;"
+                ),
+
+                # Submit button
+                Div(
+                    btn("Создать назначение", variant="success", icon_name="plus", type="submit"),
+                    btn_link("Отмена", href="/admin/brands", variant="secondary"),
+                    style="display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid #e2e8f0;"
+                ) if user_options else None,
+
+                method="POST",
+                action="/admin/brands/new"
+            ),
+            style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; max-width: 500px;"
         ),
 
         session=session
@@ -25577,32 +25737,81 @@ def get(assignment_id: str, session):
         for u in procurement_users
     ]
 
+    # Form input styles
+    select_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+    label_style = "display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;"
+
     return page_layout("Редактирование назначения",
-        H1("Редактирование назначения"),
-
+        # Modern gradient header card
         Div(
-            H3(f"Бренд: {assignment.brand}", style="color: #10b981;"),
-            style="margin-bottom: 16px;"
-        ),
-
-        Form(
-            Input(type="hidden", name="brand", value=assignment.brand),
-            Label(
-                "Менеджер по закупкам",
-                Select(
-                    *user_options,
-                    name="user_id",
-                    required=True
-                ) if user_options else P("Нет менеджеров", style="color: #ef4444;")
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К списку брендов",
+                href="/admin/brands",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
-            btn("Сохранить изменения", variant="primary", icon_name="check", type="submit") if user_options else None,
-            method="POST",
-            action=f"/admin/brands/{assignment_id}/edit"
+            # Header content
+            Div(
+                Div(
+                    icon("edit-3", size=28, color="#f59e0b"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Редактирование назначения", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    Div(
+                        Span("Бренд: ", style="color: #64748b; font-size: 14px;"),
+                        Span(assignment.brand, style="color: #8b5cf6; font-size: 14px; font-weight: 600;"),
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
+        # Form card
         Div(
-            btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
-            style="margin-top: 24px;"
+            Form(
+                Div(
+                    icon("user", size=14, color="#64748b"),
+                    Span("ИЗМЕНИТЬ МЕНЕДЖЕРА", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center;"
+                ),
+
+                Input(type="hidden", name="brand", value=assignment.brand),
+
+                # Current assignment info
+                Div(
+                    Span("Текущий менеджер: ", style="color: #64748b; font-size: 13px;"),
+                    Span(assignment.user_id[:8] + "...", style="color: #1e293b; font-weight: 500; font-size: 13px;"),
+                    style="padding: 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 16px;"
+                ),
+
+                # Manager select
+                Div(
+                    Label("Новый менеджер по закупкам *", fr="user_id", style=label_style),
+                    Select(
+                        *user_options,
+                        name="user_id",
+                        id="user_id",
+                        required=True,
+                        style=select_style
+                    ) if user_options else P("Нет менеджеров с ролью procurement", style="color: #ef4444; font-size: 14px;"),
+                    style="margin-bottom: 20px;"
+                ),
+
+                # Submit button
+                Div(
+                    btn("Сохранить изменения", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Отмена", href="/admin/brands", variant="secondary"),
+                    style="display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid #e2e8f0;"
+                ) if user_options else None,
+
+                method="POST",
+                action=f"/admin/brands/{assignment_id}/edit"
+            ),
+            style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; max-width: 500px;"
         ),
 
         session=session
