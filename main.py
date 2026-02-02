@@ -20566,15 +20566,48 @@ def get(session, quote_id: str):
 
     # Form fields grouped by category
     return page_layout("Создание спецификации",
-        H1("Создание спецификации"),
-
-        # Quote summary
+        # Header card with gradient
         Div(
-            H3(f"КП: {quote.get('idn_quote', '-')}"),
-            P(f"Клиент: {customer_name}"),
-            P(f"Сумма: {quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
-            cls="card",
-            style="margin-bottom: 1.5rem; background: #f0f9ff;"
+            Div(
+                Div(
+                    A(icon("arrow-left", size=18), " Назад", href="/dashboard?tab=spec-control",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("file-plus", size=24, color="#6366f1"),
+                    H1("Создание спецификации", style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    style="display: flex; align-items: center; gap: 12px;"
+                ),
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        ),
+
+        # Quote summary card
+        Div(
+            Div(
+                Span("ИНФОРМАЦИЯ О КП", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            Div(
+                Div(
+                    Span("КП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(f"{quote.get('idn_quote', '-')}", style="font-weight: 600; color: #1e293b; font-size: 15px;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Span("Клиент", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(customer_name, style="font-weight: 600; color: #1e293b; font-size: 15px;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Span("Сумма КП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}", style="font-weight: 600; color: #1e293b; font-size: 15px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 24px;"
+            ),
+            style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;"
         ),
 
         Form(
@@ -20584,24 +20617,28 @@ def get(session, quote_id: str):
 
             # Section 1: Identification & Date
             Div(
-                H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
+                Div(
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ИДЕНТИФИКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("№ Спецификации", For="specification_number"),
+                        Label("№ Спецификации", For="specification_number", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="specification_number", id="specification_number",
                               placeholder="Авто при выборе договора",
-                              style="width: 100%;"),
-                        Small("Заполнится автоматически при выборе договора", style="color: #666;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
+                        Small("Заполнится автоматически при выборе договора", style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Дата подписания", For="sign_date"),
+                        Label("Дата подписания", For="sign_date", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="sign_date", id="sign_date", type="date",
-                              style="width: 100%;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Версия КП", For="quote_version_id"),
+                        Label("Версия КП", For="quote_version_id", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Select(
                             Option("-- Выберите версию --", value=""),
                             *[Option(
@@ -20611,37 +20648,40 @@ def get(session, quote_id: str):
                             ) for v in versions],
                             name="quote_version_id",
                             id="quote_version_id",
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ),
                         cls="form-group"
                     ),
                     cls="grid",
                     style="grid-template-columns: repeat(3, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Section 2: Delivery Conditions
             Div(
-                H3(icon("truck", size=20), " Условия поставки", cls="card-header"),
+                Div(
+                    icon("truck", size=16, color="#64748b"),
+                    Span("УСЛОВИЯ ПОСТАВКИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("Срок поставки (дней)", For="delivery_days"),
+                        Label("Срок поставки (дней)", For="delivery_days", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="delivery_days", id="delivery_days", type="number", min="1",
                               placeholder="Авто из расчёта",
-                              style="width: 100%;"),
-                        Small("Заполнится автоматически из расчёта КП", style="color: #666;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
+                        Small("Заполнится автоматически из расчёта КП", style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Тип дней", For="delivery_days_type"),
+                        Label("Тип дней", For="delivery_days_type", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Select(
                             Option("рабочих дней", value="рабочих дней", selected=True),
                             Option("календарных дней", value="календарных дней"),
                             name="delivery_days_type",
                             id="delivery_days_type",
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ),
                         cls="form-group"
                     ),
@@ -20649,20 +20689,23 @@ def get(session, quote_id: str):
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
                 P(
-                    icon("info", size=14),
+                    icon("info", size=14, color="#64748b"),
                     " Остальные условия (оплата, адрес, Incoterms) берутся из КП и данных клиента",
-                    style="color: #666; font-size: 0.875rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"
+                    style="color: #64748b; font-size: 13px; margin-top: 12px; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f1f5f9; border-radius: 6px;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Section 3: Contract and Signatory
             Div(
-                H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
+                Div(
+                    icon("file-signature", size=16, color="#64748b"),
+                    Span("ДОГОВОР И ПОДПИСАНТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("Договор клиента", For="contract_id"),
+                        Label("Договор клиента", For="contract_id", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Select(
                             Option("-- Без привязки к договору --", value=""),
                             *[Option(
@@ -20671,49 +20714,48 @@ def get(session, quote_id: str):
                             ) for c in customer_contracts],
                             name="contract_id",
                             id="contract_id",
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ),
                         Small(
                             "При выборе договора номер спецификации будет сгенерирован автоматически",
-                            style="color: #666; display: block; margin-top: 0.25rem;"
+                            style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"
                         ),
                         cls="form-group"
                     ) if customer_contracts else Div(
-                        Label("Договор клиента"),
-                        P(icon("alert-triangle", size=14), " У клиента нет активных договоров", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+                        Label("Договор клиента", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
+                        P(icon("alert-triangle", size=14, color="#d97706"), " У клиента нет активных договоров", style="color: #d97706; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px;"),
                         A("Создать договор →", href=f"/customer-contracts/new?customer_id={customer_id}" if customer_id else "#",
-                          style="font-size: 0.875rem;"),
+                          style="font-size: 13px; color: #6366f1; margin-top: 4px; display: inline-block;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Подписант со стороны клиента"),
+                        Label("Подписант со стороны клиента", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Div(
                             P(
-                                Strong(signatory_info.get("name", "")),
+                                Strong(signatory_info.get("name", ""), style="color: #1e293b;"),
                                 Br() if signatory_info.get("position") else None,
-                                Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
-                                style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
+                                Span(signatory_info.get("position", ""), style="color: #64748b; font-size: 13px;") if signatory_info.get("position") else None,
+                                style="margin: 0; padding: 10px 14px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 6px; border-left: 3px solid #22c55e;"
                             ),
-                            Small(icon("check", size=12), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12, color="#16a34a"), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px;"),
                         ) if signatory_info else Div(
-                            P(icon("alert-triangle", size=14), " Подписант не указан в контактах клиента", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+                            P(icon("alert-triangle", size=14, color="#d97706"), " Подписант не указан в контактах клиента", style="color: #d97706; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px;"),
                             A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
-                              style="font-size: 0.875rem;"),
+                              style="font-size: 13px; color: #6366f1; margin-top: 4px; display: inline-block;"),
                         ),
                         cls="form-group"
                     ),
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem; background: #fefce8;"
+                style="background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); border: 1px solid #fde047; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Action buttons
             Div(
                 btn("Создать спецификацию", variant="success", icon_name="save", type="submit", name="action", value="create"),
-                btn_link("Отмена", href="/spec-control", variant="secondary"),
-                style="margin-top: 1rem; display: flex; gap: 0.75rem;"
+                btn_link("Отмена", href="/dashboard?tab=spec-control", variant="secondary"),
+                style="margin-top: 8px; display: flex; gap: 12px;"
             ),
 
             action=f"/spec-control/create/{quote_id}",
@@ -21007,16 +21049,16 @@ def get(session, spec_id: str):
         if signatory_result.data:
             signatory_info = signatory_result.data[0]
 
-    # Status badge helper
+    # Status badge helper with design system colors
     def spec_status_badge(status):
         status_map = {
-            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
-            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
-            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
-            "signed": ("Подписана", "bg-green-200 text-green-800"),
+            "draft": ("Черновик", "#64748b", "#f1f5f9"),
+            "pending_review": ("На проверке", "#d97706", "#fef3c7"),
+            "approved": ("Утверждена", "#2563eb", "#dbeafe"),
+            "signed": ("Подписана", "#16a34a", "#dcfce7"),
         }
-        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
-        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+        label, color, bg = status_map.get(status, (status, "#64748b", "#f1f5f9"))
+        return Span(label, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {color}; background: {bg};")
 
     # Get approval status for multi-department workflow
     approval_status = get_spec_approval_status(spec_id, org_id) or {}
@@ -21029,42 +21071,62 @@ def get(session, spec_id: str):
         progress_bar = Div()  # Empty div if workflow bar fails
 
     return page_layout("Редактирование спецификации",
-        H1("Редактирование спецификации"),
+        # Header card with gradient
+        Div(
+            Div(
+                Div(
+                    A(icon("arrow-left", size=18), " Назад", href="/dashboard?tab=spec-control",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Div(
+                        Div(
+                            icon("file-text", size=24, color="#6366f1"),
+                            H1(f"Спецификация: {spec.get('specification_number', '-') or 'Без номера'}", style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                            style="display: flex; align-items: center; gap: 12px;"
+                        ),
+                        Div(spec_status_badge(status), style="margin-top: 8px;"),
+                    ),
+                    Div(
+                        Div(
+                            Span("КП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                            Div(quote.get('idn_quote', '-'), style="font-weight: 600; color: #1e293b; font-size: 14px;"),
+                        ),
+                        Div(
+                            Span("Клиент", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                            Div(customer_name, style="font-weight: 600; color: #1e293b; font-size: 14px;"),
+                        ),
+                        Div(
+                            Span("Сумма КП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                            Div(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}", style="font-weight: 600; color: #1e293b; font-size: 14px;"),
+                        ),
+                        style="display: flex; gap: 24px; text-align: left;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: flex-start;"
+                ),
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        ),
 
         # Workflow progress bar (Feature #87)
         progress_bar,
 
-        # Status and info banner
-        Div(
-            Div(
-                H3(f"Спецификация: {spec.get('specification_number', '-') or 'Без номера'}"),
-                P(
-                    "Статус: ", spec_status_badge(status),
-                    style="margin-top: 0.5rem;"
-                ),
-            ),
-            Div(
-                P(f"КП: {quote.get('idn_quote', '-')}"),
-                P(f"Клиент: {customer_name}"),
-                P(f"Сумма КП: {quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
-                style="text-align: right;"
-            ),
-            cls="card",
-            style="margin-bottom: 1.5rem; background: #f0f9ff; display: flex; justify-content: space-between; align-items: start;"
-        ),
-
         # Warning banner if not editable
         Div(
-            icon("alert-triangle", size=16), " Спецификация утверждена/подписана и не может быть отредактирована.",
-            cls="card",
-            style="background: #fef3c7; border-left: 4px solid #f59e0b; margin-bottom: 1.5rem;"
+            icon("alert-triangle", size=16, color="#d97706"), " Спецификация утверждена/подписана и не может быть отредактирована.",
+            style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #fde047; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #92400e;"
         ) if not is_editable else None,
 
         # Admin panel for status management (Bug #8: Allow admins to move specs between stages)
         Div(
-            H3(icon("wrench", size=20), " Админ-панель управления статусом", style="margin-bottom: 1rem; color: #dc2626; display: flex; align-items: center; gap: 0.5rem;"),
-            P("Текущий статус: ", spec_status_badge(status), style="margin-bottom: 1rem;"),
-            P("Изменить статус на:", style="margin-bottom: 0.5rem; font-weight: 600;"),
+            Div(
+                icon("wrench", size=16, color="#dc2626"),
+                Span("АДМИН-ПАНЕЛЬ УПРАВЛЕНИЯ СТАТУСОМ", style="font-size: 11px; font-weight: 600; color: #dc2626; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+            ),
+            P("Текущий статус: ", spec_status_badge(status), style="margin-bottom: 12px; font-size: 14px;"),
+            P("Изменить статус на:", style="margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #374151;"),
             Div(
                 # Separate form for each status button to ensure value is passed correctly
                 Form(
@@ -21103,17 +21165,20 @@ def get(session, spec_id: str):
                     method="POST",
                     style="display: inline;"
                 ),
-                style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;"
+                style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;"
             ),
-            P(icon("alert-triangle", size=16), " Внимание: это админ-функция для тестирования и исправления ошибок. Используйте осторожно!",
-              style="margin-top: 1rem; font-size: 0.875rem; color: #ef4444;"),
-            cls="card",
-            style="background: #fee2e2; border-left: 4px solid #dc2626; margin-bottom: 1.5rem;"
+            P(icon("alert-triangle", size=14, color="#ef4444"), " Внимание: это админ-функция для тестирования и исправления ошибок. Используйте осторожно!",
+              style="margin-top: 12px; font-size: 12px; color: #ef4444; display: flex; align-items: center; gap: 6px;"),
+            style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;"
         ) if user_has_any_role(session, ["admin"]) else None,
 
         # Multi-department approval progress (Bug #8 follow-up)
         Div(
-            H3(icon("clipboard-list", size=20), " Прогресс согласования спецификации", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
+            Div(
+                icon("clipboard-list", size=16, color="#10b981"),
+                Span("ПРОГРЕСС СОГЛАСОВАНИЯ СПЕЦИФИКАЦИИ", style="font-size: 11px; font-weight: 600; color: #10b981; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+            ),
 
             # Progress bar visual
             Div(
@@ -21121,19 +21186,19 @@ def get(session, spec_id: str):
                     Div(
                         Div(
                             dept_name,
-                            style=f"text-align: center; font-size: 0.75rem; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else '#6b7280'};"
+                            style=f"text-align: center; font-size: 11px; font-weight: 600; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else '#64748b'};"
                         ),
                         Div(
                             icon("check-circle", size=28) if approval_status.get(dept, {}).get('approved') else
-                            (icon("clock", size=28) if approval_status.get(dept, {}).get('can_approve') else icon("x-circle", size=28)),
-                            style=f"margin: 0.5rem 0; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else ('#f59e0b' if approval_status.get(dept, {}).get('can_approve') else '#9ca3af')};"
+                            (icon("clock", size=28) if approval_status.get(dept, {}).get('can_approve') else icon("circle", size=28)),
+                            style=f"margin: 8px 0; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else ('#f59e0b' if approval_status.get(dept, {}).get('can_approve') else '#cbd5e1')};"
                         ),
-                        style=f"flex: 1; padding: 0.5rem; background: {'#d1fae5' if approval_status.get(dept, {}).get('approved') else '#f3f4f6'}; border-radius: 8px; margin: 0 0.25rem;"
+                        style=f"flex: 1; padding: 12px 8px; background: {'linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%)' if approval_status.get(dept, {}).get('approved') else '#f1f5f9'}; border-radius: 8px; margin: 0 4px; text-align: center;"
                     )
                     for dept, dept_name in [('procurement', 'Закупки'), ('logistics', 'Логистика'),
                                             ('customs', 'Таможня'), ('sales', 'Продажи'), ('control', 'Контроль')]
                 ],
-                style="display: flex; margin-bottom: 1.5rem;"
+                style="display: flex; margin-bottom: 20px;"
             ),
 
             # Department status details
@@ -21182,14 +21247,12 @@ def get(session, spec_id: str):
                           style="font-size: 0.875rem; color: #dc2626; margin-top: 0.5rem;")
                     ) if dept_status.get('blocking_departments') else None))),
 
-                    cls="card",
-                    style="margin-bottom: 1rem; padding: 1rem; background: #f9fafb;"
+                    style="margin-bottom: 12px; padding: 14px 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;"
                 )
                 for dept, dept_status in [(d, approval_status.get(d, {})) for d in ['procurement', 'logistics', 'customs', 'sales', 'control']]
             ],
 
-            cls="card",
-            style="background: #f0fdf4; border-left: 4px solid #10b981; margin-bottom: 1.5rem;"
+            style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-left: 4px solid #10b981; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;"
         ) if status in ['pending_review', 'approved'] and approval_status else None,
 
         Form(
@@ -21198,27 +21261,31 @@ def get(session, spec_id: str):
 
             # Section 1: Identification & Date
             Div(
-                H3(icon("file-text", size=20), " Идентификация", cls="card-header"),
+                Div(
+                    icon("file-text", size=16, color="#64748b"),
+                    Span("ИДЕНТИФИКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("№ Спецификации", For="specification_number"),
+                        Label("№ Спецификации", For="specification_number", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="specification_number", id="specification_number",
                               value=spec.get("specification_number", ""),
                               placeholder="Авто при выборе договора",
                               disabled=not is_editable,
-                              style="width: 100%;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Дата подписания", For="sign_date"),
+                        Label("Дата подписания", For="sign_date", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="sign_date", id="sign_date", type="date",
                               value=spec.get("sign_date", "") or "",
                               disabled=not is_editable,
-                              style="width: 100%;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Версия КП", For="quote_version_id"),
+                        Label("Версия КП", For="quote_version_id", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Select(
                             Option("-- Выберите версию --", value=""),
                             *[Option(
@@ -21229,32 +21296,35 @@ def get(session, spec_id: str):
                             name="quote_version_id",
                             id="quote_version_id",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ),
                         cls="form-group"
                     ),
                     cls="grid",
                     style="grid-template-columns: repeat(3, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Section 2: Delivery Conditions
             Div(
-                H3(icon("truck", size=20), " Условия поставки", cls="card-header"),
+                Div(
+                    icon("truck", size=16, color="#64748b"),
+                    Span("УСЛОВИЯ ПОСТАВКИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("Срок поставки (дней)", For="delivery_days"),
+                        Label("Срок поставки (дней)", For="delivery_days", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Input(name="delivery_days", id="delivery_days", type="number", min="1",
                               value=str(spec.get("delivery_days", "")) if spec.get("delivery_days") else "",
                               placeholder="Из расчёта КП",
                               disabled=not is_editable,
-                              style="width: 100%;"),
+                              style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Тип дней", For="delivery_days_type"),
+                        Label("Тип дней", For="delivery_days_type", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Select(
                             Option("рабочих дней", value="рабочих дней",
                                    selected=spec.get("delivery_days_type", "рабочих дней") == "рабочих дней"),
@@ -21263,7 +21333,7 @@ def get(session, spec_id: str):
                             name="delivery_days_type",
                             id="delivery_days_type",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ),
                         cls="form-group"
                     ),
@@ -21271,28 +21341,31 @@ def get(session, spec_id: str):
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
                 P(
-                    icon("info", size=14),
+                    icon("info", size=14, color="#64748b"),
                     " Остальные условия (оплата, адрес, Incoterms) берутся из КП и данных клиента",
-                    style="color: #666; font-size: 0.875rem; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"
+                    style="color: #64748b; font-size: 13px; margin-top: 12px; display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #f1f5f9; border-radius: 6px;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem;"
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Section 3: Contract and Signatory
             Div(
-                H3(icon("file-signature", size=20), " Договор и подписант", cls="card-header"),
+                Div(
+                    icon("file-signature", size=16, color="#64748b"),
+                    Span("ДОГОВОР И ПОДПИСАНТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 Div(
                     Div(
-                        Label("Договор клиента", For="contract_id"),
+                        Label("Договор клиента", For="contract_id", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         # Show linked contract (read-only display) or dropdown to select
                         Div(
                             P(
-                                Strong(f"{linked_contract.get('contract_number', '-')}"),
+                                Strong(f"{linked_contract.get('contract_number', '-')}", style="color: #1e293b;"),
                                 f" от {linked_contract.get('contract_date', '')[:10] if linked_contract.get('contract_date') else '-'}",
-                                style="margin: 0; padding: 0.5rem; background: #eff6ff; border-radius: 4px; border-left: 3px solid #3b82f6;"
+                                style="margin: 0; padding: 10px 14px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 6px; border-left: 3px solid #3b82f6; font-size: 14px;"
                             ),
-                            Small(icon("check", size=12), " Спецификация привязана к договору", style="color: #1d4ed8; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12, color="#1d4ed8"), " Спецификация привязана к договору", style="color: #1d4ed8; display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px;"),
                             Input(type="hidden", name="contract_id", value=contract_id or ""),
                         ) if linked_contract.get("contract_number") else Select(
                             Option("-- Без привязки к договору --", value="", selected=not contract_id),
@@ -21304,66 +21377,68 @@ def get(session, spec_id: str):
                             name="contract_id",
                             id="contract_id",
                             disabled=not is_editable,
-                            style="width: 100%;"
+                            style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; font-size: 14px;"
                         ) if customer_contracts else Div(
-                            P(icon("alert-triangle", size=14), " У клиента нет активных договоров", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+                            P(icon("alert-triangle", size=14, color="#d97706"), " У клиента нет активных договоров", style="color: #d97706; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px;"),
                             A("Создать договор →", href=f"/customer-contracts/new?customer_id={customer_id}" if customer_id else "#",
-                              style="font-size: 0.875rem;"),
+                              style="font-size: 13px; color: #6366f1; margin-top: 4px; display: inline-block;"),
                         ),
                         cls="form-group"
                     ),
                     Div(
-                        Label("Подписант со стороны клиента"),
+                        Label("Подписант со стороны клиента", style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px; display: block;"),
                         Div(
                             P(
-                                Strong(signatory_info.get("name", "")),
+                                Strong(signatory_info.get("name", ""), style="color: #1e293b;"),
                                 Br() if signatory_info.get("position") else None,
-                                Span(signatory_info.get("position", ""), style="color: #666;") if signatory_info.get("position") else None,
-                                style="margin: 0; padding: 0.5rem; background: #f0fdf4; border-radius: 4px; border-left: 3px solid #22c55e;"
+                                Span(signatory_info.get("position", ""), style="color: #64748b; font-size: 13px;") if signatory_info.get("position") else None,
+                                style="margin: 0; padding: 10px 14px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 6px; border-left: 3px solid #22c55e;"
                             ),
-                            Small(icon("check", size=12), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 0.25rem; margin-top: 0.25rem;"),
+                            Small(icon("check", size=12, color="#16a34a"), " Подписант определён из контактов клиента", style="color: #16a34a; display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px;"),
                         ) if signatory_info else Div(
-                            P(icon("alert-triangle", size=14), " Подписант не указан в контактах клиента", style="color: #b45309; margin: 0; display: flex; align-items: center; gap: 0.5rem;"),
+                            P(icon("alert-triangle", size=14, color="#d97706"), " Подписант не указан в контактах клиента", style="color: #d97706; margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px;"),
                             A("Указать подписанта →", href=f"/customers/{customer_id}" if customer_id else "#",
-                              style="font-size: 0.875rem;"),
+                              style="font-size: 13px; color: #6366f1; margin-top: 4px; display: inline-block;"),
                         ),
                         cls="form-group"
                     ),
                     cls="grid",
                     style="grid-template-columns: repeat(2, 1fr); gap: 1rem;"
                 ),
-                cls="card",
-                style="margin-bottom: 1.5rem; background: #fefce8;"
+                style="background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); border: 1px solid #fde047; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Feature #71: Section 7 - Signed Scan Upload (visible when status is approved or signed)
             Div(
-                H3(icon("pen-tool", size=20), " Подписанный скан", cls="card-header"),
+                Div(
+                    icon("pen-tool", size=16, color="#64748b"),
+                    Span("ПОДПИСАННЫЙ СКАН", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
                 # Show current scan if exists
                 Div(
                     P(
-                        icon("check-circle", size=14), " Скан загружен: ",
+                        icon("check-circle", size=14, color="#16a34a"), " Скан загружен: ",
                         A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
                           href=spec.get("signed_scan_url", "#"),
                           target="_blank",
-                          style="color: #007bff;"),
-                        style="margin-bottom: 0.5rem;"
+                          style="color: #6366f1; font-weight: 500;"),
+                        style="margin-bottom: 0; display: flex; align-items: center; gap: 6px; font-size: 14px;"
                     ),
-                    cls="card",
-                    style="background: #d4edda; border-left: 4px solid #28a745; padding: 0.75rem; margin-bottom: 1rem;"
+                    style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border: 1px solid #86efac; border-left: 4px solid #22c55e; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;"
                 ) if spec.get("signed_scan_url") else None,
                 # Upload form (separate form from main form due to enctype)
                 P(
                     "Загрузите скан подписанной спецификации (PDF, JPG, PNG, до 10 МБ).",
-                    style="margin-bottom: 0.75rem; color: #666;"
+                    style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
                 ) if not spec.get("signed_scan_url") else P(
                     "Вы можете загрузить новый скан для замены текущего.",
-                    style="margin-bottom: 0.75rem; color: #666;"
+                    style="margin-bottom: 12px; color: #64748b; font-size: 13px;"
                 ),
                 Form(
                     Input(type="file", name="signed_scan", id="signed_scan",
                           accept=".pdf,.jpg,.jpeg,.png",
-                          style="margin-bottom: 0.75rem;"),
+                          style="margin-bottom: 12px; font-size: 14px;"),
                     btn("Загрузить скан", variant="primary", icon_name="upload", type="submit"),
                     action=f"/spec-control/{spec_id}/upload-signed",
                     method="POST",
@@ -21371,29 +21446,28 @@ def get(session, spec_id: str):
                 ),
                 # Feature #72: Confirm Signature button (visible when approved + has signed scan)
                 Div(
-                    Hr(style="margin: 1rem 0;"),
+                    Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
                     P(
-                        icon("file-text", size=14), " Скан загружен. Подтвердите подпись для создания сделки.",
-                        style="margin-bottom: 0.75rem; color: #155724; font-weight: 500;"
+                        icon("file-text", size=14, color="#16a34a"), " Скан загружен. Подтвердите подпись для создания сделки.",
+                        style="margin-bottom: 12px; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
                     ),
                     Form(
                         btn("Подтвердить подпись и создать сделку", variant="success", icon_name="check", type="submit", full_width=True),
                         action=f"/spec-control/{spec_id}/confirm-signature",
                         method="POST"
                     ),
-                    style="margin-top: 1rem;"
+                    style="margin-top: 16px;"
                 ) if status == "approved" and spec.get("signed_scan_url") else None,
                 # Info for already signed specs
                 Div(
-                    Hr(style="margin: 1rem 0;"),
+                    Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
                     P(
-                        icon("check-circle", size=14), " Спецификация подписана. Сделка создана.",
-                        style="margin-bottom: 0; color: #155724; font-weight: 500;"
+                        icon("check-circle", size=14, color="#16a34a"), " Спецификация подписана. Сделка создана.",
+                        style="margin-bottom: 0; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
                     ),
-                    style="margin-top: 1rem;"
+                    style="margin-top: 16px;"
                 ) if status == "signed" else None,
-                cls="card",
-                style="margin-bottom: 1.5rem; background: #f8f9fa;"
+                style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ) if status in ["approved", "signed"] else None,
 
             # Action buttons
@@ -21408,8 +21482,8 @@ def get(session, spec_id: str):
                 btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
                 # Contract-style specification export (direct download - no modal)
                 btn_link("Экспорт PDF", href=f"/spec-control/{spec_id}/export-pdf", variant="primary", icon_name="download"),
-                btn_link("Назад к спецификациям", href="/spec-control", variant="ghost", icon_name="arrow-left"),
-                style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;"
+                btn_link("Назад", href="/dashboard?tab=spec-control", variant="ghost", icon_name="arrow-left"),
+                style="margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap;"
             ),
 
             action=f"/spec-control/{spec_id}",
