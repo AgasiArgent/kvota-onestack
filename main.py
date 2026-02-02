@@ -4720,12 +4720,11 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
 
             deal_rows = []
             for d in active_deals_list:
-                spec_info = d.get('specification', {})
+                # Deal is a dataclass, use attribute access not .get()
                 deal_rows.append(Tr(
-                    Td(d.get('deal_number', '—')),
-                    Td(spec_info.get('customer_name', '—') if spec_info else '—'),
-                    Td(format_money(d.get('total_amount'), d.get('currency', 'RUB'))),
-                    Td(A("Открыть", href=f"/finance/{d.get('id')}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                    Td(d.deal_number or '—'),
+                    Td(format_money(d.total_amount, d.currency or 'RUB')),
+                    Td(A("Открыть", href=f"/finance/{d.id}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ))
 
             sections.append(
@@ -4734,8 +4733,8 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                        style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
                     Div(
                         Table(
-                            Thead(Tr(Th("Сделка #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
-                            Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="4", style="text-align: center;"))),
+                            Thead(Tr(Th("Сделка #"), Th("Сумма"), Th("Действие"))),
+                            Tbody(*deal_rows) if deal_rows else Tbody(Tr(Td("Нет данных", colspan="3", style="text-align: center;"))),
                             cls="table-enhanced"
                         ),
                         cls="table-enhanced-container"
