@@ -82,6 +82,7 @@ VALID_DOCUMENT_TYPES = {
     "customs_declaration",
     "founding_docs",
     "license",
+    "specification_signed_scan",
     "other",
 }
 
@@ -98,6 +99,7 @@ DOCUMENT_TYPE_LABELS = {
     "customs_declaration": "Таможенная декларация",
     "founding_docs": "Учредительные документы",
     "license": "Лицензия",
+    "specification_signed_scan": "Подписанная спецификация",
     "other": "Прочее",
 }
 

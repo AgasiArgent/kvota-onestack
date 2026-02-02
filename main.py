@@ -61,13 +61,6 @@ from services.deal_service import count_deals_by_status, get_deals_by_status
 
 # Import specification service (Feature #86)
 from services.specification_service import count_specifications_by_status
-from services.specification_approval_service import (
-    get_approval_status as get_spec_approval_status,
-    approve_department as approve_spec_department,
-    reject_department as reject_spec_department,
-    user_can_approve_department as user_can_approve_spec_department,
-    DEPARTMENT_NAMES as SPEC_DEPARTMENT_NAMES
-)
 
 # Import quote approval service (Bug #8 follow-up - Multi-department approval)
 from services.quote_approval_service import (
@@ -21253,9 +21246,6 @@ def get(session, spec_id: str):
         label, color, bg = status_map.get(status, (status, "#64748b", "#f1f5f9"))
         return Span(label, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {color}; background: {bg};")
 
-    # Get approval status for multi-department workflow
-    approval_status = get_spec_approval_status(spec_id, org_id) or {}
-
     # Safe workflow progress bar with error handling
     try:
         progress_bar = workflow_progress_bar(quote_workflow_status)
@@ -21321,21 +21311,12 @@ def get(session, spec_id: str):
             P("Текущий статус: ", spec_status_badge(status), style="margin-bottom: 12px; font-size: 14px;"),
             P("Изменить статус на:", style="margin-bottom: 8px; font-weight: 600; font-size: 13px; color: #374151;"),
             Div(
-                # Separate form for each status button to ensure value is passed correctly
+                # Simplified workflow: draft -> approved -> signed (no pending_review)
                 Form(
                     Input(type="hidden", name="action", value="admin_change_status"),
                     Input(type="hidden", name="new_status", value="draft"),
                     btn("Черновик", variant="secondary", icon_name="file-edit", type="submit", size="sm",
                         disabled=(status == "draft")),
-                    action=f"/spec-control/{spec_id}",
-                    method="POST",
-                    style="display: inline;"
-                ),
-                Form(
-                    Input(type="hidden", name="action", value="admin_change_status"),
-                    Input(type="hidden", name="new_status", value="pending_review"),
-                    btn("На проверке", variant="secondary", icon_name="search", type="submit", size="sm",
-                        disabled=(status == "pending_review")),
                     action=f"/spec-control/{spec_id}",
                     method="POST",
                     style="display: inline;"
@@ -21364,89 +21345,6 @@ def get(session, spec_id: str):
               style="margin-top: 12px; font-size: 12px; color: #ef4444; display: flex; align-items: center; gap: 6px;"),
             style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 1px solid #fca5a5; border-left: 4px solid #dc2626; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;"
         ) if user_has_any_role(session, ["admin"]) else None,
-
-        # Multi-department approval progress (Bug #8 follow-up)
-        Div(
-            Div(
-                icon("clipboard-list", size=16, color="#10b981"),
-                Span("ПРОГРЕСС СОГЛАСОВАНИЯ СПЕЦИФИКАЦИИ", style="font-size: 11px; font-weight: 600; color: #10b981; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
-            ),
-
-            # Progress bar visual
-            Div(
-                *[
-                    Div(
-                        Div(
-                            dept_name,
-                            style=f"text-align: center; font-size: 11px; font-weight: 600; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else '#64748b'};"
-                        ),
-                        Div(
-                            icon("check-circle", size=28) if approval_status.get(dept, {}).get('approved') else
-                            (icon("clock", size=28) if approval_status.get(dept, {}).get('can_approve') else icon("circle", size=28)),
-                            style=f"margin: 8px 0; color: {'#10b981' if approval_status.get(dept, {}).get('approved') else ('#f59e0b' if approval_status.get(dept, {}).get('can_approve') else '#cbd5e1')};"
-                        ),
-                        style=f"flex: 1; padding: 12px 8px; background: {'linear-gradient(135deg, #d1fae5 0%, #bbf7d0 100%)' if approval_status.get(dept, {}).get('approved') else '#f1f5f9'}; border-radius: 8px; margin: 0 4px; text-align: center;"
-                    )
-                    for dept, dept_name in [('procurement', 'Закупки'), ('logistics', 'Логистика'),
-                                            ('customs', 'Таможня'), ('sales', 'Продажи'), ('control', 'Контроль')]
-                ],
-                style="display: flex; margin-bottom: 20px;"
-            ),
-
-            # Department status details
-            *[
-                Div(
-                    # Department name and status
-                    Div(
-                        Span(
-                            icon("check-circle", size=18) if dept_status.get('approved') else
-                            (icon("clock", size=18) if dept_status.get('can_approve') else icon("x-circle", size=18)),
-                            f" {SPEC_DEPARTMENT_NAMES.get(dept, dept)}",
-                            style=f"font-weight: 600; color: {'#10b981' if dept_status.get('approved') else ('#f59e0b' if dept_status.get('can_approve') else '#6b7280')}; display: inline-flex; align-items: center; gap: 0.25rem;"
-                        ),
-                        Span(" - Одобрено" if dept_status.get('approved') else
-                             (" - Ожидает проверки" if dept_status.get('can_approve') else " - Недоступно"),
-                             style="margin-left: 0.5rem; color: #6b7280;"),
-                        style="margin-bottom: 0.5rem;"
-                    ),
-
-                    # Approval info or blocking info
-                    (Div(
-                        P(f"Одобрил: {dept_status.get('approved_by_name') or dept_status.get('approved_by') or 'Неизвестно'}",
-                          style="font-size: 0.875rem; margin: 0.25rem 0; color: #6b7280;") if dept_status.get('approved_by') else None,
-                        P(f"Дата: {dept_status.get('approved_at', '').split('T')[0] if dept_status.get('approved_at') else ''}",
-                          style="font-size: 0.875rem; margin: 0.25rem 0; color: #6b7280;") if dept_status.get('approved_at') else None,
-                        P(f"Комментарий: {dept_status.get('comments')}",
-                          style="font-size: 0.875rem; margin: 0.25rem 0; font-style: italic;") if dept_status.get('comments') else None,
-                    ) if dept_status.get('approved') else
-                    (Div(
-                        Form(
-                            Input(type="hidden", name="action", value="department_approve"),
-                            Input(type="hidden", name="department", value=dept),
-                            Div(
-                                Textarea(name="comments", placeholder="Комментарий (необязательно)",
-                                        rows="2", style="width: 100%; margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px;"),
-                                style="margin-bottom: 0.5rem;"
-                            ),
-                            btn("Одобрить", variant="success", icon_name="check", type="submit"),
-                            action=f"/spec-control/{spec_id}",
-                            method="POST"
-                        ),
-                        style="margin-top: 0.5rem;"
-                    ) if dept_status.get('can_approve') and user_can_approve_spec_department(session, dept) and status == 'pending_review' else
-                    (Div(
-                        P(f"Требуется одобрение: {', '.join([SPEC_DEPARTMENT_NAMES.get(d, d) for d in dept_status.get('blocking_departments', [])])}",
-                          style="font-size: 0.875rem; color: #dc2626; margin-top: 0.5rem;")
-                    ) if dept_status.get('blocking_departments') else None))),
-
-                    style="margin-bottom: 12px; padding: 14px 16px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;"
-                )
-                for dept, dept_status in [(d, approval_status.get(d, {})) for d in ['procurement', 'logistics', 'customs', 'sales', 'control']]
-            ],
-
-            style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac; border-left: 4px solid #10b981; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;"
-        ) if status in ['pending_review', 'approved'] and approval_status else None,
 
         Form(
             # Hidden fields
@@ -21663,14 +21561,12 @@ def get(session, spec_id: str):
                 style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ) if status in ["approved", "signed"] else None,
 
-            # Action buttons
+            # Action buttons (simplified workflow: draft -> approved -> signed)
             Div(
                 btn("Сохранить", variant="primary", icon_name="save", type="submit", name="action", value="save",
                     disabled=not is_editable) if is_editable else None,
-                btn("Отправить на проверку", variant="secondary", icon_name="send", type="submit", name="action", value="submit_review",
-                    disabled=not is_editable) if is_editable and status == "draft" else None,
                 btn("Утвердить", variant="success", icon_name="check", type="submit", name="action", value="approve",
-                    disabled=not is_editable) if is_editable and status == "pending_review" else None,
+                    disabled=not is_editable) if is_editable and status == "draft" else None,
                 # Feature #70: PDF Preview button (opens in new tab)
                 btn_link("Предпросмотр PDF", href=f"/spec-control/{spec_id}/preview-pdf", variant="ghost", icon_name="file-text", target="_blank"),
                 # Contract-style specification export (direct download - no modal)
@@ -21692,20 +21588,17 @@ def get(session, spec_id: str):
 
 
 @rt("/spec-control/{spec_id}")
-def post(session, spec_id: str, action: str = "save", new_status: str = "", department: str = "", comments: str = "", **kwargs):
+def post(session, spec_id: str, action: str = "save", new_status: str = "", **kwargs):
     """
     Save specification changes or change status.
 
     Feature #69: Specification data entry form (save/update POST handler)
     Bug #8: Admin status override for testing and error correction
-    Bug #8 follow-up: Multi-department approval
 
     Actions:
     - save: Save current data
-    - submit_review: Save and change status to pending_review
-    - approve: Save and change status to approved
+    - approve: Save and change status to approved (direct from draft)
     - admin_change_status: Admin-only action to directly change status to any value
-    - department_approve: Approve specification for a specific department
     """
     redirect = require_login(session)
     if redirect:
@@ -21753,22 +21646,8 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
-    # Bug #8 follow-up: Multi-department approval
-    if action == "department_approve":
-        if not department:
-            return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
-
-        # Check if user has permission for this department
-        if not user_can_approve_spec_department(session, department):
-            return RedirectResponse("/unauthorized", status_code=303)
-
-        # Approve the department
-        approve_spec_department(spec_id, org_id, department, user_id, comments)
-
-        return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
-
-    # Check if editable (for regular save/submit/approve actions)
-    if current_status not in ["draft", "pending_review"]:
+    # Check if editable (for regular save/approve actions)
+    if current_status not in ["draft"]:
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
     # Helper for safe numeric conversion
@@ -21785,10 +21664,9 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", depa
             return default
 
     # Determine new status based on action
+    # Simplified workflow: draft -> approved (no pending_review step)
     new_status = current_status
-    if action == "submit_review" and current_status == "draft":
-        new_status = "pending_review"
-    elif action == "approve" and current_status == "pending_review":
+    if action == "approve" and current_status == "draft":
         new_status = "approved"
 
     # Build update data
@@ -22021,19 +21899,20 @@ def get(session, spec_id: str):
 
 
 # ============================================================================
-# Feature #71: Upload signed specification scan
+# Feature #71: Upload signed specification scan (simplified with document_service)
 # ============================================================================
 
 @rt("/spec-control/{spec_id}/upload-signed")
 async def post(session, spec_id: str, request):
     """
-    Upload signed specification scan.
+    Upload signed specification scan using unified document_service.
 
     Feature #71: Загрузка подписанного скана
+    Simplified: Uses document_service for unified document storage.
 
-    Accepts PDF, JPG, PNG files up to 10MB.
-    Stores in Supabase Storage bucket 'specifications'.
-    Updates specifications.signed_scan_url with public URL.
+    Accepts PDF, JPG, PNG files up to 50MB (document_service limit).
+    Stores in unified 'kvota-documents' bucket via document_service.
+    Updates specifications.signed_scan_document_id with document reference.
     """
     redirect = require_login(session)
     if redirect:
@@ -22061,6 +21940,7 @@ async def post(session, spec_id: str, request):
 
     spec = spec_result.data[0]
     status = spec.get("status", "draft")
+    quote_id = spec.get("quote_id")
 
     # Only allow upload for approved specifications
     if status not in ["approved", "signed"]:
@@ -22092,102 +21972,47 @@ async def post(session, spec_id: str, request):
                 session=session
             )
 
-        # Validate file type
-        filename = signed_scan.filename
-        allowed_extensions = ['.pdf', '.jpg', '.jpeg', '.png']
-        file_ext = '.' + filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-
-        if file_ext not in allowed_extensions:
-            return page_layout("Ошибка загрузки",
-                H1("Неподдерживаемый формат"),
-                Div(
-                    f"Поддерживаемые форматы: PDF, JPG, PNG. Вы загрузили: {file_ext}",
-                    cls="card",
-                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
-                ),
-                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
-                session=session
-            )
-
         # Read file content
         file_content = await signed_scan.read()
+        filename = signed_scan.filename
 
-        # Validate file size (max 10MB)
-        max_size = 10 * 1024 * 1024  # 10MB
-        if len(file_content) > max_size:
+        # Use document_service for upload (handles validation, storage, metadata)
+        doc, error = upload_document(
+            organization_id=org_id,
+            entity_type="specification",
+            entity_id=spec_id,
+            file_content=file_content,
+            filename=filename,
+            document_type="specification_signed_scan",
+            uploaded_by=user_id,
+            parent_quote_id=quote_id,  # For hierarchical aggregation
+        )
+
+        if error:
             return page_layout("Ошибка загрузки",
-                H1("Файл слишком большой"),
-                Div(
-                    f"Максимальный размер файла: 10 МБ. Ваш файл: {len(file_content) / 1024 / 1024:.1f} МБ",
-                    cls="card",
-                    style="background: #fee2e2; border-left: 4px solid #dc2626;"
-                ),
+                H1("Ошибка загрузки файла"),
+                Div(error, cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626;"),
                 A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
                 session=session
             )
 
-        # Determine content type
-        content_type_map = {
-            '.pdf': 'application/pdf',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png'
-        }
-        content_type = content_type_map.get(file_ext, 'application/octet-stream')
+        # Update specification with document reference
+        # Keep signed_scan_url for backward compatibility (generate signed URL)
+        signed_url = get_download_url(doc.id, expires_in=3600*24*365)  # 1 year expiry
 
-        # Generate storage path: org_id/spec_id/signed_scan_timestamp.ext
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        spec_number = spec.get("specification_number") or spec_id[:8]
-        safe_spec_number = "".join(c for c in spec_number if c.isalnum() or c in "-_")
-        storage_path = f"{org_id}/{spec_id}/signed_{safe_spec_number}_{timestamp}{file_ext}"
+        supabase.table("specifications") \
+            .update({
+                "signed_scan_document_id": doc.id,
+                "signed_scan_url": signed_url,  # Backward compatibility
+                "updated_at": datetime.now().isoformat()
+            }) \
+            .eq("id", spec_id) \
+            .execute()
 
-        # Upload to Supabase Storage (bucket: specifications)
-        # Note: Bucket must be created manually in Supabase dashboard first
-        bucket_name = "specifications"
+        print(f"Signed scan uploaded successfully via document_service: doc_id={doc.id}")
 
-        try:
-            # Upload the file
-            upload_result = supabase.storage.from_(bucket_name).upload(
-                path=storage_path,
-                file=file_content,
-                file_options={"content-type": content_type, "upsert": "true"}
-            )
-
-            # Get public URL
-            public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
-
-            # Update specification with signed_scan_url
-            supabase.table("specifications") \
-                .update({"signed_scan_url": public_url, "updated_at": datetime.now().isoformat()}) \
-                .eq("id", spec_id) \
-                .execute()
-
-            print(f"Signed scan uploaded successfully: {public_url}")
-
-            # Redirect back to spec page with success
-            return RedirectResponse(f"/spec-control/{spec_id}?upload_success=1", status_code=303)
-
-        except Exception as storage_error:
-            print(f"Storage upload error: {storage_error}")
-
-            # If bucket doesn't exist, provide helpful message
-            error_msg = str(storage_error)
-            if "Bucket not found" in error_msg or "bucket" in error_msg.lower():
-                return page_layout("Ошибка хранилища",
-                    H1("Хранилище не настроено"),
-                    Div(
-                        "Хранилище для спецификаций не настроено. ",
-                        "Необходимо создать bucket 'specifications' в Supabase Storage.",
-                        cls="card",
-                        style="background: #fef3c7; border-left: 4px solid #f59e0b;"
-                    ),
-                    P("Инструкция: Supabase Dashboard → Storage → New Bucket → Name: specifications, Public: Yes",
-                      style="font-size: 0.9rem; color: #666; margin-top: 1rem;"),
-                    A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
-                    session=session
-                )
-
-            raise storage_error
+        # Redirect back to spec page with success
+        return RedirectResponse(f"/spec-control/{spec_id}?upload_success=1", status_code=303)
 
     except Exception as e:
         print(f"Error uploading signed scan: {e}")
