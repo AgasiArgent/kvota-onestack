@@ -10543,6 +10543,56 @@ BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 # CALCULATION HELPERS
 # ============================================================================
 
+# Mapping from various database values to SupplierCountry enum values
+# DO NOT MODIFY the enum values (right side) - they must match calculation_models.py
+SUPPLIER_COUNTRY_MAPPING = {
+    # Direct enum values (already valid)
+    "Турция": "Турция",
+    "Турция (транзитная зона)": "Турция (транзитная зона)",
+    "Россия": "Россия",
+    "Китай": "Китай",
+    "Литва": "Литва",
+    "Латвия": "Латвия",
+    "Болгария": "Болгария",
+    "Польша": "Польша",
+    "ЕС (между странами ЕС)": "ЕС (между странами ЕС)",
+    "ОАЭ": "ОАЭ",
+    "Прочие": "Прочие",
+    # ISO codes
+    "TR": "Турция",
+    "RU": "Россия",
+    "CN": "Китай",
+    "LT": "Литва",
+    "LV": "Латвия",
+    "BG": "Болгария",
+    "PL": "Польша",
+    "AE": "ОАЭ",
+    # English names
+    "Turkey": "Турция",
+    "Russia": "Россия",
+    "China": "Китай",
+    "Lithuania": "Литва",
+    "Latvia": "Латвия",
+    "Bulgaria": "Болгария",
+    "Poland": "Польша",
+    "UAE": "ОАЭ",
+    # Special values
+    "OTHER": "Прочие",
+    "other": "Прочие",
+    "Другое": "Прочие",
+    "": "Прочие",  # Empty defaults to OTHER
+}
+
+def map_supplier_country(value: str) -> str:
+    """Map database supplier_country value to SupplierCountry enum value.
+
+    Returns "Прочие" (OTHER) for any unmapped values.
+    """
+    if not value:
+        return "Прочие"
+    return SUPPLIER_COUNTRY_MAPPING.get(value, "Прочие")
+
+
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
     """Build calculation inputs for all quote items.
 
@@ -10656,7 +10706,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
             'quantity': item.get('quantity', 1),
             'weight_in_kg': safe_decimal(item.get('weight_in_kg')),
             'customs_code': item.get('customs_code', '0000000000'),
-            'supplier_country': item.get('supplier_country', variables.get('supplier_country', 'Турция')),
+            'supplier_country': map_supplier_country(item.get('supplier_country') or variables.get('supplier_country', '')),
             'currency_of_base_price': item_currency,
             'import_tariff': item.get('customs_duty') or item.get('import_tariff'),  # customs_duty is saved by customs workspace
             'markup': item.get('markup'),
