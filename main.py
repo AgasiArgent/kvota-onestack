@@ -12896,54 +12896,210 @@ def get(session):
     sales_groups = get_sales_groups(org_id)
     users = get_organization_users(org_id)
 
+    # Design system styles
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    section_card_style = """
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+        margin-bottom: 20px;
+    """
+
+    section_header_style = """
+        display: flex;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
+    input_style = """
+        width: 100%;
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+    """
+
+    label_style = """
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 6px;
+        display: block;
+    """
+
     return page_layout("Мой профиль",
-        H1(icon("user", size=28), " Мой профиль", cls="page-header"),
+        # Header card with gradient
+        Div(
+            Div(
+                btn_link("", href="/dashboard", variant="secondary", icon_name="arrow-left",
+                         style="padding: 8px 12px; margin-right: 12px;"),
+                Div(
+                    icon("user", size=24, color="#475569"),
+                    Span(" Мой профиль", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style=header_card_style
+        ),
+
         Form(
-            Div(H3("Личная информация"),
-                Div(Label("ФИО *", Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True)),
-                    Label("Email", Input(value=user.get("email", "—"), readonly=True, disabled=True, style="background: #f3f4f6; cursor: not-allowed;")),
-                    cls="form-row"),
-                Div(Label("Телефон", Input(name="phone", type="tel", value=profile.get("phone") or "", placeholder="+7 (999) 123-45-67")),
-                    Label("Дата рождения", Input(name="date_of_birth", type="date", value=profile.get("date_of_birth") or "")),
-                    cls="form-row"),
-                Div(Label("Telegram",
-                        Div(Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'};"),
-                            Small(" (привязан)" if tg_linked else " (не привязан)", style="color: #666;"),
-                            A(" → Настроить" if not tg_linked else " → Изменить", href="/settings/telegram", style="margin-left: 0.5rem; font-size: 0.875rem;"),
-                            style="display: flex; align-items: center; padding: 0.5rem; background: #f9fafb; border-radius: 4px;")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("Организация"),
-                Div(Label("Должность", Input(name="position", value=profile.get("position") or "", placeholder="Менеджер по продажам")),
-                    Label("Дата приема на работу", Input(name="hire_date", type="date", value=profile.get("hire_date") or "")),
-                    cls="form-row"),
-                Div(Label("Департамент", Select(Option("— Не выбрано —", value="", selected=not profile.get("department_id")),
-                        *[Option(dept["name"], value=dept["id"], selected=dept["id"] == profile.get("department_id")) for dept in departments], name="department_id")),
-                    Label("Группа продаж", Select(Option("— Не выбрано —", value="", selected=not profile.get("sales_group_id")),
-                        *[Option(sg["name"], value=sg["id"], selected=sg["id"] == profile.get("sales_group_id")) for sg in sales_groups], name="sales_group_id")),
-                    cls="form-row"),
-                Div(Label("Руководитель", Select(Option("— Не выбрано —", value="", selected=not profile.get("manager_id")),
-                        *[Option(u["full_name"], value=u["id"], selected=u["id"] == profile.get("manager_id")) for u in users if u.get("full_name")], name="manager_id")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("Настройки"),
-                Div(Label("Часовой пояс", Select(
-                        Option("Europe/Moscow (МСК, UTC+3)", value="Europe/Moscow", selected=profile.get("timezone") == "Europe/Moscow" or not profile.get("timezone")),
-                        Option("Asia/Shanghai (CST, UTC+8)", value="Asia/Shanghai", selected=profile.get("timezone") == "Asia/Shanghai"),
-                        Option("Asia/Hong_Kong (HKT, UTC+8)", value="Asia/Hong_Kong", selected=profile.get("timezone") == "Asia/Hong_Kong"),
-                        Option("Asia/Dubai (GST, UTC+4)", value="Asia/Dubai", selected=profile.get("timezone") == "Asia/Dubai"),
-                        Option("Europe/Istanbul (TRT, UTC+3)", value="Europe/Istanbul", selected=profile.get("timezone") == "Europe/Istanbul"),
-                        name="timezone")),
-                    Label("Офис/локация", Input(name="location", value=profile.get("location") or "", placeholder="Москва, офис на Тверской")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("О себе"),
-                Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
-                cls="card"),
-            Div(btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
-                btn_link("Назад", href="/dashboard", variant="secondary", icon_name="arrow-left"),
-                cls="form-actions"),
-            method="post", action="/profile"),
+            # Section 1: Personal info
+            Div(
+                Div(
+                    icon("user", size=16, color="#64748b"),
+                    Span(" ЛИЧНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("ФИО *", style=label_style),
+                        Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True, style=input_style),
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label("Email", style=label_style),
+                        Input(value=user.get("email", "—"), readonly=True, disabled=True, style=f"{input_style} background: #f1f5f9; cursor: not-allowed;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("Телефон", style=label_style),
+                        Input(name="phone", type="tel", value=profile.get("phone") or "", placeholder="+7 (999) 123-45-67", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Дата рождения", style=label_style),
+                        Input(name="date_of_birth", type="date", value=profile.get("date_of_birth") or "", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Label("Telegram", style=label_style),
+                    Div(
+                        Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'}; font-weight: 500;"),
+                        Small(" (привязан)" if tg_linked else " (не привязан)", style="color: #64748b; margin-left: 4px;"),
+                        A(" → Настроить" if not tg_linked else " → Изменить", href="/settings/telegram", style="margin-left: 8px; font-size: 13px; color: #3b82f6;"),
+                        style="display: flex; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;"
+                    ),
+                ),
+                style=section_card_style
+            ),
+
+            # Section 2: Organization
+            Div(
+                Div(
+                    icon("building", size=16, color="#64748b"),
+                    Span(" ОРГАНИЗАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Должность", style=label_style),
+                        Input(name="position", value=profile.get("position") or "", placeholder="Менеджер по продажам", style=input_style),
+                        style="flex: 2;"
+                    ),
+                    Div(
+                        Label("Дата приема", style=label_style),
+                        Input(name="hire_date", type="date", value=profile.get("hire_date") or "", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Label("Департамент", style=label_style),
+                        Select(Option("— Не выбрано —", value="", selected=not profile.get("department_id")),
+                            *[Option(dept["name"], value=dept["id"], selected=dept["id"] == profile.get("department_id")) for dept in departments],
+                            name="department_id", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Группа продаж", style=label_style),
+                        Select(Option("— Не выбрано —", value="", selected=not profile.get("sales_group_id")),
+                            *[Option(sg["name"], value=sg["id"], selected=sg["id"] == profile.get("sales_group_id")) for sg in sales_groups],
+                            name="sales_group_id", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Label("Руководитель", style=label_style),
+                    Select(Option("— Не выбрано —", value="", selected=not profile.get("manager_id")),
+                        *[Option(u["full_name"], value=u["id"], selected=u["id"] == profile.get("manager_id")) for u in users if u.get("full_name")],
+                        name="manager_id", style=input_style),
+                ),
+                style=section_card_style
+            ),
+
+            # Section 3: Settings
+            Div(
+                Div(
+                    icon("settings", size=16, color="#64748b"),
+                    Span(" НАСТРОЙКИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Label("Часовой пояс", style=label_style),
+                        Select(
+                            Option("Europe/Moscow (МСК, UTC+3)", value="Europe/Moscow", selected=profile.get("timezone") == "Europe/Moscow" or not profile.get("timezone")),
+                            Option("Asia/Shanghai (CST, UTC+8)", value="Asia/Shanghai", selected=profile.get("timezone") == "Asia/Shanghai"),
+                            Option("Asia/Hong_Kong (HKT, UTC+8)", value="Asia/Hong_Kong", selected=profile.get("timezone") == "Asia/Hong_Kong"),
+                            Option("Asia/Dubai (GST, UTC+4)", value="Asia/Dubai", selected=profile.get("timezone") == "Asia/Dubai"),
+                            Option("Europe/Istanbul (TRT, UTC+3)", value="Europe/Istanbul", selected=profile.get("timezone") == "Europe/Istanbul"),
+                            name="timezone", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    Div(
+                        Label("Офис/локация", style=label_style),
+                        Input(name="location", value=profile.get("location") or "", placeholder="Москва, офис на Тверской", style=input_style),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; gap: 16px;"
+                ),
+                style=section_card_style
+            ),
+
+            # Section 4: Bio
+            Div(
+                Div(
+                    icon("file-text", size=16, color="#64748b"),
+                    Span(" О СЕБЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
+                ),
+                Label("Биография", style=label_style),
+                Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...",
+                         style=f"{input_style} resize: vertical;"),
+                style=section_card_style
+            ),
+
+            # Actions
+            Div(
+                btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
+                btn_link("Отмена", href="/dashboard", variant="secondary", icon_name="x"),
+                style="display: flex; gap: 12px; justify-content: flex-end;"
+            ),
+            method="post", action="/profile"
+        ),
         session=session)
 
 
@@ -21434,8 +21590,28 @@ def get(session, status_filter: str = None):
 
     content = finance_workspace_tab(session, user, org_id, status_filter)
 
+    # Design system header
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
     return page_layout("Сделки",
-        H1("💼 Сделки"),
+        # Header card with gradient
+        Div(
+            Div(
+                icon("briefcase", size=24, color="#475569"),
+                Span(" Сделки", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Активные сделки и план-факт анализ",
+              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+            style=header_card_style
+        ),
         content,
         session=session,
         current_path="/deals"
@@ -21461,8 +21637,28 @@ def get(session):
 
     content = finance_calendar_tab(session, user, org_id)
 
+    # Design system header
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
     return page_layout("Календарь платежей",
-        H1("📅 Календарь платежей"),
+        # Header card with gradient
+        Div(
+            Div(
+                icon("calendar", size=24, color="#475569"),
+                Span(" Календарь платежей", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Планируемые и выполненные платежи",
+              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+            style=header_card_style
+        ),
         content,
         session=session,
         current_path="/payments/calendar"
@@ -21502,44 +21698,56 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
     if not user_has_any_role(session, ["finance", "admin", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
-    # Tab navigation
+    # Tab navigation with design system styling
     tabs_style = """
         .finance-tabs {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #e5e7eb;
-            padding-bottom: 0;
+            gap: 4px;
+            padding: 12px 16px 0 16px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+            border-radius: 12px 12px 0 0;
         }
         .finance-tab {
-            padding: 0.75rem 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 500;
             text-decoration: none;
-            color: #6b7280;
-            border-bottom: 3px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.2s;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            border-bottom: none;
+            margin-bottom: -1px;
+            color: #64748b;
+            background: transparent;
         }
         .finance-tab:hover {
-            color: #3b82f6;
-            background-color: #f3f4f6;
+            color: #1e293b;
+            background: rgba(255,255,255,0.5);
         }
         .finance-tab.active {
-            color: #3b82f6;
-            border-bottom-color: #3b82f6;
+            color: #1e293b;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-color: #e2e8f0;
             font-weight: 600;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
         }
     """
 
     tabs = Div(
         Style(tabs_style),
         Div(
-            A("Рабочая зона",
+            A(icon("briefcase", size=16), " Рабочая зона",
               href="/finance?tab=workspace",
               cls="finance-tab" + (" active" if tab == "workspace" else "")),
-            A("ERPS",
+            A(icon("table", size=16), " ERPS",
               href="/finance?tab=erps",
               cls="finance-tab" + (" active" if tab == "erps" else "")),
-            A("Календарь",
+            A(icon("calendar", size=16), " Календарь",
               href="/finance?tab=calendar",
               cls="finance-tab" + (" active" if tab == "calendar" else "")),
             cls="finance-tabs"
@@ -21554,8 +21762,28 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
     else:
         content = finance_workspace_tab(session, user, org_id, status_filter)
 
+    # Design system header
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
     return page_layout("Финансы",
-        H1("Финансы"),
+        # Header card with gradient
+        Div(
+            Div(
+                icon("wallet", size=24, color="#475569"),
+                Span(" Финансы", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Сделки, ERPS и календарь платежей",
+              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+            style=header_card_style
+        ),
         tabs,
         content,
         session=session
@@ -23635,42 +23863,76 @@ def get(session, tab: str = "users"):
     else:
         tab_content = Div("Неизвестная вкладка", id="tab-content")
 
-    return page_layout("Администрирование",
-        H1(icon("settings", size=28), " Администрирование", cls="page-header"),
+    # Design system styles for admin page
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
 
-        # Tabs navigation
+    return page_layout("Администрирование",
+        # Header card with gradient
+        Div(
+            Div(
+                icon("settings", size=24, color="#475569"),
+                Span(" Администрирование", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Управление пользователями, ролями и компаниями",
+              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+            style=header_card_style
+        ),
+
+        # Tabs navigation with design system styling
         tabs_nav,
 
         # Tab content
         tab_content,
 
-        # Add custom CSS for tabs (same as customer detail page)
+        # Add custom CSS for tabs with design system styling
         Style("""
             .tabs-nav {
                 display: flex;
-                gap: 0;
-                border-bottom: 2px solid #e5e7eb;
-                margin-bottom: 2rem;
+                gap: 4px;
+                padding: 0 4px;
+                margin-bottom: 20px;
+                border-bottom: 1px solid #e2e8f0;
+                background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+                padding: 12px 16px 0 16px;
+                border-radius: 12px 12px 0 0;
             }
 
             .tab-btn {
-                padding: 0.75rem 1.5rem;
-                text-decoration: none;
-                color: #6b7280;
-                border-bottom: 2px solid transparent;
-                margin-bottom: -2px;
-                transition: all 0.2s;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 18px;
+                font-size: 13px;
                 font-weight: 500;
+                text-decoration: none;
+                border-radius: 8px 8px 0 0;
+                transition: all 0.2s ease;
+                border: 1px solid transparent;
+                border-bottom: none;
+                margin-bottom: -1px;
+                color: #64748b;
+                background: transparent;
             }
 
             .tab-btn:hover {
-                color: #111827;
-                background: #f9fafb;
+                color: #1e293b;
+                background: rgba(255,255,255,0.5);
             }
 
             .tab-btn.active {
-                color: #2563eb;
-                border-bottom-color: #2563eb;
+                color: #1e293b;
+                background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+                border-color: #e2e8f0;
+                font-weight: 600;
+                box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
             }
         """),
 
