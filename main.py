@@ -31527,6 +31527,7 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
         # Insert new contact
         result = supabase.table("customer_contacts").insert({
             "customer_id": customer_id,
+            "organization_id": user["org_id"],
             "name": full_name,  # Combined: "Рахал Мамут Иванович"
             "position": position or None,
             "email": email or None,
