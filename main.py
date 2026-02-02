@@ -12279,23 +12279,33 @@ def get(quote_id: str, version_num: int, session):
 
 @rt("/quotes/{quote_id}/export/specification")
 def get(quote_id: str, session):
-    """Export Specification PDF"""
+    """Export Specification PDF - uses contract-style template matching DOCX"""
     redirect = require_login(session)
     if redirect:
         return redirect
 
     user = session["user"]
+    org_id = user["org_id"]
 
     try:
-        # Fetch all export data
-        data = fetch_export_data(quote_id, user["org_id"])
+        # First, check if a specification exists for this quote
+        from services.specification_service import get_specification_by_quote
+        spec = get_specification_by_quote(quote_id, org_id)
 
-        # Generate PDF
-        pdf_bytes = generate_specification_pdf(data)
+        if spec:
+            # Use new contract-style template (matches DOCX)
+            from services.contract_spec_export import generate_contract_spec_pdf
+            pdf_bytes, spec_number = generate_contract_spec_pdf(str(spec.id), org_id)
+            safe_spec_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(spec_number))
+            filename = f"Specification_{safe_spec_number}.pdf"
+        else:
+            # Fallback to old template if no specification exists yet
+            data = fetch_export_data(quote_id, org_id)
+            pdf_bytes = generate_specification_pdf(data)
+            filename = f"specification_{data.quote.get('quote_number', quote_id)}.pdf"
 
         # Return as file download
         from starlette.responses import Response
-        filename = f"specification_{data.quote.get('quote_number', quote_id)}.pdf"
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",

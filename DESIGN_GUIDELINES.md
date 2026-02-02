@@ -1,6 +1,7 @@
 # OneStack Design System
 
-**Last Updated:** 2026-02-01
+**Last Updated:** 2026-02-02
+**Audit Status:** Complete (56 pages updated)
 
 A practical guide for building consistent, polished UI in OneStack.
 
@@ -82,6 +83,42 @@ Div(
     style="border-left: 4px solid #3b82f6; padding: 16px;"
 )
 ```
+
+### Page Header Card
+
+Used at the top of detail/form pages with gradient background, icon, and title.
+
+```python
+header_style = """
+    background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    padding: 20px 24px;
+    margin-bottom: 20px;
+"""
+
+Div(
+    # Back link
+    A(icon("arrow-left", size=14), " К списку", href="/items",
+      style="font-size: 13px; color: #64748b; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px;"),
+    # Title row with icon and badge
+    Div(
+        icon("briefcase", size=24, style="color: #3b82f6;"),
+        Span("Название сущности", style="font-size: 20px; font-weight: 700; color: #1e293b;"),
+        status_badge_v2("approved"),
+        style="display: flex; align-items: center; gap: 12px;"
+    ),
+    style=header_style
+)
+```
+
+**Theme colors for header icons:**
+- Blue (#3b82f6): Default, finance, logistics
+- Green (#10b981): Success states, locations
+- Amber (#f59e0b): Warnings, edit forms
+- Purple (#8b5cf6): Customs
+- Red (#dc2626): Errors, unauthorized
 
 **Accent colors by department:**
 - Approvals: `#f59e0b` (orange)
@@ -311,6 +348,55 @@ Div(
 )
 ```
 
+### Two-Column Layout
+
+Used for detail pages with info on left, actions/form on right.
+
+```python
+# Responsive two-column grid
+Div(
+    # Left column - info cards
+    Div(
+        Div(..., cls="card-elevated", style="padding: 16px; margin-bottom: 16px;"),
+        Div(..., cls="card-elevated", style="padding: 16px;"),
+    ),
+    # Right column - actions/form
+    Div(
+        Div(..., cls="card-elevated", style="padding: 16px;"),
+    ),
+    style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"
+)
+```
+
+### Four-Column Stats Grid
+
+Used for summary statistics at top of pages.
+
+```python
+stats_card = """
+    background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    padding: 16px;
+    text-align: center;
+"""
+
+Div(
+    Div(
+        Div("12", style="font-size: 24px; font-weight: 700; color: #3b82f6;"),
+        Div("ВСЕГО", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-top: 4px;"),
+        style=stats_card
+    ),
+    Div(
+        Div("₽1.2M", style="font-size: 24px; font-weight: 700; color: #10b981;"),
+        Div("ДОХОД", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-top: 4px;"),
+        style=stats_card
+    ),
+    # More stats...
+    style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px;"
+)
+```
+
 ### Compact Form Layout (Calculate Page Style)
 
 ```python
@@ -349,7 +435,19 @@ Div(
 style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; font-weight: 600;"
 ```
 
-### Section Headers
+### Section Headers (with icon)
+
+The standard pattern for section headers inside cards.
+
+```python
+Div(
+    icon("package", size=14, style="color: #64748b;"),
+    " ИНФОРМАЦИЯ О ТОВАРАХ",
+    style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"
+)
+```
+
+### Section Headers (card title)
 ```python
 style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"
 ```
@@ -418,3 +516,67 @@ All CSS uses variables that automatically switch in dark mode:
 - `var(--accent)`
 
 Cards and tables have `[data-theme="dark"]` variants defined.
+
+---
+
+## Error Pages
+
+### Centered Card (Unauthorized, Not Found)
+
+```python
+page_bg_style = """
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+"""
+
+card_style = """
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    padding: 48px 40px;
+    max-width: 480px;
+    text-align: center;
+"""
+
+icon_container_style = """
+    width: 72px;
+    height: 72px;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    border: 1px solid #fecaca;
+"""
+
+Div(
+    Div(
+        Div(icon("shield-x", size=36, style="color: #dc2626;"), style=icon_container_style),
+        H1("Доступ запрещён", style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 12px 0;"),
+        P("Описание ошибки.", style="font-size: 14px; color: #64748b; margin: 0 0 8px 0;"),
+        A(icon("arrow-left", size=16), " Вернуться", href="/tasks",
+          style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; ..."),
+        style=card_style
+    ),
+    style=page_bg_style
+)
+```
+
+---
+
+## Gold Standard Pages
+
+Reference these pages when implementing new designs:
+
+| Page | URL | Why |
+|------|-----|-----|
+| Calculate Page | `/quotes/{id}/calculate` | Compact form layout, section cards |
+| Logistics Workspace | `/logistics/{id}` | Workspace with multiple sections |
+| Deal Detail | `/finance/{deal_id}` | Two-column layout, stats grid |
+| Brand Assignments | `/admin/brands` | List with stats, modern table |
