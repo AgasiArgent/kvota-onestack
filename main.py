@@ -30350,7 +30350,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Td(Strong(contract.get("contract_number", "—"))),
                     Td(contract_date or "—"),
                     Td(Span(status_text, cls=f"status-badge {status_class}")),
-                    Td(contract.get("notes", "—")[:100]),
+                    Td((contract.get("notes") or "—")[:100]),
                     Td(
                         A(icon("file-text", size=16), href=f"/contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
                     )
