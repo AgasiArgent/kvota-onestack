@@ -14581,6 +14581,9 @@ def get(quote_id: str, session):
 
             // Modal functions (sibling pattern - backdrop + modal-box)
             window.openCreateInvoiceModal = function() {{
+                // Save Handsontable data before opening modal (prevents data loss on page reload)
+                saveAllChanges(false);
+
                 // Collect selected item IDs
                 if (!hot) {{
                     alert('Таблица не инициализирована');
@@ -14645,6 +14648,9 @@ def get(quote_id: str, session):
             }};
 
             window.openEditInvoiceModal = function(invoiceId) {{
+                // Save Handsontable data before opening modal (prevents data loss)
+                saveAllChanges(false);
+
                 var inv = invoicesData.find(function(i) {{ return i.id === invoiceId; }});
                 if (!inv) return;
 
