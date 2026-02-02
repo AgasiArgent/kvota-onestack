@@ -23474,135 +23474,212 @@ def get(session, deal_id: str):
         # Category badge color
         category_color = "#10b981" if is_income else "#6366f1"
 
+        cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
         return Tr(
             Td(
-                Span(category_name, style=f"color: {category_color}; font-weight: 500;"),
-                Br(),
-                Small(item.get("description", "-") or "-", style="color: #666;")
+                Span(category_name, style=f"color: {category_color}; font-weight: 600; display: block;"),
+                Span(item.get("description", "-") or "-", style="color: #64748b; font-size: 12px;"),
+                style=cell_style
             ),
-            Td(planned_date),
-            Td(planned_str, style="text-align: right; font-weight: 500;"),
-            Td(actual_date if actual_amount is not None else "-"),
-            Td(actual_str, style="text-align: right;"),
-            Td(variance_str, style=f"text-align: right; color: {variance_color}; font-weight: 500;"),
-            Td(payment_status),
+            Td(planned_date, style=cell_style),
+            Td(planned_str, style=f"{cell_style} text-align: right; font-weight: 500;"),
+            Td(actual_date if actual_amount is not None else "-", style=cell_style),
+            Td(actual_str, style=f"{cell_style} text-align: right;"),
+            Td(variance_str, style=f"{cell_style} text-align: right; color: {variance_color}; font-weight: 600;"),
+            Td(payment_status, style=cell_style),
             Td(
                 btn_link("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", variant="primary", size="sm") if actual_amount is None else "",
+                style=cell_style
             ),
+            style="transition: background-color 0.15s ease;",
+            onmouseover="this.style.backgroundColor='#f8fafc'",
+            onmouseout="this.style.backgroundColor='transparent'"
         )
 
-    # Build plan-fact table
+    # Build plan-fact table with modern styling
+    table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    table_cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
     if plan_fact_items:
         plan_fact_table = Table(
             Thead(
                 Tr(
-                    Th("Категория / Описание"),
-                    Th("План. дата"),
-                    Th("План. сумма", style="text-align: right;"),
-                    Th("Факт. дата"),
-                    Th("Факт. сумма", style="text-align: right;"),
-                    Th("Отклонение", style="text-align: right;"),
-                    Th("Статус"),
-                    Th(""),
+                    Th("Категория / Описание", style=table_header_style),
+                    Th("План. дата", style=table_header_style),
+                    Th("План. сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Факт. дата", style=table_header_style),
+                    Th("Факт. сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Отклонение", style=f"{table_header_style} text-align: right;"),
+                    Th("Статус", style=table_header_style),
+                    Th("", style=table_header_style),
                 )
             ),
             Tbody(*[plan_fact_row(item) for item in plan_fact_items]),
-            cls="striped"
+            style="width: 100%; border-collapse: collapse;"
         )
     else:
         plan_fact_table = Div(
-            P("Плановые платежи ещё не созданы.", style="color: #666; font-style: italic; margin-bottom: 1rem;"),
+            Div(
+                icon("file-plus", size=40, color="#94a3b8"),
+                style="margin-bottom: 12px;"
+            ),
+            P("Плановые платежи ещё не созданы", style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;"),
             Div(
                 btn_link("Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", variant="primary", icon_name="refresh-cw"),
                 btn_link("Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", variant="success", icon_name="plus"),
-                style="display: flex; gap: 0.5rem; justify-content: center;"
+                style="display: flex; gap: 8px; justify-content: center;"
             ),
-            style="text-align: center; padding: 2rem; background: #f9fafb; border-radius: 8px;"
+            style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
         )
 
     return page_layout(f"Сделка {deal_number}",
-        # Header with back button
+        # Modern gradient header card
         Div(
-            A("← Назад к списку сделок", href="/finance", style="color: #6b7280; text-decoration: none;"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Deal header
-        Div(
-            H1(f"Сделка {deal_number}", style="margin-bottom: 0.5rem;"),
-            Div(status_badge, style="margin-bottom: 1rem;"),
-            style="margin-bottom: 1.5rem;"
-        ),
-
-        # Deal info cards
-        Div(
-            # Left column - Deal info
-            Div(
-                H3("Информация о сделке", style="margin-top: 0;"),
-                Table(
-                    Tr(Td(Strong("Номер сделки:"), style="width: 180px;"), Td(deal_number)),
-                    Tr(Td(Strong("Спецификация:")), Td(spec_number)),
-                    Tr(Td(Strong("Клиент:")), Td(customer_name)),
-                    Tr(Td(Strong("Сумма сделки:")), Td(f"{deal_amount:,.2f} {deal_currency}", style="font-weight: 600;")),
-                    Tr(Td(Strong("Дата подписания:")), Td(signed_at)),
-                    Tr(Td(Strong("Условия оплаты:")), Td(spec.get("client_payment_terms", "-") or "-")),
-                    Tr(Td(Strong("Наше юр. лицо:")), Td(spec.get("our_legal_entity", "-") or "-")),
-                    Tr(Td(Strong("Юр. лицо клиента:")), Td(spec.get("client_legal_entity", "-") or "-")),
-                ),
-                style="flex: 1; padding: 1rem; background: #f9fafb; border-radius: 8px; margin-right: 1rem;"
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К списку сделок",
+                href="/finance",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
-            # Right column - Plan-fact summary
+            # Header content
             Div(
-                H3("Сводка план-факт", style="margin-top: 0;"),
-                Table(
-                    Tr(
-                        Td(Strong("Плановые поступления:"), style="width: 180px;"),
-                        Td(f"{total_planned_income:,.2f} ₽", style="color: #10b981; font-weight: 500; text-align: right;")
-                    ),
-                    Tr(
-                        Td(Strong("Фактические поступления:")),
-                        Td(f"{total_actual_income:,.2f} ₽", style="text-align: right;")
-                    ),
-                    Tr(
-                        Td(Strong("Плановые расходы:")),
-                        Td(f"{total_planned_expense:,.2f} ₽", style="color: #6366f1; font-weight: 500; text-align: right;")
-                    ),
-                    Tr(
-                        Td(Strong("Фактические расходы:")),
-                        Td(f"{total_actual_expense:,.2f} ₽", style="text-align: right;")
-                    ),
-                    Tr(
-                        Td(Strong("Плановая маржа:")),
-                        Td(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-weight: 600; text-align: right;")
-                    ),
-                    Tr(
-                        Td(Strong("Общее отклонение:")),
-                        Td(f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
-                           style=f"font-weight: 600; text-align: right; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#6b7280'};")
-                    ),
+                Div(
+                    icon("briefcase", size=28, color="#6366f1"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
                 ),
                 Div(
-                    Span(f"Оплачено: {paid_count}", style="color: #10b981; margin-right: 1rem;"),
-                    Span(f"Ожидает: {unpaid_count}", style="color: #f59e0b;"),
-                    style="margin-top: 1rem; font-size: 0.875rem;"
+                    H1(f"Сделка {deal_number}", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    Div(
+                        Span(customer_name, style="color: #64748b; font-size: 14px; margin-right: 12px;"),
+                        Span(
+                            status_label,
+                            style=f"display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: {status_color}20; color: {status_color};"
+                        ),
+                        style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;"
+                    ),
+                    style="flex: 1;"
                 ),
-                style="flex: 1; padding: 1rem; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;"
+                style="display: flex; align-items: center;"
             ),
-            style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem;"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
+        ),
+
+        # Two-column grid for info cards
+        Div(
+            # Left column - Deal info card
+            Div(
+                Div(
+                    icon("file-text", size=14, color="#64748b"),
+                    Span("ИНФОРМАЦИЯ О СДЕЛКЕ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    *[Div(
+                        Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
+                        Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
+                        style="margin-bottom: 12px;"
+                    ) for label, value in [
+                        ("Номер сделки", deal_number),
+                        ("Спецификация", spec_number),
+                        ("Клиент", customer_name),
+                        ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
+                        ("Дата подписания", signed_at),
+                        ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),
+                        ("Наше юр. лицо", spec.get("our_legal_entity", "-") or "-"),
+                        ("Юр. лицо клиента", spec.get("client_legal_entity", "-") or "-"),
+                    ]],
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            # Right column - Plan-fact summary card
+            Div(
+                Div(
+                    icon("bar-chart-2", size=14, color="#64748b"),
+                    Span("СВОДКА ПЛАН-ФАКТ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                # Summary stats grid
+                Div(
+                    Div(
+                        Span("Плановые поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_planned_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #10b981;"),
+                        style="padding: 12px; background: #f0fdf4; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Факт. поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_actual_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Плановые расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_planned_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #6366f1;"),
+                        style="padding: 12px; background: #eef2ff; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Факт. расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_actual_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;"
+                ),
+                # Margin and variance
+                Div(
+                    Div(
+                        Span("Плановая маржа", style="font-size: 12px; color: #64748b;"),
+                        Span(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
+                        style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;"
+                    ),
+                    Div(
+                        Span("Общее отклонение", style="font-size: 12px; color: #64748b;"),
+                        Span(
+                            f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
+                            style=f"font-size: 14px; font-weight: 600; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#64748b'};"
+                        ),
+                        style="display: flex; justify-content: space-between; padding: 8px 0;"
+                    ),
+                ),
+                # Payment status badges
+                Div(
+                    Span(
+                        icon("check-circle", size=14, color="#10b981"),
+                        f" Оплачено: {paid_count}",
+                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #f0fdf4; border-radius: 12px; font-size: 12px; color: #10b981; font-weight: 500; margin-right: 8px;"
+                    ),
+                    Span(
+                        icon("clock", size=14, color="#f59e0b"),
+                        f" Ожидает: {unpaid_count}",
+                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #fef3c7; border-radius: 12px; font-size: 12px; color: #d97706; font-weight: 500;"
+                    ),
+                    style="margin-top: 12px;"
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;"
         ),
 
         # Plan-fact table section
         Div(
+            # Section header
             Div(
-                H2("План-факт платежей", style="display: inline-block; margin-right: 1rem;"),
+                Div(
+                    icon("list", size=14, color="#64748b"),
+                    Span("ПЛАН-ФАКТ ПЛАТЕЖЕЙ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
+                ),
                 Div(
                     btn_link("Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", variant="success", size="sm", icon_name="plus"),
                     btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
-                    style="display: flex; gap: 0.5rem;"
+                    style="display: flex; gap: 8px;"
                 ) if plan_fact_items else "",
-                style="display: flex; align-items: center; margin-bottom: 1rem;"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"
             ),
-            plan_fact_table,
+            # Table container
+            Div(
+                plan_fact_table,
+                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="margin-bottom: 24px;"
         ),
 
         # Transition history (Feature #88) - uses quote_id from the deal
@@ -23686,77 +23763,143 @@ def get(session, deal_id: str):
             style="background: #fef3c7; border: 1px solid #f59e0b; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; color: #92400e;"
         )
 
+    # Define consistent table styles
+    th_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    td_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+    tfoot_style = "padding: 12px 16px; font-size: 14px; background: #f8fafc; border-top: 2px solid #e2e8f0;"
+
     return page_layout(f"Генерация план-факта",
-        # Header with back button
+        # Modern gradient header card
         Div(
-            A(f"← Назад к сделке {deal_info.get('deal_number', '')}", href=f"/finance/{deal_id}", style="color: #6b7280; text-decoration: none;"),
-            style="margin-bottom: 1rem;"
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                f"К сделке {deal_info.get('deal_number', '')}",
+                href=f"/finance/{deal_id}",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
+            ),
+            # Header content
+            Div(
+                Div(
+                    icon("refresh-cw", size=28, color="#6366f1"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Автогенерация плановых платежей", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    P("На основе условий сделки будут созданы плановые платежи", style="margin: 0; color: #64748b; font-size: 14px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
-        H1("Автогенерация плановых платежей"),
-        P("На основе условий сделки будут созданы следующие плановые платежи:"),
-
-        existing_warning,
-
-        # Source data info
+        # Warning banner if items exist
         Div(
-            H3("Исходные данные", style="margin-top: 0;"),
-            Table(
-                Tr(Td(Strong("Сумма сделки:"), style="width: 200px;"), Td(f"{deal_info.get('total_amount', 0):,.2f} {deal_info.get('currency', 'RUB')}")),
-                Tr(Td(Strong("Дата подписания:")), Td(deal_info.get('signed_at', '-'))),
-                Tr(Td(Strong("Закупка (из КП):")), Td(f"{totals.get('total_purchase', 0):,.2f}")),
-                Tr(Td(Strong("Логистика (из КП):")), Td(f"{totals.get('total_logistics', 0):,.2f}")),
-                Tr(Td(Strong("Таможня (из КП):")), Td(f"{totals.get('total_customs', 0):,.2f}")),
+            Div(
+                icon("alert-triangle", size=18, color="#d97706"),
+                style="margin-right: 12px;"
             ),
-            style="background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;"
+            Div(
+                Strong(f"Внимание: для этой сделки уже существуют {existing_items} плановых платежей. ", style="display: block; margin-bottom: 2px;"),
+                Span("Генерация заменит все существующие записи.", style="color: #92400e; font-size: 13px;"),
+            ),
+            style="display: flex; align-items: flex-start; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b; padding: 16px 20px; border-radius: 12px; margin-bottom: 20px; color: #92400e;"
+        ) if existing_items > 0 else "",
+
+        # Source data card
+        Div(
+            Div(
+                icon("database", size=14, color="#64748b"),
+                Span("ИСХОДНЫЕ ДАННЫЕ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+            ),
+            Div(
+                *[Div(
+                    Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
+                    Span(str(value), style="font-size: 14px; color: #1e293b; font-weight: 500;"),
+                    style="padding: 10px 16px; background: #f8fafc; border-radius: 8px;"
+                ) for label, value in [
+                    ("Сумма сделки", f"{deal_info.get('total_amount', 0):,.2f} {deal_info.get('currency', 'RUB')}"),
+                    ("Дата подписания", deal_info.get('signed_at', '-')),
+                    ("Закупка (из КП)", f"{totals.get('total_purchase', 0):,.2f}"),
+                    ("Логистика (из КП)", f"{totals.get('total_logistics', 0):,.2f}"),
+                    ("Таможня (из КП)", f"{totals.get('total_customs', 0):,.2f}"),
+                ]],
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;"
+            ),
+            style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
         ),
 
-        # Preview table
-        H3("Планируемые платежи"),
-        Table(
-            Thead(
-                Tr(
-                    Th("Категория"),
-                    Th("Описание"),
-                    Th("Сумма", style="text-align: right;"),
-                    Th("План. дата"),
-                    Th("Тип"),
-                )
+        # Preview table section
+        Div(
+            Div(
+                icon("list", size=14, color="#64748b"),
+                Span("ПЛАНИРУЕМЫЕ ПЛАТЕЖИ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
             ),
-            Tbody(*preview_rows),
-            Tfoot(
-                Tr(
-                    Td(Strong("Итого поступлений:"), colspan="2"),
-                    Td(Strong(f"{total_income:,.2f}"), style="text-align: right; color: #10b981;"),
-                    Td(),
-                    Td(),
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Категория", style=th_style),
+                            Th("Описание", style=th_style),
+                            Th("Сумма", style=f"{th_style} text-align: right;"),
+                            Th("План. дата", style=th_style),
+                            Th("Тип", style=th_style),
+                        )
+                    ),
+                    Tbody(*[Tr(
+                        Td(Span(item.get('category_name', '-'), style=f"color: {'#10b981' if item.get('is_income') else '#6366f1'}; font-weight: 600;"), style=td_style),
+                        Td(item.get('description', '-'), style=td_style),
+                        Td(f"{float(item.get('amount', 0)):,.2f} {item.get('currency', 'RUB')}", style=f"{td_style} text-align: right; font-weight: 500;"),
+                        Td(item.get('date', '-'), style=td_style),
+                        Td(
+                            Span("Доход", style="padding: 3px 10px; background: #f0fdf4; border-radius: 12px; color: #10b981; font-size: 12px; font-weight: 500;") if item.get('is_income') else
+                            Span("Расход", style="padding: 3px 10px; background: #eef2ff; border-radius: 12px; color: #6366f1; font-size: 12px; font-weight: 500;"),
+                            style=td_style
+                        ),
+                    ) for item in planned_items]),
+                    Tfoot(
+                        Tr(
+                            Td(Strong("Итого поступлений:"), colspan="2", style=tfoot_style),
+                            Td(Strong(f"{total_income:,.2f}"), style=f"{tfoot_style} text-align: right; color: #10b981;"),
+                            Td("", style=tfoot_style),
+                            Td("", style=tfoot_style),
+                        ),
+                        Tr(
+                            Td(Strong("Итого расходов:"), colspan="2", style=tfoot_style),
+                            Td(Strong(f"{total_expense:,.2f}"), style=f"{tfoot_style} text-align: right; color: #6366f1;"),
+                            Td("", style=tfoot_style),
+                            Td("", style=tfoot_style),
+                        ),
+                        Tr(
+                            Td(Strong("Плановая маржа:"), colspan="2", style=f"{tfoot_style} font-weight: 700;"),
+                            Td(Strong(f"{planned_margin:,.2f}"), style=f"{tfoot_style} text-align: right; font-weight: 700; color: {'#10b981' if planned_margin >= 0 else '#ef4444'};"),
+                            Td("", style=tfoot_style),
+                            Td("", style=tfoot_style),
+                        ),
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ) if preview_rows else Div(
+                    icon("file-x", size=40, color="#94a3b8"),
+                    P("Нет данных для генерации платежей", style="color: #64748b; font-size: 14px; margin: 12px 0 0 0;"),
+                    style="text-align: center; padding: 40px 20px;"
                 ),
-                Tr(
-                    Td(Strong("Итого расходов:"), colspan="2"),
-                    Td(Strong(f"{total_expense:,.2f}"), style="text-align: right; color: #6366f1;"),
-                    Td(),
-                    Td(),
-                ),
-                Tr(
-                    Td(Strong("Плановая маржа:"), colspan="2"),
-                    Td(Strong(f"{planned_margin:,.2f}"), style=f"text-align: right; color: {'#10b981' if planned_margin >= 0 else '#ef4444'};"),
-                    Td(),
-                    Td(),
-                ),
+                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
-            cls="striped"
-        ) if preview_rows else P("Нет данных для генерации платежей.", style="color: #666; font-style: italic;"),
+            style="margin-bottom: 24px;"
+        ),
 
         # Action buttons
-        Div(
-            Form(
+        Form(
+            Div(
                 btn("Сгенерировать платежи", variant="success", icon_name="check", type="submit") if preview_rows else "",
                 btn_link("Отмена", href=f"/finance/{deal_id}", variant="secondary"),
-                method="POST",
-                action=f"/finance/{deal_id}/generate-plan-fact",
-                style="display: flex; gap: 0.75rem;"
+                style="display: flex; gap: 12px;"
             ),
-            style="margin-top: 1.5rem;"
+            method="POST",
+            action=f"/finance/{deal_id}/generate-plan-fact",
         ),
 
         session=session
@@ -23928,157 +24071,197 @@ def get(session, deal_id: str, item_id: str):
     category_color = "#10b981" if is_income else "#6366f1"
     category_type = "Доход" if is_income else "Расход"
 
+    # Modern form input styles
+    input_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; transition: border-color 0.15s ease, box-shadow 0.15s ease;"
+    label_style = "display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;"
+    select_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+
     return page_layout(f"Регистрация платежа — {deal_number}",
-        # Header with back button
+        # Modern gradient header card
         Div(
-            A(f"← Назад к сделке {deal_number}", href=f"/finance/{deal_id}",
-              style="color: #6b7280; text-decoration: none;"),
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Page header
-        H1("Регистрация платежа", style="margin-bottom: 1rem;"),
-
-        # Planned payment info card
-        Div(
-            H3("Плановые данные", style="margin-top: 0;"),
-            Table(
-                Tr(
-                    Td(Strong("Категория:"), style="width: 180px;"),
-                    Td(
-                        Span(category_name, style=f"color: {category_color}; font-weight: 600;"),
-                        Span(f" ({category_type})", style="color: #666; font-size: 0.875rem;")
-                    )
-                ),
-                Tr(Td(Strong("Описание:")), Td(description or "-")),
-                Tr(
-                    Td(Strong("Плановая сумма:")),
-                    Td(f"{planned_amount:,.2f} {planned_currency}", style="font-weight: 600;")
-                ),
-                Tr(Td(Strong("Плановая дата:")), Td(planned_date or "-")),
-                Tr(
-                    Td(Strong("Статус:")),
-                    Td(Span(status_label, style=f"color: {status_color}; font-weight: 500;"))
-                ),
+            # Back link
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                f"К сделке {deal_number}",
+                href=f"/finance/{deal_id}",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
-            style="padding: 1rem; background: #f9fafb; border-radius: 8px; margin-bottom: 1.5rem;"
-        ),
-
-        # Actual payment form
-        Form(
-            H3("Фактические данные", style="margin-top: 0;"),
-
-            # Hidden fields
-            Input(type="hidden", name="deal_id", value=deal_id),
-            Input(type="hidden", name="item_id", value=item_id),
-
-            # Actual amount
-            Div(
-                Label("Фактическая сумма *", fr="actual_amount"),
-                Input(
-                    type="number",
-                    name="actual_amount",
-                    id="actual_amount",
-                    value=str(actual_amount) if actual_amount is not None else "",
-                    step="0.01",
-                    min="0",
-                    required=True,
-                    placeholder=f"Плановая: {planned_amount:,.2f}"
-                ),
-                style="margin-bottom: 1rem;"
-            ),
-
-            # Actual currency and exchange rate (side by side)
+            # Header content
             Div(
                 Div(
-                    Label("Валюта", fr="actual_currency"),
-                    Select(
-                        Option("RUB - Рубли", value="RUB", selected=(actual_currency == "RUB")),
-                        Option("USD - Доллары США", value="USD", selected=(actual_currency == "USD")),
-                        Option("EUR - Евро", value="EUR", selected=(actual_currency == "EUR")),
-                        Option("CNY - Юани", value="CNY", selected=(actual_currency == "CNY")),
-                        name="actual_currency",
-                        id="actual_currency"
-                    ),
-                    style="flex: 1; margin-right: 1rem;"
+                    icon("credit-card", size=28, color="#10b981"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
                 ),
                 Div(
-                    Label("Курс к рублю", fr="actual_exchange_rate"),
-                    Input(
-                        type="number",
-                        name="actual_exchange_rate",
-                        id="actual_exchange_rate",
-                        value=str(actual_exchange_rate) if actual_exchange_rate else "",
-                        step="0.0001",
-                        min="0",
-                        placeholder="Для валюты, отличной от RUB"
+                    H1("Регистрация платежа", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    Div(
+                        Span(category_name, style=f"color: {category_color}; font-weight: 500; margin-right: 8px;"),
+                        Span(f"({category_type})", style="color: #64748b; font-size: 13px; margin-right: 12px;"),
+                        Span(
+                            status_label,
+                            style=f"display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: {status_color}20; color: {status_color};"
+                        ),
+                        style="display: flex; align-items: center; flex-wrap: wrap;"
                     ),
-                    Small("Оставьте пустым для RUB. Для валют введите курс на дату платежа.",
-                          style="display: block; color: #666; margin-top: 0.25rem;"),
                     style="flex: 1;"
                 ),
-                style="display: flex; flex-wrap: wrap; margin-bottom: 1rem;"
+                style="display: flex; align-items: center;"
             ),
-
-            # Actual date
-            Div(
-                Label("Дата платежа *", fr="actual_date"),
-                Input(
-                    type="date",
-                    name="actual_date",
-                    id="actual_date",
-                    value=actual_date or "",
-                    required=True
-                ),
-                style="margin-bottom: 1rem;"
-            ),
-
-            # Payment document
-            Div(
-                Label("Номер платёжного документа", fr="payment_document"),
-                Input(
-                    type="text",
-                    name="payment_document",
-                    id="payment_document",
-                    value=payment_document,
-                    placeholder="№ п/п, номер счёта и т.д."
-                ),
-                style="margin-bottom: 1rem;"
-            ),
-
-            # Notes
-            Div(
-                Label("Примечания", fr="notes"),
-                Textarea(
-                    notes,
-                    name="notes",
-                    id="notes",
-                    rows="3",
-                    placeholder="Дополнительная информация о платеже..."
-                ),
-                style="margin-bottom: 1.5rem;"
-            ),
-
-            # Submit buttons
-            Div(
-                btn("Сохранить платёж", variant="success", icon_name="check", type="submit"),
-                btn_link("Отмена", href=f"/finance/{deal_id}", variant="secondary"),
-                style="display: flex; gap: 0.5rem;"
-            ),
-
-            action=f"/finance/{deal_id}/plan-fact/{item_id}",
-            method="POST",
-            style="padding: 1rem; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
-        # Help text
+        # Two-column layout
         Div(
-            H4("Подсказка", style="margin-top: 1.5rem; margin-bottom: 0.5rem;"),
-            P("При сохранении система автоматически рассчитает отклонение от плана.",
-              style="color: #666; font-size: 0.875rem; margin: 0;"),
-            P("Отклонение = Фактическая сумма (в рублях) - Плановая сумма.",
-              style="color: #666; font-size: 0.875rem; margin: 0;"),
-            style="padding: 0.75rem; background: #fef3c7; border-radius: 6px; border: 1px solid #fcd34d;"
+            # Left column - Planned payment info card
+            Div(
+                Div(
+                    icon("file-text", size=14, color="#64748b"),
+                    Span("ПЛАНОВЫЕ ДАННЫЕ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    *[Div(
+                        Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
+                        Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
+                        style="margin-bottom: 12px;"
+                    ) for label, value in [
+                        ("Категория", f"{category_name} ({category_type})"),
+                        ("Описание", description or "-"),
+                        ("Плановая сумма", f"{planned_amount:,.2f} {planned_currency}"),
+                        ("Плановая дата", planned_date or "-"),
+                    ]],
+                ),
+                # Help box
+                Div(
+                    Div(
+                        icon("info", size=16, color="#d97706"),
+                        style="margin-right: 10px; flex-shrink: 0;"
+                    ),
+                    Div(
+                        Strong("Подсказка", style="display: block; font-size: 13px; margin-bottom: 4px;"),
+                        Span("При сохранении система автоматически рассчитает отклонение: Факт - План", style="font-size: 12px; color: #92400e;"),
+                    ),
+                    style="display: flex; align-items: flex-start; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #fcd34d; padding: 12px 14px; border-radius: 8px; margin-top: 16px;"
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            # Right column - Actual payment form
+            Div(
+                Form(
+                    Div(
+                        icon("check-circle", size=14, color="#64748b"),
+                        Span("ФАКТИЧЕСКИЕ ДАННЫЕ", style="margin-left: 6px;"),
+                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                    ),
+
+                    # Hidden fields
+                    Input(type="hidden", name="deal_id", value=deal_id),
+                    Input(type="hidden", name="item_id", value=item_id),
+
+                    # Actual amount
+                    Div(
+                        Label("Фактическая сумма *", fr="actual_amount", style=label_style),
+                        Input(
+                            type="number",
+                            name="actual_amount",
+                            id="actual_amount",
+                            value=str(actual_amount) if actual_amount is not None else "",
+                            step="0.01",
+                            min="0",
+                            required=True,
+                            placeholder=f"Плановая: {planned_amount:,.2f}",
+                            style=input_style
+                        ),
+                        style="margin-bottom: 16px;"
+                    ),
+
+                    # Currency and exchange rate row
+                    Div(
+                        Div(
+                            Label("Валюта", fr="actual_currency", style=label_style),
+                            Select(
+                                Option("RUB - Рубли", value="RUB", selected=(actual_currency == "RUB")),
+                                Option("USD - Доллары США", value="USD", selected=(actual_currency == "USD")),
+                                Option("EUR - Евро", value="EUR", selected=(actual_currency == "EUR")),
+                                Option("CNY - Юани", value="CNY", selected=(actual_currency == "CNY")),
+                                name="actual_currency",
+                                id="actual_currency",
+                                style=select_style
+                            ),
+                            style="flex: 1;"
+                        ),
+                        Div(
+                            Label("Курс к рублю", fr="actual_exchange_rate", style=label_style),
+                            Input(
+                                type="number",
+                                name="actual_exchange_rate",
+                                id="actual_exchange_rate",
+                                value=str(actual_exchange_rate) if actual_exchange_rate else "",
+                                step="0.0001",
+                                min="0",
+                                placeholder="Для валюты ≠ RUB",
+                                style=input_style
+                            ),
+                            style="flex: 1;"
+                        ),
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"
+                    ),
+
+                    # Actual date
+                    Div(
+                        Label("Дата платежа *", fr="actual_date", style=label_style),
+                        Input(
+                            type="date",
+                            name="actual_date",
+                            id="actual_date",
+                            value=actual_date or "",
+                            required=True,
+                            style=input_style
+                        ),
+                        style="margin-bottom: 16px;"
+                    ),
+
+                    # Payment document
+                    Div(
+                        Label("Номер платёжного документа", fr="payment_document", style=label_style),
+                        Input(
+                            type="text",
+                            name="payment_document",
+                            id="payment_document",
+                            value=payment_document,
+                            placeholder="№ п/п, номер счёта и т.д.",
+                            style=input_style
+                        ),
+                        style="margin-bottom: 16px;"
+                    ),
+
+                    # Notes
+                    Div(
+                        Label("Примечания", fr="notes", style=label_style),
+                        Textarea(
+                            notes,
+                            name="notes",
+                            id="notes",
+                            rows="3",
+                            placeholder="Дополнительная информация о платеже...",
+                            style=f"{input_style} resize: vertical; min-height: 80px;"
+                        ),
+                        style="margin-bottom: 20px;"
+                    ),
+
+                    # Submit buttons
+                    Div(
+                        btn("Сохранить платёж", variant="success", icon_name="check", type="submit"),
+                        btn_link("Отмена", href=f"/finance/{deal_id}", variant="secondary"),
+                        style="display: flex; gap: 12px;"
+                    ),
+
+                    action=f"/finance/{deal_id}/plan-fact/{item_id}",
+                    method="POST",
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;"
         ),
 
         session=session
