@@ -3896,22 +3896,41 @@ def build_export_filename(doc_type: str, customer_name: str, quote_number: str, 
         ext: File extension (pdf, xlsx)
 
     Returns:
-        Safe filename string
+        Safe ASCII filename string
     """
     import re
     from datetime import date
+
+    # Cyrillic to Latin transliteration map
+    translit_map = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+        'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+        'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+        'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+        'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+        'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'E',
+        'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M',
+        'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U',
+        'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch',
+        'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',
+    }
+
+    def transliterate(text):
+        return ''.join(translit_map.get(c, c) for c in text)
 
     # Extract numeric suffix from quote number (e.g., "044" from "КП-2024-044")
     number_match = re.search(r'(\d+)$', quote_number or '')
     short_number = number_match.group(1).lstrip('0') or '0' if number_match else '0'
 
-    # Sanitize company name: keep alphanumeric and some safe chars
+    # Sanitize company name
     safe_name = customer_name or "Unknown"
     # Remove common legal suffixes to shorten
     safe_name = re.sub(r'\s*(ООО|ОАО|ЗАО|ИП|LLC|Inc|Ltd|Corp)\.?\s*', '', safe_name, flags=re.IGNORECASE)
-    # Keep only safe characters
-    safe_name = re.sub(r'[^\w\s-]', '', safe_name)
-    # Replace spaces with nothing (CamelCase style) or underscore
+    # Transliterate Cyrillic to Latin
+    safe_name = transliterate(safe_name)
+    # Keep only ASCII alphanumeric and some safe chars
+    safe_name = re.sub(r'[^a-zA-Z0-9\s-]', '', safe_name)
+    # Replace spaces with nothing (CamelCase style)
     safe_name = safe_name.replace(' ', '')
     # Truncate if too long
     safe_name = safe_name[:30] if len(safe_name) > 30 else safe_name
