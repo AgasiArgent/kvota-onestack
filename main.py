@@ -14111,11 +14111,19 @@ def get(quote_id: str, session):
 
     items_json = json.dumps(items_for_handsontable)
 
+    # Fetch documents for all invoices (supplier_invoice entity type)
+    invoice_documents = {}
+    for inv in invoices:
+        docs = get_documents_for_entity("supplier_invoice", inv["id"])
+        if docs:
+            invoice_documents[inv["id"]] = docs[0]  # Take first (most recent) document
+
     # Prepare invoices data for JavaScript
     invoices_for_js = []
     for idx, inv in enumerate(invoices, 1):
         supp = suppliers.get(inv.get("supplier_id"), "—")
         buyer = buyer_companies.get(inv.get("buyer_company_id"), {})
+        doc = invoice_documents.get(inv['id'])
         invoices_for_js.append({
             'id': inv['id'],
             'number': idx,
@@ -14130,6 +14138,9 @@ def get(quote_id: str, session):
             'total_weight_kg': inv.get('total_weight_kg'),
             'total_volume_m3': inv.get('total_volume_m3'),
             'pickup_location_id': inv.get('pickup_location_id'),
+            'has_document': doc is not None,
+            'document_id': doc.id if doc else None,
+            'document_filename': doc.original_filename if doc else None,
         })
 
     invoices_json = json.dumps(invoices_for_js)
@@ -14148,6 +14159,7 @@ def get(quote_id: str, session):
         volume = inv.get("total_volume_m3")
         status = inv.get("status", "pending_procurement")
         is_completed = status != "pending_procurement"
+        has_document = inv["id"] in invoice_documents
 
         # Count items in this invoice
         items_in_invoice = len([i for i in my_items if i.get("invoice_id") == inv["id"]])
@@ -14204,7 +14216,7 @@ def get(quote_id: str, session):
                 style="margin-bottom: 0.5rem; display: flex; align-items: center;"
             ) if status_label else None,
 
-            # Currency, weight, items count
+            # Currency, weight, document indicator
             Div(
                 Span(currency, style="font-weight: 500; color: #059669; margin-right: 0.75rem;"),
                 Div(
@@ -14216,8 +14228,18 @@ def get(quote_id: str, session):
                     Span(" вес", style="color: #f59e0b; margin-left: 2px;"),
                     style="display: inline-flex; align-items: center; margin-right: 0.75rem;"
                 ),
+                # Document indicator
+                Div(
+                    icon("file-text", size=12, color="#10b981"),
+                    Span(" скан", style="color: #10b981; margin-left: 2px;"),
+                    style="display: inline-flex; align-items: center; margin-right: 0.75rem;"
+                ) if has_document else Div(
+                    icon("file-x", size=12, color="#94a3b8"),
+                    Span(" нет скана", style="color: #94a3b8; margin-left: 2px;"),
+                    style="display: inline-flex; align-items: center; margin-right: 0.75rem;"
+                ),
                 Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500; color: #1e40af;") if total_sum > 0 else None,
-                style="font-size: 0.75rem; display: flex; align-items: center;"
+                style="font-size: 0.75rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
             ),
 
             # Action buttons for pending invoices
@@ -14527,6 +14549,22 @@ def get(quote_id: str, session):
                         cls="flex gap-4 mb-4"
                     ),
 
+                    # Invoice file upload
+                    Div(
+                        Label("Скан инвойса от поставщика", cls="block mb-2 font-medium"),
+                        Div(
+                            icon("upload", size=20, color="#64748b"),
+                            Span(" Выберите файл или перетащите", style="margin-left: 8px; color: #64748b;"),
+                            Input(type="file", name="invoice_file", id="create-invoice-file",
+                                  accept=".pdf,.jpg,.jpeg,.png,.webp",
+                                  style="position: absolute; inset: 0; opacity: 0; cursor: pointer;"),
+                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 1rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;",
+                            onclick="document.getElementById('create-invoice-file').click()"
+                        ),
+                        Div(id="create-invoice-filename", style="margin-top: 0.5rem; font-size: 0.875rem; color: #059669;"),
+                        cls="mb-4"
+                    ),
+
                     # Error message container
                     Div(id="create-invoice-error", cls="text-red-500 text-sm mt-2 hidden"),
 
@@ -14626,6 +14664,34 @@ def get(quote_id: str, session):
                         cls="mb-4"
                     ),
 
+                    # Invoice file section
+                    Div(
+                        Label("Скан инвойса от поставщика", cls="block mb-2 font-medium"),
+                        # Current file display (hidden by default, shown via JS)
+                        Div(
+                            icon("file-text", size=16, color="#10b981"),
+                            Span(id="edit-invoice-doc-filename", style="margin-left: 6px; color: #374151;"),
+                            A("Скачать", href="#", id="edit-invoice-doc-download", target="_blank",
+                              style="margin-left: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
+                            A("Удалить", href="#", onclick="deleteInvoiceDocument(); return false;",
+                              style="margin-left: 0.75rem; color: #ef4444; font-size: 0.875rem;"),
+                            id="edit-invoice-doc-current",
+                            style="display: none; align-items: center; padding: 0.75rem; background: #f0fdf4; border-radius: 8px; margin-bottom: 0.5rem;"
+                        ),
+                        # Upload new file
+                        Div(
+                            icon("upload", size=20, color="#64748b"),
+                            Span(" Заменить файл", id="edit-upload-label", style="margin-left: 8px; color: #64748b;"),
+                            Input(type="file", name="invoice_file", id="edit-invoice-file",
+                                  accept=".pdf,.jpg,.jpeg,.png,.webp",
+                                  style="position: absolute; inset: 0; opacity: 0; cursor: pointer;"),
+                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 0.75rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;",
+                            onclick="document.getElementById('edit-invoice-file').click()"
+                        ),
+                        Div(id="edit-invoice-filename", style="margin-top: 0.5rem; font-size: 0.875rem; color: #059669;"),
+                        cls="mb-4"
+                    ),
+
                     # Delete button
                     Div(
                         A("🗑 Удалить инвойс", href="#", onclick="deleteInvoice(); return false;",
@@ -14635,16 +14701,13 @@ def get(quote_id: str, session):
 
                     # Action buttons
                     Div(
-                        btn("Сохранить", variant="primary", type="submit", icon_name="check"),
+                        btn("Сохранить", variant="primary", type="button", icon_name="check", onclick="submitEditInvoiceForm()"),
                         btn("Отмена", variant="ghost", type="button", onclick="closeEditInvoiceModal()"),
                         cls="flex gap-3 justify-end mt-6"
                     ),
 
                     id="edit-invoice-form",
-                    hx_patch=f"/api/procurement/{quote_id}/invoices/update",
-                    hx_target="#invoices-list",
-                    hx_swap="innerHTML",
-                    hx_on="htmx:afterRequest: if(event.detail.successful && event.detail.requestConfig.verb === 'patch') closeEditInvoiceModal();"
+                    enctype="multipart/form-data"
                 ),
 
                 id="edit-invoice-modal-box",
@@ -14704,7 +14767,19 @@ def get(quote_id: str, session):
                 document.getElementById('modal-item-ids').value = '';
                 document.getElementById('modal-selected-count').textContent = '0';
                 document.getElementById('create-invoice-error').classList.add('hidden');
+                document.getElementById('create-invoice-filename').textContent = '';
             }};
+
+            // File input change handlers
+            document.getElementById('create-invoice-file').addEventListener('change', function(e) {{
+                var filename = e.target.files[0] ? e.target.files[0].name : '';
+                document.getElementById('create-invoice-filename').textContent = filename ? '📎 ' + filename : '';
+            }});
+
+            document.getElementById('edit-invoice-file').addEventListener('change', function(e) {{
+                var filename = e.target.files[0] ? e.target.files[0].name : '';
+                document.getElementById('edit-invoice-filename').textContent = filename ? '📎 Новый файл: ' + filename : '';
+            }});
 
             window.submitCreateInvoiceForm = function() {{
                 var form = document.getElementById('create-invoice-form');
@@ -14748,6 +14823,21 @@ def get(quote_id: str, session):
                 document.getElementById('edit-invoice-weight').value = inv.total_weight_kg || '';
                 document.getElementById('edit-invoice-volume').value = inv.total_volume_m3 || '';
 
+                // Show/hide current document info
+                var docCurrentEl = document.getElementById('edit-invoice-doc-current');
+                var uploadLabel = document.getElementById('edit-upload-label');
+                if (inv.has_document && inv.document_filename) {{
+                    docCurrentEl.style.display = 'flex';
+                    document.getElementById('edit-invoice-doc-filename').textContent = inv.document_filename;
+                    document.getElementById('edit-invoice-doc-download').href = '/api/documents/' + inv.document_id + '/download';
+                    uploadLabel.textContent = ' Заменить файл';
+                }} else {{
+                    docCurrentEl.style.display = 'none';
+                    uploadLabel.textContent = ' Загрузить файл';
+                }}
+                document.getElementById('edit-invoice-filename').textContent = '';
+                document.getElementById('edit-invoice-file').value = '';
+
                 selectedInvoiceId = invoiceId;
                 document.getElementById('edit-invoice-backdrop').style.display = 'block';
                 document.getElementById('edit-invoice-modal-box').style.display = 'block';
@@ -14756,7 +14846,58 @@ def get(quote_id: str, session):
             window.closeEditInvoiceModal = function() {{
                 document.getElementById('edit-invoice-backdrop').style.display = 'none';
                 document.getElementById('edit-invoice-modal-box').style.display = 'none';
+                document.getElementById('edit-invoice-filename').textContent = '';
                 selectedInvoiceId = null;
+            }};
+
+            window.submitEditInvoiceForm = function() {{
+                var form = document.getElementById('edit-invoice-form');
+                var formData = new FormData(form);
+
+                fetch('/api/procurement/{quote_id}/invoices/update', {{
+                    method: 'PATCH',
+                    body: formData
+                }})
+                .then(function(response) {{
+                    if (response.ok) {{
+                        closeEditInvoiceModal();
+                        location.reload();
+                    }} else {{
+                        return response.json().then(function(data) {{
+                            alert(data.error || 'Ошибка сохранения');
+                        }});
+                    }}
+                }})
+                .catch(function(err) {{
+                    alert('Ошибка сети: ' + err.message);
+                }});
+            }};
+
+            window.deleteInvoiceDocument = function() {{
+                if (!selectedInvoiceId) return;
+                var inv = invoicesData.find(function(i) {{ return i.id === selectedInvoiceId; }});
+                if (!inv || !inv.document_id) return;
+
+                if (!confirm('Удалить скан инвойса?')) return;
+
+                fetch('/api/documents/' + inv.document_id, {{
+                    method: 'DELETE'
+                }})
+                .then(function(response) {{ return response.json(); }})
+                .then(function(data) {{
+                    if (data.success) {{
+                        // Update local data and UI
+                        inv.has_document = false;
+                        inv.document_id = null;
+                        inv.document_filename = null;
+                        document.getElementById('edit-invoice-doc-current').style.display = 'none';
+                        document.getElementById('edit-upload-label').textContent = ' Загрузить файл';
+                        location.reload();
+                    }} else {{
+                        alert(data.error || 'Ошибка удаления');
+                    }}
+                }})
+                .catch(function(err) {{ alert('Ошибка: ' + err.message); }});
             }};
 
             // Invoice selection
@@ -15146,6 +15287,24 @@ async def api_create_invoice(quote_id: str, session, request):
             .eq("quote_id", quote_id) \
             .execute()
 
+        # Handle file upload if provided
+        invoice_file = form.get("invoice_file")
+        if invoice_file and hasattr(invoice_file, 'filename') and invoice_file.filename:
+            file_content = await invoice_file.read()
+            if file_content:
+                doc, error = upload_document(
+                    organization_id=org_id,
+                    entity_type="supplier_invoice",
+                    entity_id=invoice_id,
+                    file_content=file_content,
+                    filename=invoice_file.filename,
+                    document_type="invoice_scan",
+                    uploaded_by=user["id"],
+                    parent_quote_id=quote_id,
+                )
+                if error:
+                    print(f"Warning: Failed to upload invoice document: {error}")
+
         # Return success JSON
         return JSONResponse({"success": True, "invoice_id": invoice_id})
 
@@ -15193,18 +15352,46 @@ async def api_update_invoice(quote_id: str, session, request):
     if volume:
         update_data["total_volume_m3"] = float(volume)
 
-    if not update_data:
+    # Handle file upload if provided
+    invoice_file = form.get("invoice_file")
+    has_file_upload = invoice_file and hasattr(invoice_file, 'filename') and invoice_file.filename
+
+    if not update_data and not has_file_upload:
         return JSONResponse({"success": False, "error": "No fields to update"}, status_code=400)
 
     try:
-        supabase.table("invoices").update(update_data).eq("id", invoice_id).execute()
+        if update_data:
+            supabase.table("invoices").update(update_data).eq("id", invoice_id).execute()
 
-        # Also update currency on linked items
-        if currency:
-            supabase.table("quote_items") \
-                .update({"purchase_currency": currency}) \
-                .eq("invoice_id", invoice_id) \
-                .execute()
+            # Also update currency on linked items
+            if currency:
+                supabase.table("quote_items") \
+                    .update({"purchase_currency": currency}) \
+                    .eq("invoice_id", invoice_id) \
+                    .execute()
+
+        # Handle file upload
+        if has_file_upload:
+            file_content = await invoice_file.read()
+            if file_content:
+                # Delete existing document first
+                existing_docs = get_documents_for_entity("supplier_invoice", invoice_id)
+                for doc in existing_docs:
+                    delete_document(doc.id)
+
+                # Upload new document
+                doc, error = upload_document(
+                    organization_id=org_id,
+                    entity_type="supplier_invoice",
+                    entity_id=invoice_id,
+                    file_content=file_content,
+                    filename=invoice_file.filename,
+                    document_type="invoice_scan",
+                    uploaded_by=user["id"],
+                    parent_quote_id=quote_id,
+                )
+                if error:
+                    print(f"Warning: Failed to upload invoice document: {error}")
 
         return await render_invoices_list(quote_id, org_id, session)
 
@@ -15676,6 +15863,45 @@ async def api_complete_procurement(quote_id: str, session):
         "completed_items": len(my_item_ids),
         "workflow_transitioned": completion_result.success if completion_result else False
     })
+
+
+# ============================================================================
+# DOCUMENT API ENDPOINTS
+# ============================================================================
+
+@rt("/api/documents/{document_id}/download")
+def api_document_download(document_id: str, session):
+    """Get a download URL for a document."""
+    redirect = require_login(session)
+    if redirect:
+        return RedirectResponse("/login", status_code=303)
+
+    # Get download URL
+    download_url = get_download_url(document_id, expires_in=3600, force_download=True)
+    if not download_url:
+        return JSONResponse({"success": False, "error": "Document not found"}, status_code=404)
+
+    return RedirectResponse(download_url, status_code=302)
+
+
+@rt("/api/documents/{document_id}", methods=["DELETE"])
+def api_delete_document(document_id: str, session):
+    """Delete a document."""
+    redirect = require_login(session)
+    if redirect:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    user = session["user"]
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
+
+    # Delete the document
+    success, error = delete_document(document_id)
+    if success:
+        return JSONResponse({"success": True})
+    else:
+        return JSONResponse({"success": False, "error": error or "Delete failed"}, status_code=500)
 
 
 async def render_invoices_list(quote_id: str, org_id: str, session):
