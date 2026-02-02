@@ -30419,16 +30419,23 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 )
             )
 
+        add_btn = A(
+            icon("plus", size=14), " Добавить",
+            href=f"/customers/{customer_id}/contracts/new",
+            style="background: var(--accent); color: white; padding: 0.4rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500;"
+        )
+
         tab_content = Div(
             Div(
                 Div(
-                    Div(H4("Договоры", style="margin: 0;"), cls="table-header-left"),
-                    Div(A(icon("plus", size=16), " Добавить", href=f"/customers/{customer_id}/contracts/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"), cls="table-header-right"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("НОМЕР"), Th("ДАТА"), Th("СТАТУС"), Th("ПРИМЕЧАНИЯ"), Th("", cls="col-actions"))),
+                        Thead(Tr(
+                            Th("НОМЕР"),
+                            Th("ДАТА"),
+                            Th("СТАТУС"),
+                            Th("ПРИМЕЧАНИЯ"),
+                            Th(add_btn, style="text-align: right;", cls="col-actions")
+                        )),
                         Tbody(*contracts_rows) if contracts_rows else Tbody(
                             Tr(Td("Договоры не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
@@ -30484,16 +30491,23 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 )
             )
 
+        add_btn = A(
+            icon("plus", size=14), " Создать КП",
+            href=f"/quotes/new?customer_id={customer_id}",
+            style="background: var(--accent); color: white; padding: 0.4rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500;"
+        )
+
         tab_content = Div(
             Div(
                 Div(
-                    Div(H4("Коммерческие предложения", style="margin: 0;"), cls="table-header-left"),
-                    Div(A(icon("plus", size=16), " Создать КП", href=f"/quotes/new?customer_id={customer_id}", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"), cls="table-header-right"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("IDN"), Th("СУММА", cls="col-money"), Th("ПРОФИТ", cls="col-money"), Th("ДАТА"), Th("СТАТУС"))),
+                        Thead(Tr(
+                            Th("IDN"),
+                            Th("СУММА", cls="col-money"),
+                            Th("ПРОФИТ", cls="col-money"),
+                            Th("ДАТА"),
+                            Th(add_btn, style="text-align: right;")
+                        )),
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
                             Tr(Td("КП не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
@@ -30555,12 +30569,15 @@ def get(customer_id: str, session, request, tab: str = "general"):
         tab_content = Div(
             Div(
                 Div(
-                    Div(H4("Спецификации", style="margin: 0;"), cls="table-header-left"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("НОМЕР"), Th("IDN"), Th("СУММА", cls="col-money"), Th("ПРОФИТ", cls="col-money"), Th("ДАТА"), Th("СТАТУС"))),
+                        Thead(Tr(
+                            Th("НОМЕР"),
+                            Th("IDN"),
+                            Th("СУММА", cls="col-money"),
+                            Th("ПРОФИТ", cls="col-money"),
+                            Th("ДАТА"),
+                            Th("СТАТУС")
+                        )),
                         Tbody(*specs_rows) if specs_rows else Tbody(
                             Tr(Td("Спецификации не найдены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
@@ -30621,12 +30638,16 @@ def get(customer_id: str, session, request, tab: str = "general"):
         tab_content = Div(
             Div(
                 Div(
-                    Div(H4("Запрашиваемые позиции", style="margin: 0;"), cls="table-header-left"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("НАЗВАНИЕ"), Th("БРЕНД"), Th("АРТИКУЛ"), Th("КОЛ-ВО", cls="col-number"), Th("ЦЕНА", cls="col-money"), Th("ДАТА"), Th("СТАТУС"))),
+                        Thead(Tr(
+                            Th("НАЗВАНИЕ"),
+                            Th("БРЕНД"),
+                            Th("АРТИКУЛ"),
+                            Th("КОЛ-ВО", cls="col-number"),
+                            Th("ЦЕНА", cls="col-money"),
+                            Th("ДАТА"),
+                            Th("СТАТУС")
+                        )),
                         Tbody(*items_rows) if items_rows else Tbody(
                             Tr(Td("Позиции не найдены.", colspan="7", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
