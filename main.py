@@ -32628,6 +32628,97 @@ def get(session, q: str = "", country: str = "", type_filter: str = "", status: 
     )
 
 
+# NOTE: /locations/new routes MUST be defined BEFORE /locations/{location_id}
+# to prevent "new" from being matched as a location_id parameter
+@rt("/locations/new")
+def get_new_location(session):
+    """Show form to create a new location."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions - admin or logistics can create locations
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания локаций. Требуется роль: admin или logistics", cls="alert alert-error"),
+            session=session
+        )
+
+    return _location_form(session=session)
+
+
+@rt("/locations/new")
+def post_new_location(
+    country: str,
+    code: str = "",
+    city: str = "",
+    address: str = "",
+    is_hub: str = "",
+    is_customs_point: str = "",
+    notes: str = "",
+    session=None
+):
+    """Handle location creation form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    # Check permissions
+    if not user_has_any_role(session, ["admin", "logistics"]):
+        return page_layout("Access Denied",
+            Div("У вас нет прав для создания локаций.", cls="alert alert-error"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.location_service import create_location, validate_location_code, validate_country
+
+    # Normalize code to uppercase
+    code = code.strip().upper() if code else ""
+
+    # Validate country
+    if not validate_country(country):
+        return _location_form(error="Страна обязательна для заполнения", session=session)
+
+    # Validate code format if provided
+    if code and not validate_location_code(code):
+        return _location_form(
+            error="Код локации должен состоять из 2-5 заглавных латинских букв (например, MSK, SPB, SH)",
+            session=session
+        )
+
+    try:
+        location = create_location(
+            organization_id=org_id,
+            country=country.strip(),
+            city=city.strip() if city else None,
+            code=code if code else None,
+            address=address.strip() if address else None,
+            is_hub=bool(is_hub),
+            is_customs_point=bool(is_customs_point),
+            is_active=True,
+            notes=notes.strip() if notes else None,
+            created_by=user_id,
+        )
+
+        if location:
+            return RedirectResponse(f"/locations/{location.id}", status_code=303)
+        else:
+            return _location_form(
+                error="Локация с таким кодом уже существует или произошла ошибка",
+                session=session
+            )
+
+    except ValueError as e:
+        return _location_form(error=str(e), session=session)
+    except Exception as e:
+        print(f"Error creating location: {e}")
+        return _location_form(error=f"Ошибка при создании: {e}", session=session)
+
+
 @rt("/locations/{location_id}")
 def get(location_id: str, session):
     """Location detail view page."""
@@ -33002,95 +33093,6 @@ def _location_form(location=None, error=None, session=None):
         ),
         session=session
     )
-
-
-@rt("/locations/new")
-def get(session):
-    """Show form to create a new location."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin or logistics can create locations
-    if not user_has_any_role(session, ["admin", "logistics"]):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания локаций. Требуется роль: admin или logistics", cls="alert alert-error"),
-            session=session
-        )
-
-    return _location_form(session=session)
-
-
-@rt("/locations/new")
-def post(
-    country: str,
-    code: str = "",
-    city: str = "",
-    address: str = "",
-    is_hub: str = "",
-    is_customs_point: str = "",
-    notes: str = "",
-    session=None
-):
-    """Handle location creation form submission."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions
-    if not user_has_any_role(session, ["admin", "logistics"]):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для создания локаций.", cls="alert alert-error"),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-    user_id = user.get("id")
-
-    from services.location_service import create_location, validate_location_code, validate_country
-
-    # Normalize code to uppercase
-    code = code.strip().upper() if code else ""
-
-    # Validate country
-    if not validate_country(country):
-        return _location_form(error="Страна обязательна для заполнения", session=session)
-
-    # Validate code format if provided
-    if code and not validate_location_code(code):
-        return _location_form(
-            error="Код локации должен состоять из 2-5 заглавных латинских букв (например, MSK, SPB, SH)",
-            session=session
-        )
-
-    try:
-        location = create_location(
-            organization_id=org_id,
-            country=country.strip(),
-            city=city.strip() if city else None,
-            code=code if code else None,
-            address=address.strip() if address else None,
-            is_hub=bool(is_hub),
-            is_customs_point=bool(is_customs_point),
-            is_active=True,
-            notes=notes.strip() if notes else None,
-            created_by=user_id,
-        )
-
-        if location:
-            return RedirectResponse(f"/locations/{location.id}", status_code=303)
-        else:
-            return _location_form(
-                error="Локация с таким кодом уже существует или произошла ошибка",
-                session=session
-            )
-
-    except ValueError as e:
-        return _location_form(error=str(e), session=session)
-    except Exception as e:
-        print(f"Error creating location: {e}")
-        return _location_form(error=f"Ошибка при создании: {e}", session=session)
 
 
 @rt("/locations/{location_id}/edit")
