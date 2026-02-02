@@ -27689,71 +27689,133 @@ def get(company_id: str, session):
             session=session
         )
 
-    status_class = "status-approved" if company.is_active else "status-rejected"
     status_text = "Активна" if company.is_active else "Неактивна"
 
     return page_layout(f"Компания: {company.name}",
-        # Header with actions
+        # Header card with gradient
         Div(
-            H1(icon("building-2", size=28), f" {company.name}", cls="page-header"),
             Div(
-                A(icon("edit", size=16), " Редактировать", href=f"/buyer-companies/{company_id}/edit", role="button"),
-                btn_link("К списку", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
-                style="display: flex; gap: 0.5rem;"
+                Div(
+                    A(icon("arrow-left", size=18), " Компании-покупатели", href="/buyer-companies",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Div(
+                        icon("building-2", size=24, color="#8b5cf6"),
+                        H1(company.name, style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        Span(company.company_code, style="font-family: monospace; font-size: 14px; padding: 4px 10px; background: #f3e8ff; color: #7c3aed; border-radius: 6px; font-weight: 600;"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if company.is_active else '#dc2626'}; background: {'#dcfce7' if company.is_active else '#fee2e2'};"),
+                        btn_link("Редактировать", href=f"/buyer-companies/{company_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
             ),
-            style="display: flex; justify-content: space-between; align-items: center;"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Main info card
+        # Main info cards grid
         Div(
+            # Card 1: Company Info
             Div(
-                H3("Основная информация", cls="card-header"),
-                Table(
-                    Tr(Th("Код компании:"), Td(
-                        Strong(company.company_code, style="font-family: monospace; font-size: 1.25rem; color: #4a4aff;")
-                    )),
-                    Tr(Th("Название:"), Td(company.name)),
-                    Tr(Th("Страна:"), Td(company.country or "Россия")),
-                    Tr(Th("Статус:"), Td(Span(status_text, cls=f"status-badge {status_class}"))),
-                    style="width: auto;"
+                Div(
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
-                style="flex: 1;"
+                Div(
+                    Div(
+                        Span("Код компании", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.company_code, style="font-weight: 600; color: #7c3aed; font-family: monospace; font-size: 16px;"),
+                    ),
+                    Div(
+                        Span("Название", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.name, style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Страна", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.country or "Россия", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
+                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
+            # Card 2: Director
             Div(
-                H3("Руководство", cls="card-header"),
-                Table(
-                    Tr(Th("Должность:"), Td(company.general_director_position or "Генеральный директор")),
-                    Tr(Th("ФИО:"), Td(company.general_director_name or "—")),
-                    style="width: auto;"
+                Div(
+                    icon("user", size=16, color="#64748b"),
+                    Span("РУКОВОДСТВО", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
-                style="flex: 1;"
+                Div(
+                    Div(
+                        Span("Должность", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.general_director_position or "Генеральный директор", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("ФИО", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.general_director_name or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
+                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            cls="card", style="display: flex; gap: 2rem;"
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"
         ),
 
         # Legal info
         Div(
-            H3("Юридические данные", cls="card-header"),
-            Table(
-                Tr(Th("ИНН:"), Td(company.inn or "—")),
-                Tr(Th("КПП:"), Td(company.kpp or "—")),
-                Tr(Th("ОГРН:"), Td(company.ogrn or "—")),
+            Div(
+                icon("file-text", size=16, color="#64748b"),
+                Span("ЮРИДИЧЕСКИЕ ДАННЫЕ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
             ),
-            cls="card"
+            Div(
+                Div(
+                    Span("ИНН", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.inn or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                Div(
+                    Span("КПП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.kpp or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                Div(
+                    Span("ОГРН", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.ogrn or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px;"
+            ),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Registration address
         Div(
-            H3("Юридический адрес"),
-            P(company.registration_address or "Не указан"),
-            cls="card"
+            Div(
+                icon("map-pin", size=16, color="#64748b"),
+                Span("ЮРИДИЧЕСКИЙ АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"
+            ),
+            P(company.registration_address or "Не указан", style="font-size: 14px; color: #1e293b; margin: 0;"),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if company.registration_address else "",
 
         # Metadata
         Div(
-            P(f"Создана: {company.created_at.strftime('%d.%m.%Y %H:%M') if company.created_at else '—'}"),
-            P(f"Обновлена: {company.updated_at.strftime('%d.%m.%Y %H:%M') if company.updated_at else '—'}"),
-            style="color: #666; font-size: 0.875rem;"
+            Div(
+                Span("Создана", style="font-size: 11px; color: #94a3b8; text-transform: uppercase;"),
+                Span(f"{company.created_at.strftime('%d.%m.%Y %H:%M') if company.created_at else '—'}", style="font-size: 13px; color: #64748b; margin-left: 8px;"),
+                style="display: flex; align-items: center; gap: 4px;"
+            ),
+            Div(
+                Span("Обновлена", style="font-size: 11px; color: #94a3b8; text-transform: uppercase;"),
+                Span(f"{company.updated_at.strftime('%d.%m.%Y %H:%M') if company.updated_at else '—'}", style="font-size: 13px; color: #64748b; margin-left: 8px;"),
+                style="display: flex; align-items: center; gap: 4px;"
+            ),
+            style="display: flex; gap: 24px; padding: 12px 0; border-top: 1px solid #e2e8f0;"
         ),
 
         session=session
