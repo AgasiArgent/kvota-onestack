@@ -8412,43 +8412,25 @@ def get(quote_id: str, session):
             cls="card", style="border-left: 4px solid #0891b2;"
         ) if workflow_status == "approved" and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Workflow Actions (for sent_to_client - Start Negotiation or Accept)
+        # Workflow Actions (for sent_to_client - Client Response)
         Div(
-            H3("Workflow"),
-            P("Client has received the quote. What's next?", style="margin-bottom: 1rem;"),
+            H3(icon("message-circle", size=20), " Ответ клиента", style="display: flex; align-items: center; gap: 0.5rem;"),
+            P("КП отправлено клиенту. Какой результат?", style="margin-bottom: 1rem; color: #666;"),
             Div(
                 Form(
-                    btn("Start Negotiation", variant="secondary", icon_name="handshake", type="submit"),
-                    method="post",
-                    action=f"/quotes/{quote_id}/start-negotiation",
-                    style="display: inline;"
-                ),
-                Form(
-                    btn("Client Accepted - Submit for Spec", variant="success", icon_name="check", type="submit"),
+                    btn("Клиент согласен → Спецификация", variant="success", icon_name="check", type="submit"),
                     method="post",
                     action=f"/quotes/{quote_id}/submit-spec-control",
-                    style="display: inline; margin-left: 0.75rem;"
+                    style="display: inline;"
                 ),
+                style="margin-bottom: 1rem;"
             ),
             cls="card", style="border-left: 4px solid #14b8a6;"
         ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Workflow Actions (for client_negotiation - Accept Version)
+        # Client Change Request Section (for sent_to_client)
         Div(
-            H3("Workflow"),
-            P("Negotiation in progress. When client accepts a version:", style="margin-bottom: 1rem;"),
-            Form(
-                btn("Client Accepted Version - Submit for Spec", variant="success", icon_name="check", size="lg", type="submit"),
-                P("Proceed to specification preparation.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
-                method="post",
-                action=f"/quotes/{quote_id}/submit-spec-control"
-            ),
-            cls="card", style="border-left: 4px solid #16a34a;"
-        ) if workflow_status == "client_negotiation" and user_has_any_role(session, ["sales", "admin"]) else None,
-
-        # Client Change Request Section (for sent_to_client or client_negotiation)
-        Div(
-            H3("Клиент просит изменения"),
+            H3(icon("rotate-ccw", size=20), " Клиент просит изменения", style="display: flex; align-items: center; gap: 0.5rem;"),
             P("Выберите тип изменений:", style="margin-bottom: 1rem; color: #666;"),
             Form(
                 Div(
@@ -8489,7 +8471,43 @@ def get(quote_id: str, session):
                 action=f"/quotes/{quote_id}/client-change-request"
             ),
             cls="card", style="border-left: 4px solid #f59e0b;"
-        ) if workflow_status in ["sent_to_client", "client_negotiation"] and user_has_any_role(session, ["sales", "admin"]) else None,
+        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
+
+        # Client Rejected Section (for sent_to_client)
+        Div(
+            H3(icon("x-circle", size=20), " Клиент отказался", style="display: flex; align-items: center; gap: 0.5rem; color: #dc2626;"),
+            Form(
+                Div(
+                    Label("Причина отказа *", fr="rejection_reason", style="font-weight: 500;"),
+                    Select(
+                        Option("-- Выберите причину --", value="", disabled=True, selected=True),
+                        Option("Цена слишком высокая", value="price_too_high"),
+                        Option("Сроки не устраивают", value="delivery_time"),
+                        Option("Выбрали другого поставщика", value="competitor"),
+                        Option("Проект отменён / заморожен", value="project_cancelled"),
+                        Option("Нет бюджета", value="no_budget"),
+                        Option("Изменились требования", value="requirements_changed"),
+                        Option("Другое", value="other"),
+                        name="rejection_reason",
+                        id="rejection_reason",
+                        required=True,
+                        style="width: 100%; margin-top: 0.25rem;"
+                    ),
+                    style="margin-bottom: 1rem;"
+                ),
+                Div(
+                    Label("Комментарий:", fr="rejection_comment", style="font-weight: 500;"),
+                    Textarea(name="rejection_comment", id="rejection_comment",
+                             placeholder="Дополнительные детали об отказе...",
+                             rows="2", style="width: 100%; margin-top: 0.25rem;"),
+                    style="margin-bottom: 1rem;"
+                ),
+                btn("Отметить как отказ", variant="danger", icon_name="x", type="submit"),
+                method="post",
+                action=f"/quotes/{quote_id}/client-rejected"
+            ),
+            cls="card", style="border-left: 4px solid #dc2626;"
+        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
 
         # Actions section (only for non-draft quotes - after calculation)
         Div(
@@ -9558,6 +9576,73 @@ def post(quote_id: str, session):
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
             A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            session=session
+        )
+
+
+@rt("/quotes/{quote_id}/client-rejected")
+def post(quote_id: str, session, rejection_reason: str = "", rejection_comment: str = ""):
+    """
+    Mark quote as rejected by client with reason.
+    Transitions to 'rejected' status and stores rejection reason.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_roles = user.get("roles", [])
+
+    if not user_has_any_role(session, ["sales", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    # Map rejection reason codes to human-readable labels
+    reason_labels = {
+        "price_too_high": "Цена слишком высокая",
+        "delivery_time": "Сроки не устраивают",
+        "competitor": "Выбрали другого поставщика",
+        "project_cancelled": "Проект отменён / заморожен",
+        "no_budget": "Нет бюджета",
+        "requirements_changed": "Изменились требования",
+        "other": "Другое",
+    }
+
+    reason_label = reason_labels.get(rejection_reason, rejection_reason)
+
+    # Build comment with reason
+    comment_parts = [f"Причина отказа: {reason_label}"]
+    if rejection_comment and rejection_comment.strip():
+        comment_parts.append(f"Комментарий: {rejection_comment.strip()}")
+
+    full_comment = ". ".join(comment_parts)
+
+    # Store rejection reason in quote metadata
+    supabase = get_supabase()
+    try:
+        supabase.table("quotes").update({
+            "rejection_reason": rejection_reason,
+            "rejection_comment": rejection_comment.strip() if rejection_comment else None,
+            "rejected_at": datetime.now().isoformat(),
+            "rejected_by": user["id"]
+        }).eq("id", quote_id).execute()
+    except Exception as e:
+        print(f"Error storing rejection reason: {e}")
+        # Continue even if metadata update fails
+
+    result = transition_quote_status(
+        quote_id=quote_id,
+        to_status="rejected",
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment=full_comment
+    )
+
+    if result.success:
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            Div(f"Ошибка: {result.error_message}", cls="alert alert-error"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
