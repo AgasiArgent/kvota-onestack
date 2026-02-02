@@ -14724,6 +14724,9 @@ def get(quote_id: str, session):
             // Save all changes - returns Promise for chaining
             window.saveAllChanges = function(showAlert) {{
                 if (!hot) return Promise.resolve({{ success: true }});
+                // IMPORTANT: Finish any active cell edit before reading data
+                // Without this, typing a value and clicking Save/Complete won't include the current edit
+                hot.deselectCell();
                 var sourceData = hot.getSourceData();
                 var updates = [];
 
