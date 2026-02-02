@@ -22129,7 +22129,7 @@ def post(session, spec_id: str):
         # Get quote data for total amount calculation
         quote_id = spec.get("quote_id")
         quote_result = supabase.table("quotes") \
-            .select("id, calculated_total_client_price, customers(id, name)") \
+            .select("id, total_amount, customers(id, name)") \
             .eq("id", quote_id) \
             .execute()
 
@@ -22142,7 +22142,7 @@ def post(session, spec_id: str):
             )
 
         quote = quote_result.data[0]
-        total_amount = quote.get("calculated_total_client_price") or 0
+        total_amount = quote.get("total_amount") or 0
 
         # Generate deal number using SQL function if available, otherwise generate manually
         try:
