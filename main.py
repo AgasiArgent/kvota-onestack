@@ -15240,18 +15240,23 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
     if not items:
         return JSONResponse({"success": False, "error": "Invoice has no items"}, status_code=400)
 
-    # Validate: all items must have price OR be marked unavailable
-    items_without_price = []
+    # Validate: all items must have (price > 0 AND production_time > 0) OR be marked unavailable
+    invalid_items = []
     for item in items:
-        has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
         is_unavailable = item.get("is_unavailable", False)
-        if not has_price and not is_unavailable:
-            items_without_price.append(item["id"])
+        if is_unavailable:
+            continue  # Unavailable items are OK
 
-    if items_without_price:
+        has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
+        has_time = item.get("production_time_days") and int(item.get("production_time_days", 0)) > 0
+
+        if not has_price or not has_time:
+            invalid_items.append(item["id"])
+
+    if invalid_items:
         return JSONResponse({
             "success": False,
-            "error": f"Не все позиции оценены. {len(items_without_price)} поз. без цены и не отмечены как недоступные."
+            "error": f"Не все позиции заполнены. {len(invalid_items)} поз. без цены или срока производства (и не отмечены как недоступные)."
         }, status_code=400)
 
     try:
@@ -15273,7 +15278,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             .execute()
 
         all_items = supabase.table("quote_items") \
-            .select("id, invoice_id") \
+            .select("id, invoice_id, is_unavailable") \
             .eq("quote_id", quote_id) \
             .execute()
 
@@ -15286,14 +15291,17 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             if inv.get("status") != "pending_procurement"
         )
 
-        # Check: all items must have invoice_id AND that invoice must be completed
-        all_items_in_completed_invoices = all(
-            item.get("invoice_id") and item.get("invoice_id") in completed_invoice_ids
+        # Check: all items must either:
+        # 1. Be in a completed invoice (which validated price + production_time), OR
+        # 2. Be marked as unavailable (can skip invoice entirely)
+        all_items_ready = all(
+            (item.get("invoice_id") and item.get("invoice_id") in completed_invoice_ids)
+            or item.get("is_unavailable", False)
             for item in items_data
         ) if items_data else False
 
         workflow_transitioned = False
-        if all_items_in_completed_invoices:
+        if all_items_ready:
             # All items are in completed invoices - transition quote workflow
             try:
                 user_roles = user.get("roles", [])
