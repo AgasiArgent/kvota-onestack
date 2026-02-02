@@ -30344,25 +30344,25 @@ def get(customer_id: str, session, request, tab: str = "general"):
         for contact in customer.contacts:
             contacts_rows.append(_render_contact_row(contact, customer_id))
 
+        # Add button for table header
+        add_btn = A(
+            icon("plus", size=14), " Добавить",
+            href=f"/customers/{customer_id}/contacts/new",
+            style="background: var(--accent); color: white; padding: 0.4rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500;"
+        )
+
         tab_content = Div(
-            dismissible_hint(
-                "contacts-editing",
-                icon("lightbulb", size=16), " Кликните на поле для редактирования. В колонке СТАТУС: ",
-                Span(icon("pen-tool", size=14), style="color: #10b981; display: inline-flex;"),
-                " подписант, ",
-                Span(icon("star", size=14), style="color: #f59e0b; display: inline-flex;"),
-                " основной контакт.",
-                variant="info"
-            ),
             Div(
                 Div(
-                    Div(H4("Контакты", style="margin: 0;"), cls="table-header-left"),
-                    Div(A(icon("plus", size=16), " Добавить", href=f"/customers/{customer_id}/contacts/new", role="button", style="background: var(--accent); color: white; padding: 0.5rem 1rem; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;"), cls="table-header-right"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("ФИО"), Th("ДОЛЖНОСТЬ"), Th("EMAIL"), Th("ТЕЛЕФОН"), Th("ЗАМЕТКИ"), Th("СТАТУС", cls="col-actions"))),
+                        Thead(Tr(
+                            Th("ФИО"),
+                            Th("ДОЛЖНОСТЬ"),
+                            Th("EMAIL"),
+                            Th("ТЕЛЕФОН"),
+                            Th("ЗАМЕТКИ"),
+                            Th(add_btn, style="text-align: right;", cls="col-actions")
+                        )),
                         Tbody(*contacts_rows, id="contacts-tbody") if contacts_rows else Tbody(
                             Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;")),
                             id="contacts-tbody"
