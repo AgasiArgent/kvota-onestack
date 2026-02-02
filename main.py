@@ -21530,7 +21530,8 @@ def get(session, spec_id: str):
             Div(
                 P(
                     icon("check-circle", size=14, color="#16a34a"), " Скан загружен: ",
-                    A(spec.get("signed_scan_url", "").split("/")[-1] if spec.get("signed_scan_url") else "",
+                    # Strip query params (token) from display for security - only show filename
+                    A(spec.get("signed_scan_url", "").split("/")[-1].split("?")[0] if spec.get("signed_scan_url") else "",
                       href=spec.get("signed_scan_url", "#"),
                       target="_blank",
                       style="color: #6366f1; font-weight: 500;"),
