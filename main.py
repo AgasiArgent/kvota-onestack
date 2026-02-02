@@ -25296,25 +25296,20 @@ def get(session):
     unassigned_brands = [b for b in sorted(all_quote_brands) if b.lower() not in assigned_brands]
 
     # Get procurement users for assignments
-    # First get all active organization members
+    from services.role_service import get_user_role_codes
+
+    # Get all active organization members
     members_result = supabase.table("organization_members").select(
         "user_id"
     ).eq("organization_id", org_id).eq("status", "active").execute()
 
-    member_ids = [m["user_id"] for m in (members_result.data or [])]
-
-    # Then get users who have the procurement role
+    # Filter to only users who have the procurement role
     procurement_users = []
-    if member_ids:
-        user_roles_result = supabase.table("user_roles").select(
-            "user_id, roles(code)"
-        ).in_("user_id", member_ids).execute()
-
-        for ur in (user_roles_result.data or []):
-            role = ur.get("roles", {})
-            if role and role.get("code") == "procurement":
-                if ur["user_id"] not in procurement_users:
-                    procurement_users.append(ur["user_id"])
+    for member in (members_result.data or []):
+        user_id = member["user_id"]
+        user_roles = get_user_role_codes(user_id, org_id)
+        if "procurement" in user_roles:
+            procurement_users.append(user_id)
 
     # Get assignment counts per user
     assignment_counts = count_assignments_by_user(org_id)
@@ -25516,25 +25511,16 @@ def get(session, brand: str = None):
         "user_id"
     ).eq("organization_id", org_id).eq("status", "active").execute()
 
-    member_ids = [m["user_id"] for m in (members_result.data or [])]
-
-    # Then get users who have the procurement role
+    # Filter to only users who have the procurement role
+    from services.role_service import get_user_role_codes
     procurement_users = []
-    if member_ids:
-        user_roles_result = supabase.table("user_roles").select(
-            "user_id, roles(code)"
-        ).in_("user_id", member_ids).execute()
-
-        procurement_user_ids = set()
-        for ur in (user_roles_result.data or []):
-            role = ur.get("roles", {})
-            if role and role.get("code") == "procurement":
-                procurement_user_ids.add(ur["user_id"])
-
-        for uid in procurement_user_ids:
+    for member in (members_result.data or []):
+        user_id = member["user_id"]
+        user_roles = get_user_role_codes(user_id, org_id)
+        if "procurement" in user_roles:
             procurement_users.append({
-                "user_id": uid,
-                "display": uid[:8] + "..."
+                "user_id": user_id,
+                "display": user_id[:8] + "..."
             })
 
     # Build user options
@@ -25728,30 +25714,22 @@ def get(assignment_id: str, session):
     org_id = user["org_id"]
 
     # Get procurement users
-    # First get all active organization members
+    from services.role_service import get_user_role_codes
+
+    # Get all active organization members
     members_result = supabase.table("organization_members").select(
         "user_id"
     ).eq("organization_id", org_id).eq("status", "active").execute()
 
-    member_ids = [m["user_id"] for m in (members_result.data or [])]
-
-    # Then get users who have the procurement role
+    # Filter to only users who have the procurement role
     procurement_users = []
-    if member_ids:
-        user_roles_result = supabase.table("user_roles").select(
-            "user_id, roles(code)"
-        ).in_("user_id", member_ids).execute()
-
-        procurement_user_ids = set()
-        for ur in (user_roles_result.data or []):
-            role = ur.get("roles", {})
-            if role and role.get("code") == "procurement":
-                procurement_user_ids.add(ur["user_id"])
-
-        for uid in procurement_user_ids:
+    for member in (members_result.data or []):
+        user_id = member["user_id"]
+        user_roles = get_user_role_codes(user_id, org_id)
+        if "procurement" in user_roles:
             procurement_users.append({
-                "user_id": uid,
-                "display": uid[:8] + "..."
+                "user_id": user_id,
+                "display": user_id[:8] + "..."
             })
 
     # Build user options
