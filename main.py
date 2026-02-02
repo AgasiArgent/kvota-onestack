@@ -30979,29 +30979,34 @@ def _render_contact_name_cell(contact, customer_id: str):
 def _render_contact_flags_cell(contact, customer_id: str):
     """Render the flags cell (signatory, primary) with minimal clickable icons."""
     # Colors: green for signatory, orange for primary, darker gray for inactive (more visible)
-    signatory_color = "#10b981" if contact.is_signatory else "#9ca3af"
-    primary_color = "#f59e0b" if contact.is_primary else "#9ca3af"
+    # Changed inactive from #9ca3af to #6b7280 for better visibility
+    signatory_color = "#10b981" if contact.is_signatory else "#6b7280"
+    primary_color = "#f59e0b" if contact.is_primary else "#6b7280"
 
     # Use Span with HTMX instead of Button to avoid global button styling
     return Td(
         Div(
             Span(
-                icon("pen-tool", size=16),
+                icon("pen-tool", size=18),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-signatory",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=f"color: {signatory_color}; cursor: pointer; padding: 4px; display: inline-flex;",
-                title="Подписант" if contact.is_signatory else "Сделать подписантом"
+                style=f"color: {signatory_color}; cursor: pointer; padding: 6px; display: inline-flex; border-radius: 4px; transition: background 0.15s;",
+                title="Подписант" if contact.is_signatory else "Сделать подписантом",
+                onmouseover="this.style.background='#f3f4f6'",
+                onmouseout="this.style.background='transparent'"
             ),
             Span(
-                icon("star", size=16),
+                icon("star", size=18),
                 hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-primary",
                 hx_target="#contacts-tbody",
                 hx_swap="innerHTML",
-                style=f"color: {primary_color}; cursor: pointer; padding: 4px; display: inline-flex;",
-                title="Основной контакт" if contact.is_primary else "Сделать основным"
+                style=f"color: {primary_color}; cursor: pointer; padding: 6px; display: inline-flex; border-radius: 4px; transition: background 0.15s;",
+                title="Основной контакт" if contact.is_primary else "Сделать основным",
+                onmouseover="this.style.background='#f3f4f6'",
+                onmouseout="this.style.background='transparent'"
             ),
-            style="display: flex; align-items: center; gap: 4px;"
+            style="display: flex; align-items: center; gap: 8px;"
         ),
         cls="col-actions"
     )
