@@ -710,6 +710,7 @@ button.btn-sm:not(.btn),
  */
 
 /* Base button reset - highest specificity with .btn class */
+/* Note: width: auto overrides PicoCSS full-width form buttons */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -727,6 +728,7 @@ button.btn-sm:not(.btn),
     text-decoration: none;
     background: none;
     box-shadow: none;
+    width: auto;
 }
 
 /* Primary - Gray fill (main actions) */
