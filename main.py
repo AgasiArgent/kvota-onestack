@@ -14010,11 +14010,13 @@ def get(quote_id: str, session):
         if inv.get("status") == "pending_procurement"
     )
 
-    # Filter items: show only items without invoice OR in pending invoices
-    # Items in completed invoices are hidden (already processed)
+    # Filter items: show only items that need work
+    # Hide: items in completed invoices (already processed)
+    # Hide: items marked unavailable (no action needed)
     items_to_show = [
         item for item in my_items
-        if not item.get("invoice_id") or item.get("invoice_id") in pending_invoice_ids
+        if (not item.get("invoice_id") and not item.get("is_unavailable", False))
+        or item.get("invoice_id") in pending_invoice_ids
     ]
 
     # Prepare items data for Handsontable
