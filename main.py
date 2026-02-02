@@ -7766,6 +7766,8 @@ def get(quote_id: str, session):
 
                 // Bulk save all items - replaces everything in DB
                 function saveAllItems() {{
+                    // IMPORTANT: Finish any active cell edit before reading data
+                    if (hot) hot.deselectCell();
                     var sourceData = hot.getSourceData();
                     var items = sourceData.filter(function(row) {{
                         return row.product_name && row.product_name.trim();
@@ -14012,8 +14014,8 @@ def get(quote_id: str, session):
             'product_name': item.get('product_name', ''),
             'product_code': item.get('product_code', ''),
             'quantity': item.get('quantity', 1),
-            'price': item.get('purchase_price_original') or '',
-            'production_time': item.get('production_time_days') or '',
+            'price': item.get('purchase_price_original') if item.get('purchase_price_original') is not None else '',
+            'production_time': item.get('production_time_days') if item.get('production_time_days') is not None else '',
             'is_unavailable': item.get('is_unavailable', False),
             'invoice_id': item.get('invoice_id') or '',
             'invoice_label': f"#{invoices.index(inv)+1}" if inv else '',
@@ -14735,8 +14737,8 @@ def get(quote_id: str, session):
                     if (row.id) {{
                         updates.push({{
                             id: row.id,
-                            purchase_price_original: row.price ? parseFloat(row.price) : null,
-                            production_time_days: row.production_time ? parseInt(row.production_time) : null,
+                            purchase_price_original: row.price !== '' && row.price != null ? parseFloat(row.price) : null,
+                            production_time_days: row.production_time !== '' && row.production_time != null ? parseInt(row.production_time) : null,
                             is_unavailable: row.is_unavailable || false
                         }});
                     }}
@@ -17724,7 +17726,8 @@ def get(session, quote_id: str):
                 // Save all customs items data (called on form submit)
                 window.saveCustomsItems = function() {{
                     if (!hot) return Promise.resolve({{ success: true }});
-
+                    // IMPORTANT: Finish any active cell edit before reading data
+                    hot.deselectCell();
                     var sourceData = hot.getSourceData();
                     var items = sourceData.map(function(row) {{
                         return {{
