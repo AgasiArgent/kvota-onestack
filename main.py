@@ -8677,40 +8677,107 @@ def get(quote_id: str, session):
             session=session
         )
 
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    comment_box_style = """
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        padding: 16px;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 24px;
+    """
+
+    textarea_style = """
+        width: 100%;
+        min-height: 120px;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #f8fafc;
+        font-family: inherit;
+        resize: vertical;
+        box-sizing: border-box;
+    """
+
     return page_layout(f"Вернуть на проверку - {idn_quote}",
+        # Header card
         Div(
-            A(f"← Назад к КП {idn_quote}", href=f"/quotes/{quote_id}", style="color: #3b82f6;"),
-            H1("✓ Вернуть КП на проверку"),
-            P(f"Клиент: {customer_name}", style="color: #666;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(icon("arrow-left", size=16), f" Назад к КП {idn_quote}", href=f"/quotes/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1("Вернуть КП на проверку",
+               style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            Div(
+                icon("users", size=14, style="color: #64748b;"),
+                Span(f"Клиент: {customer_name}", style="color: #475569;"),
+                style="display: flex; align-items: center; gap: 8px; font-size: 14px;"
+            ),
+            style=header_style
         ),
+
+        # Original comment (if present)
         Div(
-            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            Div(icon("message-circle", size=14), " Исходный комментарий контроллёра", style=section_header_style),
             P(revision_comment if revision_comment else "— нет комментария —",
-              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
-            style="margin-bottom: 1.5rem;"
+              style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;"),
+            style=comment_box_style
         ) if revision_comment else None,
+
+        # Form
         Form(
             Div(
-                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                Div(icon("edit-3", size=14), " Комментарий об исправлениях *", style=section_header_style),
                 P("Опишите, какие исправления были внесены:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin: 0 0 12px 0;"),
                 Textarea(
                     name="comment",
                     placeholder="Исправлена наценка...\nОбновлены условия оплаты...\nИзменены данные клиента...",
                     required=True,
-                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                    style=textarea_style
                 ),
-                style="margin-bottom: 1rem;"
+                style="margin-bottom: 24px;"
             ),
             Div(
-                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
-                btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
-                style="display: flex; align-items: center; gap: 0.75rem;"
+                Button(icon("check", size=14), " Вернуть на проверку", type="submit",
+                       style="padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                A(icon("x", size=14), " Отмена", href=f"/quotes/{quote_id}",
+                  style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+                style="display: flex; gap: 12px;"
             ),
             action=f"/quotes/{quote_id}/return-to-control",
             method="post",
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -9847,127 +9914,238 @@ def get(quote_id: str, session):
     selected_seller_label = None
     # We no longer join seller_companies since FK may not exist
 
-    return page_layout(f"Edit {quote.get('idn_quote', '')}",
-        H1(f"Edit Quote {quote.get('idn_quote', '')}"),
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
 
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        width: 100%;
+        box-sizing: border-box;
+    """
+
+    select_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        width: 100%;
+        box-sizing: border-box;
+    """
+
+    label_style = "display: block; font-size: 13px; color: #475569; margin-bottom: 6px; font-weight: 500;"
+
+    form_group_style = "margin-bottom: 16px;"
+
+    grid_2col_style = "display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"
+
+    return page_layout(f"Редактирование {quote.get('idn_quote', '')}",
+        # Header card
         Div(
-            Form(
+            Div(
+                A(icon("arrow-left", size=16), " Назад к КП", href=f"/quotes/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1(f"Редактирование КП {quote.get('idn_quote', '')}",
+               style="margin: 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            style=header_style
+        ),
+
+        Form(
+            # Section 1: Client & Status
+            Div(
+                Div(icon("users", size=14), " Клиент и статус", style=section_header_style),
                 Div(
-                    Label("Customer *",
+                    Div(
+                        Label("Клиент *", style=label_style),
                         Select(
                             *[Option(
                                 f"{c['name']} ({c.get('inn', '')})",
                                 value=c["id"],
                                 selected=(c["id"] == quote.get("customer_id"))
                             ) for c in customers],
-                            name="customer_id", required=True
-                        )
-                    ),
-                    Label("Status",
-                        Select(
-                            Option("Draft", value="draft", selected=quote.get("status") == "draft"),
-                            Option("Sent", value="sent", selected=quote.get("status") == "sent"),
-                            Option("Approved", value="approved", selected=quote.get("status") == "approved"),
-                            Option("Rejected", value="rejected", selected=quote.get("status") == "rejected"),
-                            name="status"
-                        )
-                    ),
-                    cls="form-row"
-                ),
-                # Seller company selector (v3.0 - at quote level)
-                Div(
-                    Label("Компания-продавец *",
-                        Select(
-                            Option("Выберите компанию...", value=""),
-                            *[Option(
-                                format_seller_company_for_dropdown(sc),
-                                value=sc.id,
-                                selected=(str(sc.id) == str(selected_seller_id)) if selected_seller_id else False
-                            ) for sc in seller_companies],
-                            name="seller_company_id", required=True
+                            name="customer_id", required=True,
+                            style=select_style
                         ),
-                        Small("Наше юридическое лицо для продажи (определяет IDN котировки)",
-                              style="color: #666; display: block; margin-top: 0.25rem;")
+                        style=form_group_style
                     ),
-                    cls="form-group"
+                    Div(
+                        Label("Статус", style=label_style),
+                        Select(
+                            Option("Черновик", value="draft", selected=quote.get("status") == "draft"),
+                            Option("Отправлено", value="sent", selected=quote.get("status") == "sent"),
+                            Option("Одобрено", value="approved", selected=quote.get("status") == "approved"),
+                            Option("Отклонено", value="rejected", selected=quote.get("status") == "rejected"),
+                            name="status",
+                            style=select_style
+                        ),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
                 ),
                 Div(
-                    Label("Currency",
-                        Select(
-                            Option("RUB", value="RUB", selected=quote.get("currency") == "RUB"),
-                            Option("USD", value="USD", selected=quote.get("currency") == "USD"),
-                            Option("EUR", value="EUR", selected=quote.get("currency") == "EUR"),
-                            name="currency"
-                        )
+                    Label("Компания-продавец *", style=label_style),
+                    Select(
+                        Option("Выберите компанию...", value=""),
+                        *[Option(
+                            format_seller_company_for_dropdown(sc),
+                            value=sc.id,
+                            selected=(str(sc.id) == str(selected_seller_id)) if selected_seller_id else False
+                        ) for sc in seller_companies],
+                        name="seller_company_id", required=True,
+                        style=select_style
                     ),
-                    Label("Delivery Terms",
+                    Small("Наше юридическое лицо для продажи",
+                          style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
+                    style=form_group_style
+                ),
+                style=form_card_style
+            ),
+
+            # Section 2: Delivery
+            Div(
+                Div(icon("truck", size=14), " Доставка", style=section_header_style),
+                Div(
+                    Div(
+                        Label("Город доставки", style=label_style),
+                        Input(
+                            name="delivery_city",
+                            type="text",
+                            value=quote.get("delivery_city", "") or "",
+                            placeholder="Москва, Пекин и т.д.",
+                            style=input_style
+                        ),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Страна доставки", style=label_style),
+                        Input(
+                            name="delivery_country",
+                            type="text",
+                            value=quote.get("delivery_country", "") or "",
+                            placeholder="Россия, Китай и т.д.",
+                            style=input_style
+                        ),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
+                ),
+                Div(
+                    Div(
+                        Label("Способ доставки", style=label_style),
+                        Select(
+                            Option("-- Выберите способ --", value="", selected=not quote.get("delivery_method")),
+                            Option("Авиа", value="air", selected=quote.get("delivery_method") == "air"),
+                            Option("Авто", value="auto", selected=quote.get("delivery_method") == "auto"),
+                            Option("Море", value="sea", selected=quote.get("delivery_method") == "sea"),
+                            Option("Мультимодально", value="multimodal", selected=quote.get("delivery_method") == "multimodal"),
+                            name="delivery_method",
+                            style=select_style
+                        ),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Условия поставки", style=label_style),
                         Select(
                             Option("EXW", value="EXW", selected=quote.get("delivery_terms") == "EXW"),
                             Option("FOB", value="FOB", selected=quote.get("delivery_terms") == "FOB"),
                             Option("CIF", value="CIF", selected=quote.get("delivery_terms") == "CIF"),
                             Option("DDP", value="DDP", selected=quote.get("delivery_terms") == "DDP"),
-                            name="delivery_terms"
-                        )
+                            name="delivery_terms",
+                            style=select_style
+                        ),
+                        style=form_group_style
                     ),
-                    cls="form-row"
+                    style=grid_2col_style
                 ),
-                # Delivery location fields
-                Div(
-                    Label("Delivery City",
-                        Input(
-                            name="delivery_city",
-                            type="text",
-                            value=quote.get("delivery_city", "") or "",
-                            placeholder="Moscow, Beijing, etc.",
-                            required=False
-                        )
-                    ),
-                    Label("Delivery Country",
-                        Input(
-                            name="delivery_country",
-                            type="text",
-                            value=quote.get("delivery_country", "") or "",
-                            placeholder="Russia, China, etc.",
-                            required=False
-                        )
-                    ),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Delivery Method",
-                        Select(
-                            Option("-- Select delivery method --", value="", selected=not quote.get("delivery_method")),
-                            Option("Авиа", value="air", selected=quote.get("delivery_method") == "air"),
-                            Option("Авто", value="auto", selected=quote.get("delivery_method") == "auto"),
-                            Option("Море", value="sea", selected=quote.get("delivery_method") == "sea"),
-                            Option("Мультимодально (все)", value="multimodal", selected=quote.get("delivery_method") == "multimodal"),
-                            name="delivery_method"
-                        )
-                    ),
-                    cls="form-group"
-                ),
-                Div(
-                    Label("Payment Terms (days)",
-                        Input(name="payment_terms", type="number", value=str(quote.get("payment_terms", 30)), min="0")
-                    ),
-                    Label("Delivery Days",
-                        Input(name="delivery_days", type="number", value=str(quote.get("delivery_days", 45)), min="0")
-                    ),
-                    cls="form-row"
-                ),
-                Label("Notes", Textarea(quote.get("notes", "") or "", name="notes", rows="3")),
-                Div(
-                    btn("Save Changes", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Cancel", href=f"/quotes/{quote_id}", variant="secondary"),
-                    btn("Delete Quote", variant="danger", icon_name="trash-2", type="button",
-                        hx_delete=f"/quotes/{quote_id}",
-                        hx_confirm="Are you sure you want to delete this quote?"),
-                    cls="form-actions"
-                ),
-                method="post",
-                action=f"/quotes/{quote_id}/edit"
+                style=form_card_style
             ),
-            cls="card"
+
+            # Section 3: Terms
+            Div(
+                Div(icon("file-text", size=14), " Условия оплаты и сроки", style=section_header_style),
+                Div(
+                    Div(
+                        Label("Валюта", style=label_style),
+                        Select(
+                            Option("RUB", value="RUB", selected=quote.get("currency") == "RUB"),
+                            Option("USD", value="USD", selected=quote.get("currency") == "USD"),
+                            Option("EUR", value="EUR", selected=quote.get("currency") == "EUR"),
+                            name="currency",
+                            style=select_style
+                        ),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Отсрочка платежа (дней)", style=label_style),
+                        Input(name="payment_terms", type="number", value=str(quote.get("payment_terms", 30)), min="0",
+                              style=input_style),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Срок поставки (дней)", style=label_style),
+                        Input(name="delivery_days", type="number", value=str(quote.get("delivery_days", 45)), min="0",
+                              style=input_style),
+                        style=form_group_style
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;"
+                ),
+                Div(
+                    Label("Примечания", style=label_style),
+                    Textarea(quote.get("notes", "") or "", name="notes", rows="3",
+                             style=f"{input_style} resize: vertical; min-height: 80px;"),
+                    style=form_group_style
+                ),
+                style=form_card_style
+            ),
+
+            # Action buttons
+            Div(
+                Button(icon("check", size=14), " Сохранить", type="submit",
+                       style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                A(icon("x", size=14), " Отмена", href=f"/quotes/{quote_id}",
+                  style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+                Button(icon("trash-2", size=14), " Удалить КП", type="button",
+                       hx_delete=f"/quotes/{quote_id}",
+                       hx_confirm="Вы уверены, что хотите удалить это КП?",
+                       style="padding: 10px 20px; background: #fee2e2; color: #dc2626; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-left: auto;"),
+                style="display: flex; gap: 12px; padding: 20px 0;"
+            ),
+            method="post",
+            action=f"/quotes/{quote_id}/edit"
         ),
 
         session=session
@@ -11731,30 +11909,104 @@ def get(quote_id: str, session):
             )
         )
 
-    return page_layout(f"Version History - {quote.get('idn_quote', '')}",
-        H1(f"Version History - {quote.get('idn_quote', '')}"),
-        P(f"Customer: {quote.get('customers', {}).get('name', '-')}"),
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
 
+    table_style = """
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    """
+
+    th_style = """
+        padding: 14px 16px;
+        text-align: left;
+        background: #f8fafc;
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        border-bottom: 1px solid #e2e8f0;
+    """
+
+    td_style = "padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #334155;"
+
+    return page_layout(f"История версий - {quote.get('idn_quote', '')}",
+        # Header card
+        Div(
+            Div(
+                A(icon("arrow-left", size=16), " Назад к КП", href=f"/quotes/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1(f"История версий",
+               style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            Div(
+                Span(icon("file-text", size=14), style="color: #64748b;"),
+                Span(f"КП: {quote.get('idn_quote', '-')}", style="color: #475569; font-weight: 500;"),
+                Span(" • ", style="color: #cbd5e1;"),
+                Span(f"Клиент: {quote.get('customers', {}).get('name', '-')}", style="color: #64748b;"),
+                style="display: flex; align-items: center; gap: 8px; font-size: 14px;"
+            ),
+            style=header_style
+        ),
+
+        # Versions table
         Table(
             Thead(
                 Tr(
-                    Th("Version"),
-                    Th("Status"),
-                    Th("Total"),
-                    Th("Change Reason"),
-                    Th("Created"),
-                    Th("Actions"),
+                    Th("Версия", style=th_style),
+                    Th("Статус", style=th_style),
+                    Th("Сумма", style=th_style),
+                    Th("Причина изменения", style=th_style),
+                    Th("Создана", style=th_style),
+                    Th("", style=th_style),
                 )
             ),
-            Tbody(*version_rows) if version_rows else Tbody(
-                Tr(Td("No versions yet. Run calculation to create first version.", colspan="6", style="text-align: center;"))
+            Tbody(
+                *[Tr(
+                    Td(f"v{v['version_number']}", style=f"{td_style} font-weight: 600;"),
+                    Td(
+                        Span(v.get("status", "draft"),
+                             style=f"padding: 4px 10px; border-radius: 12px; font-size: 12px; "
+                                   f"background: {'#dcfce7' if v.get('status') == 'approved' else '#fef3c7' if v.get('status') == 'sent' else '#f1f5f9'}; "
+                                   f"color: {'#166534' if v.get('status') == 'approved' else '#92400e' if v.get('status') == 'sent' else '#475569'};"),
+                        style=td_style
+                    ),
+                    Td(format_money(v.get("total_quote_currency"), currency), style=f"{td_style} font-weight: 500;"),
+                    Td(v.get("change_reason") or "-", style=f"{td_style} color: #64748b;"),
+                    Td(v.get("created_at", "")[:16].replace("T", " "), style=f"{td_style} color: #64748b; font-size: 13px;"),
+                    Td(
+                        A(icon("eye", size=14), " Просмотр", href=f"/quotes/{quote_id}/versions/{v['version_number']}",
+                          style="color: #3b82f6; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 4px;"),
+                        style=td_style
+                    ),
+                ) for v in versions]
+            ) if version_rows else Tbody(
+                Tr(Td("Версий пока нет. Запустите расчёт для создания первой версии.",
+                      colspan="6", style=f"{td_style} text-align: center; color: #94a3b8; padding: 40px;"))
             ),
+            style=table_style
         ),
 
+        # Action buttons
         Div(
-            btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="arrow-left"),
-            btn_link("Calculate New Version", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-            style="margin-top: 1rem; display: flex; gap: 0.5rem;"
+            A(icon("arrow-left", size=14), " К КП", href=f"/quotes/{quote_id}",
+              style="padding: 10px 16px; background: #f1f5f9; color: #475569; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+            A(icon("calculator", size=14), " Новый расчёт", href=f"/quotes/{quote_id}/calculate",
+              style="padding: 10px 16px; background: #3b82f6; color: white; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+            style="margin-top: 20px; display: flex; gap: 12px;"
         ),
 
         session=session
@@ -15093,43 +15345,109 @@ def get(quote_id: str, session):
             session=session
         )
 
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    comment_box_style = """
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        padding: 16px;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 24px;
+    """
+
+    textarea_style = """
+        width: 100%;
+        min-height: 120px;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #f8fafc;
+        font-family: inherit;
+        resize: vertical;
+        box-sizing: border-box;
+    """
+
     return page_layout(f"Вернуть на проверку - {idn_quote}",
+        # Header card
         Div(
-            A(f"← Назад к КП {idn_quote}", href=f"/procurement/{quote_id}", style="color: #3b82f6;"),
-            H1("✓ Вернуть КП на проверку"),
-            P(f"Клиент: {customer_name}", style="color: #666;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(icon("arrow-left", size=16), f" Назад к закупкам", href=f"/procurement/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1("Вернуть КП на проверку",
+               style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            Div(
+                icon("file-text", size=14, style="color: #64748b;"),
+                Span(f"КП: {idn_quote}", style="color: #475569; font-weight: 500;"),
+                Span(" • ", style="color: #cbd5e1;"),
+                Span(f"Клиент: {customer_name}", style="color: #64748b;"),
+                style="display: flex; align-items: center; gap: 8px; font-size: 14px;"
+            ),
+            style=header_style
         ),
 
-        # Show original revision comment
+        # Original comment (if present)
         Div(
-            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            Div(icon("message-circle", size=14), " Исходный комментарий контроллёра", style=section_header_style),
             P(revision_comment if revision_comment else "— нет комментария —",
-              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
-            style="margin-bottom: 1.5rem;"
+              style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;"),
+            style=comment_box_style
         ) if revision_comment else None,
 
+        # Form
         Form(
             Div(
-                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                Div(icon("edit-3", size=14), " Комментарий об исправлениях *", style=section_header_style),
                 P("Опишите, какие исправления были внесены:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin: 0 0 12px 0;"),
                 Textarea(
                     name="comment",
                     placeholder="Исправлена цена на позицию X...\nОбновлены данные поставщика...\nИзменены сроки производства...",
                     required=True,
-                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                    style=textarea_style
                 ),
-                style="margin-bottom: 1rem;"
+                style="margin-bottom: 24px;"
             ),
             Div(
-                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
-                btn_link("Отмена", href=f"/procurement/{quote_id}", variant="ghost"),
-                style="display: flex; align-items: center; gap: 0.75rem;"
+                Button(icon("check", size=14), " Вернуть на проверку", type="submit",
+                       style="padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                A(icon("x", size=14), " Отмена", href=f"/procurement/{quote_id}",
+                  style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+                style="display: flex; gap: 12px;"
             ),
             action=f"/procurement/{quote_id}/return-to-control",
             method="post",
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -16127,40 +16445,109 @@ def get(quote_id: str, session):
             session=session
         )
 
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    comment_box_style = """
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        padding: 16px;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 24px;
+    """
+
+    textarea_style = """
+        width: 100%;
+        min-height: 120px;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #f8fafc;
+        font-family: inherit;
+        resize: vertical;
+        box-sizing: border-box;
+    """
+
     return page_layout(f"Вернуть на проверку - {idn_quote}",
+        # Header card
         Div(
-            A(f"← Назад к КП {idn_quote}", href=f"/logistics/{quote_id}", style="color: #3b82f6;"),
-            H1("✓ Вернуть КП на проверку"),
-            P(f"Клиент: {customer_name}", style="color: #666;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(icon("arrow-left", size=16), f" Назад к логистике", href=f"/logistics/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1("Вернуть КП на проверку",
+               style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            Div(
+                icon("file-text", size=14, style="color: #64748b;"),
+                Span(f"КП: {idn_quote}", style="color: #475569; font-weight: 500;"),
+                Span(" • ", style="color: #cbd5e1;"),
+                Span(f"Клиент: {customer_name}", style="color: #64748b;"),
+                style="display: flex; align-items: center; gap: 8px; font-size: 14px;"
+            ),
+            style=header_style
         ),
+
+        # Original comment (if present)
         Div(
-            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            Div(icon("message-circle", size=14), " Исходный комментарий контроллёра", style=section_header_style),
             P(revision_comment if revision_comment else "— нет комментария —",
-              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
-            style="margin-bottom: 1.5rem;"
+              style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;"),
+            style=comment_box_style
         ) if revision_comment else None,
+
+        # Form
         Form(
             Div(
-                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                Div(icon("edit-3", size=14), " Комментарий об исправлениях *", style=section_header_style),
                 P("Опишите, какие исправления были внесены:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin: 0 0 12px 0;"),
                 Textarea(
                     name="comment",
                     placeholder="Исправлены расчёты доставки...\nИзменены маршруты...\nОбновлены сроки...",
                     required=True,
-                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                    style=textarea_style
                 ),
-                style="margin-bottom: 1rem;"
+                style="margin-bottom: 24px;"
             ),
             Div(
-                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
-                btn_link("Отмена", href=f"/logistics/{quote_id}", variant="ghost"),
-                style="display: flex; align-items: center; gap: 0.75rem;"
+                Button(icon("check", size=14), " Вернуть на проверку", type="submit",
+                       style="padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                A(icon("x", size=14), " Отмена", href=f"/logistics/{quote_id}",
+                  style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+                style="display: flex; gap: 12px;"
             ),
             action=f"/logistics/{quote_id}/return-to-control",
             method="post",
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
@@ -17481,40 +17868,109 @@ def get(quote_id: str, session):
             session=session
         )
 
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+    """
+
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    comment_box_style = """
+        background: #fef3c7;
+        border-left: 3px solid #f59e0b;
+        padding: 16px;
+        border-radius: 0 8px 8px 0;
+        margin-bottom: 24px;
+    """
+
+    textarea_style = """
+        width: 100%;
+        min-height: 120px;
+        padding: 12px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        background: #f8fafc;
+        font-family: inherit;
+        resize: vertical;
+        box-sizing: border-box;
+    """
+
     return page_layout(f"Вернуть на проверку - {idn_quote}",
+        # Header card
         Div(
-            A(f"← Назад к КП {idn_quote}", href=f"/customs/{quote_id}", style="color: #3b82f6;"),
-            H1("✓ Вернуть КП на проверку"),
-            P(f"Клиент: {customer_name}", style="color: #666;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(icon("arrow-left", size=16), f" Назад к таможне", href=f"/customs/{quote_id}",
+                  style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                style="margin-bottom: 12px;"
+            ),
+            H1("Вернуть КП на проверку",
+               style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            Div(
+                icon("file-text", size=14, style="color: #64748b;"),
+                Span(f"КП: {idn_quote}", style="color: #475569; font-weight: 500;"),
+                Span(" • ", style="color: #cbd5e1;"),
+                Span(f"Клиент: {customer_name}", style="color: #64748b;"),
+                style="display: flex; align-items: center; gap: 8px; font-size: 14px;"
+            ),
+            style=header_style
         ),
+
+        # Original comment (if present)
         Div(
-            H4("Исходный комментарий контроллёра:", style="margin-bottom: 0.5rem;"),
+            Div(icon("message-circle", size=14), " Исходный комментарий контроллёра", style=section_header_style),
             P(revision_comment if revision_comment else "— нет комментария —",
-              style="font-style: italic; background: #f3f4f6; padding: 0.75rem; border-radius: 6px;"),
-            style="margin-bottom: 1.5rem;"
+              style="margin: 0; font-size: 14px; color: #92400e; line-height: 1.5;"),
+            style=comment_box_style
         ) if revision_comment else None,
+
+        # Form
         Form(
             Div(
-                H3("Комментарий об исправлениях *", style="margin-bottom: 0.5rem;"),
+                Div(icon("edit-3", size=14), " Комментарий об исправлениях *", style=section_header_style),
                 P("Опишите, какие исправления были внесены:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin: 0 0 12px 0;"),
                 Textarea(
                     name="comment",
                     placeholder="Исправлены HS-коды...\nОбновлены пошлины...\nИзменены таможенные расходы...",
                     required=True,
-                    style="width: 100%; min-height: 120px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit;"
+                    style=textarea_style
                 ),
-                style="margin-bottom: 1rem;"
+                style="margin-bottom: 24px;"
             ),
             Div(
-                btn("Вернуть на проверку", variant="success", icon_name="check", type="submit"),
-                btn_link("Отмена", href=f"/customs/{quote_id}", variant="ghost"),
-                style="display: flex; align-items: center; gap: 0.75rem;"
+                Button(icon("check", size=14), " Вернуть на проверку", type="submit",
+                       style="padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                A(icon("x", size=14), " Отмена", href=f"/customs/{quote_id}",
+                  style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
+                style="display: flex; gap: 12px;"
             ),
             action=f"/customs/{quote_id}/return-to-control",
             method="post",
-            cls="card"
+            style=form_card_style
         ),
         session=session
     )
