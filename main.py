@@ -28551,80 +28551,111 @@ def get(company_id: str, session):
             session=session
         )
 
-    status_class = "status-approved" if company.is_active else "status-rejected"
     status_text = "Активна" if company.is_active else "Неактивна"
 
     return page_layout(f"Компания: {company.name}",
+        # Header card with gradient
         Div(
-            # Header with actions
             Div(
-                H1(icon("building-2", size=28), f" {company.supplier_code} - {company.name}", cls="page-header"),
                 Div(
-                    A(icon("edit", size=16), " Редактировать", href=f"/seller-companies/{company_id}/edit", role="button"),
-                    " ",
-                    btn_link("К списку", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
-                    style="display: flex; gap: 0.5rem;"
+                    A(icon("arrow-left", size=18), " Компании-продавцы", href="/seller-companies",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
                 ),
-                style="display: flex; justify-content: space-between; align-items: center;"
+                Div(
+                    Div(
+                        icon("building-2", size=24, color="#f97316"),
+                        H1(company.name, style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        Span(company.supplier_code, style="font-family: monospace; font-size: 14px; padding: 4px 10px; background: #fff7ed; color: #ea580c; border-radius: 6px; font-weight: 600;"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if company.is_active else '#dc2626'}; background: {'#dcfce7' if company.is_active else '#fee2e2'};"),
+                        btn_link("Редактировать", href=f"/seller-companies/{company_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
             ),
-            cls="card"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Company details
+        # Main info cards grid
         Div(
-            H2("Основная информация", cls="section-header"),
+            # Card 1: Company Info
             Div(
                 Div(
-                    Strong("Код компании: "), Span(company.supplier_code, style="font-family: monospace;"),
-                    style="margin-bottom: 0.5rem;"
+                    icon("building", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Strong("Название: "), Span(company.name),
-                    style="margin-bottom: 0.5rem;"
+                    Div(
+                        Span("Код компании", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.supplier_code, style="font-weight: 600; color: #ea580c; font-family: monospace; font-size: 16px;"),
+                    ),
+                    Div(
+                        Span("Название", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.name, style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Страна", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.country or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
                 ),
-                Div(
-                    Strong("Страна: "), Span(company.country or "—"),
-                    style="margin-bottom: 0.5rem;"
-                ),
-                Div(
-                    Strong("Статус: "), Span(status_text, cls=f"status-badge {status_class}"),
-                    style="margin-bottom: 0.5rem;"
-                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-
-            H2("Юридические реквизиты", cls="section-header"),
+            # Card 2: Director
             Div(
                 Div(
-                    Strong("ИНН: "), Span(company.inn or "—"),
-                    style="margin-bottom: 0.5rem;"
+                    icon("user", size=16, color="#64748b"),
+                    Span("РУКОВОДИТЕЛЬ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Strong("КПП: "), Span(company.kpp or "—"),
-                    style="margin-bottom: 0.5rem;"
+                    Div(
+                        Span("ФИО директора", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.general_director_name or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Должность", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(company.general_director_position or "Генеральный директор", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; gap: 12px;"
                 ),
-                Div(
-                    Strong("ОГРН: "), Span(company.ogrn or "—"),
-                    style="margin-bottom: 0.5rem;"
-                ),
-                Div(
-                    Strong("Юридический адрес: "), Span(company.registration_address or "—"),
-                    style="margin-bottom: 0.5rem;"
-                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"
+        ),
 
-            H2("Руководитель", cls="section-header"),
+        # Legal info
+        Div(
+            Div(
+                icon("file-text", size=16, color="#64748b"),
+                Span("ЮРИДИЧЕСКИЕ РЕКВИЗИТЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+            ),
             Div(
                 Div(
-                    Strong("ФИО директора: "), Span(company.general_director_name or "—"),
-                    style="margin-bottom: 0.5rem;"
+                    Span("ИНН", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.inn or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
                 ),
                 Div(
-                    Strong("Должность: "), Span(company.general_director_position or "Генеральный директор"),
-                    style="margin-bottom: 0.5rem;"
+                    Span("КПП", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.kpp or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
                 ),
+                Div(
+                    Span("ОГРН", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(company.ogrn or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 16px;"
             ),
-
-            cls="card"
+            Div(
+                Span("Юридический адрес", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                Div(company.registration_address or "—", style="font-weight: 500; color: #1e293b; font-size: 14px; margin-top: 4px;"),
+            ),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         session=session
@@ -31970,79 +32001,97 @@ def get(contract_id: str, session):
             session=session
         )
 
-    status_class = {
-        "active": "status-approved",
-        "suspended": "status-pending",
-        "terminated": "status-rejected"
-    }.get(contract.status, "")
     status_text = CONTRACT_STATUS_NAMES.get(contract.status, contract.status)
+    status_colors = {
+        "active": ("#16a34a", "#dcfce7"),
+        "suspended": ("#d97706", "#fef3c7"),
+        "terminated": ("#dc2626", "#fee2e2"),
+    }
+    status_color, status_bg = status_colors.get(contract.status, ("#64748b", "#f1f5f9"))
 
     specs_count = contract.next_specification_number - 1 if contract.next_specification_number > 1 else 0
 
     return page_layout(f"Договор: {contract.contract_number}",
-        # Header with actions
+        # Header card with gradient
         Div(
-            H1(icon("file-text", size=28), f" {contract.contract_number}", cls="page-header"),
             Div(
-                A(icon("edit", size=16), " Редактировать", href=f"/customer-contracts/{contract_id}/edit", role="button"),
-                btn_link("К списку", href="/customer-contracts", variant="secondary", icon_name="arrow-left"),
-                style="display: flex; gap: 0.5rem;"
+                Div(
+                    A(icon("arrow-left", size=18), " Договоры", href="/customer-contracts",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Div(
+                        icon("file-text", size=24, color="#0ea5e9"),
+                        H1(f"Договор {contract.contract_number}", style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {status_color}; background: {status_bg};"),
+                        btn_link("Редактировать", href=f"/customer-contracts/{contract_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
+                ),
             ),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Status badge
-        Div(
-            Span(status_text, cls=f"status-badge {status_class}"),
-            style="margin-bottom: 1rem;"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Main info card
         Div(
-            H3(icon("clipboard-list", size=20), " Основная информация", cls="card-header"),
+            Div(
+                icon("clipboard-list", size=16, color="#64748b"),
+                Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+            ),
             Div(
                 Div(
-                    Div(Strong("Номер договора"), style="color: #666; font-size: 0.9em;"),
-                    Div(contract.contract_number, style="font-family: monospace; font-size: 1.2em;"),
-                    cls="info-item"
+                    Span("Номер договора", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(contract.contract_number, style="font-weight: 600; color: #0284c7; font-family: monospace; font-size: 16px;"),
                 ),
                 Div(
-                    Div(Strong("Клиент"), style="color: #666; font-size: 0.9em;"),
+                    Span("Клиент", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
                     Div(
-                        A(contract.customer_name, href=f"/customers/{contract.customer_id}") if contract.customer_name else "—"
+                        A(contract.customer_name, href=f"/customers/{contract.customer_id}", style="color: #6366f1; font-weight: 500;") if contract.customer_name else "—",
+                        style="font-size: 14px;"
                     ),
-                    cls="info-item"
                 ),
                 Div(
-                    Div(Strong("Дата договора"), style="color: #666; font-size: 0.9em;"),
-                    Div(contract.contract_date.strftime("%d.%m.%Y") if contract.contract_date else "—"),
-                    cls="info-item"
+                    Span("Дата договора", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(contract.contract_date.strftime("%d.%m.%Y") if contract.contract_date else "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
                 ),
                 Div(
-                    Div(Strong("Спецификаций создано"), style="color: #666; font-size: 0.9em;"),
-                    Div(str(specs_count)),
-                    cls="info-item"
+                    Span("Спецификаций создано", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(str(specs_count), style="font-weight: 600; color: #1e293b; font-size: 16px;"),
                 ),
-                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
+                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;"
             ),
-            cls="card"
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Notes card (if has notes)
         Div(
-            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
-            P(contract.notes or "Нет примечаний"),
-            cls="card"
+            Div(
+                icon("message-square", size=16, color="#64748b"),
+                Span("ПРИМЕЧАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"
+            ),
+            P(contract.notes or "Нет примечаний", style="font-size: 14px; color: #1e293b; margin: 0;"),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if contract.notes else "",
 
         # Specifications info
         Div(
-            H3("📑 Спецификации по договору"),
-            P(f"По данному договору создано {specs_count} спецификаций.") if specs_count > 0 else
-            P("По данному договору ещё нет спецификаций.", style="color: #666;"),
-            P("Следующий номер спецификации: ", Strong(f"№{contract.next_specification_number}")),
+            Div(
+                icon("file-stack", size=16, color="#64748b"),
+                Span("СПЕЦИФИКАЦИИ ПО ДОГОВОРУ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"
+            ),
+            P(f"По данному договору создано {specs_count} спецификаций.", style="font-size: 14px; color: #1e293b; margin: 0 0 8px 0;") if specs_count > 0 else
+            P("По данному договору ещё нет спецификаций.", style="font-size: 14px; color: #64748b; margin: 0 0 8px 0;"),
+            P(Span("Следующий номер спецификации: ", style="color: #64748b;"), Strong(f"№{contract.next_specification_number}", style="color: #1e293b;"), style="font-size: 14px; margin: 0 0 16px 0;"),
             btn_link("К контролю спецификаций", href="/dashboard?tab=spec-control", variant="secondary", icon_name="arrow-right"),
-            cls="card"
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         session=session
@@ -32363,91 +32412,108 @@ def get(location_id: str, session):
             session=session
         )
 
-    status_class = "status-approved" if location.is_active else "status-rejected"
     status_text = "Активна" if location.is_active else "Неактивна"
-
-    # Type badges
-    type_badges = []
-    if location.is_hub:
-        type_badges.append(Span(icon("building-2", size=12), " Логистический хаб", cls="badge badge-primary", style="margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
-    if location.is_customs_point:
-        type_badges.append(Span(icon("shield-check", size=12), " Таможенный пункт", cls="badge badge-info", style="display: inline-flex; align-items: center; gap: 0.25rem;"))
-
     display_name = location.display_name or f"{location.code or ''} - {location.city or ''}, {location.country}".strip(" -,")
 
     return page_layout(f"Локация: {display_name}",
-        # Header with actions
+        # Header card with gradient
         Div(
-            H1(icon("map-pin", size=28), f" {display_name}", cls="page-header"),
-            Div(
-                A(icon("edit", size=16), " Редактировать", href=f"/locations/{location_id}/edit", role="button"),
-                btn_link("К списку", href="/locations", variant="secondary", icon_name="arrow-left"),
-                style="display: flex; gap: 0.5rem;"
-            ),
-            style="display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Status and type badges
-        Div(
-            Span(status_text, cls=f"status-badge {status_class}"),
-            " ",
-            *type_badges,
-            style="margin-bottom: 1rem;"
-        ),
-
-        # Main info card
-        Div(
-            H3(icon("clipboard-list", size=20), " Основная информация", cls="card-header"),
             Div(
                 Div(
-                    Div(Strong("Код"), style="color: #666; font-size: 0.9em;"),
-                    Div(location.code or "—", style="font-family: monospace; font-size: 1.2em;"),
-                    cls="info-item"
+                    A(icon("arrow-left", size=18), " Локации", href="/locations",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
+                    style="margin-bottom: 12px;"
                 ),
                 Div(
-                    Div(Strong("Город"), style="color: #666; font-size: 0.9em;"),
-                    Div(location.city or "—"),
-                    cls="info-item"
+                    Div(
+                        icon("map-pin", size=24, color="#0ea5e9"),
+                        H1(display_name, style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        Span(location.code, style="font-family: monospace; font-size: 14px; padding: 4px 10px; background: #e0f2fe; color: #0284c7; border-radius: 6px; font-weight: 600;") if location.code else "",
+                        style="display: flex; align-items: center; gap: 12px;"
+                    ),
+                    Div(
+                        Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if location.is_active else '#dc2626'}; background: {'#dcfce7' if location.is_active else '#fee2e2'};"),
+                        Span(icon("building-2", size=12), " Хаб", style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #7c3aed; background: #f3e8ff;") if location.is_hub else "",
+                        Span(icon("shield-check", size=12), " Таможня", style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: #0284c7; background: #e0f2fe;") if location.is_customs_point else "",
+                        btn_link("Редактировать", href=f"/locations/{location_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        style="display: flex; align-items: center; gap: 8px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center;"
                 ),
-                Div(
-                    Div(Strong("Страна"), style="color: #666; font-size: 0.9em;"),
-                    Div(location.country),
-                    cls="info-item"
-                ),
-                Div(
-                    Div(Strong("Адрес"), style="color: #666; font-size: 0.9em;"),
-                    Div(location.address or "—"),
-                    cls="info-item"
-                ),
-                cls="info-grid", style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem;"
             ),
-            cls="card"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Type flags card
+        # Main info cards grid
         Div(
-            H3(icon("tag", size=20), " Классификация", cls="card-header"),
+            # Card 1: Location Info
             Div(
                 Div(
-                    Div(Strong("Логистический хаб"), style="color: #666; font-size: 0.9em;"),
-                    Div(Span(icon("check-circle", size=14), " Да", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #16a34a;") if location.is_hub else Span(icon("x-circle", size=14), " Нет", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #666;")),
-                    cls="info-item"
+                    icon("clipboard-list", size=16, color="#64748b"),
+                    Span("ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Div(Strong("Таможенный пункт"), style="color: #666; font-size: 0.9em;"),
-                    Div(Span(icon("check-circle", size=14), " Да", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #16a34a;") if location.is_customs_point else Span(icon("x-circle", size=14), " Нет", style="display: inline-flex; align-items: center; gap: 0.25rem; color: #666;")),
-                    cls="info-item"
+                    Div(
+                        Span("Код", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(location.code or "—", style="font-weight: 600; color: #0284c7; font-family: monospace; font-size: 16px;"),
+                    ),
+                    Div(
+                        Span("Город", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(location.city or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Страна", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(location.country, style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    Div(
+                        Span("Адрес", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(location.address or "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;"
                 ),
-                cls="info-grid", style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            cls="card"
+            # Card 2: Classification
+            Div(
+                Div(
+                    icon("tag", size=16, color="#64748b"),
+                    Span("КЛАССИФИКАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Span("Логистический хаб", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(
+                            Span(icon("check-circle", size=14, color="#16a34a"), " Да", style="display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-weight: 500;") if location.is_hub else
+                            Span(icon("x-circle", size=14, color="#94a3b8"), " Нет", style="display: inline-flex; align-items: center; gap: 4px; color: #64748b;"),
+                            style="font-size: 14px; margin-top: 4px;"
+                        ),
+                    ),
+                    Div(
+                        Span("Таможенный пункт", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                        Div(
+                            Span(icon("check-circle", size=14, color="#16a34a"), " Да", style="display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-weight: 500;") if location.is_customs_point else
+                            Span(icon("x-circle", size=14, color="#94a3b8"), " Нет", style="display: inline-flex; align-items: center; gap: 4px; color: #64748b;"),
+                            style="font-size: 14px; margin-top: 4px;"
+                        ),
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;"
+                ),
+                style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;"
         ),
 
         # Notes card (if has notes)
         Div(
-            H3(icon("message-square", size=20), " Примечания", cls="card-header"),
-            P(location.notes or "Нет примечаний"),
-            cls="card"
+            Div(
+                icon("message-square", size=16, color="#64748b"),
+                Span("ПРИМЕЧАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;"
+            ),
+            P(location.notes or "Нет примечаний", style="font-size: 14px; color: #1e293b; margin: 0;"),
+            style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if location.notes else "",
 
         session=session
