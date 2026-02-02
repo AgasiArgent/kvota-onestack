@@ -4964,26 +4964,34 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     ]
 
 
-def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
     """
     Procurement workspace tab content.
     Shows quotes with items having brands assigned to current user.
+    Admin users see ALL items regardless of brand assignment.
     """
-    # Get brands assigned to this user
-    my_brands = get_assigned_brands(user_id, org_id)
+    # Check if user is admin - bypass brand filtering
+    is_admin = roles and "admin" in roles
+
+    # Get brands assigned to this user (empty for admin = see all)
+    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
     quotes_with_details = []
 
-    if my_brands:
+    # Admin sees all, regular users need assigned brands
+    if is_admin or my_brands:
         # Query quote_items with my brands
         items_result = supabase.table("quote_items") \
             .select("id, quote_id, brand, procurement_status, quantity, product_name") \
             .execute()
 
-        # Filter items for my brands (case-insensitive)
-        my_items = [item for item in (items_result.data or [])
-                    if (item.get("brand") or "").lower() in my_brands_lower]
+        # Filter items for my brands (case-insensitive) - admins see all
+        if is_admin:
+            my_items = items_result.data or []
+        else:
+            my_items = [item for item in (items_result.data or [])
+                        if (item.get("brand") or "").lower() in my_brands_lower]
 
         # Group items by quote_id
         items_by_quote = {}
@@ -5116,10 +5124,10 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
             style="margin-bottom: 1rem;"
         ),
 
-        # My assigned brands
+        # My assigned brands (admin sees all)
         Div(
             H3("Мои бренды"),
-            P(", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору."),
+            P("Все бренды (администратор)" if is_admin else (", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору.")),
             cls="card"
         ),
 
@@ -6776,7 +6784,7 @@ def get(session, tab: str = None, status_filter: str = None):
     if tab == "overview":
         content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
     elif tab == "procurement":
-        content = _dashboard_procurement_content(user_id, org_id, supabase, status_filter)
+        content = _dashboard_procurement_content(user_id, org_id, supabase, status_filter, roles)
     elif tab == "logistics":
         content = _dashboard_logistics_content(user_id, org_id, supabase, status_filter)
     elif tab == "customs":
@@ -13924,8 +13932,11 @@ def get(quote_id: str, session):
             session=session
         )
 
-    # Get user's assigned brands
-    my_brands = get_assigned_brands(user_id, org_id)
+    # Check if user is admin - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin"])
+
+    # Get user's assigned brands (admin sees all)
+    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
     # Get all items for this quote
@@ -13937,9 +13948,12 @@ def get(quote_id: str, session):
 
     all_items = items_result.data or []
 
-    # Filter items for my brands (handle None brand values)
-    my_items = [item for item in all_items
-                if (item.get("brand") or "").lower() in my_brands_lower]
+    # Filter items for my brands (handle None brand values) - admin sees all
+    if is_admin:
+        my_items = all_items
+    else:
+        my_items = [item for item in all_items
+                    if (item.get("brand") or "").lower() in my_brands_lower]
 
     # Get existing invoices for this quote
     invoices_result = supabase.table("invoices") \
@@ -15458,10 +15472,13 @@ async def api_complete_procurement(quote_id: str, session):
     if not user_has_any_role(session, ["procurement", "admin"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
+    # Check if user is admin - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin"])
+
     supabase = get_supabase()
 
-    # Get user's assigned brands
-    my_brands = get_assigned_brands(user_id, org_id)
+    # Get user's assigned brands (admin sees all)
+    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
     # Get all items for this quote
@@ -15472,9 +15489,12 @@ async def api_complete_procurement(quote_id: str, session):
 
     all_items = items_result.data or []
 
-    # Filter items for my brands
-    my_item_ids = [item["id"] for item in all_items
-                   if (item.get("brand") or "").lower() in my_brands_lower]
+    # Filter items for my brands - admin can complete all
+    if is_admin:
+        my_item_ids = [item["id"] for item in all_items]
+    else:
+        my_item_ids = [item["id"] for item in all_items
+                       if (item.get("brand") or "").lower() in my_brands_lower]
 
     if my_item_ids:
         # Mark items as completed
@@ -15508,8 +15528,11 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
     user = session["user"]
     user_id = user["id"]
 
-    # Get user's assigned brands
-    my_brands = get_assigned_brands(user_id, org_id)
+    # Check if user is admin - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin"])
+
+    # Get user's assigned brands (admin sees all)
+    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
     # Get invoices
@@ -15528,8 +15551,11 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
         .execute()
 
     all_items = items_result.data or []
-    my_items = [item for item in all_items
-                if (item.get("brand") or "").lower() in my_brands_lower]
+    if is_admin:
+        my_items = all_items
+    else:
+        my_items = [item for item in all_items
+                    if (item.get("brand") or "").lower() in my_brands_lower]
 
     # Get supplier and buyer names
     supplier_ids = list(set(inv.get("supplier_id") for inv in invoices if inv.get("supplier_id")))
@@ -15888,8 +15914,11 @@ def get(quote_id: str, session):
 
     customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
 
-    # Get user's assigned brands
-    my_brands = get_assigned_brands(user_id, org_id)
+    # Check if user is admin - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin"])
+
+    # Get user's assigned brands (admin sees all)
+    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
     # Get all items for this quote
@@ -15901,9 +15930,12 @@ def get(quote_id: str, session):
 
     all_items = items_result.data or []
 
-    # Filter items for my brands (handle None brand values)
-    my_items = [item for item in all_items
-                if (item.get("brand") or "").lower() in my_brands_lower]
+    # Filter items for my brands (handle None brand values) - admin sees all
+    if is_admin:
+        my_items = all_items
+    else:
+        my_items = [item for item in all_items
+                    if (item.get("brand") or "").lower() in my_brands_lower]
 
     if not my_items:
         # No items to export, redirect back with message
