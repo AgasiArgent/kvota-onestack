@@ -12269,57 +12269,119 @@ def get(session):
 
     calc_settings = calc_result.data[0] if calc_result.data else {}
 
-    return page_layout("Settings",
-        H1("Organization Settings"),
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
+    section_header_style = """
+        font-size: 11px;
+        text-transform: uppercase;
+        color: #64748b;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    """
+
+    form_card_style = """
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 24px;
+        margin-bottom: 20px;
+    """
+
+    input_style = """
+        padding: 10px 14px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        background: #f8fafc;
+        width: 100%;
+        box-sizing: border-box;
+    """
+
+    label_style = "display: block; font-size: 13px; color: #475569; margin-bottom: 6px; font-weight: 500;"
+
+    form_group_style = "margin-bottom: 16px;"
+
+    grid_2col_style = "display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"
+
+    return page_layout("Настройки",
+        # Header card
+        Div(
+            H1("Настройки организации",
+               style="margin: 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            P(f"Организация: {org.get('name', '—')}",
+              style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;"),
+            style=header_style
+        ),
 
         # Organization info
         Div(
-            H3("Organization Details"),
-            Form(
-                Label("Organization Name",
-                    Input(name="name", value=org.get("name", ""), readonly=True)
-                ),
-                P("Contact your administrator to change organization details.", style="color: #666; font-size: 0.875rem;"),
-                cls="card"
-            )
+            Div(icon("building", size=14), " Информация об организации", style=section_header_style),
+            Div(
+                Label("Название организации", style=label_style),
+                Input(name="name", value=org.get("name", ""), readonly=True,
+                      style=f"{input_style} background: #f1f5f9; color: #64748b;"),
+                Small("Для изменения реквизитов организации обратитесь к администратору",
+                      style="color: #94a3b8; font-size: 12px; margin-top: 6px; display: block;"),
+                style=form_group_style
+            ),
+            style=form_card_style
         ),
 
         # Calculation defaults
-        Div(
-            H3("Calculation Defaults"),
-            Form(
+        Form(
+            Div(
+                Div(icon("calculator", size=14), " Настройки расчётов", style=section_header_style),
                 Div(
-                    Label("Default Forex Risk %",
-                        Input(name="rate_forex_risk", type="number", value=str(calc_settings.get("rate_forex_risk", 3)), step="0.1", min="0", max="20")
+                    Div(
+                        Label("Риск курса валют (%)", style=label_style),
+                        Input(name="rate_forex_risk", type="number", value=str(calc_settings.get("rate_forex_risk", 3)),
+                              step="0.1", min="0", max="20", style=input_style),
+                        style=form_group_style
                     ),
-                    Label("Default Financial Commission %",
-                        Input(name="rate_fin_comm", type="number", value=str(calc_settings.get("rate_fin_comm", 2)), step="0.1", min="0", max="20")
+                    Div(
+                        Label("Финансовая комиссия (%)", style=label_style),
+                        Input(name="rate_fin_comm", type="number", value=str(calc_settings.get("rate_fin_comm", 2)),
+                              step="0.1", min="0", max="20", style=input_style),
+                        style=form_group_style
                     ),
-                    cls="form-row"
+                    style=grid_2col_style
                 ),
                 Div(
-                    Label("Daily Loan Interest Rate %",
-                        Input(name="rate_loan_interest_daily", type="number", value=str(round(calc_settings.get("rate_loan_interest_daily", 0.05), 6)), step="any", min="0", max="1")
-                    ),
-                    cls="form-row"
+                    Label("Ставка кредита (% в день)", style=label_style),
+                    Input(name="rate_loan_interest_daily", type="number",
+                          value=str(round(calc_settings.get("rate_loan_interest_daily", 0.05), 6)),
+                          step="any", min="0", max="1", style=f"{input_style} max-width: 300px;"),
+                    style=form_group_style
                 ),
-                Div(
-                    btn("Save Settings", variant="primary", icon_name="check", type="submit"),
-                    cls="form-actions"
-                ),
-                method="post",
-                action="/settings"
+                Button(icon("check", size=14), " Сохранить настройки", type="submit",
+                       style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                style=form_card_style
             ),
-            cls="card"
+            method="post",
+            action="/settings"
         ),
 
         # Telegram settings link
         Div(
-            H3(icon("message-circle", size=20), " Telegram", cls="card-header"),
+            Div(icon("message-circle", size=14), " Telegram", style=section_header_style),
             P("Привяжите Telegram для получения уведомлений о задачах и согласованиях.",
-              style="color: #666; margin-bottom: 1rem;"),
-            btn_link("Настройки Telegram →", href="/settings/telegram", variant="primary", icon_name="message-circle"),
-            cls="card"
+              style="color: #64748b; margin: 0 0 16px 0; font-size: 14px;"),
+            A(icon("message-circle", size=14), " Настройки Telegram", href="/settings/telegram",
+              style="padding: 10px 20px; background: #3b82f6; color: white; border-radius: 6px; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"),
+            style=form_card_style
         ),
 
         session=session
@@ -12503,12 +12565,31 @@ def get(session):
             style="padding: 1.5rem; max-width: 400px; margin: 0 auto;"
         )
 
+    # Design system styles
+    header_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 24px;
+    """
+
     return page_layout("Настройки Telegram",
         Div(
-            btn_link("← Настройки", href="/settings", variant="ghost", icon_name="arrow-left"),
-            H1("🔗 Привязка Telegram", style="margin: 1rem 0;"),
-            P("Получайте уведомления и согласовывайте КП прямо в Telegram",
-              style="color: #666; margin-bottom: 2rem;"),
+            # Header card
+            Div(
+                Div(
+                    A(icon("arrow-left", size=16), " Назад к настройкам", href="/settings",
+                      style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
+                    style="margin-bottom: 12px;"
+                ),
+                H1("Привязка Telegram",
+                   style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+                P("Получайте уведомления и согласовывайте КП прямо в Telegram",
+                  style="margin: 0; font-size: 14px; color: #64748b;"),
+                style=header_style
+            ),
             status_card,
             style="max-width: 600px; margin: 0 auto;"
         ),
