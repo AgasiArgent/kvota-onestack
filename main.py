@@ -12144,51 +12144,137 @@ def get(quote_id: str, version_num: int, session):
     variables = version.get("quote_variables", {})
 
     return page_layout(f"Version {version_num} - {quote.get('idn_quote', '')}",
+        # Gradient header card
         Div(
-            H1(f"Version {version_num}"),
-            status_badge(version.get("status", "draft")),
-            style="display: flex; align-items: center; gap: 1rem;"
-        ),
-
-        # Version metadata
-        Div(
-            H3("Version Info"),
-            Table(
-                Tr(Td("Created:"), Td(version.get("created_at", "")[:16].replace("T", " "))),
-                Tr(Td("Change Reason:"), Td(version.get("change_reason", "-"))),
-                Tr(Td("Status:"), Td(version.get("status", "draft"))),
-                Tr(Td("Total:"), Td(Strong(format_money(version.get("total_quote_currency"), currency)))),
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#64748b"),
+                    Span("К истории версий", style="margin-left: 6px;"),
+                    href=f"/quotes/{quote_id}/versions",
+                    style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("history", size=24, color="#6366f1"),
+                    Span(f"Версия {version_num}", style="font-size: 24px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    status_badge(version.get("status", "draft")),
+                    style="display: flex; align-items: center; gap: 12px;"
+                ),
+                Div(
+                    Span(f"КП: {quote.get('idn_quote', '-')}", style="color: #64748b; font-size: 14px;"),
+                    style="margin-top: 4px;"
+                ),
             ),
-            cls="card"
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Variables snapshot
+        # Two column layout
         Div(
-            H3("Calculation Variables"),
-            Table(
-                Tr(Td("Markup:"), Td(f"{variables.get('markup', '-')}%")),
-                Tr(Td("Incoterms:"), Td(variables.get('offer_incoterms', '-'))),
-                Tr(Td("Delivery Time:"), Td(f"{variables.get('delivery_time', '-')} days")),
-                Tr(Td("Client Advance:"), Td(f"{variables.get('advance_from_client', '-')}%")),
-                Tr(Td("Exchange Rate:"), Td(str(variables.get('exchange_rate', '-')))),
+            # Left column - Version Info & Variables
+            Div(
+                # Version metadata card
+                Div(
+                    Div(
+                        icon("info", size=16, color="#64748b"),
+                        Span("ИНФОРМАЦИЯ О ВЕРСИИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Div(
+                            Span("Дата создания", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(version.get("created_at", "")[:16].replace("T", " "), style="font-size: 14px; font-weight: 500; color: #1e293b;"),
+                            style="margin-bottom: 16px;"
+                        ),
+                        Div(
+                            Span("Причина изменения", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(version.get("change_reason", "-") or "-", style="font-size: 14px; font-weight: 500; color: #1e293b;"),
+                            style="margin-bottom: 16px;"
+                        ),
+                        Div(
+                            Span("Итого по версии", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(format_money(version.get("total_quote_currency"), currency), style="font-size: 18px; font-weight: 600; color: #059669;"),
+                        ),
+                    ),
+                    style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+                ),
+
+                # Variables snapshot card
+                Div(
+                    Div(
+                        icon("sliders", size=16, color="#64748b"),
+                        Span("ПАРАМЕТРЫ РАСЧЁТА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                    ),
+                    Div(
+                        *[
+                            Div(
+                                Span(label, style="font-size: 12px; color: #64748b;"),
+                                Span(value, style="font-size: 14px; font-weight: 500; color: #1e293b;"),
+                                style="display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9;"
+                            )
+                            for label, value in [
+                                ("Наценка", f"{variables.get('markup', '-')}%"),
+                                ("Инкотермс", variables.get('offer_incoterms', '-') or '-'),
+                                ("Срок поставки", f"{variables.get('delivery_time', '-')} дн."),
+                                ("Аванс от клиента", f"{variables.get('advance_from_client', '-')}%"),
+                                ("Курс обмена", str(variables.get('exchange_rate', '-'))),
+                            ]
+                        ],
+                    ),
+                    style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+                ),
+                style="flex: 1; min-width: 280px;"
             ),
-            cls="card"
-        ),
 
-        # Products snapshot
-        Div(
-            H3("Products"),
-            Table(
-                Thead(Tr(Th("Product"), Th("Qty"), Th("Price/Unit"), Th("Total"), Th("Profit"))),
-                Tbody(*product_rows) if product_rows else Tbody(Tr(Td("No products", colspan="5"))),
+            # Right column - Products
+            Div(
+                Div(
+                    Div(
+                        icon("package", size=16, color="#64748b"),
+                        Span("ТОВАРЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                        Span(f"{len(products)}", style="background: #e0e7ff; color: #4f46e5; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;"),
+                        style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;"
+                    ),
+                    Div(
+                        Table(
+                            Thead(
+                                Tr(
+                                    Th("Товар", style="text-align: left; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"),
+                                    Th("Кол-во", style="text-align: center; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"),
+                                    Th("Цена/ед.", style="text-align: right; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"),
+                                    Th("Итого", style="text-align: right; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"),
+                                    Th("Прибыль", style="text-align: right; padding: 12px 16px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #e2e8f0;"),
+                                )
+                            ),
+                            Tbody(
+                                *[
+                                    Tr(
+                                        Td(p.get("product_name", "-")[:40], style="padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"),
+                                        Td(str(p.get("quantity", 1)), style="text-align: center; padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"),
+                                        Td(format_money((results[i] if i < len(results) else {}).get("AJ16"), currency), style="text-align: right; padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"),
+                                        Td(format_money((results[i] if i < len(results) else {}).get("AL16"), currency), style="text-align: right; padding: 12px 16px; font-size: 14px; font-weight: 500; color: #1e293b; border-bottom: 1px solid #f1f5f9;"),
+                                        Td(format_money((results[i] if i < len(results) else {}).get("AF16"), currency), style="text-align: right; padding: 12px 16px; font-size: 14px; font-weight: 500; color: #059669; border-bottom: 1px solid #f1f5f9;"),
+                                    )
+                                    for i, p in enumerate(products)
+                                ] if products else [
+                                    Tr(Td("Нет товаров", colspan="5", style="padding: 24px; text-align: center; color: #94a3b8;"))
+                                ]
+                            ),
+                            style="width: 100%; border-collapse: collapse;"
+                        ),
+                        style="overflow-x: auto;"
+                    ),
+                    style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+                ),
+                style="flex: 2; min-width: 400px;"
             ),
-            cls="card"
+            style="display: flex; gap: 24px; flex-wrap: wrap;"
         ),
 
+        # Action buttons
         Div(
-            btn_link("Version History", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="arrow-left"),
-            btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="file-text"),
-            style="margin-top: 1rem; display: flex; gap: 0.5rem;"
+            btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+            btn_link("К КП", href=f"/quotes/{quote_id}", variant="primary", icon_name="file-text"),
+            style="margin-top: 24px; display: flex; gap: 12px;"
         ),
 
         session=session
@@ -19581,21 +19667,39 @@ def get(session, quote_id: str):
     ]
 
     return page_layout(f"Возврат на доработку - {idn_quote}",
-        # Header
+        # Gradient header card
         Div(
-            A("← Вернуться к проверке", href=f"/quote-control/{quote_id}", style="color: #3b82f6; text-decoration: none;"),
-            H1(f"↩ Возврат КП {idn_quote} на доработку"),
-            P(f"Клиент: {customer_name}", style="color: #666;"),
-            style="margin-bottom: 1rem;"
+            Div(
+                A(
+                    icon("arrow-left", size=16, color="#64748b"),
+                    Span("Вернуться к проверке", style="margin-left: 6px;"),
+                    href=f"/quote-control/{quote_id}",
+                    style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
+                ),
+                Div(
+                    icon("undo-2", size=24, color="#f59e0b"),
+                    Span(f"Возврат КП {idn_quote} на доработку", style="font-size: 22px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                    style="display: flex; align-items: center;"
+                ),
+                Div(
+                    Span(f"Клиент: {customer_name}", style="color: #64748b; font-size: 14px;"),
+                    style="margin-top: 4px;"
+                ),
+            ),
+            style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; border-radius: 12px; padding: 20px 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
         # Form
         Form(
-            # Department selection
+            # Department selection card
             Div(
-                H3("Кому вернуть?", style="margin-bottom: 0.75rem;"),
+                Div(
+                    icon("users", size=16, color="#64748b"),
+                    Span("КОМУ ВЕРНУТЬ?", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"
+                ),
                 P("Выберите отдел, который должен внести исправления:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin-bottom: 16px;"),
                 *[
                     Div(
                         Label(
@@ -19605,51 +19709,55 @@ def get(session, quote_id: str):
                                 value=dept_code,
                                 required=True,
                                 checked=(dept_code == "sales"),
-                                style="margin-right: 0.5rem;"
+                                style="margin-right: 10px; accent-color: #f59e0b;"
                             ),
-                            Span(dept_label, style="font-weight: 500;"),
+                            Span(dept_label, style="font-weight: 500; color: #1e293b;"),
                             Br(),
-                            Span(dept_desc, style="color: #666; font-size: 0.875rem; margin-left: 1.5rem;"),
+                            Span(dept_desc, style="color: #64748b; font-size: 13px; margin-left: 26px; display: block; margin-top: 2px;"),
                             style="cursor: pointer; display: block;"
                         ),
-                        style="padding: 0.75rem; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 0.5rem; background: white;"
+                        style="padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; background: #f8fafc; transition: all 0.15s ease;"
                     )
                     for dept_code, dept_label, dept_desc in department_options
                 ],
-                style="margin-bottom: 1.5rem;"
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
-            # Comment section
+            # Comment section card
             Div(
-                H3("Причина возврата", style="margin-bottom: 0.5rem;"),
+                Div(
+                    icon("message-square", size=16, color="#64748b"),
+                    Span("ПРИЧИНА ВОЗВРАТА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                    style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;"
+                ),
                 P("Укажите, что необходимо исправить в КП:",
-                  style="color: #666; font-size: 0.875rem; margin-bottom: 1rem;"),
+                  style="color: #64748b; font-size: 13px; margin-bottom: 12px;"),
                 Textarea(
                     name="comment",
                     id="comment",
                     placeholder="Опишите, какие именно данные требуют исправления:\n- Неверная наценка\n- Ошибки в логистике\n- Некорректные условия оплаты\n- и т.д.",
                     required=True,
-                    style="width: 100%; min-height: 150px; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-family: inherit; resize: vertical;"
+                    style="width: 100%; min-height: 150px; padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-family: inherit; resize: vertical; background: #f8fafc; font-size: 14px; color: #1e293b;"
                 ),
-                style="margin-bottom: 1rem;"
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
 
             # Info banner
             Div(
-                "⚠️ После исправлений выбранный отдел вернёт КП обратно на проверку.",
-                style="background: #fef3c7; color: #92400e; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;"
+                icon("alert-triangle", size=18, color="#92400e"),
+                Span("После исправлений выбранный отдел вернёт КП обратно на проверку.", style="margin-left: 10px;"),
+                style="display: flex; align-items: center; background: #fef3c7; color: #92400e; padding: 14px 16px; border-radius: 10px; margin-bottom: 24px; font-size: 14px;"
             ),
 
             # Action buttons
             Div(
-                btn("Вернуть на доработку", variant="secondary", icon_name="arrow-left", type="submit"),
+                btn("Вернуть на доработку", variant="secondary", icon_name="undo-2", type="submit"),
                 btn_link("Отмена", href=f"/quote-control/{quote_id}", variant="ghost"),
-                style="display: flex; align-items: center; gap: 1rem;"
+                style="display: flex; align-items: center; gap: 12px;"
             ),
 
             action=f"/quote-control/{quote_id}/return",
-            method="post",
-            cls="card"
+            method="post"
         ),
 
         session=session
