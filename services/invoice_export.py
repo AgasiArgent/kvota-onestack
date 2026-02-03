@@ -158,13 +158,25 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     # Amount in words
     amount_words = amount_in_words_russian(float(total_with_vat), currency)
 
-    # Terms from variables
-    payment_terms = variables.get("payment_terms_text", "Постоплата")
-    if not payment_terms and variables.get("advance_percent", 0) > 0:
-        advance = variables.get("advance_percent", 0)
-        payment_terms = f"Аванс {advance}%, остаток после отгрузки"
-    elif not payment_terms:
-        payment_terms = "Постоплата"
+    # Payment terms from calculation variables
+    # Use advance_from_client (not advance_percent which doesn't exist)
+    advance_from_client = float(variables.get("advance_from_client", 0))
+    time_to_advance_raw = int(variables.get("time_to_advance", 0))
+    time_to_receiving_raw = int(variables.get("time_to_advance_on_receiving", 0))
+
+    # Apply minimum values: at least 5 days for advance, 3 days for final payment
+    time_to_advance = max(time_to_advance_raw, 5)
+    time_to_receiving = max(time_to_receiving_raw, 3)
+
+    # Build payment terms text based on advance percentage
+    if advance_from_client >= 100:
+        payment_terms = f"100% предоплата в течение {time_to_advance} дней"
+    elif advance_from_client > 0:
+        remainder = int(100 - advance_from_client)
+        advance_int = int(advance_from_client)
+        payment_terms = f"Аванс {advance_int}% в течение {time_to_advance} дней, остаток {remainder}% в течение {time_to_receiving} дней после отгрузки"
+    else:
+        payment_terms = f"Оплата 100% в течение {time_to_receiving} дней после отгрузки"
 
     delivery_time = variables.get("delivery_time", 60)
     price_includes = variables.get("price_includes", "НДС, страховку, таможенную очистку и доставку товара до склада")
