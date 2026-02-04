@@ -1021,8 +1021,9 @@ def create_deal_from_specification(
             )
         extracted_data['quote_id'] = quote_id
 
-        # Generate deal number
-        deal_number = generate_deal_number(organization_id)
+        # Use quote's idn_quote as deal number (unified numbering)
+        # Instead of generating DEAL-YYYY-NNNN, inherit the quote number
+        deal_number = quote.get('idn_quote') or generate_deal_number(organization_id)
         extracted_data['deal_number'] = deal_number
 
         # Signed date (use provided, spec sign_date, or today)

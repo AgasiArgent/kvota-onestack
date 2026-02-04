@@ -226,3 +226,201 @@ def get_quote_version(quote_id: str, version_number: int, org_id: str) -> Option
         "offer_incoterms": v.get("offer_incoterms"),
         "currency_of_quote": v.get("currency_of_quote")
     }
+
+
+def get_current_quote_version(quote_id: str, org_id: str) -> Optional[Dict]:
+    """
+    Get the current (latest) version for a quote.
+
+    Args:
+        quote_id: Quote UUID
+        org_id: Organization UUID (for security)
+
+    Returns:
+        Latest version record or None if no versions exist
+    """
+    supabase = get_supabase()
+
+    # Verify quote belongs to org
+    quote = supabase.table("quotes") \
+        .select("id, current_version_id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote.data:
+        return None
+
+    # Get latest version by version number
+    result = supabase.table("quote_versions") \
+        .select("*") \
+        .eq("quote_id", quote_id) \
+        .order("version", desc=True) \
+        .limit(1) \
+        .execute()
+
+    if not result.data:
+        return None
+
+    v = result.data[0]
+    input_vars = v.get("input_variables") or {}
+
+    return {
+        "id": v["id"],
+        "quote_id": v["quote_id"],
+        "version_number": v.get("version", 1),
+        "status": v.get("status", "sent"),
+        "quote_variables": input_vars.get("variables", {}),
+        "products_snapshot": input_vars.get("products", []),
+        "exchange_rates_used": input_vars.get("exchange_rate", {}),
+        "calculation_results": input_vars.get("results", []),
+        "totals": input_vars.get("totals", {}),
+        "total_quote_currency": input_vars.get("totals", {}).get("total_with_vat", 0),
+        "change_reason": input_vars.get("change_reason", ""),
+        "created_at": v.get("created_at"),
+        "created_by": v.get("created_by"),
+        "seller_company": v.get("seller_company"),
+        "offer_incoterms": v.get("offer_incoterms"),
+        "currency_of_quote": v.get("currency_of_quote")
+    }
+
+
+def can_update_version(quote_id: str, org_id: str) -> tuple[bool, str]:
+    """
+    Check if the current version can be updated (based on КП workflow_status).
+
+    Protection rule: If КП is sent_to_client → versions are immutable.
+    Only create new versions, can't update existing ones.
+
+    Args:
+        quote_id: Quote UUID
+        org_id: Organization UUID (for security)
+
+    Returns:
+        Tuple of (can_update: bool, reason: str)
+    """
+    supabase = get_supabase()
+
+    quote = supabase.table("quotes") \
+        .select("id, workflow_status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote.data:
+        return False, "КП не найдено"
+
+    workflow_status = quote.data[0].get("workflow_status", "draft")
+
+    # КП sent to client → versions are immutable
+    protected_statuses = ["sent_to_client", "client_negotiation", "deal", "pending_spec_control", "pending_signature"]
+    if workflow_status in protected_statuses:
+        return False, f"КП уже отправлено клиенту (статус: {workflow_status}). Можно только создать новую версию."
+
+    return True, "OK"
+
+
+def update_quote_version(
+    version_id: str,
+    quote_id: str,
+    org_id: str,
+    user_id: str,
+    variables: Dict[str, Any],
+    items: List[Dict],
+    results: List[Dict],
+    totals: Dict[str, Any],
+    change_reason: str = "Updated"
+) -> Dict[str, Any]:
+    """
+    Update existing version (if КП not sent to client).
+
+    Args:
+        version_id: Version UUID to update
+        quote_id: Quote UUID
+        org_id: Organization UUID (for security)
+        user_id: User UUID making the update
+        variables: Calculation variables used
+        items: List of quote items with product info
+        results: List of calculation results
+        totals: Quote totals
+        change_reason: Reason for update
+
+    Returns:
+        Updated version record
+
+    Raises:
+        ValueError: If version can't be updated (КП sent to client)
+    """
+    supabase = get_supabase()
+
+    # Check if version can be updated
+    can_update, reason = can_update_version(quote_id, org_id)
+    if not can_update:
+        raise ValueError(reason)
+
+    # Convert Decimal to float in variables
+    vars_for_storage = {
+        k: float(v) if isinstance(v, Decimal) else v
+        for k, v in variables.items()
+    }
+
+    # Build products snapshot
+    products_snapshot = []
+    for item in items:
+        products_snapshot.append({
+            "id": item.get("id"),
+            "product_name": item.get("product_name"),
+            "product_code": item.get("product_code"),
+            "quantity": item.get("quantity"),
+            "base_price_vat": float(item.get("base_price_vat", 0)),
+            "weight_in_kg": float(item.get("weight_in_kg", 0)) if item.get("weight_in_kg") else None,
+            "customs_code": item.get("customs_code"),
+            "supplier_country": item.get("supplier_country"),
+        })
+
+    # Build input_variables JSONB
+    input_variables = {
+        "variables": vars_for_storage,
+        "products": products_snapshot,
+        "results": results,
+        "totals": {k: float(v) if isinstance(v, Decimal) else v for k, v in totals.items()},
+        "exchange_rate": {
+            "rate": float(variables.get("exchange_rate", 1.0)),
+            "from_currency": variables.get("currency_of_base_price", "USD"),
+            "to_currency": variables.get("currency_of_quote", "USD"),
+        },
+        "change_reason": change_reason,
+        "updated_at": datetime.now().isoformat(),
+        "updated_by": user_id
+    }
+
+    # Update version
+    update_data = {
+        "input_variables": input_variables,
+        "seller_company": variables.get("seller_company", ""),
+        "offer_sale_type": variables.get("offer_sale_type", "поставка"),
+        "offer_incoterms": variables.get("offer_incoterms", "DDP"),
+        "currency_of_quote": variables.get("currency_of_quote", "USD"),
+    }
+
+    result = supabase.table("quote_versions") \
+        .update(update_data) \
+        .eq("id", version_id) \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    if not result.data:
+        raise ValueError("Не удалось обновить версию")
+
+    version = result.data[0]
+
+    # Update quote timestamp
+    try:
+        supabase.table("quotes").update({
+            "delivery_terms": variables.get("offer_incoterms", ""),
+            "updated_at": datetime.now().isoformat()
+        }).eq("id", quote_id).execute()
+    except Exception:
+        pass
+
+    return version

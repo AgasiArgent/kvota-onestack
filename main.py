@@ -38,7 +38,10 @@ from services.export_validation_service import create_validation_excel
 from services.procurement_export import create_procurement_excel
 
 # Import version service
-from services.quote_version_service import create_quote_version, list_quote_versions, get_quote_version
+from services.quote_version_service import (
+    create_quote_version, list_quote_versions, get_quote_version,
+    get_current_quote_version, can_update_version, update_quote_version
+)
 
 # Import role service
 from services.role_service import get_user_role_codes, get_session_user_roles, require_role, require_any_role
@@ -11092,6 +11095,13 @@ def get(quote_id: str, session):
     # Check for partial recalculation
     partial_recalc = quote.get("partial_recalc")
 
+    # Check existing versions and workflow status for version dialog
+    existing_versions = list_quote_versions(quote_id, user["org_id"])
+    workflow_status = quote.get("workflow_status", "draft")
+    can_update, update_reason = can_update_version(quote_id, user["org_id"])
+    current_version = get_current_quote_version(quote_id, user["org_id"]) if existing_versions else None
+    current_version_num = current_version.get("version_number", 1) if current_version else 0
+
     # ==========================================================================
     # COMPACT CALCULATE PAGE STYLING (Logistics-inspired design)
     # ==========================================================================
@@ -11332,12 +11342,131 @@ def get(quote_id: str, session):
                 style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start;"
             ),
 
+            # Hidden fields for version handling
+            Input(type="hidden", name="version_action", id="version_action", value="new" if existing_versions else "auto"),
+            Input(type="hidden", name="change_reason", id="change_reason", value=""),
+
+            # Version dialog (shown only if versions exist)
+            Div(
+                Div(
+                    # Dialog header
+                    Div(
+                        icon("git-branch", size=20),
+                        Span("Сохранение версии", style="font-size: 16px; font-weight: 600; margin-left: 8px;"),
+                        style="display: flex; align-items: center; margin-bottom: 16px;"
+                    ),
+                    # Current version info
+                    Div(
+                        Span(f"Текущая версия: v{current_version_num}", style="font-weight: 500;"),
+                        style="margin-bottom: 12px; color: #64748b;"
+                    ) if current_version_num > 0 else None,
+                    # Options
+                    Div(
+                        # Update option (only if allowed)
+                        Div(
+                            Input(type="radio", name="version_choice", value="update", id="version_update",
+                                  disabled=not can_update,
+                                  style="margin-right: 8px;"),
+                            Label(
+                                f"Обновить версию v{current_version_num}",
+                                fr="version_update",
+                                style="cursor: pointer;" if can_update else "cursor: not-allowed; color: #9ca3af;"
+                            ),
+                            Span(" (не создавать новую)", style="font-size: 12px; color: #64748b;"),
+                            style="margin-bottom: 8px;"
+                        ) if can_update else Div(
+                            icon("lock", size=14),
+                            Span(update_reason, style="font-size: 13px; color: #dc2626; margin-left: 6px;"),
+                            style="display: flex; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;"
+                        ),
+                        # New version option
+                        Div(
+                            Input(type="radio", name="version_choice", value="new", id="version_new", checked=True,
+                                  style="margin-right: 8px;"),
+                            Label(
+                                f"Создать версию v{current_version_num + 1}",
+                                fr="version_new",
+                                style="cursor: pointer; font-weight: 500;"
+                            ),
+                            style="margin-bottom: 12px;"
+                        ),
+                        style="margin-bottom: 16px;"
+                    ),
+                    # Change reason (optional)
+                    Div(
+                        Label("Причина изменения (опционально):", style="font-size: 13px; color: #64748b; display: block; margin-bottom: 6px;"),
+                        Input(type="text", id="change_reason_input", placeholder="Скидка по запросу клиента",
+                              style="width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;"),
+                        style="margin-bottom: 20px;"
+                    ),
+                    # Dialog buttons
+                    Div(
+                        Button("Сохранить", type="button", id="version_dialog_save",
+                               style="padding: 10px 24px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer;"),
+                        Button("Отмена", type="button", id="version_dialog_cancel",
+                               style="padding: 10px 24px; background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; border-radius: 6px; margin-left: 8px; cursor: pointer;"),
+                        style="display: flex; justify-content: flex-end;"
+                    ),
+                    style="background: white; padding: 24px; border-radius: 12px; max-width: 420px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);"
+                ),
+                id="version_dialog",
+                style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center;"
+            ) if existing_versions else None,
+
             # Actions - compact
             Div(
-                btn("Сохранить расчёт", variant="success", icon_name="check", type="submit"),
+                btn("Сохранить расчёт", variant="success", icon_name="check", type="button" if existing_versions else "submit",
+                    id="save_calc_btn", onclick="showVersionDialog()" if existing_versions else None),
                 btn_link("Отмена", href=f"/quotes/{quote_id}", variant="ghost"),
                 style="display: flex; gap: 12px; margin-top: 16px; padding: 12px 16px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-radius: 10px; border: 1px solid #e2e8f0;"
             ),
+
+            # JavaScript for version dialog
+            Script(f"""
+                function showVersionDialog() {{
+                    document.getElementById('version_dialog').style.display = 'flex';
+                }}
+
+                document.addEventListener('DOMContentLoaded', function() {{
+                    var dialog = document.getElementById('version_dialog');
+                    var saveBtn = document.getElementById('version_dialog_save');
+                    var cancelBtn = document.getElementById('version_dialog_cancel');
+                    var form = document.querySelector('form[action="/quotes/{quote_id}/calculate"]');
+
+                    if (cancelBtn) {{
+                        cancelBtn.addEventListener('click', function() {{
+                            dialog.style.display = 'none';
+                        }});
+                    }}
+
+                    if (saveBtn) {{
+                        saveBtn.addEventListener('click', function() {{
+                            // Get selected version action
+                            var versionChoice = document.querySelector('input[name="version_choice"]:checked');
+                            if (versionChoice) {{
+                                document.getElementById('version_action').value = versionChoice.value;
+                            }}
+                            // Get change reason
+                            var changeReason = document.getElementById('change_reason_input');
+                            if (changeReason) {{
+                                document.getElementById('change_reason').value = changeReason.value;
+                            }}
+                            // Submit the form
+                            dialog.style.display = 'none';
+                            form.submit();
+                        }});
+                    }}
+
+                    // Close dialog on backdrop click
+                    if (dialog) {{
+                        dialog.addEventListener('click', function(e) {{
+                            if (e.target === dialog) {{
+                                dialog.style.display = 'none';
+                            }}
+                        }});
+                    }}
+                }});
+            """) if existing_versions else None,
 
             method="post",
             action=f"/quotes/{quote_id}/calculate",
@@ -11364,6 +11493,9 @@ def post(
     supplier_discount: str = "0",
     exchange_rate: str = "1.0",
     delivery_time: str = "30",
+    # Version handling (new fields)
+    version_action: str = "auto",  # "auto", "update", "new"
+    change_reason: str = "",
     # Logistics
     logistics_supplier_hub: str = "0",
     logistics_hub_customs: str = "0",
@@ -11795,7 +11927,7 @@ def post(
                 comment="Partial recalculation: price updated, returning to client negotiation"
             )
 
-        # Create immutable quote version for audit trail
+        # Create or update quote version for audit trail
         all_results = []
         for item, result in zip(items, results):
             all_results.append({
@@ -11821,17 +11953,71 @@ def post(
         }
 
         try:
-            version = create_quote_version(
-                quote_id=quote_id,
-                user_id=user["id"],
-                variables=variables,
-                items=items,
-                results=all_results,
-                totals=version_totals,
-                change_reason="Calculation saved",
-                customer_id=quote.get("customer_id")
-            )
-            version_number = version.get("version_number") if version else None
+            # Check existing versions and decide action
+            existing_versions = list_quote_versions(quote_id, user["org_id"])
+            current_version = get_current_quote_version(quote_id, user["org_id"]) if existing_versions else None
+
+            # Determine change reason text
+            reason_text = change_reason if change_reason else "Calculation saved"
+
+            if not existing_versions:
+                # First version - always create (no dialog shown)
+                version = create_quote_version(
+                    quote_id=quote_id,
+                    user_id=user["id"],
+                    variables=variables,
+                    items=items,
+                    results=all_results,
+                    totals=version_totals,
+                    change_reason=reason_text,
+                    customer_id=quote.get("customer_id")
+                )
+                version_number = version.get("version") if version else 1
+
+            elif version_action == "update" and current_version:
+                # User chose to update existing version
+                can_update_flag, _ = can_update_version(quote_id, user["org_id"])
+                if can_update_flag:
+                    version = update_quote_version(
+                        version_id=current_version["id"],
+                        quote_id=quote_id,
+                        org_id=user["org_id"],
+                        user_id=user["id"],
+                        variables=variables,
+                        items=items,
+                        results=all_results,
+                        totals=version_totals,
+                        change_reason=reason_text
+                    )
+                    version_number = current_version.get("version_number", 1)
+                else:
+                    # Can't update, create new instead
+                    version = create_quote_version(
+                        quote_id=quote_id,
+                        user_id=user["id"],
+                        variables=variables,
+                        items=items,
+                        results=all_results,
+                        totals=version_totals,
+                        change_reason=reason_text,
+                        customer_id=quote.get("customer_id")
+                    )
+                    version_number = version.get("version") if version else None
+
+            else:
+                # Create new version (default or user explicitly chose "new")
+                version = create_quote_version(
+                    quote_id=quote_id,
+                    user_id=user["id"],
+                    variables=variables,
+                    items=items,
+                    results=all_results,
+                    totals=version_totals,
+                    change_reason=reason_text,
+                    customer_id=quote.get("customer_id")
+                )
+                version_number = version.get("version") if version else None
+
         except Exception as ve:
             # Version creation is optional - don't fail calculation
             version_number = None

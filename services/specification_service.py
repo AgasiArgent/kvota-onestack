@@ -911,9 +911,10 @@ def create_specification_from_quote(
         # 5. Build prefilled data from quote and calculation variables
         prefilled_fields = {}
 
-        # Identification
+        # Identification - inherit quote number (unified numbering)
+        # Instead of generating SPEC-YYYY-NNNN, use the same idn_quote
         prefilled_fields['proposal_idn'] = quote.get('idn_quote')
-        prefilled_fields['specification_number'] = generate_specification_number(organization_id)
+        prefilled_fields['specification_number'] = quote.get('idn_quote')  # Use quote number as spec number
 
         # Currency and payment
         prefilled_fields['specification_currency'] = (
