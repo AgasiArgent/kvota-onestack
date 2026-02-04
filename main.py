@@ -6927,7 +6927,7 @@ def get(session):
     supabase = get_supabase()
 
     result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at, quote_versions(version)") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at, quote_versions!quote_versions_quote_id_fkey(version)") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True) \
         .execute()
