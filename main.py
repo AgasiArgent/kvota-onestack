@@ -6885,6 +6885,35 @@ def get(session, tab: str = None, status_filter: str = None):
 # QUOTES LIST
 # ============================================================================
 
+def version_badge(quote_id, current_ver, total_count):
+    """Render version badge for quotes list. Clickable if multiple versions."""
+    if total_count <= 1:
+        return Span(f"v{current_ver}", style="color: #94a3b8; font-size: 12px;")
+
+    badge_style = """
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    """
+    return A(
+        f"v{current_ver}",
+        Span(f"({total_count})", style="opacity: 0.7; margin-left: 4px;"),
+        href=f"/quotes/{quote_id}/versions",
+        style=badge_style,
+        title="Посмотреть историю версий",
+        onclick="event.stopPropagation();"
+    )
+
+
 @rt("/quotes")
 def get(session):
     """
@@ -6898,12 +6927,18 @@ def get(session):
     supabase = get_supabase()
 
     result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at") \
+        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at, quote_versions(version)") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True) \
         .execute()
 
     quotes = result.data or []
+
+    # Process version data for each quote
+    for q in quotes:
+        versions = q.get("quote_versions") or []
+        q["version_count"] = len(versions)
+        q["current_version"] = max([v.get("version", 1) for v in versions]) if versions else 1
 
     # Design system styles
     header_card_style = """
@@ -7017,6 +7052,7 @@ def get(session):
                         Th("№ КП"),
                         Th("Клиент"),
                         Th("Статус"),
+                        Th("Версии", style="text-align: center; width: 80px;"),
                         Th("Сумма", cls="col-money"),
                         Th("Профит", cls="col-money"),
                         Th("Дата"),
@@ -7027,6 +7063,8 @@ def get(session):
                             Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
                             Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
                             Td(status_badge_v2(q.get("workflow_status", "draft"))),
+                            Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
+                               style="text-align: center;"),
                             Td(format_money(q.get("total_amount")), cls="col-money"),
                             Td(format_money(q.get("total_profit_usd")), cls="col-money",
                                style="color: #059669; font-weight: 500;"),
@@ -7052,7 +7090,7 @@ def get(session):
                             ),
                             style="text-align: center; padding: 40px 24px;"
                         ),
-                        colspan="7"
+                        colspan="8"
                     ))),
                     cls="table-enhanced"
                 ),
