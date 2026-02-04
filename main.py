@@ -11617,8 +11617,10 @@ def post(
 
         invoices_logistics = invoices_result.data or []
 
+        # Import convert_amount for use in logistics aggregation and exchange rate calculation
+        from services.currency_service import convert_amount
+
         if invoices_logistics:
-            from services.currency_service import convert_amount
             total_logistics_supplier_hub = Decimal(0)
             total_logistics_hub_customs = Decimal(0)
             total_logistics_customs_client = Decimal(0)
