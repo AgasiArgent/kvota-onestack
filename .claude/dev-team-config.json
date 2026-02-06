@@ -1,0 +1,32 @@
+{
+  "team_name": "dev-team-onestack",
+  "stack": "python",
+  "dev_mode": "unified",
+  "roles": {
+    "persistent": ["session-planner", "backlog-manager", "code-quality", "test-writer"],
+    "optional": ["e2e-tester", "designer", "team-lead"],
+    "dynamic": ["developer"]
+  },
+  "active_roles": ["session-planner", "backlog-manager", "code-quality", "test-writer", "developer", "e2e-tester", "designer", "team-lead"],
+  "clickup_list": "kvota",
+  "clickup_lists": ["kvota", "sprint"],
+  "base_url": "https://kvotaflow.ru",
+  "commands": {
+    "test": "pytest -v",
+    "lint": "ruff check .",
+    "build": "pip install -e .",
+    "format": "black . && isort ."
+  },
+  "directories": {
+    "frontend": ".",
+    "backend": ".",
+    "tests": "tests/"
+  },
+  "extensions": {
+    "skills_to_preload": ["db-kvota", "cicd", "vps-connect"],
+    "custom_agents": [],
+    "developer_extra_skills": ["db-kvota", "cicd"]
+  },
+  "max_parallel_devs": 4,
+  "max_fix_cycles": 3
+}
