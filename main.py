@@ -7598,6 +7598,20 @@ def get(quote_id: str, session):
     from services.seller_company_service import get_all_seller_companies
     seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
+    # Look up creator name from user_profiles
+    creator_name = None
+    if quote.get("created_by"):
+        try:
+            creator_result = supabase.table("user_profiles") \
+                .select("full_name") \
+                .eq("user_id", quote["created_by"]) \
+                .limit(1) \
+                .execute()
+            if creator_result.data and creator_result.data[0].get("full_name"):
+                creator_name = creator_result.data[0]["full_name"]
+        except Exception:
+            pass
+
     # Get quote items
     items_result = supabase.table("quote_items") \
         .select("*") \
@@ -7644,6 +7658,26 @@ def get(quote_id: str, session):
         ("sea", "Море"),
         ("multimodal", "Мультимодально")
     ]
+    delivery_priority_options = [
+        ("fast", "Лучше быстро"),
+        ("cheap", "Лучше дешево"),
+        ("normal", "Обычно")
+    ]
+
+    # Compute created_at display and expiry info
+    created_at_display = "—"
+    expiry_display = "—"
+    is_expired = False
+    if quote.get("created_at"):
+        try:
+            created_dt = datetime.fromisoformat(quote["created_at"].replace("Z", "+00:00"))
+            created_at_display = created_dt.strftime("%d.%m.%Y %H:%M")
+            validity = quote.get("validity_days") or 30
+            expiry_dt = created_dt + timedelta(days=validity)
+            expiry_display = expiry_dt.strftime("%d.%m.%Y")
+            is_expired = datetime.now(created_dt.tzinfo) > expiry_dt
+        except Exception:
+            pass
 
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Compact header with inline editing
@@ -7773,6 +7807,21 @@ def get(quote_id: str, session):
                     ),
                     style="flex: 1 1 160px; min-width: 160px;"
                 ),
+                # Delivery Priority
+                Div(
+                    Label("ПРИОРИТЕТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Select(
+                        Option("—", value=""),
+                        *[Option(label, value=val, selected=(val == quote.get("delivery_priority"))) for val, label in delivery_priority_options],
+                        name="delivery_priority",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_priority", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1 1 160px; min-width: 160px;"
+                ),
                 # Delivery Terms
                 Div(
                     Label("УСЛОВИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
@@ -7786,6 +7835,60 @@ def get(quote_id: str, session):
                         hx_swap="none"
                     ),
                     style="flex: 1 1 100px; min-width: 100px;"
+                ),
+                style="display: flex; flex-wrap: wrap; gap: 1rem;"
+            ),
+            # Section header: СРОКИ И ИНФОРМАЦИЯ
+            Div(
+                icon("clock", size=16, color="#64748b"),
+                Span(" СРОКИ И ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-top: 1.25rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+
+            # Row: Created at, Creator, Validity days, Expiry date
+            Div(
+                # Created at
+                Div(
+                    Label("ДАТА СОЗДАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Span(
+                        created_at_display,
+                        style="font-size: 14px; color: #334155; padding: 8px 0; display: block;"
+                    ),
+                    style="flex: 1 1 140px; min-width: 140px;"
+                ),
+                # Creator
+                Div(
+                    Label("СОЗДАЛ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Span(
+                        creator_name or "—",
+                        style="font-size: 14px; color: #334155; padding: 8px 0; display: block;"
+                    ),
+                    style="flex: 1 1 160px; min-width: 160px;"
+                ),
+                # Validity days (inline-editable)
+                Div(
+                    Label("СРОК ДЕЙСТВИЯ (ДНЕЙ)", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Input(
+                        type="number",
+                        value=str(quote.get("validity_days") or 30),
+                        min="1",
+                        name="validity_days",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box; max-width: 120px;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "validity_days", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1 1 160px; min-width: 160px;"
+                ),
+                # Expiry date (calculated, with red/green indicator)
+                Div(
+                    Label("ДЕЙСТВИТЕЛЕН ДО", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Span(
+                        expiry_display,
+                        style=f"font-size: 14px; padding: 6px 10px; border-radius: 6px; display: inline-block; font-weight: 500; {'background: #fef2f2; color: #dc2626;' if is_expired else 'background: #f0fdf4; color: #16a34a;'}" if expiry_display != "\u2014" else "font-size: 14px; color: #334155; padding: 8px 0; display: block;"
+                    ),
+                    style="flex: 1 1 140px; min-width: 140px;"
                 ),
                 style="display: flex; flex-wrap: wrap; gap: 1rem;"
             ),
@@ -10067,8 +10170,9 @@ async def inline_update_quote(quote_id: str, session, request):
     # Allowed fields for inline update
     allowed_fields = [
         'customer_id', 'seller_company_id', 'delivery_city',
-        'delivery_country', 'delivery_method', 'delivery_terms',
-        'currency', 'payment_terms', 'notes'
+        'delivery_country', 'delivery_method', 'delivery_priority',
+        'delivery_terms', 'currency', 'payment_terms', 'notes',
+        'validity_days'
     ]
 
     if field not in allowed_fields:
@@ -10077,6 +10181,13 @@ async def inline_update_quote(quote_id: str, session, request):
     # Handle empty values and the string "undefined" (JavaScript serialization bug)
     if value == "" or value is None or value == "undefined":
         value = None
+
+    # Convert integer fields
+    if field == "validity_days" and value is not None:
+        try:
+            value = max(1, int(value))
+        except (ValueError, TypeError):
+            value = 30
 
     try:
         supabase.table("quotes") \
@@ -10341,6 +10452,21 @@ def get(quote_id: str, session):
                     ),
                     style=grid_2col_style
                 ),
+                Div(
+                    Div(
+                        Label("Приоритет доставки", style=label_style),
+                        Select(
+                            Option("-- Выберите приоритет --", value="", selected=not quote.get("delivery_priority")),
+                            Option("Лучше быстро", value="fast", selected=quote.get("delivery_priority") == "fast"),
+                            Option("Лучше дешево", value="cheap", selected=quote.get("delivery_priority") == "cheap"),
+                            Option("Обычно", value="normal", selected=quote.get("delivery_priority") == "normal"),
+                            name="delivery_priority",
+                            style=select_style
+                        ),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
+                ),
                 style=form_card_style
             ),
 
@@ -10371,7 +10497,13 @@ def get(quote_id: str, session):
                               style=input_style),
                         style=form_group_style
                     ),
-                    style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;"
+                    Div(
+                        Label("Срок действия КП (дней)", style=label_style),
+                        Input(name="validity_days", type="number", value=str(quote.get("validity_days", 30)), min="1",
+                              style=input_style),
+                        style=form_group_style
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px;"
                 ),
                 Div(
                     Label("Примечания", style=label_style),
@@ -10406,7 +10538,8 @@ def get(quote_id: str, session):
 def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_terms: str,
          payment_terms: int, delivery_days: int, notes: str,
          delivery_city: str = None, delivery_country: str = None, delivery_method: str = None,
-         seller_company_id: str = None, session=None):
+         delivery_priority: str = None, seller_company_id: str = None,
+         validity_days: int = 30, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -10422,6 +10555,7 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
             "delivery_terms": delivery_terms,
             "payment_terms": payment_terms,
             "delivery_days": delivery_days,
+            "validity_days": validity_days,
             "notes": notes or None,
             "updated_at": datetime.now().isoformat()
         }
@@ -10441,6 +10575,11 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
             update_data["delivery_method"] = delivery_method.strip()
         else:
             update_data["delivery_method"] = None
+
+        if delivery_priority and delivery_priority.strip():
+            update_data["delivery_priority"] = delivery_priority.strip()
+        else:
+            update_data["delivery_priority"] = None
 
         # v3.0: seller_company_id at quote level
         # If provided and not empty, set it; otherwise keep existing or set to None
@@ -14380,6 +14519,7 @@ def get(quote_id: str, session):
             'quantity': item.get('quantity', 1),
             'price': item.get('purchase_price_original') if item.get('purchase_price_original') is not None else '',
             'production_time': item.get('production_time_days') if item.get('production_time_days') is not None else '',
+            'price_includes_vat': item.get('price_includes_vat', False),
             'is_unavailable': item.get('is_unavailable', False),
             'invoice_id': item.get('invoice_id') or '',
             'invoice_label': f"#{invoices.index(inv)+1}" if inv else '',
@@ -15250,6 +15390,7 @@ def get(quote_id: str, session):
                             id: row.id,
                             purchase_price_original: row.price !== '' && row.price != null ? parseFloat(row.price) : null,
                             production_time_days: row.production_time !== '' && row.production_time != null ? parseInt(row.production_time) : null,
+                            price_includes_vat: row.price_includes_vat || false,
                             is_unavailable: row.is_unavailable || false
                         }});
                     }}
@@ -15400,6 +15541,7 @@ def get(quote_id: str, session):
                     {{data: 'quantity', type: 'numeric', readOnly: true, width: 50}},
                     {{data: 'price', type: 'numeric', width: 80, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
                     {{data: 'production_time', type: 'numeric', width: 50, readOnly: !canEdit}},
+                    {{data: 'price_includes_vat', type: 'checkbox', width: 50, readOnly: !canEdit}},
                     {{data: 'is_unavailable', type: 'checkbox', width: 50, readOnly: !canEdit,
                       renderer: function(instance, td, row, col, prop, value) {{
                           Handsontable.renderers.CheckboxRenderer.apply(this, arguments);
@@ -15428,7 +15570,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Н/Д', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'НДС', 'Н/Д', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -16057,6 +16199,10 @@ async def api_bulk_update_items(quote_id: str, session, request):
 
             if "production_time_days" in item and item["production_time_days"] is not None:
                 update_data["production_time_days"] = item["production_time_days"]
+
+            # Support price_includes_vat checkbox
+            if "price_includes_vat" in item:
+                update_data["price_includes_vat"] = bool(item["price_includes_vat"])
 
             # Support is_unavailable checkbox
             if "is_unavailable" in item:
@@ -28651,6 +28797,7 @@ def get(session, q: str = "", status: str = ""):
                     style="font-family: monospace; color: #4a4aff;"
                 ),
                 Td(c.name),
+                Td(c.country or "—"),
                 Td(c.inn or "—"),
                 Td(c.kpp or "—"),
                 Td(c.ogrn or "—"),
@@ -28776,6 +28923,7 @@ def get(session, q: str = "", status: str = ""):
                 Tr(
                     Th("Код"),
                     Th("Название"),
+                    Th("Страна"),
                     Th("ИНН"),
                     Th("КПП"),
                     Th("ОГРН"),
@@ -28788,7 +28936,7 @@ def get(session, q: str = "", status: str = ""):
                 Tr(Td(
                     "Компании не найдены. ",
                     A("Добавить первую компанию", href="/buyer-companies/new"),
-                    colspan="8", style="text-align: center; padding: 2rem;"
+                    colspan="9", style="text-align: center; padding: 2rem;"
                 ))
             )
         ),
@@ -30743,6 +30891,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
         contacts_preview_items = []
         for contact in customer.contacts[:5]:
             badges = []
+            if contact.is_lpr:
+                badges.append(Span("ЛПР", title="Лицо, принимающее решения", style="margin-left: 0.25rem; background: #dbeafe; color: #1d4ed8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;"))
             if contact.is_signatory:
                 badges.append(Span("✏️", title="Подписант", style="margin-left: 0.25rem;"))
             if contact.is_primary:
@@ -31029,7 +31179,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         hx_swap="outerHTML",
                         id="add-warehouse-form"),
                 ),
-                style="margin-top: 1rem;"
+                cls="table-container",
+                style="margin: 0; padding: 1.5rem;"
             )
         )
 
@@ -31109,14 +31260,14 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Td(Span(status_text, cls=f"status-badge {status_class}")),
                     Td((contract.get("notes") or "—")[:100]),
                     Td(
-                        A(icon("file-text", size=16), href=f"/contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
+                        A(icon("file-text", size=16), href=f"/customer-contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
                     )
                 )
             )
 
         add_btn = A(
             icon("plus", size=14), " Добавить",
-            href=f"/customers/{customer_id}/contracts/new",
+            href=f"/customer-contracts/new?customer_id={customer_id}",
             style="background: var(--accent); color: white; padding: 0.4rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500;"
         )
 
@@ -31726,7 +31877,7 @@ def _render_contact_field(contact_id: str, customer_id: str, field_name: str, va
 
 
 def _render_contact_name_cell(contact, customer_id: str):
-    """Render the name cell with full name (Фамилия Имя Отчество) and inline editing."""
+    """Render the name cell with full name (Фамилия Имя Отчество), ЛПР badge, and inline editing."""
     # Build full name: Фамилия Имя Отчество
     name_parts = []
     if contact.last_name:
@@ -31737,9 +31888,14 @@ def _render_contact_name_cell(contact, customer_id: str):
         name_parts.append(contact.patronymic)
     full_name = " ".join(name_parts) if name_parts else "—"
 
+    # Build name content with optional ЛПР badge
+    name_content = [Strong(full_name)]
+    if contact.is_lpr:
+        name_content.append(Span("ЛПР", style="margin-left: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;"))
+
     return Td(
         Div(
-            Strong(full_name),
+            *name_content,
             id=f"contact-{contact.id}-name",
             hx_get=f"/customers/{customer_id}/contacts/{contact.id}/edit-field/name",
             hx_target=f"#contact-{contact.id}-name",
@@ -31753,11 +31909,11 @@ def _render_contact_name_cell(contact, customer_id: str):
 
 
 def _render_contact_flags_cell(contact, customer_id: str):
-    """Render the flags cell (signatory, primary) with minimal clickable icons."""
-    # Colors: green for signatory, orange for primary, darker gray for inactive (more visible)
-    # Changed inactive from #9ca3af to #6b7280 for better visibility
+    """Render the flags cell (signatory, primary, LPR) with minimal clickable icons."""
+    # Colors: green for signatory, orange for primary, blue for LPR, darker gray for inactive
     signatory_color = "#10b981" if contact.is_signatory else "#6b7280"
     primary_color = "#f59e0b" if contact.is_primary else "#6b7280"
+    lpr_color = "#3b82f6" if contact.is_lpr else "#6b7280"
 
     # Use Span with HTMX instead of Button to avoid global button styling
     return Td(
@@ -31779,6 +31935,16 @@ def _render_contact_flags_cell(contact, customer_id: str):
                 hx_swap="innerHTML",
                 style=f"color: {primary_color}; cursor: pointer; padding: 6px; display: inline-flex; border-radius: 4px; transition: background 0.15s;",
                 title="Основной контакт" if contact.is_primary else "Сделать основным",
+                onmouseover="this.style.background='#f3f4f6'",
+                onmouseout="this.style.background='transparent'"
+            ),
+            Span(
+                icon("user-check", size=18),
+                hx_post=f"/customers/{customer_id}/contacts/{contact.id}/toggle-lpr",
+                hx_target="#contacts-tbody",
+                hx_swap="innerHTML",
+                style=f"color: {lpr_color}; cursor: pointer; padding: 6px; display: inline-flex; border-radius: 4px; transition: background 0.15s;",
+                title="ЛПР (лицо, принимающее решения)" if contact.is_lpr else "Сделать ЛПР",
                 onmouseover="this.style.background='#f3f4f6'",
                 onmouseout="this.style.background='transparent'"
             ),
@@ -31972,6 +32138,8 @@ def get(customer_id: str, contact_id: str, field_name: str, session):
     if field_name == "name":
         # Return the name cell with badges
         badges = []
+        if contact.is_lpr:
+            badges.append(Span("ЛПР", style="margin-left: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600;"))
         if contact.is_signatory:
             badges.append(Span(icon("pen-tool", size=12), " Подписант", cls="status-badge status-approved", style="margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"))
         if contact.is_primary:
@@ -32066,6 +32234,30 @@ def post(customer_id: str, contact_id: str, session):
     update_contact(contact_id, is_primary=new_status)
 
     # Re-fetch all contacts to show updated state (including unset primary on other contacts)
+    customer = get_customer_with_contacts(customer_id)
+    if customer and customer.contacts:
+        return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
+    return Tr(Td("Контакты не найдены", colspan="6"))
+
+
+@rt("/customers/{customer_id}/contacts/{contact_id}/toggle-lpr")
+def post(customer_id: str, contact_id: str, session):
+    """Toggle LPR (decision maker) status for a contact. Multiple contacts can be LPR."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.customer_service import get_contact, update_contact, get_customer_with_contacts
+
+    contact = get_contact(contact_id)
+    if not contact:
+        return Tr(Td("Контакт не найден", colspan="6"))
+
+    # Toggle LPR status (multiple contacts can be LPR, no need to unset others)
+    new_status = not contact.is_lpr
+    update_contact(contact_id, is_lpr=new_status)
+
+    # Re-fetch all contacts to show updated state
     customer = get_customer_with_contacts(customer_id)
     if customer and customer.contacts:
         return tuple(_render_contact_row(c, customer_id) for c in customer.contacts)
@@ -32254,6 +32446,11 @@ def get(session, customer_id: str):
                         icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
                         style="display: flex; align-items: center; gap: 0.5rem;"
                     ),
+                    Label(
+                        Input(type="checkbox", name="is_lpr", value="true"),
+                        icon("user-check", size=12), " ЛПР (лицо, принимающее решения)",
+                        style="display: flex; align-items: center; gap: 0.5rem;"
+                    ),
                     cls="form-row"
                 ),
                 Label("Заметки", Textarea(name="notes", placeholder="Дополнительная информация о контакте", rows="3")),
@@ -32274,7 +32471,7 @@ def get(session, customer_id: str):
 @rt("/customers/{customer_id}/contacts/new")
 def post(session, customer_id: str, name: str, last_name: str = "", patronymic: str = "",
          position: str = "", email: str = "", phone: str = "",
-         is_primary: str = "", is_signatory: str = "", notes: str = ""):
+         is_primary: str = "", is_signatory: str = "", is_lpr: str = "", notes: str = ""):
     """Create new contact for a customer."""
     redirect = require_login(session)
     if redirect:
@@ -32315,6 +32512,7 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
             "phone": phone or None,
             "is_primary": is_primary == "true",
             "is_signatory": is_signatory == "true",
+            "is_lpr": is_lpr == "true",
             "notes": notes or None
         }).execute()
 
@@ -32352,6 +32550,11 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
                         Label(
                             Input(type="checkbox", name="is_signatory", value="true", checked=is_signatory=="true"),
                             icon("pen-tool", size=12), " Подписант (имя будет в спецификациях PDF)",
+                            style="display: flex; align-items: center; gap: 0.5rem;"
+                        ),
+                        Label(
+                            Input(type="checkbox", name="is_lpr", value="true", checked=is_lpr=="true"),
+                            icon("user-check", size=12), " ЛПР (лицо, принимающее решения)",
                             style="display: flex; align-items: center; gap: 0.5rem;"
                         ),
                         cls="form-row"

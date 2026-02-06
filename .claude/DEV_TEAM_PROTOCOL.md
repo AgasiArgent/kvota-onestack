@@ -44,6 +44,14 @@ At EVERY phase transition and decision point, message `session-planner` with:
 
 This keeps the session log comprehensive for retrospectives.
 
+## Phase 1.5: Bug Reproduction (before batching bug tasks)
+
+For any tasks tagged as bugs:
+1. Send `e2e-tester` to reproduce the bug in the browser BEFORE assigning to developers
+2. E2E tester takes screenshots, checks console errors, documents exact symptoms
+3. Share reproduction report with developers so they know exactly what's broken
+4. This prevents developers from guessing — they get concrete error messages and screenshots
+
 ## Phase 2: Architect Batching
 
 1. Analyze approved tasks for dependencies and file overlap
@@ -54,7 +62,13 @@ This keeps the session log comprehensive for retrospectives.
    - How many developers needed
    - File ownership per developer (explicit, no overlap)
    - Whether to use `frontend-dev`/`backend-dev` or generic `developer`
-4. Present batch plan to user for quick confirmation
+4. **Parallelization analysis** (ALWAYS include when presenting batches):
+   - Identify which batches can run concurrently (e.g., Batch 1 + Batch 2 in parallel)
+   - For tasks within a batch, specify if they can be assigned to separate devs in parallel
+   - Flag file overlap risks (e.g., "both touch main.py:3000-3200 — assign to same dev")
+   - Show the parallelization plan as a table: Developer -> Tasks -> Owned Files
+   - Estimate wall-clock time vs serial time to show the speedup
+5. Present batch plan WITH parallelization recommendation to user for quick confirmation
 
 ## Phase 3: Spawn Developers & Execute
 

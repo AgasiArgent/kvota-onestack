@@ -65,6 +65,7 @@ class CustomerContact:
     # Special flags
     is_signatory: bool = False  # Used in specification PDF
     is_primary: bool = False    # Primary contact for communication
+    is_lpr: bool = False        # Decision maker (ЛПР)
 
     # Notes
     notes: Optional[str] = None
@@ -139,6 +140,7 @@ def _parse_contact(data: dict) -> CustomerContact:
         phone=data.get("phone"),
         is_signatory=data.get("is_signatory", False),
         is_primary=data.get("is_primary", False),
+        is_lpr=data.get("is_lpr", False),
         notes=data.get("notes"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
         updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")) if data.get("updated_at") else None,
@@ -1044,6 +1046,7 @@ def update_contact(
     phone: Optional[str] = None,
     is_signatory: Optional[bool] = None,
     is_primary: Optional[bool] = None,
+    is_lpr: Optional[bool] = None,
     notes: Optional[str] = None,
 ) -> Optional[CustomerContact]:
     """
@@ -1057,6 +1060,7 @@ def update_contact(
         phone: New phone
         is_signatory: New signatory status
         is_primary: New primary status
+        is_lpr: New LPR (decision maker) status
         notes: New notes
 
     Returns:
@@ -1107,6 +1111,8 @@ def update_contact(
             update_data["is_signatory"] = is_signatory
         if is_primary is not None:
             update_data["is_primary"] = is_primary
+        if is_lpr is not None:
+            update_data["is_lpr"] = is_lpr
         if notes is not None:
             update_data["notes"] = notes
 
@@ -1529,7 +1535,7 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
 
         # Get quote items for all quotes
         items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, unit_price, supplier_price"
+            "quote_id, quantity, unit_price, purchase_price_original"
         ).in_("quote_id", quote_ids).execute()
 
         # Calculate sums and profits per quote
@@ -1542,10 +1548,10 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
 
                 quantity = item.get("quantity", 0) or 0
                 unit_price = item.get("unit_price", 0) or 0
-                supplier_price = item.get("supplier_price", 0) or 0
+                purchase_price = item.get("purchase_price_original", 0) or 0
 
                 item_total = quantity * unit_price
-                item_profit = quantity * (unit_price - supplier_price)
+                item_profit = quantity * (unit_price - purchase_price)
 
                 quote_totals[quote_id]["sum"] += item_total
                 quote_totals[quote_id]["profit"] += item_profit
@@ -1591,7 +1597,9 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
         quote_ids = [q["id"] for q in quotes_result.data]
 
         # Get specifications for these quotes
-        specs_result = supabase.table("specifications").select("*, quotes(idn, customer_id)")\
+        # Use explicit FK hint to avoid PostgREST ambiguous relationship error
+        # (specifications has both quote_id->quotes and quote_version_id->quote_versions->quotes)
+        specs_result = supabase.table("specifications").select("*, quotes!specifications_quote_id_fkey(idn, customer_id)")\
             .in_("quote_id", quote_ids)\
             .order("sign_date", desc=True)\
             .execute()
@@ -1604,7 +1612,7 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
 
         # Get quote items to calculate sums
         items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, unit_price, supplier_price"
+            "quote_id, quantity, unit_price, purchase_price_original"
         ).in_("quote_id", spec_quote_ids).execute()
 
         # Calculate sums and profits per quote
@@ -1617,10 +1625,10 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
 
                 quantity = item.get("quantity", 0) or 0
                 unit_price = item.get("unit_price", 0) or 0
-                supplier_price = item.get("supplier_price", 0) or 0
+                purchase_price = item.get("purchase_price_original", 0) or 0
 
                 item_total = quantity * unit_price
-                item_profit = quantity * (unit_price - supplier_price)
+                item_profit = quantity * (unit_price - purchase_price)
 
                 quote_totals[quote_id]["sum"] += item_total
                 quote_totals[quote_id]["profit"] += item_profit
