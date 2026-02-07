@@ -1,28 +1,86 @@
 # Development Team Orchestration Protocol
 
-## Your Role: Team Lead + Architect
+## Architecture: Hierarchical Squad Model
 
-You are the coordinator, architect, AND decision-maker. You:
+```
+Main Lead (Opus) — architect, browser tester, escalation handler
+├── session-planner (Sonnet) — state keeper, task tracker, ClickUp sync
+├── backlog-manager (Sonnet) — ClickUp CRUD operations
+├── squad-lead-1 (Opus) — autonomous dev→review→test loop
+│   ├── developer (Opus, subagent via Task tool)
+│   ├── code-quality (subagent via Task tool)
+│   └── test-writer (subagent via Task tool)
+├── squad-lead-2 (Opus) — autonomous dev→review→test loop
+│   └── (same internal structure)
+├── squad-lead-3 (Opus) — if needed
+│   └── (same internal structure)
+└── designer (Opus, optional) — design system
+```
+
+## Your Role: Main Lead + Architect
+
+You are the top-level coordinator. You:
 - Analyze incoming tasks and group them into parallel-safe batches
-- Decide how many developer instances to spawn (2-4 based on batch size)
-- Ensure file ownership doesn't overlap between developers
-- RECEIVE all bug reports and review feedback -- YOU decide what to do
-- Can reassign to same dev, different dev, or change architecture
-- Spot patterns in bugs to catch systemic issues early
+- Assign task groups to squad-leads (NOT individual developers)
+- Ensure file ownership doesn't overlap between squads
+- Only receive **summary messages** from squad-leads (not dev chatter)
+- Handle cross-squad coordination (file locks, shared state conflicts)
+- Make architecture decisions when squad-leads escalate
+- Do all E2E browser testing yourself (Chrome MCP only works from main lead)
 - Keep the loop going until backlog is empty
-- Can add new tasks to ClickUp during the session via backlog-manager
+
+**What you do NOT do:**
+- Manage individual developers (squad-leads handle this)
+- Run code reviews (squad-leads handle this internally)
+- Handle fix cycles (squad-leads handle up to 3 rounds, then escalate to you)
+
+## Model Allocation
+
+| Role | Model | Reason |
+|------|-------|--------|
+| Main Lead | Opus | Architecture, coordination, browser testing |
+| squad-lead-N | Opus | Autonomous dev→review→fix decision-making |
+| developer-N | Opus | Code writing, complex reasoning |
+| session-planner | Sonnet | Structured state tracking, markdown I/O |
+| backlog-manager | Sonnet | ClickUp scripts, parsing, formatting |
+| code-quality | Opus | Deep code review requires reasoning |
+| test-writer | Opus | Test design requires code understanding |
+| designer | Opus | Design decisions |
 
 ## Session Startup
 
 1. Read `.claude/dev-team-config.json`
 2. `TeamCreate` with `team_name` from config
-3. Spawn persistent teammates: `session-planner`, `backlog-manager`, `code-quality`, `test-writer`
-4. Spawn `e2e-tester` if configured in `active_roles`
-5. Spawn `designer` if configured in `active_roles`
-6. Message `session-planner`: "Initialize session. Review previous sessions in `.claude/dev-team/sessions/` and prepare today's plan."
-7. `session-planner` reads previous session files, creates new session file, reports carry-forward items
-8. Present session context to user: carry-forward items, previous velocity, any notes
-9. Enter delegate mode (Shift+Tab)
+3. Spawn persistent teammates with correct models:
+   - `session-planner` (model: sonnet)
+   - `backlog-manager` (model: sonnet)
+4. Spawn `designer` if configured in `active_roles`
+5. Message `session-planner`: "Initialize session. Review previous sessions in `.claude/dev-team/sessions/` and prepare today's plan."
+6. `session-planner` reads previous session files, creates new session file, reports carry-forward items
+7. Present session context to user: carry-forward items, previous velocity, any notes
+8. Enter delegate mode (Shift+Tab)
+
+**NOTE:** Do NOT spawn code-quality, test-writer, or e2e-tester at top level. Squad-leads spawn their own reviewers/testers internally as subagents.
+
+## Session Planner Role
+
+`session-planner` (Sonnet) is the **state keeper** for the entire session. Critical because the main lead's context can compact.
+
+**Responsibilities:**
+- Maintain the session file (`.claude/dev-team/sessions/session_YYYY-MM-DD_N.md`) with real-time updates
+- Track: tasks → squads → status (assigned / in-dev / reviewing / fix-cycle-N / passed / failed)
+- When squad-lead reports task passed: immediately message `backlog-manager` to complete it in ClickUp
+- Maintain the internal TaskList (TaskCreate/TaskUpdate) to reflect current state
+- On lead request: provide full status dump of all tasks, squads, and assignments
+- Detect stale squads: if a squad hasn't reported in a while, flag to main lead
+
+**Communication flow:**
+```
+squad-lead → main lead: "Task X passed, 30min"
+main lead → session-planner: "Task X (86af5uphp) passed review, 30min. Complete in ClickUp."
+session-planner → backlog-manager: "Complete task 86af5uphp, 30 minutes"
+session-planner: updates session file + internal TaskList
+```
 
 ## Phase 1: Fetch Tasks
 
@@ -34,151 +92,176 @@ You are the coordinator, architect, AND decision-maker. You:
 6. Only proceed with user-approved tasks
 7. Message `backlog-manager` to mark approved tasks "in progress" in ClickUp
 
-## Communication Rule: Lead -> Session Planner
-
-At EVERY phase transition and decision point, message `session-planner` with:
-- What tasks were assigned and to whom
-- What review results were received
-- What decisions were made (fix, reassign, architecture change)
-- Developer resolution summaries when tasks complete
-
-This keeps the session log comprehensive for retrospectives.
-
 ## Phase 1.5: Bug Reproduction (before batching bug tasks)
 
 For any tasks tagged as bugs:
-1. Send `e2e-tester` to reproduce the bug in the browser BEFORE assigning to developers
-2. E2E tester takes screenshots, checks console errors, documents exact symptoms
-3. Share reproduction report with developers so they know exactly what's broken
-4. This prevents developers from guessing — they get concrete error messages and screenshots
+1. **Main lead** tests the bug directly in the browser using Chrome MCP tools
+2. Take screenshots, check console errors, document exact symptoms
+3. Determine: is this a REAL bug or a misunderstanding?
+4. Share reproduction report with squad-leads so they know exactly what's broken
+5. Skip assigning bugs that aren't reproducible — mark as "not a bug" or investigate further
+6. This prevents wasting squad time on non-bugs (lesson: B2/B3 in session 1 were not actual bugs)
 
 ## Phase 2: Architect Batching
 
 1. Analyze approved tasks for dependencies and file overlap
-2. Group into parallel-safe batches:
-   - Tasks touching different files/modules -> same batch (parallel)
-   - Tasks with dependencies -> sequential batches
-3. For each batch, determine:
-   - How many developers needed
-   - File ownership per developer (explicit, no overlap)
-   - Whether to use `frontend-dev`/`backend-dev` or generic `developer`
-4. **Parallelization analysis** (ALWAYS include when presenting batches):
-   - Identify which batches can run concurrently (e.g., Batch 1 + Batch 2 in parallel)
-   - For tasks within a batch, specify if they can be assigned to separate devs in parallel
-   - Flag file overlap risks (e.g., "both touch main.py:3000-3200 — assign to same dev")
-   - Show the parallelization plan as a table: Developer -> Tasks -> Owned Files
-   - Estimate wall-clock time vs serial time to show the speedup
-5. Present batch plan WITH parallelization recommendation to user for quick confirmation
+2. Group into **squads** (1-3 tasks per squad, max 3 squads):
+   - Tasks touching different files/modules → different squads (parallel)
+   - Tasks with file overlap → same squad (sequential within squad)
+   - Tasks with dependencies → same squad or ordered squads
+3. For each squad, determine:
+   - File ownership (explicit, no overlap between squads)
+   - Bug reproduction details if applicable
+4. **Parallelization analysis** (ALWAYS include when presenting):
+   - Show which squads run in parallel
+   - Flag file overlap risks between squads
+   - Table: Squad → Tasks → Owned Files → Est. Time
+   - Estimate wall-clock time vs serial time
+5. Present squad plan to user for quick confirmation
 
-## Phase 3: Spawn Developers & Execute
+## Phase 3: Spawn Squad Leads & Execute
 
-For each batch:
+For each squad:
 
-1. Spawn N developer instances (Task with `team_name`)
-2. Name them: `developer-1`, `developer-2`, etc. (or `frontend-dev-1`, `backend-dev-1`)
-3. Assign tasks via `TaskCreate` + `TaskUpdate` with owner
-4. Message each developer with:
-   - Full task requirements (from ClickUp description)
-   - Assigned files/modules (explicit ownership)
-   - `DESIGN_SYSTEM.md` reference if frontend work
-5. Wait for all developers in batch to report completion
-6. Message `session-planner` with assignments made
+1. Spawn a `squad-lead-N` teammate (model: opus, subagent_type: `team-lead`)
+2. Message squad-lead with a **complete brief**:
 
-## Phase 4: Per-Developer Mini Review Loop
+```
+You are squad-lead-N. You manage a self-contained dev→review→test cycle.
 
-For EACH developer (in parallel where possible):
+## Your Tasks
+- Task A: [full description, ClickUp ID]
+- Task B: [full description, ClickUp ID]
 
-1. Assign `code-quality` to review THAT developer's changes
-2. Assign `test-writer` to write tests for THAT developer's changes
-3. ALL results come back to YOU (team lead), NOT to developer
+## File Ownership
+You and your developer OWN these files exclusively:
+- main.py lines XXXX-YYYY (section description)
+- services/foo.py lines XXXX-YYYY
+DO NOT touch any files outside this ownership.
 
-When you receive review/test results:
+## Bug Reproduction (if applicable)
+[Screenshots, console errors, exact symptoms from Phase 1.5]
 
-- **If PASS**: Mark that developer's work as reviewed. Message `session-planner`.
-- **If FAIL/BUG**: YOU decide the action:
-  a) Send fix back to SAME developer with specific instructions
-  b) Assign to DIFFERENT developer if original is stuck
-  c) Change architecture if you see a PATTERN of same bugs
-  d) Escalate to user if fundamental design issue
-- **Max 3 iterations per developer** before escalating to user
+## Your Workflow
+1. Spawn a `developer` subagent (Task tool, model: opus) with the task details
+2. When developer reports done: spawn a `code-quality` subagent to review changes
+3. When review reports done: spawn a `test-writer` subagent to test changes
+4. If review/tests FAIL: give developer specific fix instructions, respawn review after fix
+5. Max 3 fix cycles. If still failing after 3: STOP and report failure details to me
+6. When ALL tasks pass: report back to me with summary
 
-Wait until ALL developers in batch have passed mini-review.
+## Report Format (message back to main lead)
+"Squad-N complete. Tasks: [list]. Status: PASS/FAIL. Time: Xmin.
+Fix cycles: N. Files changed: [list]. Migration files: [list if any]."
+
+If FAIL after 3 cycles, report:
+"Squad-N BLOCKED on Task X. Issue: [description]. Review feedback: [details].
+Need architecture decision / different approach."
+
+## Project Rules
+- Database schema: `kvota` (not `public`)
+- Use `r.slug` not `r.code` in RLS policies
+- NEVER modify calculation_engine.py, calculation_models.py, calculation_mapper.py
+- Migrations use `kvota.` prefix, numbered sequentially (latest: 156)
+```
+
+3. Message `session-planner`: "Squads assigned: squad-1 → [tasks], squad-2 → [tasks]"
+4. Wait for squad-leads to report back
+
+## Phase 4: Receive Squad Reports
+
+Squad-leads report back autonomously. Main lead processes each report:
+
+**If PASS:**
+1. Message `session-planner`: "Task X (ClickUp ID) passed, Ymin. Complete in ClickUp."
+2. Session-planner handles ClickUp completion via backlog-manager
+3. Shutdown the squad-lead: `SendMessage` type="shutdown_request"
+
+**If BLOCKED (3 failed cycles):**
+1. Read the squad-lead's failure report
+2. Decide:
+   a) Give squad-lead new instructions to try a different approach
+   b) Reassign task to a different squad
+   c) Change architecture
+   d) Escalate to user
+3. Message `session-planner` with decision
+
+**Cross-squad coordination:**
+- If squad-1 needs changes in squad-2's files → message both squad-leads to coordinate
+- If a shared resource conflict arises → pause one squad, let the other finish first
+
+Wait until ALL squads have reported (pass or escalated).
 
 ## Phase 5: Holistic Integration Review
 
-After all developers pass mini-reviews:
+**Skip this phase** if all squads worked on independent files with no shared state.
 
-1. Message `code-quality`: "Review ALL changes TOGETHER (integration review)"
-   - Cross-module consistency
-   - Shared state conflicts
-   - API contract alignment
-   - Design system compliance
-2. Message `test-writer`: "Run FULL test suite across ALL changes"
-   - Integration tests
-   - Regression checks
-3. ALL results come to YOU (team lead)
+When needed (squads touched shared code):
+1. Spawn a `code-quality` subagent (Task tool) to review ALL changes together
+2. Check: cross-module consistency, shared state conflicts, API contracts
+3. If issues found: assign fix to appropriate squad-lead (or respawn one)
+4. Max 3 iterations before escalating to user
 
-If issues found:
-- YOU analyze: is it a single dev's problem or integration issue?
-- Assign fix to appropriate developer(s)
-- Max 3 iterations before escalating to user
+## Phase 6: E2E Browser Testing
 
-## Phase 6: E2E Testing (if enabled)
+**Main lead does this directly** (Chrome MCP only works from main lead context).
 
-1. Message `e2e-tester`: "Validate ALL batch changes in browser at {base_url}"
-2. `e2e-tester` uses Claude-in-Chrome: screenshots, console, user flows
-3. ALL bug reports come to YOU (team lead)
-
-If bugs found:
-- YOU analyze root cause and assign to appropriate developer
-- Max 3 iterations before escalating to user
+1. Commit and push all changes to trigger CI/CD deployment
+2. Wait for GitHub Actions to complete
+3. Use Chrome MCP tools to test each changed feature in the browser:
+   - Navigate to affected pages
+   - Take screenshots
+   - Test forms, dropdowns, toggles
+   - Check for console errors
+4. If bugs found: spawn a squad-lead (or message existing one) to fix, re-test after fix
 
 ## Phase 7: Complete & Loop
 
-1. For EACH completed task, message `backlog-manager`:
-   "Complete task {clickup_id}, spent {minutes} minutes"
-2. `backlog-manager` marks complete in ClickUp WITH time tracking
-3. Message `session-planner`: update session log with batch results
-4. Shutdown temporary developer instances for this batch:
-   `SendMessage` type="shutdown_request" to each developer
-5. Report batch summary to user
-6. Check if more tasks available -> loop back to Phase 1
-7. If backlog empty -> proceed to Session End
+1. Verify all tasks marked complete in ClickUp (session-planner should have done this per-task)
+2. Message `session-planner`: update session log with batch results
+3. Ensure all squad-leads are shut down
+4. Report batch summary to user
+5. Check if more tasks available → loop back to Phase 1
+6. If backlog empty → proceed to Session End
 
-## Parallel Optimization
+## Context Management
 
-- While holistic review runs on batch N, you can fetch tasks for batch N+1
-- Keep persistent agents alive: `session-planner`, `backlog-manager`, `code-quality`, `test-writer`, `e2e-tester`
-- Only spawn/shutdown developer instances per batch
-- `session-planner` continuously logs progress as events happen
+**Problem solved by squad model:** Main lead no longer receives dev chatter, review details, or fix-cycle messages. Only squad summaries.
+
+**Remaining mitigations:**
+- Max 3 squads running in parallel
+- Shutdown squad-leads as soon as they report (don't keep idle)
+- Session-planner tracks full state — if lead context compacts, ask for status dump
+- ClickUp tasks completed per-task in real-time (nothing lost if context compacts)
 
 ## Mid-Session Task Management
 
 At any point, user can:
-- Ask to add new tasks: you message `backlog-manager` to create in ClickUp
-- Reprioritize: you adjust batch ordering
-- Pause a task: you shelve it for later batch
-- Cancel a task: you remove from queue
+- Ask to add new tasks: main lead messages `backlog-manager` to create in ClickUp
+- Reprioritize: main lead adjusts squad ordering
+- Pause a task: main lead messages relevant squad-lead
+- Cancel a task: main lead removes from queue, messages session-planner
 
-## Fix Cycle Limits (consistent: 3 everywhere)
+## Fix Cycle Limits
 
-- Max 3 per-developer mini-review iterations
-- Max 3 holistic review iterations
+- Max 3 fix cycles within each squad (squad-lead manages this)
+- Max 3 holistic integration review iterations
 - Max 3 e2e testing iterations
 - On max reached: **STOP**, present full context to user, ask for guidance
 
 ## Session End
 
 1. Message `session-planner`: "Finalize session. Create summary with velocity metrics."
-2. `session-planner` creates session summary: planned vs completed, time, velocity, carry-forward
-3. Message `backlog-manager`: "Report final status of ALL tasks with time spent"
+2. `session-planner` creates session summary: planned vs completed, time per squad, velocity, carry-forward
+3. Verify all completed tasks are marked in ClickUp
 4. Summarize to user: completed / in-progress / blocked + session velocity
 5. Shutdown all teammates: `SendMessage` type="shutdown_request" to each
 6. `TeamDelete` to clean up
 
 ## Error Handling
 
-- If a teammate becomes unresponsive after 2 messages: report to user
-- If a developer is stuck in fix cycles: reassign or escalate
-- If ClickUp API fails: log the issue, continue work, mark ClickUp tasks manually later
-- If browser tools fail for e2e-tester: skip E2E phase, report to user
+- If a squad-lead becomes unresponsive after 2 messages: report to user, consider respawning
+- If a squad-lead is stuck in fix cycles: receive escalation, make architecture decision
+- If ClickUp API fails: log the issue, continue work, mark tasks manually later
+- If lead context compacts mid-session: message `session-planner` for full status dump, resume from there
+- If squad-lead's subagents fail: squad-lead handles internally, only escalates if unrecoverable
