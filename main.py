@@ -2705,8 +2705,7 @@ def sidebar(session, current_path: str = ""):
 
     # Company registries - for admin
     if is_admin:
-        registries_items.append({"icon": "building", "label": "Юрлица-продажи", "href": "/admin?tab=seller-companies", "roles": ["admin"]})
-        registries_items.append({"icon": "store", "label": "Юрлица-закупки", "href": "/admin?tab=buyer-companies", "roles": ["admin"]})
+        registries_items.append({"icon": "building", "label": "Юрлица", "href": "/companies", "roles": ["admin"]})
 
     if registries_items:
         menu_sections.append({"title": "Реестры", "items": registries_items})
@@ -2723,7 +2722,7 @@ def sidebar(session, current_path: str = ""):
     # === ADMIN SECTION ===
     if is_admin:
         admin_items = [
-            {"icon": "user", "label": "Пользователи", "href": "/admin?tab=users", "roles": ["admin"]},
+            {"icon": "user", "label": "Пользователи", "href": "/admin", "roles": ["admin"]},
             {"icon": "settings", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
@@ -14298,7 +14297,7 @@ def get(session, user_id: str):
                 Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
                 cls="card"),
             Div(btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
-                btn_link("К списку пользователей", href="/admin?tab=users", variant="secondary", icon_name="arrow-left"),
+                btn_link("К списку пользователей", href="/admin", variant="secondary", icon_name="arrow-left"),
                 cls="form-actions"),
             method="post", action=f"/profile/{user_id}"),
         session=session)
@@ -25320,19 +25319,20 @@ def post(session, deal_id: str, item_id: str,
 
 @rt("/admin/users")
 def get_admin_users_redirect(session):
-    """Redirect old /admin/users to new /admin with tabs"""
-    return RedirectResponse("/admin?tab=users", status_code=303)
+    """Redirect old /admin/users to new /admin"""
+    return RedirectResponse("/admin", status_code=303)
 
 
-@rt("/admin")
-def get(session, tab: str = "users"):
-    """Admin page with tabs for user management and company management.
+# ============================================================================
+# COMPANIES PAGE (Юрлица) - seller + buyer companies with tabs
+# ============================================================================
 
-    Feature #84: Страница /admin
+@rt("/companies")
+def get(session, tab: str = "seller_companies"):
+    """Companies page with tabs for seller and buyer companies.
 
     Tabs:
-    - users: User and role management
-    - seller_companies: Seller companies (юрлица-продажи)
+    - seller_companies: Seller companies (юрлица-продажи) - default
     - buyer_companies: Buyer companies (юрлица-закупки)
     """
     redirect = require_login(session)
@@ -25356,171 +25356,17 @@ def get(session, tab: str = "users"):
 
     # Tab navigation
     tabs_nav = Div(
-        A("Пользователи",
-          href="/admin?tab=users",
-          cls=f"tab-btn {'active' if tab == 'users' else ''}"),
         A("Юрлица-продажи",
-          href="/admin?tab=seller_companies",
+          href="/companies?tab=seller_companies",
           cls=f"tab-btn {'active' if tab == 'seller_companies' else ''}"),
         A("Юрлица-закупки",
-          href="/admin?tab=buyer_companies",
+          href="/companies?tab=buyer_companies",
           cls=f"tab-btn {'active' if tab == 'buyer_companies' else ''}"),
         cls="tabs-nav"
     )
 
     # Build tab content based on selected tab
-    if tab == "users":
-        # Get all organization members with their roles and Telegram status
-        members_result = supabase.table("organization_members").select(
-            "user_id, status, created_at"
-        ).eq("organization_id", org_id).eq("status", "active").execute()
-
-        members = members_result.data if members_result.data else []
-
-        # Get all available roles for this organization (system roles + org-specific roles)
-        from services.role_service import get_all_roles
-        all_roles = get_all_roles(organization_id=org_id)
-
-        # Build user data with roles
-        users_data = []
-        for member in members:
-            member_user_id = member["user_id"]
-
-            # Get user roles (DB uses 'slug', we call it 'code' in UI)
-            user_roles_result = supabase.table("user_roles").select(
-                "id, role_id, roles(slug, name)"
-            ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
-
-            member_roles = user_roles_result.data if user_roles_result.data else []
-            role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
-            role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
-
-            # Get Telegram status
-            tg_result = supabase.table("telegram_users").select(
-                "telegram_id, telegram_username, verified_at"
-            ).eq("user_id", member_user_id).limit(1).execute()
-
-            tg_data = tg_result.data[0] if tg_result.data else None
-
-            # Try to get email from auth.users via profiles or organization_invites
-            # Since we can't directly query auth.users, use the invite email if available
-            # Or show user_id shortened
-            email_display = member_user_id[:8] + "..."  # Default fallback
-
-            users_data.append({
-                "user_id": member_user_id,
-                "email": email_display,
-                "roles": role_codes,
-                "role_names": role_names,
-                "telegram": tg_data,
-                "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
-            })
-
-        # Build users table rows
-        user_rows = []
-        for u in users_data:
-            # Roles badges - using status-badge style
-            role_badges = []
-            for i, code in enumerate(u["roles"]):
-                name = u["role_names"][i] if i < len(u["role_names"]) else code
-                # Map roles to unified badge colors
-                badge_class = {
-                    "admin": "status-error",
-                    "sales": "status-info",
-                    "procurement": "status-success",
-                    "logistics": "status-warning",
-                    "customs": "status-progress",
-                    "quote_controller": "status-new",
-                    "spec_controller": "status-info",
-                    "finance": "status-success",
-                    "top_manager": "status-warning"
-                }.get(code, "status-neutral")
-                role_badges.append(
-                    Span(name, cls=f"status-badge {badge_class}", style="margin-right: 4px;")
-                )
-
-            # Telegram status
-            if u["telegram"] and u["telegram"].get("verified_at"):
-                tg_status = Span("✓ @" + (u["telegram"].get("username") or str(u["telegram"]["telegram_id"])),
-                    style="color: #10b981; font-size: 0.875rem;")
-            else:
-                tg_status = Span("—", style="color: #9ca3af;")
-
-            # Make roles cell clickable for inline editing
-            roles_cell = Td(
-                Div(
-                    *role_badges if role_badges else [Span("—", style="color: #9ca3af;")],
-                    id=f"roles-display-{u['user_id']}",
-                    style="cursor: pointer;",
-                    hx_get=f"/admin/users/{u['user_id']}/roles/edit",
-                    hx_target=f"#roles-cell-{u['user_id']}",
-                    hx_swap="innerHTML",
-                    title="Кликните для редактирования ролей"
-                ),
-                id=f"roles-cell-{u['user_id']}"
-            )
-
-            user_rows.append(Tr(
-                Td(u["email"]),
-                roles_cell,
-                Td(tg_status),
-                Td(u["joined_at"])
-            ))
-
-        tab_content = Div(
-            # Stats
-            Div(
-                Div(
-                    Div(str(len(users_data)), cls="stat-value", style="color: #3b82f6;"),
-                    Div("Всего пользователей", style="font-size: 0.875rem;"),
-                    cls="card", style="text-align: center; padding: 16px;"
-                ),
-                Div(
-                    Div(str(sum(1 for u in users_data if u["telegram"])), cls="stat-value", style="color: #10b981;"),
-                    Div("С Telegram", style="font-size: 0.875rem;"),
-                    cls="card", style="text-align: center; padding: 16px;"
-                ),
-                Div(
-                    Div(str(len(all_roles)), cls="stat-value", style="color: #8b7cf6;"),
-                    Div("Доступных ролей", style="font-size: 0.875rem;"),
-                    cls="card", style="text-align: center; padding: 16px;"
-                ),
-                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
-            ),
-
-            # Users table
-            Div(
-                Div(
-                    Div(H4("Пользователи организации", style="margin: 0;"), cls="table-header-left"),
-                    cls="table-header"
-                ),
-                Div(
-                    Table(
-                        Thead(Tr(
-                            Th("ФИО"),
-                            Th("РОЛИ"),
-                            Th("TELEGRAM"),
-                            Th("ДАТА")
-                        )),
-                        Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="4", style="text-align: center; padding: 2rem; color: #9ca3af;"))),
-                        cls="unified-table"
-                    ),
-                    cls="table-responsive"
-                ),
-                Div(Span(f"Всего: {len(users_data)} пользователей"), cls="table-footer"),
-                cls="table-container", style="margin: 0;"
-            ),
-
-            # Navigation
-            Div(
-                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
-                btn_link("Назначение брендов", href="/admin/brands", variant="primary", icon_name="arrow-right"),
-                style="margin-top: 24px; display: flex; gap: 12px;"
-            ),
-            id="tab-content"
-        )
-
-    elif tab == "seller_companies":
+    if tab == "seller_companies":
         # Get all seller companies
         companies = supabase.table("seller_companies").select("*")\
             .eq("organization_id", org_id)\
@@ -25645,7 +25491,7 @@ def get(session, tab: str = "users"):
     else:
         tab_content = Div("Неизвестная вкладка", id="tab-content")
 
-    # Design system styles for admin page
+    # Design system styles
     header_card_style = """
         background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
         border-radius: 12px;
@@ -25655,26 +25501,26 @@ def get(session, tab: str = "users"):
         margin-bottom: 20px;
     """
 
-    return page_layout("Администрирование",
+    return page_layout("Юрлица",
         # Header card with gradient
         Div(
             Div(
-                icon("settings", size=24, color="#475569"),
-                Span(" Администрирование", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                icon("building", size=24, color="#475569"),
+                Span(" Юрлица", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
                 style="display: flex; align-items: center;"
             ),
-            P("Управление пользователями, ролями и компаниями",
+            P("Управление юридическими лицами для продаж и закупок",
               style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
             style=header_card_style
         ),
 
-        # Tabs navigation with design system styling
+        # Tabs navigation
         tabs_nav,
 
         # Tab content
         tab_content,
 
-        # Add custom CSS for tabs with design system styling
+        # Tab styles (reuse admin tab styles)
         Style("""
             .tabs-nav {
                 display: flex;
@@ -25717,6 +25563,210 @@ def get(session, tab: str = "users"):
                 box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
             }
         """),
+
+        session=session
+    )
+
+
+@rt("/admin")
+def get(session):
+    """Admin page - user management.
+
+    Feature #84: Страница /admin
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    # Only admins can access this page
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    org_id = user["org_id"]
+
+    # Get all organization members with their roles and Telegram status
+    members_result = supabase.table("organization_members").select(
+        "user_id, status, created_at"
+    ).eq("organization_id", org_id).eq("status", "active").execute()
+
+    members = members_result.data if members_result.data else []
+
+    # Get all available roles for this organization (system roles + org-specific roles)
+    from services.role_service import get_all_roles
+    all_roles = get_all_roles(organization_id=org_id)
+
+    # Build user data with roles
+    users_data = []
+    for member in members:
+        member_user_id = member["user_id"]
+
+        # Get user roles (DB uses 'slug', we call it 'code' in UI)
+        user_roles_result = supabase.table("user_roles").select(
+            "id, role_id, roles(slug, name)"
+        ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
+
+        member_roles = user_roles_result.data if user_roles_result.data else []
+        role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
+        role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
+
+        # Get Telegram status
+        tg_result = supabase.table("telegram_users").select(
+            "telegram_id, telegram_username, verified_at"
+        ).eq("user_id", member_user_id).limit(1).execute()
+
+        tg_data = tg_result.data[0] if tg_result.data else None
+
+        # Try to get email from auth.users via profiles or organization_invites
+        # Since we can't directly query auth.users, use the invite email if available
+        # Or show user_id shortened
+        email_display = member_user_id[:8] + "..."  # Default fallback
+
+        users_data.append({
+            "user_id": member_user_id,
+            "email": email_display,
+            "roles": role_codes,
+            "role_names": role_names,
+            "telegram": tg_data,
+            "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
+        })
+
+    # Build users table rows
+    user_rows = []
+    for u in users_data:
+        # Roles badges - using status-badge style
+        role_badges = []
+        for i, code in enumerate(u["roles"]):
+            name = u["role_names"][i] if i < len(u["role_names"]) else code
+            # Map roles to unified badge colors
+            badge_class = {
+                "admin": "status-error",
+                "sales": "status-info",
+                "procurement": "status-success",
+                "logistics": "status-warning",
+                "customs": "status-progress",
+                "quote_controller": "status-new",
+                "spec_controller": "status-info",
+                "finance": "status-success",
+                "top_manager": "status-warning"
+            }.get(code, "status-neutral")
+            role_badges.append(
+                Span(name, cls=f"status-badge {badge_class}", style="margin-right: 4px;")
+            )
+
+        # Telegram status
+        if u["telegram"] and u["telegram"].get("verified_at"):
+            tg_status = Span("✓ @" + (u["telegram"].get("username") or str(u["telegram"]["telegram_id"])),
+                style="color: #10b981; font-size: 0.875rem;")
+        else:
+            tg_status = Span("—", style="color: #9ca3af;")
+
+        # Make roles cell clickable for inline editing
+        roles_cell = Td(
+            Div(
+                *role_badges if role_badges else [Span("—", style="color: #9ca3af;")],
+                id=f"roles-display-{u['user_id']}",
+                style="cursor: pointer;",
+                hx_get=f"/admin/users/{u['user_id']}/roles/edit",
+                hx_target=f"#roles-cell-{u['user_id']}",
+                hx_swap="innerHTML",
+                title="Кликните для редактирования ролей"
+            ),
+            id=f"roles-cell-{u['user_id']}"
+        )
+
+        user_rows.append(Tr(
+            Td(u["email"]),
+            roles_cell,
+            Td(tg_status),
+            Td(u["joined_at"])
+        ))
+
+    users_content = Div(
+        # Stats
+        Div(
+            Div(
+                Div(str(len(users_data)), cls="stat-value", style="color: #3b82f6;"),
+                Div("Всего пользователей", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(sum(1 for u in users_data if u["telegram"])), cls="stat-value", style="color: #10b981;"),
+                Div("С Telegram", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            Div(
+                Div(str(len(all_roles)), cls="stat-value", style="color: #8b7cf6;"),
+                Div("Доступных ролей", style="font-size: 0.875rem;"),
+                cls="card", style="text-align: center; padding: 16px;"
+            ),
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;"
+        ),
+
+        # Users table
+        Div(
+            Div(
+                Div(H4("Пользователи организации", style="margin: 0;"), cls="table-header-left"),
+                cls="table-header"
+            ),
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("ФИО"),
+                        Th("РОЛИ"),
+                        Th("TELEGRAM"),
+                        Th("ДАТА")
+                    )),
+                    Tbody(*user_rows) if user_rows else Tbody(Tr(Td("Нет пользователей", colspan="4", style="text-align: center; padding: 2rem; color: #9ca3af;"))),
+                    cls="unified-table"
+                ),
+                cls="table-responsive"
+            ),
+            Div(Span(f"Всего: {len(users_data)} пользователей"), cls="table-footer"),
+            cls="table-container", style="margin: 0;"
+        ),
+
+        # Navigation
+        Div(
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            btn_link("Назначение брендов", href="/admin/brands", variant="primary", icon_name="arrow-right"),
+            style="margin-top: 24px; display: flex; gap: 12px;"
+        ),
+    )
+
+    # Design system styles for admin page
+    header_card_style = """
+        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    """
+
+    return page_layout("Пользователи",
+        # Header card with gradient
+        Div(
+            Div(
+                icon("settings", size=24, color="#475569"),
+                Span(" Пользователи", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Управление пользователями и ролями",
+              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
+            style=header_card_style
+        ),
+
+        # Users content (no tabs needed - only users here now)
+        users_content,
 
         session=session
     )
@@ -26003,7 +26053,7 @@ def get(user_id: str, session):
             A(
                 Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
                 "К списку пользователей",
-                href="/admin?tab=users",
+                href="/admin",
                 style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
             ),
             # Header content
@@ -26507,7 +26557,7 @@ def get(session, brand: str = None):
                             style="display: flex; align-items: center; margin-bottom: 8px;"
                         ),
                         P("Сначала назначьте роль менеджера по закупкам на ",
-                          A("странице пользователей", href="/admin?tab=users", style="color: #3b82f6; text-decoration: underline;"), ".",
+                          A("странице пользователей", href="/admin", style="color: #3b82f6; text-decoration: underline;"), ".",
                           style="color: #64748b; font-size: 13px; margin: 0;"),
                         style="padding: 16px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;"
                     ),
@@ -28710,242 +28760,13 @@ def post(supplier_id: str, session):
 
 
 # ============================================================================
-# BUYER COMPANIES LIST (Feature UI-003)
+# BUYER COMPANIES LIST - Redirect to /companies page
 # ============================================================================
 
 @rt("/buyer-companies")
-def get(session, q: str = "", status: str = ""):
-    """
-    Buyer companies list page with search and filters.
-
-    Buyer companies are OUR legal entities used for purchasing from suppliers.
-    Each quote_item can have its own buyer_company_id.
-
-    Query Parameters:
-        q: Search query (matches name or company_code)
-        status: Filter by status ("active", "inactive", or "" for all)
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only can manage buyer companies
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div(
-                H1("⛔ Доступ запрещён"),
-                P("У вас нет прав для просмотра справочника компаний-покупателей."),
-                P("Требуется роль: admin"),
-                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
-                cls="card"
-            ),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-
-    # Import buyer company service
-    from services.buyer_company_service import (
-        get_all_buyer_companies, search_buyer_companies, get_buyer_company_stats
-    )
-
-    # Get buyer companies based on filters
-    try:
-        if q and q.strip():
-            # Use search if query provided
-            companies = search_buyer_companies(
-                organization_id=org_id,
-                query=q.strip(),
-                active_only=(status == "active"),
-                limit=100
-            )
-        else:
-            # Get all with filters
-            active_only = None if status == "" else (status == "active")
-            companies = get_all_buyer_companies(
-                organization_id=org_id,
-                active_only=active_only,
-                limit=100
-            )
-
-        # Get stats for summary
-        stats = get_buyer_company_stats(organization_id=org_id)
-
-    except Exception as e:
-        print(f"Error loading buyer companies: {e}")
-        companies = []
-        stats = {"total": 0, "active": 0, "inactive": 0}
-
-    # Status options for filter
-    status_options = [
-        Option("Все статусы", value="", selected=(status == "")),
-        Option("Активные", value="active", selected=(status == "active")),
-        Option("Неактивные", value="inactive", selected=(status == "inactive")),
-    ]
-
-    # Build company rows
-    company_rows = []
-    for c in companies:
-        status_text = "Активна" if c.is_active else "Неактивна"
-        status_badge_type = "success" if c.is_active else "error"
-
-        company_rows.append(
-            Tr(
-                Td(
-                    Strong(c.company_code),
-                    style="font-family: monospace; color: #4a4aff;"
-                ),
-                Td(c.name),
-                Td(c.country or "—"),
-                Td(c.inn or "—"),
-                Td(c.kpp or "—"),
-                Td(c.ogrn or "—"),
-                Td(c.general_director_name or "—"),
-                Td(badge(status_text, type=status_badge_type)),
-                Td(
-                    A(icon("edit", size=14), href=f"/buyer-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A(icon("eye", size=14), href=f"/buyer-companies/{c.id}", title="Просмотр"),
-                )
-            )
-        )
-
-    # Design system styles
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-    """
-
-    stat_card_style = """
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        padding: 16px 20px;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-    """
-
-    filter_card_style = """
-        background: #ffffff;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-    """
-
-    input_style = """
-        padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        font-size: 14px;
-        background: #f8fafc;
-        width: 280px;
-    """
-
-    select_style = """
-        padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        font-size: 14px;
-        background: #f8fafc;
-        width: 150px;
-    """
-
-    return page_layout("Компании-покупатели",
-        # Header card with gradient
-        Div(
-            Div(
-                # Title row
-                Div(
-                    icon("building-2", size=24, color="#475569"),
-                    Span(" Компании-покупатели", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
-                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
-                    style="display: flex; align-items: center;"
-                ),
-                # Subtitle
-                P("Наши юрлица для закупки товаров у поставщиков",
-                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
-                style="flex: 1;"
-            ),
-            btn_link("Добавить компанию", href="/buyer-companies/new", variant="success", icon_name="plus"),
-            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Stats cards row
-        Div(
-            Div(
-                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
-                Div("Всего компаний", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            Div(
-                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
-                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            Div(
-                Div(str(stats.get("inactive", 0)), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
-                Div("Неактивных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;"
-        ),
-
-        # Filters card
-        Div(
-            Form(
-                Div(
-                    # Search input
-                    Input(name="q", value=q, placeholder="Поиск по названию или коду...",
-                          style=f"{input_style} margin-right: 12px;"),
-                    # Status filter
-                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
-                    # Buttons
-                    Button(icon("search", size=14), " Поиск", type="submit",
-                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
-                    A(icon("x", size=14), " Сбросить", href="/buyer-companies",
-                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
-                    style="display: flex; align-items: center;"
-                ),
-                method="get",
-                action="/buyer-companies"
-            ),
-            style=filter_card_style
-        ),
-
-        # Table
-        Table(
-            Thead(
-                Tr(
-                    Th("Код"),
-                    Th("Название"),
-                    Th("Страна"),
-                    Th("ИНН"),
-                    Th("КПП"),
-                    Th("ОГРН"),
-                    Th("Директор"),
-                    Th("Статус"),
-                    Th("Действия")
-                )
-            ),
-            Tbody(*company_rows) if company_rows else Tbody(
-                Tr(Td(
-                    "Компании не найдены. ",
-                    A("Добавить первую компанию", href="/buyer-companies/new"),
-                    colspan="9", style="text-align: center; padding: 2rem;"
-                ))
-            )
-        ),
-
-        # Results count
-        P(f"Показано записей: {len(companies)}", style="color: #666; margin-top: 0.5rem;"),
-
-        session=session
-    )
+def get(session):
+    """Redirect standalone buyer companies list to unified /companies page."""
+    return RedirectResponse("/companies?tab=buyer_companies", status_code=303)
 
 
 @rt("/buyer-companies/new")
@@ -29091,7 +28912,7 @@ def get(company_id: str, session):
             Div(
                 H1(icon("x-circle", size=28), " Компания не найдена", cls="page-header"),
                 P("Запрашиваемая компания-покупатель не существует."),
-                btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
+                btn_link("К списку компаний", href="/companies?tab=buyer_companies", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
             session=session
@@ -29104,7 +28925,7 @@ def get(company_id: str, session):
         Div(
             Div(
                 Div(
-                    A(icon("arrow-left", size=18), " Компании-покупатели", href="/buyer-companies",
+                    A(icon("arrow-left", size=18), " Компании-покупатели", href="/companies?tab=buyer_companies",
                       style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
                     style="margin-bottom: 12px;"
                 ),
@@ -29308,7 +29129,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                 A(
                     icon("arrow-left", size=16, color="#64748b"),
                     Span("Компании-покупатели", style="margin-left: 6px;"),
-                    href="/buyer-companies",
+                    href="/companies?tab=buyer_companies",
                     style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
                 ),
                 Div(
@@ -29463,7 +29284,7 @@ def _buyer_company_form(company=None, error=None, session=None):
                 # Form actions
                 Div(
                     btn("Сохранить", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Отмена", href="/buyer-companies" if not is_edit else f"/buyer-companies/{company.id}", variant="secondary", icon_name="x"),
+                    btn_link("Отмена", href="/companies?tab=buyer_companies" if not is_edit else f"/buyer-companies/{company.id}", variant="secondary", icon_name="x"),
                     style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
@@ -29497,7 +29318,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=buyer_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29540,7 +29361,7 @@ def post(
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-покупатель не существует.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=buyer_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29641,11 +29462,11 @@ def post(company_id: str, session):
     result = deactivate_buyer_company(company_id)
 
     if result:
-        return RedirectResponse("/buyer-companies", status_code=303)
+        return RedirectResponse("/companies?tab=buyer_companies", status_code=303)
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/buyer-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=buyer_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -29655,241 +29476,9 @@ def post(company_id: str, session):
 # ============================================================================
 
 @rt("/seller-companies")
-def get(session, q: str = "", status: str = ""):
-    """
-    Seller companies list page with search and filters.
-
-    Seller companies are OUR legal entities used for selling to customers.
-    Each quote has one seller_company_id (at quote level).
-
-    Query Parameters:
-        q: Search query (matches name, supplier_code, INN)
-        status: Filter by status ("active", "inactive", or "" for all)
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Check permissions - admin only can manage seller companies
-    if not user_has_role(session, "admin"):
-        return page_layout("Access Denied",
-            Div(
-                H1("⛔ Доступ запрещён"),
-                P("У вас нет прав для просмотра справочника компаний-продавцов."),
-                P("Требуется роль: admin"),
-                btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
-                cls="card"
-            ),
-            session=session
-        )
-
-    user = session["user"]
-    org_id = user.get("org_id")
-
-    # Import seller company service
-    from services.seller_company_service import (
-        get_all_seller_companies, search_seller_companies, get_seller_company_stats
-    )
-
-    # Get seller companies based on filters
-    try:
-        if q and q.strip():
-            # Use search if query provided
-            is_active_filter = None if status == "" else (status == "active")
-            companies = search_seller_companies(
-                organization_id=org_id,
-                query=q.strip(),
-                is_active=is_active_filter,
-                limit=100
-            )
-        else:
-            # Get all with filters
-            is_active_filter = None if status == "" else (status == "active")
-            companies = get_all_seller_companies(
-                organization_id=org_id,
-                is_active=is_active_filter,
-                limit=100
-            )
-
-        # Get stats for summary
-        stats = get_seller_company_stats(organization_id=org_id)
-
-    except Exception as e:
-        print(f"Error loading seller companies: {e}")
-        companies = []
-        stats = {"total": 0, "active": 0, "inactive": 0}
-
-    # Status options for filter
-    status_options = [
-        Option("Все статусы", value="", selected=(status == "")),
-        Option("Активные", value="active", selected=(status == "active")),
-        Option("Неактивные", value="inactive", selected=(status == "inactive")),
-    ]
-
-    # Build company rows
-    company_rows = []
-    for c in companies:
-        status_class = "status-approved" if c.is_active else "status-rejected"
-        status_text = "Активна" if c.is_active else "Неактивна"
-
-        company_rows.append(
-            Tr(
-                Td(
-                    Strong(c.supplier_code),
-                    style="font-family: monospace; color: #4a4aff;"
-                ),
-                Td(c.name),
-                Td(c.country or "—"),
-                Td(c.inn or "—"),
-                Td(c.kpp or "—"),
-                Td(c.general_director_name or "—"),
-                Td(Span(status_text, cls=f"status-badge {status_class}")),
-                Td(
-                    A(icon("edit", size=14), href=f"/seller-companies/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
-                    A(icon("eye", size=14), href=f"/seller-companies/{c.id}", title="Просмотр"),
-                )
-            )
-        )
-
-    # Design system styles
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-    """
-
-    stat_card_style = """
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        padding: 16px 20px;
-        text-align: center;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-    """
-
-    filter_card_style = """
-        background: #ffffff;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        padding: 16px 20px;
-        margin-bottom: 16px;
-    """
-
-    input_style = """
-        padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        font-size: 14px;
-        background: #f8fafc;
-        width: 280px;
-    """
-
-    select_style = """
-        padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        font-size: 14px;
-        background: #f8fafc;
-        width: 150px;
-    """
-
-    table_card_style = """
-        background: #ffffff;
-        border-radius: 10px;
-        border: 1px solid #e2e8f0;
-        overflow: hidden;
-    """
-
-    return page_layout("Компании-продавцы",
-        # Header card with gradient
-        Div(
-            Div(
-                # Title row
-                Div(
-                    icon("store", size=24, color="#475569"),
-                    Span(" Компании-продавцы", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
-                    Span(f" ({stats.get('total', 0)})", style="font-size: 16px; color: #64748b; margin-left: 4px;"),
-                    style="display: flex; align-items: center;"
-                ),
-                # Subtitle
-                P("Наши юрлица для продажи товаров клиентам",
-                  style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
-                style="flex: 1;"
-            ),
-            btn_link("Добавить компанию", href="/seller-companies/new", variant="success", icon_name="plus"),
-            style=f"{header_card_style} display: flex; justify-content: space-between; align-items: center;"
-        ),
-
-        # Stats cards row
-        Div(
-            Div(
-                Div(str(stats.get("total", 0)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
-                Div("Всего компаний", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            Div(
-                Div(str(stats.get("active", 0)), style="font-size: 28px; font-weight: 700; color: #10b981;"),
-                Div("Активных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            Div(
-                Div(str(stats.get("inactive", 0)), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
-                Div("Неактивных", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style=stat_card_style
-            ),
-            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;"
-        ),
-
-        # Filters card
-        Div(
-            Form(
-                Div(
-                    # Search input
-                    Input(type="text", name="q", value=q, placeholder="Название, код или ИНН...",
-                          style=f"{input_style} margin-right: 12px;"),
-                    # Status filter
-                    Select(*status_options, name="status", style=f"{select_style} margin-right: 12px;"),
-                    # Buttons
-                    Button(icon("search", size=14), " Поиск", type="submit",
-                           style="padding: 10px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-right: 8px;"),
-                    A(icon("x", size=14), " Сбросить", href="/seller-companies",
-                      style="padding: 10px 16px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none;"),
-                    style="display: flex; align-items: center;"
-                ),
-                method="get",
-                action="/seller-companies"
-            ),
-            style=filter_card_style
-        ),
-
-        # Companies table with styled container
-        Div(
-            Table(
-                Thead(
-                    Tr(
-                        Th("Код"),
-                        Th("Название"),
-                        Th("Страна"),
-                        Th("ИНН"),
-                        Th("КПП"),
-                        Th("Директор"),
-                        Th("Статус"),
-                        Th("Действия"),
-                    )
-                ),
-                Tbody(*company_rows) if company_rows else Tbody(
-                    Tr(Td("Компании-продавцы не найдены. ", A("Добавить первую компанию", href="/seller-companies/new"),
-                          colspan="8", style="text-align: center; padding: 2rem; color: #64748b;"))
-                )
-            ),
-            style=table_card_style
-        ),
-
-        session=session
-    )
+def get(session):
+    """Redirect standalone seller companies list to unified /companies page."""
+    return RedirectResponse("/companies?tab=seller_companies", status_code=303)
 
 
 @rt("/seller-companies/new")
@@ -30027,7 +29616,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Не найдено",
             Div("Компания-продавец не найдена.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=seller_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -30038,7 +29627,7 @@ def get(company_id: str, session):
         Div(
             Div(
                 Div(
-                    A(icon("arrow-left", size=18), " Компании-продавцы", href="/seller-companies",
+                    A(icon("arrow-left", size=18), " Компании-продавцы", href="/companies?tab=seller_companies",
                       style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"),
                     style="margin-bottom: 12px;"
                 ),
@@ -30227,7 +29816,7 @@ def _seller_company_form(
                 A(
                     icon("arrow-left", size=16, color="#92400e"),
                     Span("Компании-продавцы", style="margin-left: 6px;"),
-                    href="/seller-companies",
+                    href="/companies?tab=seller_companies",
                     style="display: inline-flex; align-items: center; color: #92400e; text-decoration: none; font-size: 13px; margin-bottom: 12px;"
                 ),
                 Div(
@@ -30388,7 +29977,7 @@ def _seller_company_form(
                 # Form actions
                 Div(
                     btn("Сохранить", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Отмена", href="/seller-companies" if not is_edit else f"/seller-companies/{company.id}", variant="secondary", icon_name="x"),
+                    btn_link("Отмена", href="/companies?tab=seller_companies" if not is_edit else f"/seller-companies/{company.id}", variant="secondary", icon_name="x"),
                     style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 20px; margin-top: 24px; border-top: 1px solid #e2e8f0;"
                 ),
 
@@ -30422,7 +30011,7 @@ def get(company_id: str, session):
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=seller_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -30465,7 +30054,7 @@ def post(
     if not company:
         return page_layout("Компания не найдена",
             Div("Запрашиваемая компания-продавец не существует.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=seller_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -30560,11 +30149,11 @@ def post(company_id: str, session):
     result = deactivate_seller_company(company_id)
 
     if result:
-        return RedirectResponse("/seller-companies", status_code=303)
+        return RedirectResponse("/companies?tab=seller_companies", status_code=303)
     else:
         return page_layout("Ошибка",
             Div("Не удалось деактивировать компанию.", cls="alert alert-error"),
-            btn_link("К списку компаний", href="/seller-companies", variant="secondary", icon_name="arrow-left"),
+            btn_link("К списку компаний", href="/companies?tab=seller_companies", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -36404,8 +35993,8 @@ async def post(session, entity_type: str, entity_id: str, request):
                 "supplier_invoice": f"/supplier-invoices/{entity_id}",
                 "supplier": f"/suppliers/{entity_id}",
                 "customer": f"/customers/{entity_id}?tab=documents",
-                "seller_company": f"/admin?tab=seller_companies",
-                "buyer_company": f"/admin?tab=buyer_companies",
+                "seller_company": f"/companies?tab=seller_companies",
+                "buyer_company": f"/companies?tab=buyer_companies",
                 "quote_item": f"/quotes/{entity_id}",
             }
             redirect_url = redirect_urls.get(entity_type, "/")
