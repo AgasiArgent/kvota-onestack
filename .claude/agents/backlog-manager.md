@@ -123,6 +123,25 @@ When asked for a status report, provide:
 Total time logged: XX minutes
 ```
 
+## Creating Tasks (Direct API)
+
+No `create-task.sh` script exists. Use the ClickUp API directly:
+
+1. Write task payload to `/tmp/clickup_task.json`:
+   ```json
+   {"name":"Task title","description":"Description","priority":3,"time_estimate":7200000}
+   ```
+2. Run:
+   ```bash
+   curl -s -X POST "https://api.clickup.com/api/v2/list/{LIST_ID}/task" \
+     -H "Authorization: pk_192091183_AELOKRZPPK2T1WIV2VSXVP3QLQEVU0WI" \
+     -H "Content-Type: application/json" \
+     -d @/tmp/clickup_task.json
+   ```
+3. List IDs: kvota=901324690894, sprint=901324688546, pm=901324737415
+4. Priority values: 1=urgent, 2=high, 3=normal, 4=low
+5. Time estimate in milliseconds (e.g., 7200000 = 2h)
+
 ## Important Notes
 
 - NEVER start work on tasks without team lead's instruction

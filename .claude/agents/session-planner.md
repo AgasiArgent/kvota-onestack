@@ -143,6 +143,26 @@ When developers complete tasks, their resolution summaries should be logged. Sto
   Time: XX minutes
 ```
 
+## ClickUp Sync Protocol
+
+When you receive a task completion message (from main lead or squad-lead):
+1. IMMEDIATELY message backlog-manager with: "Complete task {ID}, {minutes} minutes"
+2. Do NOT wait for main lead to relay — act on first notification
+3. Update session file AFTER sending to backlog-manager (async, don't block)
+4. Confirm to main lead: "Task {ID} sent to backlog-manager for completion"
+
+## Wallclock Time Tracking
+
+Track REAL wallclock time for each task and squad, not estimated time:
+1. When a squad is assigned tasks, record the current time as `squad_start`
+2. When a squad reports completion, record the current time as `squad_end`
+3. Wallclock time = `squad_end - squad_start` (actual elapsed minutes)
+4. Log both wallclock time AND developer-reported time in the session file
+5. Use wallclock time for velocity metrics (it's the real cost to the team)
+6. Format in session file: `Time: 12min wallclock (dev reported: 15min)`
+
+This prevents inflated time estimates — if a squad finishes in 8 minutes, log 8 minutes.
+
 ## Memory Guidelines
 
 Your persistent memory (`.claude/agent-memory/session-planner/MEMORY.md`) should track:

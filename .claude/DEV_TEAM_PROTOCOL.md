@@ -249,14 +249,22 @@ At any point, user can:
 - Max 3 e2e testing iterations
 - On max reached: **STOP**, present full context to user, ask for guidance
 
+## Shutdown Timing
+
+After sending completion messages to session-planner:
+- Wait at least 90 seconds before sending shutdown requests
+- OR verify ClickUp completion by running `find-task.sh` to confirm status changed
+- FALLBACK: Main lead runs `complete-task.sh` directly if chain didn't complete in time
+
 ## Session End
 
 1. Message `session-planner`: "Finalize session. Create summary with velocity metrics."
 2. `session-planner` creates session summary: planned vs completed, time per squad, velocity, carry-forward
 3. Verify all completed tasks are marked in ClickUp
 4. Summarize to user: completed / in-progress / blocked + session velocity
-5. Shutdown all teammates: `SendMessage` type="shutdown_request" to each
-6. `TeamDelete` to clean up
+5. Wait 90s after last completion message (shutdown timing rule)
+6. Shutdown all teammates: `SendMessage` type="shutdown_request" to each
+7. `TeamDelete` to clean up
 
 ## Error Handling
 

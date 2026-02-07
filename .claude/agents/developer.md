@@ -125,6 +125,15 @@ If working on frontend code, consult `/Users/andreynovikov/workspace/tech/projec
 - Spacing tokens
 - Component patterns
 
+## Audit/Discovery Tasks
+
+When assigned an audit task (find unused code, broken routes, dead features):
+1. Use Grep to find ALL instances of the pattern (e.g., all `@rt()` routes)
+2. Cross-reference with all usage points (e.g., all `href=` links, all `RedirectResponse`)
+3. Build a complete inventory BEFORE making changes
+4. Report the full inventory with status (used/unused/broken) to squad-lead
+5. Only delete/change after squad-lead confirms the inventory
+
 ## Important Rules
 
 - NEVER modify test files -- that's test-writer's job
