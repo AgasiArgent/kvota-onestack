@@ -7226,8 +7226,9 @@ def get(session):
                     style="display: flex; gap: 16px; margin-bottom: 16px;"
                 ),
                 Div(
-                    Label("Адрес доставки", style=label_style),
-                    Textarea(name="address", placeholder="Адрес доставки товара", rows="3",
+                    Label("Юридический адрес", style=label_style),
+                    Textarea(name="legal_address", placeholder="Адрес регистрации компании", rows="3",
+                             id="legal-address-field",
                              style=f"{input_style} resize: vertical;"),
                     style="margin-bottom: 24px;"
                 ),
@@ -7248,7 +7249,7 @@ def get(session):
 
 
 @rt("/customers/new")
-def post(name: str, inn: str, email: str, phone: str, address: str, session):
+def post(name: str, inn: str, email: str, phone: str, legal_address: str = "", session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -7262,7 +7263,7 @@ def post(name: str, inn: str, email: str, phone: str, address: str, session):
             "inn": inn or None,
             "email": email or None,
             "phone": phone or None,
-            "address": address or None,
+            "legal_address": legal_address or None,
             "organization_id": user["org_id"]
         }).execute()
 
@@ -35997,6 +35998,8 @@ async def get_dadata_lookup_inn(inn: str, session):
                 (function() {{
                     var nameField = document.querySelector('input[name="name"]');
                     if (nameField && !nameField.value) {{ nameField.value = {repr(name)}; }}
+                    var addrField = document.querySelector('textarea[name="legal_address"]');
+                    if (addrField && !addrField.value) {{ addrField.value = {repr(address)}; }}
                 }})();
             """),
             style="padding: 8px; background: #f0fdf4; border-radius: 6px; margin-top: 4px;"
