@@ -7198,7 +7198,9 @@ def get(session):
                     ),
                     Div(
                         Label("ИНН", style=label_style),
-                        Input(name="inn", placeholder="7701234567", style=input_style),
+                        Input(name="inn", placeholder="7701234567", style=input_style,
+                              hx_get="/api/dadata/lookup-inn", hx_trigger="change", hx_target="#inn-autofill-result", hx_include="[name='inn']", hx_swap="innerHTML"),
+                        Div(id="inn-autofill-result"),
                         style="flex: 1;"
                     ),
                     style="display: flex; gap: 16px; margin-bottom: 16px;"
@@ -27495,6 +27497,48 @@ def get(session, q: str = "", limit: int = 20):
 
 
 # ============================================================================
+# CITY AUTOCOMPLETE (DaData Address Suggestions)
+# ============================================================================
+
+@rt("/api/cities/search")
+def get(session, q: str = ""):
+    """
+    Search cities for HTMX datalist autocomplete using DaData API.
+
+    Query Parameters:
+        q: City name query (min 2 chars)
+
+    Returns:
+        HTML fragment with <option> elements for datalist
+    """
+    redirect = require_login(session)
+    if redirect:
+        return Option("Требуется авторизация", value="", disabled=True)
+
+    try:
+        from services.dadata_service import search_cities
+
+        cities = search_cities(q)
+
+        options = []
+        for city in cities:
+            display = city.get("display", city.get("city", ""))
+            options.append(Option(display, value=display, **{
+                "data-city": city.get("city", ""),
+                "data-country": city.get("country", ""),
+            }))
+
+        if not options and q and len(q.strip()) >= 2:
+            options.append(Option(f"Город не найден: '{q}'", value="", disabled=True))
+
+        return Group(*options)
+
+    except Exception as e:
+        print(f"Error in city search API: {e}")
+        return Option("Ошибка при поиске города", value="", disabled=True)
+
+
+# ============================================================================
 # SUPPLIERS LIST (Feature UI-001)
 # ============================================================================
 
@@ -35908,6 +35952,59 @@ async def get(session, entity_type: str, entity_id: str):
     can_delete = user_has_any_role(session, ["admin", "sales_manager", "quote_controller", "finance"])
 
     return _documents_section(entity_type, entity_id, session, can_upload=can_upload, can_delete=can_delete)
+
+
+# ============================================================================
+# DADATA INN LOOKUP API
+# ============================================================================
+
+@rt("/api/dadata/lookup-inn")
+async def get_dadata_lookup_inn(inn: str, session):
+    """Look up company info by INN via DaData API. Returns HTML fragment for HTMX."""
+    redirect = require_login(session)
+    if redirect:
+        return Div(Small("Требуется авторизация", style="color: #ef4444;"))
+
+    try:
+        from services.dadata_service import validate_inn, lookup_company_by_inn  # normalize_dadata_result used internally
+
+        inn = inn.strip() if inn else ""
+
+        if not validate_inn(inn):
+            return Div(Small("Неверный формат ИНН", style="color: #ef4444;"))
+
+        result = await lookup_company_by_inn(inn)
+
+        if result is None:
+            return Div(Small(f"Компания с ИНН {inn} не найдена", style="color: #94a3b8;"))
+
+        # Return HTML with company info + JS to auto-fill form fields
+        name = result.get("name", "")
+        address = result.get("address", "")
+        director = result.get("director", "")
+        status_text = "Действующая" if result.get("is_active") else "Ликвидирована"
+        status_color = "#22c55e" if result.get("is_active") else "#ef4444"
+
+        return Div(
+            Div(
+                Small(f"✓ {name}", style="color: #22c55e; font-weight: 600;"),
+                Small(f" · {status_text}", style=f"color: {status_color}; font-size: 11px;"),
+                style="margin-bottom: 4px;"
+            ),
+            Small(f"{address}", style="color: #64748b; font-size: 11px; display: block;") if address else "",
+            Small(f"Руководитель: {director}", style="color: #64748b; font-size: 11px; display: block;") if director else "",
+            Script(f"""
+                (function() {{
+                    var nameField = document.querySelector('input[name="name"]');
+                    if (nameField && !nameField.value) {{ nameField.value = {repr(name)}; }}
+                    var addrField = document.querySelector('textarea[name="address"]');
+                    if (addrField && !addrField.value) {{ addrField.value = {repr(address)}; }}
+                }})();
+            """),
+            style="padding: 8px; background: #f0fdf4; border-radius: 6px; margin-top: 4px;"
+        )
+    except Exception as e:
+        return Div(Small("Ошибка при поиске компании", style="color: #ef4444;"))
 
 
 # ============================================================================
