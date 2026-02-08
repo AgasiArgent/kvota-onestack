@@ -4,6 +4,7 @@ services:
   onestack:
     build: .
     container_name: kvota-onestack
+    env_file: .env
     restart: unless-stopped
     ports:
       - "5001:5001"
@@ -20,6 +21,10 @@ services:
       # Telegram Bot (optional)
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
+
+      # External APIs
+      - DADATA_API_KEY=${DADATA_API_KEY:-}
+      - ADMIN_TELEGRAM_CHAT_ID=${ADMIN_TELEGRAM_CHAT_ID:-}
 
     # Health check
     healthcheck:
