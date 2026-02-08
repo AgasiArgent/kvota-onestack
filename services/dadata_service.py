@@ -101,7 +101,7 @@ def normalize_dadata_result(suggestion: dict) -> dict:
         "inn": data.get("inn"),
         "kpp": data.get("kpp") if data.get("type") == "LEGAL" else None,
         "ogrn": data.get("ogrn"),
-        "address": address_data.get("value") if address_data else None,
+        "address": address_data.get("unrestricted_value") or address_data.get("value") if address_data else None,
         "postal_code": address_inner.get("postal_code") if address_inner else None,
         "city": address_inner.get("city") if address_inner else None,
         "director": management.get("name") if management else None,
