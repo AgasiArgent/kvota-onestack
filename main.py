@@ -7115,141 +7115,12 @@ def get(session):
 
 @rt("/customers/new")
 def get(session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    # Design system styles
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-    """
-
-    form_card_style = """
-        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 24px;
-    """
-
-    input_style = """
-        width: 100%;
-        padding: 10px 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        font-size: 14px;
-        background: #f8fafc;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    """
-
-    label_style = """
-        font-size: 12px;
-        font-weight: 600;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 6px;
-        display: block;
-    """
-
-    section_header_style = """
-        display: flex;
-        align-items: center;
-        margin-bottom: 16px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid #e2e8f0;
-    """
-
-    return page_layout("Новый клиент",
-        # Header card with gradient
-        Div(
-            Div(
-                btn_link("", href="/customers", variant="secondary", icon_name="arrow-left",
-                         style="padding: 8px 12px; margin-right: 12px;"),
-                Div(
-                    icon("user-plus", size=24, color="#475569"),
-                    Span(" Новый клиент", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
-                    style="display: flex; align-items: center;"
-                ),
-                style="display: flex; align-items: center;"
-            ),
-            style=header_card_style
-        ),
-
-        # Form card
-        Div(
-            Form(
-                # Section: Company info
-                Div(
-                    icon("building", size=16, color="#64748b"),
-                    Span(" ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                    style=section_header_style
-                ),
-                Div(
-                    Div(
-                        Label("Название компании *", style=label_style),
-                        Input(name="name", required=True, placeholder="ООО Ромашка", style=input_style),
-                        style="flex: 2;"
-                    ),
-                    Div(
-                        Label("ИНН", style=label_style),
-                        Input(name="inn", placeholder="7701234567", style=input_style,
-                              hx_get="/api/dadata/lookup-inn", hx_trigger="change", hx_target="#inn-autofill-result", hx_include="[name='inn']", hx_swap="innerHTML"),
-                        Div(id="inn-autofill-result"),
-                        style="flex: 1;"
-                    ),
-                    style="display: flex; gap: 16px; margin-bottom: 16px;"
-                ),
-
-                # Section: Contact info
-                Div(
-                    icon("phone", size=16, color="#64748b"),
-                    Span(" КОНТАКТНАЯ ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                    style=f"{section_header_style} margin-top: 24px;"
-                ),
-                Div(
-                    Div(
-                        Label("Email", style=label_style),
-                        Input(name="email", type="email", placeholder="info@company.ru", style=input_style),
-                        style="flex: 1;"
-                    ),
-                    Div(
-                        Label("Телефон", style=label_style),
-                        Input(name="phone", placeholder="+7 999 123 4567", style=input_style),
-                        style="flex: 1;"
-                    ),
-                    style="display: flex; gap: 16px; margin-bottom: 16px;"
-                ),
-                Div(
-                    Label("Юридический адрес", style=label_style),
-                    Textarea(name="legal_address", placeholder="Адрес регистрации компании", rows="3",
-                             id="legal-address-field",
-                             style=f"{input_style} resize: vertical;"),
-                    style="margin-bottom: 24px;"
-                ),
-
-                # Actions
-                Div(
-                    btn("Сохранить клиента", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Отмена", href="/customers", variant="secondary", icon_name="x"),
-                    style="display: flex; gap: 12px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid #e2e8f0;"
-                ),
-                method="post",
-                action="/customers/new"
-            ),
-            style=form_card_style
-        ),
-        session=session
-    )
+    """Redirect to /customers where the creation modal is."""
+    return RedirectResponse("/customers", status_code=302)
 
 
 @rt("/customers/new")
-def post(name: str, inn: str, email: str, phone: str, legal_address: str = "", session=None):
+async def post(inn: str = "", no_inn: str = "", session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -7257,62 +7128,57 @@ def post(name: str, inn: str, email: str, phone: str, legal_address: str = "", s
     user = session["user"]
     supabase = get_supabase()
 
-    try:
-        result = supabase.table("customers").insert({
-            "name": name,
-            "inn": inn or None,
-            "email": email or None,
-            "phone": phone or None,
-            "legal_address": legal_address or None,
-            "organization_id": user["org_id"]
-        }).execute()
+    customer_data = {
+        "organization_id": user["org_id"]
+    }
 
-        return RedirectResponse("/customers", status_code=303)
+    if no_inn or not inn.strip():
+        # No-INN path: auto-generate name
+        auto_name = f"Новый клиент {datetime.now().strftime('%Y%m%d-%H%M')}"
+        customer_data["name"] = auto_name
+    else:
+        # INN path: call DaData for company info
+        inn = inn.strip()
+        customer_data["inn"] = inn
+        try:
+            from services.dadata_service import lookup_company_by_inn
+            dadata_result = await lookup_company_by_inn(inn)
+            if dadata_result:
+                customer_data["name"] = dadata_result.get("name", f"Компания ИНН {inn}")
+                customer_data["kpp"] = dadata_result.get("kpp")
+                customer_data["ogrn"] = dadata_result.get("ogrn")
+                customer_data["legal_address"] = dadata_result.get("address")
+            else:
+                customer_data["name"] = f"Компания ИНН {inn}"
+        except Exception as e:
+            print(f"DaData lookup failed for INN {inn}: {e}")
+            customer_data["name"] = f"Компания ИНН {inn}"
+
+    try:
+        result = supabase.table("customers").insert(customer_data).execute()
+        customer_id = result.data[0]["id"]
+        return RedirectResponse(f"/customers/{customer_id}", status_code=303)
 
     except Exception as e:
-        # Parse Supabase error
         error_str = str(e)
-
-        # Check if it's a duplicate INN error
-        if "duplicate key" in error_str and "idx_customers_org_inn" in error_str:
+        if "duplicate" in error_str.lower() or "уже существует" in error_str:
             error_msg = f"Клиент с ИНН '{inn}' уже существует в вашей организации."
-        elif "duplicate key" in error_str:
-            error_msg = "Такой клиент уже существует."
         else:
-            # Try to extract the message from Supabase error format
-            if "'message':" in error_str:
-                try:
-                    import re
-                    match = re.search(r"'message': '([^']+)'", error_str)
-                    if match:
-                        error_msg = f"Ошибка при создании клиента: {match.group(1)}"
-                    else:
-                        error_msg = f"Ошибка при создании клиента: {error_str}"
-                except:
-                    error_msg = f"Ошибка при создании клиента: {error_str}"
-            else:
-                error_msg = f"Ошибка при создании клиента: {error_str}"
+            error_msg = f"Ошибка при создании клиента: {error_str}"
 
-        return page_layout("New Customer",
+        return page_layout("Ошибка",
             Div(error_msg, style="background: #fee; border: 1px solid #c33; padding: 1rem; margin-bottom: 1rem; border-radius: 4px;"),
-            H1("Add Customer"),
             Div(
                 Form(
                     Div(
-                        Label("Company Name *", Input(name="name", required=True, placeholder="ООО Ромашка", value=name)),
-                        Label("INN", Input(name="inn", placeholder="7701234567", value=inn or "")),
-                        cls="form-row"
+                        Label("ИНН", Input(name="inn", value=inn or "")),
+                        style="margin-bottom: 16px;"
                     ),
                     Div(
-                        Label("Email", Input(name="email", type="email", placeholder="info@company.ru", value=email or "")),
-                        Label("Phone", Input(name="phone", placeholder="+7 999 123 4567", value=phone or "")),
-                        cls="form-row"
-                    ),
-                    Label("Address", Textarea(name="address", placeholder="Delivery address", rows="3", value=address or "")),
-                    Div(
-                        btn("Save Customer", variant="primary", icon_name="check", type="submit"),
-                        btn_link("Cancel", href="/customers", variant="secondary"),
-                        cls="form-actions"
+                        btn("Создать", variant="primary", icon_name="check", type="submit"),
+                        btn("Не знаю ИНН", variant="secondary", type="submit", name="no_inn", value="1"),
+                        btn_link("Назад", href="/customers", variant="secondary"),
+                        style="display: flex; gap: 8px;"
                     ),
                     method="post",
                     action="/customers/new"
@@ -7628,12 +7494,18 @@ def get(quote_id: str, session):
                         value=quote.get("delivery_city") or "",
                         placeholder="Москва",
                         name="delivery_city",
+                        list="cities-datalist",
                         style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                        hx_get="/api/cities/search",
+                        hx_trigger="input changed delay:300ms",
+                        hx_target="#cities-datalist",
+                        hx_include="[name='delivery_city']",
+                        hx_vals='js:{"q": event.target.value}',
+                        hx_swap="innerHTML",
                         hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_city", value: event.target.value}',
-                        hx_swap="none"
+                        **{"_": f"on change send patch to me with {{field: 'delivery_city', value: my value}}"}
                     ),
+                    Datalist(id="cities-datalist"),
                     style="flex: 1 1 120px; min-width: 120px;"
                 ),
                 # Delivery Country
@@ -10215,8 +10087,15 @@ def get(quote_id: str, session):
                             type="text",
                             value=quote.get("delivery_city", "") or "",
                             placeholder="Москва, Пекин и т.д.",
-                            style=input_style
+                            list="city-datalist",
+                            style=input_style,
+                            hx_get="/api/cities/search",
+                            hx_trigger="input changed delay:300ms",
+                            hx_target="#city-datalist",
+                            hx_vals='js:{"q": event.target.value}',
+                            hx_swap="innerHTML"
                         ),
+                        Datalist(id="city-datalist"),
                         style=form_group_style
                     ),
                     Div(
@@ -10445,92 +10324,8 @@ def delete(quote_id: str, session):
 # This old route was causing routing conflicts preventing /customers/{customer_id}/contacts/new from working
 
 
-@rt("/customers/{customer_id}/edit")
-def get(customer_id: str, session):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    result = supabase.table("customers") \
-        .select("*") \
-        .eq("id", customer_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not result.data:
-        return page_layout("Not Found", H1("Customer not found"), session=session)
-
-    customer = result.data[0]
-
-    return page_layout(f"Edit {customer.get('name', 'Customer')}",
-        H1(f"Edit Customer"),
-
-        Div(
-            Form(
-                Div(
-                    Label("Company Name *", Input(name="name", value=customer.get("name", ""), required=True)),
-                    Label("INN", Input(name="inn", value=customer.get("inn", "") or "")),
-                    cls="form-row"
-                ),
-                Div(
-                    Label("Email", Input(name="email", type="email", value=customer.get("email", "") or "")),
-                    Label("Phone", Input(name="phone", value=customer.get("phone", "") or "")),
-                    cls="form-row"
-                ),
-                Label("Address", Textarea(customer.get("address", "") or "", name="address", rows="3")),
-                Label("Источник заказа",
-                    Select(
-                        Option("— Не указан —", value=""),
-                        *[Option(lbl, value=val, selected=(val == (customer.get("order_source") or "")))
-                          for val, lbl in ORDER_SOURCE_OPTIONS],
-                        name="order_source",
-                    ),
-                ),
-                Div(
-                    btn("Save Changes", variant="primary", icon_name="check", type="submit"),
-                    btn_link("Cancel", href=f"/customers/{customer_id}", variant="secondary"),
-                    cls="form-actions"
-                ),
-                method="post",
-                action=f"/customers/{customer_id}/edit"
-            ),
-            cls="card"
-        ),
-
-        session=session
-    )
-
-
-@rt("/customers/{customer_id}/edit")
-def post(customer_id: str, name: str, inn: str, email: str, phone: str, address: str, order_source: str = "", session=None):
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    try:
-        supabase.table("customers").update({
-            "name": name,
-            "inn": inn or None,
-            "email": email or None,
-            "phone": phone or None,
-            "address": address or None,
-            "order_source": order_source or None,
-            "updated_at": datetime.now().isoformat()
-        }).eq("id", customer_id).eq("organization_id", user["org_id"]).execute()
-
-        return RedirectResponse(f"/customers/{customer_id}", status_code=303)
-
-    except Exception as e:
-        return page_layout("Error",
-            Div(f"Error: {str(e)}", cls="alert alert-error"),
-            session=session
-        )
+    # REMOVED: GET/POST /customers/{customer_id}/edit routes
+    # Customer detail page (/customers/{customer_id}) has inline editing for all fields.
 
 
 # ============================================================================
@@ -27498,13 +27293,13 @@ def get(session, q: str = "", limit: int = 20):
 
 
 # ============================================================================
-# CITY AUTOCOMPLETE (DaData Address Suggestions)
+# CITY AUTOCOMPLETE (HERE Geocoding Autosuggest)
 # ============================================================================
 
 @rt("/api/cities/search")
 def get(session, q: str = ""):
     """
-    Search cities for HTMX datalist autocomplete using DaData API.
+    Search cities for HTMX datalist autocomplete using HERE Autosuggest API.
 
     Query Parameters:
         q: City name query (min 2 chars)
@@ -27517,7 +27312,7 @@ def get(session, q: str = ""):
         return Option("Требуется авторизация", value="", disabled=True)
 
     try:
-        from services.dadata_service import search_cities
+        from services.here_service import search_cities
 
         cities = search_cities(q)
 
@@ -30031,7 +29826,6 @@ def get(session, q: str = "", status: str = ""):
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
                     A(icon("eye", size=16), href=f"/customers/{c.id}", title="Просмотр", cls="table-action-btn"),
-                    A(icon("edit", size=16), href=f"/customers/{c.id}/edit", title="Редактировать", cls="table-action-btn"),
                     cls="col-actions"
                 )
             )
@@ -30092,7 +29886,8 @@ def get(session, q: str = "", status: str = ""):
                     cls="table-header-left"
                 ),
                 Div(
-                    btn_link("Добавить клиента", href="/customers/new", variant="primary", icon_name="plus"),
+                    btn("Новый клиент", variant="primary", icon_name="plus",
+                        onclick="document.getElementById('create-customer-modal').showModal()"),
                     cls="table-header-right"
                 ),
                 cls="table-header"
@@ -30123,6 +29918,34 @@ def get(session, q: str = "", status: str = ""):
                 cls="table-footer"
             ),
             cls="table-container"
+        ),
+
+        # Modal dialog for creating a new customer
+        Dialog(
+            Div(
+                H3("Новый клиент", style="margin: 0 0 16px 0; font-size: 18px; font-weight: 600;"),
+                Form(
+                    Div(
+                        Label("ИНН", style="font-size: 13px; font-weight: 500; color: #475569; display: block; margin-bottom: 4px;"),
+                        Input(name="inn", placeholder="Введите ИНН компании", style="width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px;"),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Div(
+                        btn("Создать", variant="primary", icon_name="check", type="submit"),
+                        btn("Не знаю ИНН", variant="secondary", icon_name="x",
+                            type="submit", name="no_inn", value="1"),
+                        Button("Отмена", type="button",
+                               onclick="document.getElementById('create-customer-modal').close()",
+                               style="padding: 8px 16px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f8fafc; cursor: pointer;"),
+                        style="display: flex; gap: 8px; justify-content: flex-end;"
+                    ),
+                    method="post",
+                    action="/customers/new"
+                ),
+                style="padding: 24px; background: white; border-radius: 12px; min-width: 400px;"
+            ),
+            id="create-customer-modal",
+            style="border: none; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.15); padding: 0;"
         ),
 
         session=session
@@ -30925,7 +30748,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Div(
                         Span("Активен" if customer.is_active else "Неактивен",
                              style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if customer.is_active else '#dc2626'}; background: {'#dcfce7' if customer.is_active else '#fee2e2'};"),
-                        btn_link("Редактировать", href=f"/customers/{customer_id}/edit", variant="secondary", icon_name="edit", size="sm"),
+                        # Inline editing available on detail page fields directly
                         style="display: flex; align-items: center; gap: 12px;"
                     ),
                     style="display: flex; justify-content: space-between; align-items: center;"

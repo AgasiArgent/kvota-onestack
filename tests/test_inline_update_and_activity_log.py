@@ -426,20 +426,20 @@ class TestOrderSourceInlineEditBug:
         assert 'if new_value == "" and field_name == "order_source":\n        new_value = None' in source, \
             "Inline edit handler does not convert empty order_source to None"
 
-    def test_full_form_edit_bypasses_update_customer(self):
-        """Full-form edit writes directly to supabase, not via update_customer.
+    def test_full_form_edit_removed_in_favor_of_inline(self):
+        """Full-form edit page was removed — all editing now happens inline on detail page.
 
-        This means the full-form edit CAN clear order_source (sends None directly),
-        while the inline edit CANNOT (goes through update_customer which ignores None).
-        This inconsistency confirms the bug.
+        The old /customers/{id}/edit route was removed because the detail page
+        already supports inline editing for all fields including order_source.
         """
         source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
         with open(source_path, "r") as f:
             source = f.read()
 
-        # The full-form edit handler writes order_source directly to supabase
-        assert '"order_source": order_source or None' in source, \
-            "Full-form edit handler does not write order_source directly"
+        # The standalone edit route should no longer exist
+        assert '/customers/{customer_id}/edit' not in source or \
+            'RedirectResponse' in source, \
+            "Old edit route should be removed or redirect"
 
 
 # ============================================================================
