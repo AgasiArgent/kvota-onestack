@@ -1142,13 +1142,13 @@ table tbody td:last-child {
     border-bottom: none;
 }
 
-/* Clickable row */
-.unified-table tbody tr.clickable-row {
+/* Clickable row - global (works in all table types) */
+tr.clickable-row {
     cursor: pointer;
 }
 
-.unified-table tbody tr.clickable-row:hover {
-    background: rgba(59, 130, 246, 0.05);
+tr.clickable-row:hover {
+    background: rgba(59, 130, 246, 0.08) !important;
 }
 
 /* Status Badges - Unified Color Palette */
@@ -23605,7 +23605,8 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
                 A(icon("eye", size=16), href=f"/finance/{deal['id']}", title="Подробнее", cls="table-action-btn"),
                 cls="col-actions"
             ),
-            cls="clickable-row"
+            cls="clickable-row",
+            onclick=f"window.location='/finance/{deal['id']}'"
         )
 
     # Build deals table
@@ -25505,7 +25506,9 @@ def get(session, tab: str = "seller_companies"):
                         A(icon("edit", size=14), href=f"/seller-companies/{company['id']}/edit", title="Редактировать",
                           style="margin-right: 0.5rem;"),
                         A(icon("eye", size=14), href=f"/seller-companies/{company['id']}", title="Просмотр")
-                    )
+                    ),
+                    cls="clickable-row",
+                    onclick=f"window.location='/seller-companies/{company['id']}'"
                 )
             )
 
@@ -25566,7 +25569,9 @@ def get(session, tab: str = "seller_companies"):
                         A(icon("edit", size=14), href=f"/buyer-companies/{company['id']}/edit", title="Редактировать",
                           style="margin-right: 0.5rem;"),
                         A(icon("eye", size=14), href=f"/buyer-companies/{company['id']}", title="Просмотр")
-                    )
+                    ),
+                    cls="clickable-row",
+                    onclick=f"window.location='/buyer-companies/{company['id']}'"
                 )
             )
 
@@ -28026,7 +28031,8 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                     A(icon("edit", size=16), href=f"/suppliers/{s.id}/edit", title="Редактировать", cls="table-action-btn"),
                     cls="col-actions"
                 ),
-                cls="clickable-row"
+                cls="clickable-row",
+                onclick=f"window.location='/suppliers/{s.id}'"
             )
         )
 
@@ -33017,7 +33023,9 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 Td(
                     A(icon("edit", size=14), href=f"/customer-contracts/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
                     A(icon("eye", size=14), href=f"/customer-contracts/{c.id}", title="Просмотр"),
-                )
+                ),
+                cls="clickable-row",
+                onclick=f"window.location='/customer-contracts/{c.id}'"
             )
         )
 
