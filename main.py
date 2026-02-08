@@ -35991,14 +35991,12 @@ async def get_dadata_lookup_inn(inn: str, session):
                 Small(f" · {status_text}", style=f"color: {status_color}; font-size: 11px;"),
                 style="margin-bottom: 4px;"
             ),
-            Small(f"{address}", style="color: #64748b; font-size: 11px; display: block;") if address else "",
+            Small(f"Юр. адрес: {address}", style="color: #64748b; font-size: 11px; display: block;") if address else "",
             Small(f"Руководитель: {director}", style="color: #64748b; font-size: 11px; display: block;") if director else "",
             Script(f"""
                 (function() {{
                     var nameField = document.querySelector('input[name="name"]');
                     if (nameField && !nameField.value) {{ nameField.value = {repr(name)}; }}
-                    var addrField = document.querySelector('textarea[name="address"]');
-                    if (addrField && !addrField.value) {{ addrField.value = {repr(address)}; }}
                 }})();
             """),
             style="padding: 8px; background: #f0fdf4; border-radius: 6px; margin-top: 4px;"
