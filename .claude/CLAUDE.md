@@ -104,6 +104,27 @@ ssh beget-kvota "docker logs kvota-onestack --tail 50"
 
 ---
 
+## ⚠️ Common Pitfalls (from production incidents)
+
+**PostgREST FK ambiguity:**
+- When querying tables with multiple foreign keys to the same target, PostgREST cannot auto-detect which FK to use
+- ALWAYS specify the FK relationship explicitly: `table!fk_column(fields)` instead of `table(fields)`
+- Example: `quotes!customer_id(name)` NOT just `customers(name)`
+- This causes silent failures that only surface after deployment
+
+**Python variable scoping in route handlers:**
+- Variables defined inside `if/for/try` blocks or in a GET handler are NOT accessible in a separate POST handler
+- Before writing POST/PUT handlers, verify every variable you reference is defined in THAT handler's scope
+- Common bug: defining `convert_amount` in GET `/quotes/{id}` but using it in POST `/quotes/{id}` — they're separate functions
+- Always trace variable definitions to ensure they're in scope
+
+**Hardcoded values:**
+- NEVER use hardcoded example timestamps (like `14:35`), IDs, or URLs
+- Always use `datetime.now()`, generated UUIDs, or config variables
+- If generating files with timestamps, use the actual current time
+
+---
+
 ## ✅ Best Practices
 
 **Migrations:**

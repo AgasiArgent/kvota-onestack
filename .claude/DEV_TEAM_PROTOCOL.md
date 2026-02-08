@@ -1,275 +1,328 @@
 # Development Team Orchestration Protocol
 
-## Architecture: Hierarchical Squad Model
+## Your Role: Team Lead + Architect
 
-```
-Main Lead (Opus) — architect, browser tester, escalation handler
-├── session-planner (Sonnet) — state keeper, task tracker, ClickUp sync
-├── backlog-manager (Sonnet) — ClickUp CRUD operations
-├── squad-lead-1 (Opus) — autonomous dev→review→test loop
-│   ├── developer (Opus, subagent via Task tool)
-│   ├── code-quality (subagent via Task tool)
-│   └── test-writer (subagent via Task tool)
-├── squad-lead-2 (Opus) — autonomous dev→review→test loop
-│   └── (same internal structure)
-├── squad-lead-3 (Opus) — if needed
-│   └── (same internal structure)
-└── designer (Opus, optional) — design system
-```
-
-## Your Role: Main Lead + Architect
-
-You are the top-level coordinator. You:
-- Analyze incoming tasks and group them into parallel-safe batches
-- Assign task groups to squad-leads (NOT individual developers)
-- Ensure file ownership doesn't overlap between squads
-- Only receive **summary messages** from squad-leads (not dev chatter)
-- Handle cross-squad coordination (file locks, shared state conflicts)
-- Make architecture decisions when squad-leads escalate
-- Do all E2E browser testing yourself (Chrome MCP only works from main lead)
+You are the coordinator, architect, AND decision-maker. You:
+- Analyze incoming tasks and decide execution strategy
+- RECEIVE all bug reports and review feedback -- YOU decide what to do
+- Spot patterns in bugs to catch systemic issues early
 - Keep the loop going until backlog is empty
+- Can add new tasks to ClickUp during the session via project-manager
 
-**What you do NOT do:**
-- Manage individual developers (squad-leads handle this)
-- Run code reviews (squad-leads handle this internally)
-- Handle fix cycles (squad-leads handle up to 3 rounds, then escalate to you)
+## Team Mode
 
-## Model Allocation
+Read `team_mode` from `.claude/dev-team-config.json`. It can be overridden by `/dev-team-start` argument.
 
-| Role | Model | Reason |
-|------|-------|--------|
-| Main Lead | Opus | Architecture, coordination, browser testing |
-| squad-lead-N | Opus | Autonomous dev→review→fix decision-making |
-| developer-N | Opus | Code writing, complex reasoning |
-| session-planner | Sonnet | Structured state tracking, markdown I/O |
-| backlog-manager | Sonnet | ClickUp scripts, parsing, formatting |
-| code-quality | Opus | Deep code review requires reasoning |
-| test-writer | Opus | Test design requires code understanding |
-| designer | Opus | Design decisions |
+**Three modes:**
+
+| | Lean | Full | TDD |
+|---|---|---|---|
+| Developer instances | 1 persistent | 2-4 dynamic per batch | 1 persistent |
+| Task execution | Sequential | Parallel batches | Sequential |
+| Tests | After implementation | After implementation | BEFORE implementation |
+| Batching phase | SKIP | Architect groups tasks | SKIP |
+| Holistic review | SKIP (1 dev) | Required (cross-dev) | SKIP |
+| Developer lifecycle | Stays alive all session | Spawned & shutdown per batch | Stays alive all session |
+| Best for | Getting started, focused work | Large backlogs, independent tasks | High-quality code, complex logic |
+
+**Default: lean.** Use `/dev-team-start full` or `/dev-team-start tdd` to override.
+
+---
 
 ## Session Startup
 
 1. Read `.claude/dev-team-config.json`
-2. `TeamCreate` with `team_name` from config
-3. Spawn persistent teammates with correct models:
-   - `session-planner` (model: sonnet)
-   - `backlog-manager` (model: sonnet)
-4. Spawn `designer` if configured in `active_roles`
-5. Message `session-planner`: "Initialize session. Review previous sessions in `.claude/dev-team/sessions/` and prepare today's plan."
-6. `session-planner` reads previous session files, creates new session file, reports carry-forward items
-7. Present session context to user: carry-forward items, previous velocity, any notes
-8. Enter delegate mode (Shift+Tab)
+2. Determine effective team mode (config default or `/dev-team-start` override)
+3. **Clean up stale teams**: Check `~/.claude/teams/` for leftover team dirs from previous sessions. Delete them. Check `~/.claude/tasks/` for orphaned dirs (empty UUID-named dirs), delete them. This prevents conflicts with the new session.
+4. `TeamCreate` with `team_name` from config
+5. **Enter delegate mode** (Shift+Tab) -- do this IMMEDIATELY after team creation
+6. Spawn **only** `project-manager` -- no other agents yet
+7. Message `project-manager`: "Initialize session. Review previous sessions in `.claude/dev-team/sessions/` AND fetch open tasks from ClickUp. Report unified situation."
+8. `project-manager` reports back with: carry-forward items, velocity, AND available ClickUp tasks in one message
+9. **STOP**: Present the unified situation to user for review and task approval
+10. After user approves tasks -> proceed to work phases (spawn agents on demand, see Agent Lifecycle)
 
-**NOTE:** Do NOT spawn code-quality, test-writer, or e2e-tester at top level. Squad-leads spawn their own reviewers/testers internally as subagents.
+## Agent Lifecycle
 
-## Session Planner Role
+Spawn agents **on demand**, not all at startup. The team lead tracks which agents are currently alive.
 
-`session-planner` (Sonnet) is the **state keeper** for the entire session. Critical because the main lead's context can compact.
+### Lean Mode Lifecycle
 
-**Responsibilities:**
-- Maintain the session file (`.claude/dev-team/sessions/session_YYYY-MM-DD_N.md`) with real-time updates
-- Track: tasks → squads → status (assigned / in-dev / reviewing / fix-cycle-N / passed / failed)
-- When squad-lead reports task passed: immediately message `backlog-manager` to complete it in ClickUp
-- Maintain the internal TaskList (TaskCreate/TaskUpdate) to reflect current state
-- On lead request: provide full status dump of all tasks, squads, and assignments
-- Detect stale squads: if a squad hasn't reported in a while, flag to main lead
+| Agent | When to Spawn | Lifecycle |
+|---|---|---|
+| project-manager | Session startup (step 6) | Persistent -- ClickUp ops + session document |
+| developer | User approves first task | Persistent -- stays alive all session |
+| code-quality | First review needed | Persistent -- keeps context across reviews |
+| test-writer | First tests needed | Persistent -- keeps context across test cycles |
 
-**Communication flow:**
-```
-squad-lead → main lead: "Task X passed, 30min"
-main lead → session-planner: "Task X (86af5uphp) passed review, 30min. Complete in ClickUp."
-session-planner → backlog-manager: "Complete task 86af5uphp, 30 minutes"
-session-planner: updates session file + internal TaskList
-```
+### Full Mode Lifecycle
+
+| Agent | When to Spawn | Lifecycle |
+|---|---|---|
+| project-manager | Session startup (step 6) | Persistent |
+| developer-1..N | Per batch, after architect batching | Shut down after batch completes |
+| code-quality | First review needed | Persistent -- keeps context |
+| test-writer | First tests needed | Persistent -- keeps context |
+
+### TDD Mode Lifecycle
+
+| Agent | When to Spawn | Lifecycle |
+|---|---|---|
+| project-manager | Session startup (step 6) | Persistent |
+| test-writer | User approves first task | Persistent -- writes tests FIRST |
+| developer | After first tests are written | Persistent -- makes tests pass |
+| code-quality | First review needed | Persistent -- keeps context |
+
+### Session End Cleanup
+
+When ending the session:
+1. Send `shutdown_request` to ALL alive agents
+2. Wait for shutdown confirmations
+3. Call `TeamDelete` to remove team config
+4. Verify: check `~/.claude/teams/` and `~/.claude/tasks/` are clean
 
 ## Phase 1: Fetch Tasks
 
-1. Message `backlog-manager`: "Fetch open tasks from {clickup_list}"
-2. `backlog-manager` returns task list
+**First time**: Tasks already fetched during Session Startup (step 7-8). Skip to step 3.
+**Subsequent loops**: Message `project-manager` to fetch more tasks, then continue from step 3.
+
+1. Message `project-manager`: "Fetch open tasks from {clickup_list}"
+2. `project-manager` returns task list
 3. **STOP**: Present tasks to user for review and discussion
 4. User may: approve all, approve some, reject some, discuss, modify, add new ones
-5. If user wants to add tasks: message `backlog-manager` to create them in ClickUp
+5. If user wants to add tasks: message `project-manager` to create them in ClickUp
 6. Only proceed with user-approved tasks
-7. Message `backlog-manager` to mark approved tasks "in progress" in ClickUp
+7. Message `project-manager` to mark approved tasks "in progress" in ClickUp
 
-## Phase 1.5: Bug Reproduction (before batching bug tasks)
+## Communication Rule: Lead -> Project Manager
 
-For any tasks tagged as bugs:
-1. **Main lead** tests the bug directly in the browser using Chrome MCP tools
-2. Take screenshots, check console errors, document exact symptoms
-3. Determine: is this a REAL bug or a misunderstanding?
-4. Share reproduction report with squad-leads so they know exactly what's broken
-5. Skip assigning bugs that aren't reproducible — mark as "not a bug" or investigate further
-6. This prevents wasting squad time on non-bugs (lesson: B2/B3 in session 1 were not actual bugs)
+At EVERY phase transition and decision point, message `project-manager` with:
+- What tasks were assigned and to whom
+- What review results were received
+- What decisions were made (fix, reassign, architecture change)
+- Developer resolution summaries when tasks complete
 
-## Phase 2: Architect Batching
+This keeps the session log comprehensive for retrospectives.
+
+---
+
+## LEAN MODE FLOW (default)
+
+After Phase 1, follow this simplified sequential loop:
+
+### Lean Phase 2: Assign Task to Developer
+
+1. Pick the next approved task
+2. **If `developer` not yet spawned**: Spawn it now (first task of the session)
+3. Message `developer` with:
+   - Full task requirements (from ClickUp description)
+   - Files/modules to work on
+   - `DESIGN_SYSTEM.md` reference if frontend work
+4. Wait for developer to report completion
+5. Message `project-manager` with assignment
+
+### Lean Phase 3: Review & Test
+
+1. **If `code-quality` not yet spawned**: Spawn it now
+2. **If `test-writer` not yet spawned**: Spawn it now
+3. Message `code-quality`: "Review developer's changes for this task"
+4. Message `test-writer`: "Write tests for developer's changes"
+5. ALL results come back to YOU (team lead), NOT to developer
+
+When you receive results:
+- **If PASS**: Mark task as reviewed. Message `project-manager`.
+- **If FAIL/BUG**: YOU decide:
+  a) Send fix back to developer with specific instructions
+  b) Escalate to user if fundamental design issue
+- **Max 3 iterations** before escalating to user
+
+### Lean Phase 4: Complete & Next
+
+1. Message `project-manager`: "Complete task {clickup_id}, spent {minutes} minutes"
+2. Report task result to user
+3. If more approved tasks remain -> loop back to Lean Phase 2
+4. If all done -> fetch more tasks (Phase 1) or Session End
+
+**Key difference from full mode**: developer stays alive between tasks. No spawning/shutdown overhead.
+
+---
+
+## FULL MODE FLOW
+
+After Phase 1, follow the parallel batch flow:
+
+### Full Phase 2: Architect Batching
 
 1. Analyze approved tasks for dependencies and file overlap
-2. Group into **squads** (1-3 tasks per squad, max 3 squads):
-   - Tasks touching different files/modules → different squads (parallel)
-   - Tasks with file overlap → same squad (sequential within squad)
-   - Tasks with dependencies → same squad or ordered squads
-3. For each squad, determine:
-   - File ownership (explicit, no overlap between squads)
-   - Bug reproduction details if applicable
-4. **Parallelization analysis** (ALWAYS include when presenting):
-   - Show which squads run in parallel
-   - Flag file overlap risks between squads
-   - Table: Squad → Tasks → Owned Files → Est. Time
-   - Estimate wall-clock time vs serial time
-5. Present squad plan to user for quick confirmation
+2. Group into parallel-safe batches:
+   - Tasks touching different files/modules -> same batch (parallel)
+   - Tasks with dependencies -> sequential batches
+3. For each batch, determine:
+   - How many developers needed
+   - File ownership per developer (explicit, no overlap)
+   - Whether to use `frontend-dev`/`backend-dev` or generic `developer`
+4. Present batch plan to user for quick confirmation
 
-## Phase 3: Spawn Squad Leads & Execute
+### Full Phase 3: Spawn Developers & Execute
 
-For each squad:
+For each batch:
 
-1. Spawn a `squad-lead-N` teammate (model: opus, subagent_type: `team-lead`)
-2. Message squad-lead with a **complete brief**:
+1. Spawn N developer instances (Task with `team_name`)
+2. Name them: `developer-1`, `developer-2`, etc. (or `frontend-dev-1`, `backend-dev-1`)
+3. Assign tasks via `TaskCreate` + `TaskUpdate` with owner
+4. Message each developer with:
+   - Full task requirements (from ClickUp description)
+   - Assigned files/modules (explicit ownership)
+   - `DESIGN_SYSTEM.md` reference if frontend work
+5. Wait for all developers in batch to report completion
+6. Message `project-manager` with assignments made
 
-```
-You are squad-lead-N. You manage a self-contained dev→review→test cycle.
+### Full Phase 4: Per-Developer Mini Review Loop
 
-## Your Tasks
-- Task A: [full description, ClickUp ID]
-- Task B: [full description, ClickUp ID]
+For EACH developer (in parallel where possible):
 
-## File Ownership
-You and your developer OWN these files exclusively:
-- main.py lines XXXX-YYYY (section description)
-- services/foo.py lines XXXX-YYYY
-DO NOT touch any files outside this ownership.
+1. Assign `code-quality` to review THAT developer's changes
+2. Assign `test-writer` to write tests for THAT developer's changes
+3. ALL results come back to YOU (team lead), NOT to developer
 
-## Bug Reproduction (if applicable)
-[Screenshots, console errors, exact symptoms from Phase 1.5]
+When you receive review/test results:
 
-## Your Workflow
-1. Spawn a `developer` subagent (Task tool, model: opus) with the task details
-2. When developer reports done: spawn a `code-quality` subagent to review changes
-3. When review reports done: spawn a `test-writer` subagent to test changes
-4. If review/tests FAIL: give developer specific fix instructions, respawn review after fix
-5. Max 3 fix cycles. If still failing after 3: STOP and report failure details to me
-6. When ALL tasks pass: report back to me with summary
+- **If PASS**: Mark that developer's work as reviewed. Message `project-manager`.
+- **If FAIL/BUG**: YOU decide the action:
+  a) Send fix back to SAME developer with specific instructions
+  b) Assign to DIFFERENT developer if original is stuck
+  c) Change architecture if you see a PATTERN of same bugs
+  d) Escalate to user if fundamental design issue
+- **Max 3 iterations per developer** before escalating to user
 
-## Report Format (message back to main lead)
-"Squad-N complete. Tasks: [list]. Status: PASS/FAIL. Time: Xmin.
-Fix cycles: N. Files changed: [list]. Migration files: [list if any]."
+Wait until ALL developers in batch have passed mini-review.
 
-If FAIL after 3 cycles, report:
-"Squad-N BLOCKED on Task X. Issue: [description]. Review feedback: [details].
-Need architecture decision / different approach."
+### Full Phase 5: Holistic Integration Review
 
-## Project Rules
-- Database schema: `kvota` (not `public`)
-- Use `r.slug` not `r.code` in RLS policies
-- NEVER modify calculation_engine.py, calculation_models.py, calculation_mapper.py
-- Migrations use `kvota.` prefix, numbered sequentially (latest: 156)
-```
+After all developers pass mini-reviews:
 
-3. Message `session-planner`: "Squads assigned: squad-1 → [tasks], squad-2 → [tasks]"
-4. Wait for squad-leads to report back
+1. Message `code-quality`: "Review ALL changes TOGETHER (integration review)"
+   - Cross-module consistency
+   - Shared state conflicts
+   - API contract alignment
+   - Design system compliance
+2. Message `test-writer`: "Run FULL test suite across ALL changes"
+   - Integration tests
+   - Regression checks
+3. ALL results come to YOU (team lead)
 
-## Phase 4: Receive Squad Reports
+If issues found:
+- YOU analyze: is it a single dev's problem or integration issue?
+- Assign fix to appropriate developer(s)
+- Max 3 iterations before escalating to user
 
-Squad-leads report back autonomously. Main lead processes each report:
+### Full Phase 6: Complete & Loop
 
-**If PASS:**
-1. Message `session-planner`: "Task X (ClickUp ID) passed, Ymin. Complete in ClickUp."
-2. Session-planner handles ClickUp completion via backlog-manager
-3. Shutdown the squad-lead: `SendMessage` type="shutdown_request"
+1. For EACH completed task, message `project-manager`:
+   "Complete task {clickup_id}, spent {minutes} minutes"
+2. `project-manager` marks complete in ClickUp WITH time tracking
+3. Message `project-manager`: update session log with batch results
+4. Shutdown temporary developer instances for this batch:
+   `SendMessage` type="shutdown_request" to each developer
+5. Report batch summary to user
+6. Check if more tasks available -> loop back to Phase 1
+7. If backlog empty -> proceed to Session End
 
-**If BLOCKED (3 failed cycles):**
-1. Read the squad-lead's failure report
-2. Decide:
-   a) Give squad-lead new instructions to try a different approach
-   b) Reassign task to a different squad
-   c) Change architecture
-   d) Escalate to user
-3. Message `session-planner` with decision
+### Parallel Optimization (Full Mode Only)
 
-**Cross-squad coordination:**
-- If squad-1 needs changes in squad-2's files → message both squad-leads to coordinate
-- If a shared resource conflict arises → pause one squad, let the other finish first
+- While holistic review runs on batch N, you can fetch tasks for batch N+1
+- Keep persistent agents alive: `project-manager`, `code-quality`, `test-writer`
+- Only spawn/shutdown developer instances per batch
+- `project-manager` continuously logs progress as events happen
 
-Wait until ALL squads have reported (pass or escalated).
+---
 
-## Phase 5: Holistic Integration Review
+## TDD MODE FLOW
 
-**Skip this phase** if all squads worked on independent files with no shared state.
+After Phase 1, follow this test-first sequential loop:
 
-When needed (squads touched shared code):
-1. Spawn a `code-quality` subagent (Task tool) to review ALL changes together
-2. Check: cross-module consistency, shared state conflicts, API contracts
-3. If issues found: assign fix to appropriate squad-lead (or respawn one)
-4. Max 3 iterations before escalating to user
+### TDD Phase 2: Write Failing Tests
 
-## Phase 6: E2E Browser Testing
+1. Pick the next approved task
+2. Extract acceptance criteria from ClickUp description
+3. **If `test-writer` not yet spawned**: Spawn it now
+4. Message `test-writer`: "Write failing tests for this task. Acceptance criteria: [criteria]. Tests should define expected behavior but FAIL because the feature isn't implemented yet."
+5. Wait for `test-writer` to report: tests written + confirmed failing
+6. Message `project-manager` with test-first assignment
 
-**Main lead does this directly** (Chrome MCP only works from main lead context).
+### TDD Phase 3: Make Tests Pass
 
-1. Commit and push all changes to trigger CI/CD deployment
-2. Wait for GitHub Actions to complete
-3. Use Chrome MCP tools to test each changed feature in the browser:
-   - Navigate to affected pages
-   - Take screenshots
-   - Test forms, dropdowns, toggles
-   - Check for console errors
-4. If bugs found: spawn a squad-lead (or message existing one) to fix, re-test after fix
+1. **If `developer` not yet spawned**: Spawn it now
+2. Message `developer`: "Make these tests pass. Test files: [paths]. Do NOT modify test files."
+3. Wait for developer to report all tests passing
+4. Message `project-manager` with developer assignment
 
-## Phase 7: Complete & Loop
+### TDD Phase 4: Review Implementation
 
-1. Verify all tasks marked complete in ClickUp (session-planner should have done this per-task)
-2. Message `session-planner`: update session log with batch results
-3. Ensure all squad-leads are shut down
-4. Report batch summary to user
-5. Check if more tasks available → loop back to Phase 1
-6. If backlog empty → proceed to Session End
+1. **If `code-quality` not yet spawned**: Spawn it now
+2. Message `code-quality`: "Review developer's implementation for this task"
+3. ALL results come back to YOU (team lead)
 
-## Context Management
+When you receive results:
+- **If PASS**: Mark task as reviewed. Message `project-manager`.
+- **If FAIL/BUG**: Send fix back to developer with specific instructions. Developer must NOT modify test files.
+- **Max 3 iterations** before escalating to user
 
-**Problem solved by squad model:** Main lead no longer receives dev chatter, review details, or fix-cycle messages. Only squad summaries.
+### TDD Phase 5: Complete & Next
 
-**Remaining mitigations:**
-- Max 3 squads running in parallel
-- Shutdown squad-leads as soon as they report (don't keep idle)
-- Session-planner tracks full state — if lead context compacts, ask for status dump
-- ClickUp tasks completed per-task in real-time (nothing lost if context compacts)
+1. Message `project-manager`: "Complete task {clickup_id}, spent {minutes} minutes"
+2. Report task result to user
+3. If more approved tasks remain -> loop back to TDD Phase 2
+4. If all done -> fetch more tasks (Phase 1) or Session End
+
+**Key difference from lean mode**: Tests are written FIRST by test-writer, then developer makes them pass. Developer must never modify test files.
+
+---
+
+## Agent Healthcheck
+
+When waiting for an agent response:
+
+1. If no response after your first message, send a follow-up: "Status update? Are you still working on [task]?"
+2. If still no response after the follow-up, send one final message: "Please report your current status."
+3. If still unresponsive after 3 total messages: the agent is stalled.
+
+**When an agent is stalled:**
+- Shut it down: `SendMessage` type="shutdown_request"
+- Spawn a fresh replacement with the same role
+- Re-assign the task to the new agent with full context
+- Report to user: "Agent [name] was unresponsive, replaced with fresh instance"
+
+**Do NOT** keep messaging a stalled agent repeatedly. Three messages is the limit.
+
+---
 
 ## Mid-Session Task Management
 
 At any point, user can:
-- Ask to add new tasks: main lead messages `backlog-manager` to create in ClickUp
-- Reprioritize: main lead adjusts squad ordering
-- Pause a task: main lead messages relevant squad-lead
-- Cancel a task: main lead removes from queue, messages session-planner
+- Ask to add new tasks: you message `project-manager` to create in ClickUp
+- Reprioritize: you adjust task ordering (lean) or batch ordering (full)
+- Pause a task: you shelve it for later
+- Cancel a task: you remove from queue
 
-## Fix Cycle Limits
+## Fix Cycle Limits (consistent: 3 everywhere)
 
-- Max 3 fix cycles within each squad (squad-lead manages this)
-- Max 3 holistic integration review iterations
-- Max 3 e2e testing iterations
+- Max 3 review iterations per task (lean/tdd) or per developer (full)
+- Max 3 holistic review iterations (full mode only)
 - On max reached: **STOP**, present full context to user, ask for guidance
-
-## Shutdown Timing
-
-After sending completion messages to session-planner:
-- Wait at least 90 seconds before sending shutdown requests
-- OR verify ClickUp completion by running `find-task.sh` to confirm status changed
-- FALLBACK: Main lead runs `complete-task.sh` directly if chain didn't complete in time
 
 ## Session End
 
-1. Message `session-planner`: "Finalize session. Create summary with velocity metrics."
-2. `session-planner` creates session summary: planned vs completed, time per squad, velocity, carry-forward
-3. Verify all completed tasks are marked in ClickUp
-4. Summarize to user: completed / in-progress / blocked + session velocity
-5. Wait 90s after last completion message (shutdown timing rule)
-6. Shutdown all teammates: `SendMessage` type="shutdown_request" to each
-7. `TeamDelete` to clean up
+1. Message `project-manager`: "Finalize session. Create summary with velocity metrics and report final ClickUp status of ALL tasks with time spent."
+2. `project-manager` creates session summary: planned vs completed, time, velocity, carry-forward + ClickUp report
+3. Summarize to user: completed / in-progress / blocked + session velocity
+4. Shutdown ALL alive teammates: `SendMessage` type="shutdown_request" to each
+5. Wait for shutdown confirmations from each agent
+6. `TeamDelete` to clean up team and task dirs
+7. Verify cleanup: check that `~/.claude/teams/{team_name}/` and `~/.claude/tasks/{team_name}/` are removed
 
 ## Error Handling
 
-- If a squad-lead becomes unresponsive after 2 messages: report to user, consider respawning
-- If a squad-lead is stuck in fix cycles: receive escalation, make architecture decision
-- If ClickUp API fails: log the issue, continue work, mark tasks manually later
-- If lead context compacts mid-session: message `session-planner` for full status dump, resume from there
-- If squad-lead's subagents fail: squad-lead handles internally, only escalates if unrecoverable
+- If a teammate becomes unresponsive: follow Agent Healthcheck protocol above (3 messages max, then respawn)
+- If a developer is stuck in fix cycles: reassign (full) or escalate (lean/tdd)
+- If ClickUp API fails: log the issue, continue work, mark ClickUp tasks manually later

@@ -1,19 +1,18 @@
 {
   "team_name": "dev-team-onestack",
+  "team_mode": "lean",
   "stack": "python",
   "dev_mode": "unified",
   "architecture": "hierarchical_squads",
   "roles": {
-    "persistent": ["session-planner", "backlog-manager"],
+    "persistent": ["project-manager", "code-quality", "test-writer"],
     "squad_internal": ["developer", "code-quality", "test-writer"],
     "optional": ["designer"],
-    "dynamic": ["squad-lead"]
+    "dynamic": ["developer"]
   },
-  "active_roles": ["session-planner", "backlog-manager", "squad-lead", "developer", "code-quality", "test-writer", "designer"],
+  "active_roles": ["project-manager", "developer", "code-quality", "test-writer", "designer"],
   "model_allocation": {
-    "session-planner": "sonnet",
-    "backlog-manager": "sonnet",
-    "squad-lead": "opus",
+    "project-manager": "sonnet",
     "developer": "opus",
     "code-quality": "opus",
     "test-writer": "opus",

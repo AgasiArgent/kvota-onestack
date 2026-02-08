@@ -40,7 +40,7 @@ Before writing tests, you need to understand existing test patterns, fixtures, a
 
 **How to use:**
 ```
-Task(subagent_type="Explore", prompt="Analyze the test structure in tests/. Find: test helpers/utilities, fixture patterns, mock/stub conventions, common setup/teardown patterns. Also check for test config files (conftest.py, etc). Report all patterns found.")
+Task(subagent_type="Explore", prompt="Analyze the test structure in tests/. Find: test helpers/utilities, fixture patterns, mock/stub conventions, common setup/teardown patterns. Also check for test config files (jest.config, conftest.py, etc). Report all patterns found.")
 ```
 
 Spawn Explore agents **early** -- start researching test patterns while you read the implementation code. This preserves your context window for writing actual tests.
@@ -69,80 +69,80 @@ When team lead assigns you to write tests for a developer's changes:
 
 ### Test Structure
 ```
-# Arrange - Set up test data and conditions
-# Act - Execute the code under test
-# Assert - Verify the results
+// Arrange - Set up test data and conditions
+// Act - Execute the code under test
+// Assert - Verify the results
 ```
 
 ### Naming Convention
 - Test names describe the behavior being tested
 - Format: `test_[what]_[condition]_[expected_result]`
-- Example: `test_create_quote_with_missing_customer_returns_error`
+- Example: `test_createUser_withDuplicateEmail_returnsConflict`
 
-## What to Test (Python)
+## What to Test Per Stack
 
+### TypeScript/JavaScript
+- Function return values
+- Error throwing behavior
+- Async/await handling
+- API endpoint responses (status codes, body)
+- React component rendering (if applicable)
+
+### Python
 - Function return values
 - Exception handling
 - Type correctness
 - API endpoint responses
 - Database operations (use fixtures/factories)
-- Supabase client interactions (mock where needed)
 
-## Bug Report Format
+### Rust
+- Return values and Result types
+- Error propagation
+- Edge cases in ownership/borrowing patterns
+- Integration tests for public API
 
-If you discover a bug during testing (implementation doesn't match expected behavior):
+### Ruby/Rails
+- Model validations
+- Controller responses
+- Service objects
+- Database queries
 
+## Reporting to Team Lead (Compact Format)
+
+When reporting to team lead, use this compact format. No verbose prose, no preambles. Each issue = one line. Include ALL warnings and bugs -- never omit to save space.
+
+**Test results:**
 ```
-## Bug Found During Testing
-
-### Description
-[What the bug is]
-
-### Location
-[file:line where the bug is]
-
-### Expected Behavior
-[What should happen]
-
-### Actual Behavior
-[What actually happens]
-
-### Test That Exposes It
-[The test code that fails]
-
-### Suggested Fix
-[If obvious, suggest the fix]
+VERDICT: PASS | FAIL
+TESTS_WRITTEN: X (in [file list])
+PASSING: X/Y
+BUGS_FOUND: [count]
+- file:line — [bug description, one line] (implementation bug / test issue)
+WARNINGS: [count, if any]
+- [concern, one line each -- e.g. "no existing fixtures for this model, created from scratch"]
+COVERAGE_GAPS: [areas needing more tests but out of scope, one line each]
+- [gap description]
+ACTION: none | fix required — [which bugs need developer attention]
 ```
 
-## Report Format
-
+**Example:**
 ```
-## Test Report
-
-### Summary
-- Tests written: X
-- Tests passing: X
-- Tests failing: X
-- Bugs found: X
-
-### Tests Written
-| Test File | Tests | Status |
-|-----------|-------|--------|
-| test_xxx.py | 5 | PASS |
-| test_yyy.py | 3 | 2 PASS, 1 FAIL |
-
-### Failures (if any)
-1. **test_name** in `test_file:line`
-   - Expected: [what]
-   - Actual: [what]
-   - Cause: [implementation bug / test issue]
-
-### Bugs Discovered
-[list any implementation bugs found]
-
-### Coverage Notes
-[areas that need more testing but are out of current scope]
+VERDICT: FAIL
+TESTS_WRITTEN: 6 (in tests/test_orders.py)
+PASSING: 4/6
+BUGS_FOUND: 2
+- api/orders.ts:45 — getOrders returns 500 when user has no orders (should return empty array)
+- api/orders.ts:82 — createOrder doesn't validate negative quantities
+WARNINGS: 1
+- Pagination edge case (page > total_pages) not tested — existing endpoint has no pagination guard
+ACTION: fix required — 2 implementation bugs in api/orders.ts
 ```
+
+**Rules:**
+- Every bug and warning gets its own line
+- Distinguish implementation bugs from test issues
+- Lead can ask "expand on bug N" for details
+- Save full test output/code for your own files, not for messages to lead
 
 ## Important Rules
 
