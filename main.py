@@ -7597,6 +7597,20 @@ def get(quote_id: str, session):
     from services.seller_company_service import get_all_seller_companies
     seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
 
+    # Get customer contacts for contact person dropdown
+    contacts = []
+    if quote.get("customer_id"):
+        try:
+            contacts_result = supabase.table("customer_contacts") \
+                .select("id, name, position, phone, is_lpr") \
+                .eq("customer_id", quote["customer_id"]) \
+                .order("is_lpr", desc=True) \
+                .order("name") \
+                .execute()
+            contacts = contacts_result.data or []
+        except Exception:
+            pass
+
     # Look up creator name from user_profiles
     creator_name = None
     if quote.get("created_by"):
@@ -7725,6 +7739,11 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "customer_id", value: event.target.value}',
                         hx_swap="none"
                     ),
+                    Script("""
+                        document.getElementById('inline-customer').addEventListener('htmx:afterRequest', function(event) {
+                            if (event.detail.successful) { window.location.reload(); }
+                        });
+                    """),
                     style="flex: 1; min-width: 200px;"
                 ),
                 # Seller Company dropdown
@@ -7746,6 +7765,30 @@ def get(quote_id: str, session):
                         hx_swap="none"
                     ),
                     style="flex: 1; min-width: 200px;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 1.25rem;"
+            ),
+
+            # Row 1.5: Contact Person
+            Div(
+                Div(
+                    Label("КОНТАКТНОЕ ЛИЦО", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Select(
+                        Option("— Не выбрано —", value=""),
+                        *[Option(
+                            f"{'⭐ ' if c.get('is_lpr') else ''}{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
+                            value=c["id"],
+                            selected=(c["id"] == quote.get("contact_person_id"))
+                        ) for c in contacts],
+                        name="contact_person_id",
+                        id="inline-contact-person",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "contact_person_id", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1; min-width: 200px; max-width: 400px;"
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1.25rem;"
             ),
@@ -8793,6 +8836,9 @@ def get(quote_id: str, session):
             ),
             cls="card"
         ) if workflow_status != "draft" else None,
+
+        # Activity log (workflow transitions history)
+        workflow_transition_history(quote_id, limit=50, collapsed=True),
 
         # Delete quote button (soft delete)
         Div(
@@ -10168,10 +10214,10 @@ async def inline_update_quote(quote_id: str, session, request):
 
     # Allowed fields for inline update
     allowed_fields = [
-        'customer_id', 'seller_company_id', 'delivery_city',
-        'delivery_country', 'delivery_method', 'delivery_priority',
-        'delivery_terms', 'currency', 'payment_terms', 'notes',
-        'validity_days'
+        'customer_id', 'seller_company_id', 'contact_person_id',
+        'delivery_city', 'delivery_country', 'delivery_method',
+        'delivery_priority', 'delivery_terms', 'currency',
+        'payment_terms', 'notes', 'validity_days'
     ]
 
     if field not in allowed_fields:
@@ -10189,8 +10235,12 @@ async def inline_update_quote(quote_id: str, session, request):
             value = 30
 
     try:
+        update_data = {field: value}
+        # When customer changes, clear contact_person_id (belongs to old customer)
+        if field == "customer_id":
+            update_data["contact_person_id"] = None
         supabase.table("quotes") \
-            .update({field: value}) \
+            .update(update_data) \
             .eq("id", quote_id) \
             .execute()
         return ""  # HTMX swap="none", no response needed
@@ -10267,6 +10317,20 @@ def get(quote_id: str, session):
     # Get seller companies for dropdown
     from services.seller_company_service import get_all_seller_companies, format_seller_company_for_dropdown
     seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
+
+    # Get customer contacts for contact person dropdown
+    edit_contacts = []
+    if quote.get("customer_id"):
+        try:
+            edit_contacts_result = supabase.table("customer_contacts") \
+                .select("id, name, position, phone, is_lpr") \
+                .eq("customer_id", quote["customer_id"]) \
+                .order("is_lpr", desc=True) \
+                .order("name") \
+                .execute()
+            edit_contacts = edit_contacts_result.data or []
+        except Exception:
+            pass
 
     # Prepare seller company info for pre-selected value
     # Note: seller_company_id column may not exist if migration 028 not applied
@@ -10389,6 +10453,22 @@ def get(quote_id: str, session):
                         style=select_style
                     ),
                     Small("Наше юридическое лицо для продажи",
+                          style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
+                    style=form_group_style
+                ),
+                Div(
+                    Label("Контактное лицо", style=label_style),
+                    Select(
+                        Option("— Не выбрано —", value=""),
+                        *[Option(
+                            f"{'⭐ ' if c.get('is_lpr') else ''}{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
+                            value=c["id"],
+                            selected=(c["id"] == quote.get("contact_person_id"))
+                        ) for c in edit_contacts],
+                        name="contact_person_id",
+                        style=select_style
+                    ),
+                    Small("ЛПР или контакт клиента",
                           style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
                     style=form_group_style
                 ),
@@ -10538,7 +10618,7 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
          payment_terms: int, delivery_days: int, notes: str,
          delivery_city: str = None, delivery_country: str = None, delivery_method: str = None,
          delivery_priority: str = None, seller_company_id: str = None,
-         validity_days: int = 30, session=None):
+         contact_person_id: str = None, validity_days: int = 30, session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -10586,6 +10666,12 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
             update_data["seller_company_id"] = seller_company_id.strip()
         else:
             update_data["seller_company_id"] = None
+
+        # Contact person (ЛПР)
+        if contact_person_id and contact_person_id.strip():
+            update_data["contact_person_id"] = contact_person_id.strip()
+        else:
+            update_data["contact_person_id"] = None
 
         supabase.table("quotes").update(update_data) \
             .eq("id", quote_id) \
@@ -10666,6 +10752,14 @@ def get(customer_id: str, session):
                     cls="form-row"
                 ),
                 Label("Address", Textarea(customer.get("address", "") or "", name="address", rows="3")),
+                Label("Источник заказа",
+                    Select(
+                        Option("— Не указан —", value=""),
+                        *[Option(lbl, value=val, selected=(val == (customer.get("order_source") or "")))
+                          for val, lbl in ORDER_SOURCE_OPTIONS],
+                        name="order_source",
+                    ),
+                ),
                 Div(
                     btn("Save Changes", variant="primary", icon_name="check", type="submit"),
                     btn_link("Cancel", href=f"/customers/{customer_id}", variant="secondary"),
@@ -10682,7 +10776,7 @@ def get(customer_id: str, session):
 
 
 @rt("/customers/{customer_id}/edit")
-def post(customer_id: str, name: str, inn: str, email: str, phone: str, address: str, session):
+def post(customer_id: str, name: str, inn: str, email: str, phone: str, address: str, order_source: str = "", session=None):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -10697,6 +10791,7 @@ def post(customer_id: str, name: str, inn: str, email: str, phone: str, address:
             "email": email or None,
             "phone": phone or None,
             "address": address or None,
+            "order_source": order_source or None,
             "updated_at": datetime.now().isoformat()
         }).eq("id", customer_id).eq("organization_id", user["org_id"]).execute()
 
@@ -13441,6 +13536,29 @@ def post(action: str, session):
 
 
 # ============================================================================
+# SHARED ROLE LABELS (used by activity log across all pages)
+# ============================================================================
+
+ROLE_LABELS_RU = {
+    "sales": "Продажи", "sales_manager": "Менеджер", "procurement": "Закупки",
+    "logistics": "Логистика", "customs": "Таможня", "admin": "Админ",
+    "quote_controller": "Контроль КП", "spec_controller": "Контроль спец.",
+    "top_manager": "Руководитель", "finance": "Финансы", "system": "Система",
+}
+
+
+def _format_transition_timestamp(dt_str: str) -> str:
+    """Format ISO timestamp to DD.MM.YYYY HH:MM."""
+    if not dt_str:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        return dt.strftime("%d.%m.%Y %H:%M")
+    except Exception:
+        return dt_str[:16] if len(dt_str) >= 16 else dt_str
+
+
+# ============================================================================
 # PROCUREMENT WORKSPACE (Feature #33)
 # ============================================================================
 
@@ -13640,15 +13758,22 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
             style="background: #f9fafb;"
         )
 
-    # Format timestamp
-    def format_date(date_str):
-        if not date_str:
-            return "—"
+    # Resolve actor names (FIO) from user_profiles
+    actor_ids = list(set(r.get("actor_id") for r in history if r.get("actor_id")))
+    actor_names = {}
+    if actor_ids:
         try:
-            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-            return dt.strftime("%d.%m.%Y %H:%M")
-        except:
-            return date_str[:16] if date_str else "—"
+            supabase = get_supabase()
+            profiles_result = supabase.table("user_profiles") \
+                .select("user_id, full_name") \
+                .in_("user_id", actor_ids) \
+                .execute()
+            for p in (profiles_result.data or []):
+                actor_names[p["user_id"]] = p.get("full_name") or ""
+        except Exception:
+            pass
+    for r in history:
+        r["actor_name"] = actor_names.get(r.get("actor_id"), "")
 
     # Build transition rows
     def transition_row(record, is_first=False):
@@ -13658,7 +13783,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
         to_name = record.get("to_status_name", to_status)
         comment = record.get("comment", "")
         actor_role = record.get("actor_role", "")
-        created_at = format_date(record.get("created_at"))
+        created_at = _format_transition_timestamp(record.get("created_at"))
 
         # Get colors for status badges
         def get_badge_colors(status_str):
@@ -13691,20 +13816,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
         from_bg, from_text = get_badge_colors(from_status)
         to_bg, to_text = get_badge_colors(to_status)
 
-        # Role name translation
-        role_names = {
-            "sales": "Продажи",
-            "procurement": "Закупки",
-            "logistics": "Логистика",
-            "customs": "Таможня",
-            "quote_controller": "Контролёр КП",
-            "spec_controller": "Контролёр спец.",
-            "finance": "Финансы",
-            "top_manager": "Руководство",
-            "admin": "Админ",
-            "system": "Система",
-        }
-        role_display = role_names.get(actor_role, actor_role) if actor_role else "—"
+        role_display = ROLE_LABELS_RU.get(actor_role, actor_role) if actor_role else "—"
 
         return Div(
             # Timeline dot and line
@@ -13722,6 +13834,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
                 # Header: timestamp and role
                 Div(
                     Span(created_at, style="font-size: 0.75rem; color: #666;"),
+                    Span(f" — {record.get('actor_name', '')}", style="font-size: 0.75rem; font-weight: 600; color: #1e293b;") if record.get("actor_name") else None,
                     Span(f" • {role_display}", style="font-size: 0.75rem; color: #9ca3af;") if role_display != "—" else None,
                     style="margin-bottom: 4px;"
                 ),
@@ -30398,6 +30511,20 @@ def _stat_card_simple(value: str, label: str, description: str = None):
     )
 
 
+ORDER_SOURCE_OPTIONS = [
+    ("cold_call", "Холодный звонок"),
+    ("recommendation", "Рекомендация"),
+    ("tender", "Тендер"),
+    ("website", "Сайт"),
+    ("exhibition", "Выставка"),
+    ("social", "Соцсети"),
+    ("repeat", "Повторный клиент"),
+    ("other", "Другое"),
+]
+
+ORDER_SOURCE_LABELS = dict(ORDER_SOURCE_OPTIONS)
+
+
 @rt("/customers/{customer_id}")
 def get(customer_id: str, session, request, tab: str = "general"):
     """Customer detail view page with tabbed interface."""
@@ -30597,6 +30724,10 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Div(
                             Div("Обновлён", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
                             Div(updated_at or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                        ),
+                        Div(
+                            Div("Источник", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            _render_field_display(customer_id, "order_source", customer.order_source or ""),
                         ),
                         style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
                     ),
@@ -31211,6 +31342,7 @@ def get(customer_id: str, field_name: str, session):
         "legal_address": ("Юридический адрес", customer.legal_address or "", "textarea"),
         "actual_address": ("Фактический адрес", customer.actual_address or "", "textarea"),
         "postal_address": ("Почтовый адрес", customer.postal_address or "", "textarea"),
+        "order_source": ("Источник заказа", customer.order_source or "", "select"),
     }
 
     if field_name not in field_config:
@@ -31234,6 +31366,20 @@ def get(customer_id: str, field_name: str, session):
             style=input_style + " width: 100%; min-height: 80px; font-family: inherit;",
             required=True if field_name == "name" else False,
             onkeydown=esc_handler
+        )
+    elif input_type == "select":
+        # Select dropdown: auto-submit on change, Escape cancels
+        select_options = [Option("— Не указан —", value="")]
+        if field_name == "order_source":
+            for opt_val, opt_label in ORDER_SOURCE_OPTIONS:
+                select_options.append(Option(opt_label, value=opt_val, selected=(opt_val == value)))
+        input_elem = Select(
+            *select_options,
+            name=field_name,
+            autofocus=True,
+            style=input_style + " flex: 1; cursor: pointer;",
+            onchange=f"this.form.querySelector('button[type=submit]').click();",
+            onkeydown=esc_handler,
         )
     else:
         # Input: Enter saves, Escape cancels
@@ -31265,25 +31411,44 @@ async def post(customer_id: str, field_name: str, session, request):
     if redirect:
         return redirect
 
+    user = session["user"]
+
     from services.customer_service import get_customer, update_customer
 
     customer = get_customer(customer_id)
     if not customer:
         return Div("Клиент не найден")
 
+    # Verify customer belongs to user's organization
+    if customer.organization_id != user["org_id"]:
+        return Div("Клиент не найден", id=f"field-{field_name}")
+
     # Get form data
     form_data = await request.form()
     new_value = form_data.get(field_name, "")
 
+    # For select fields, store None instead of empty string
+    if new_value == "" and field_name == "order_source":
+        new_value = None
+
     # Update customer
-    update_data = {field_name: new_value}
-    success = update_customer(customer_id, **update_data)
+    if field_name == "order_source":
+        # Direct update for nullable select fields (update_customer treats None as "don't change")
+        try:
+            supabase = get_supabase()
+            supabase.table("customers").update({"order_source": new_value}).eq("id", customer_id).eq("organization_id", user["org_id"]).execute()
+            success = True
+        except Exception:
+            success = False
+    else:
+        update_data = {field_name: new_value}
+        success = update_customer(customer_id, **update_data)
 
     if not success:
         return Div("Ошибка обновления", id=f"field-{field_name}")
 
     # Return updated display
-    return _render_field_display(customer_id, field_name, new_value)
+    return _render_field_display(customer_id, field_name, new_value or "")
 
 
 @rt("/customers/{customer_id}/cancel-edit/{field_name}")
@@ -31293,11 +31458,17 @@ def get(customer_id: str, field_name: str, session):
     if redirect:
         return redirect
 
+    user = session["user"]
+
     from services.customer_service import get_customer
 
     customer = get_customer(customer_id)
     if not customer:
         return Div("Клиент не найден")
+
+    # Verify customer belongs to user's organization
+    if customer.organization_id != user["org_id"]:
+        return Div("Клиент не найден", id=f"field-{field_name}")
 
     # Get current value
     value = getattr(customer, field_name, "")
@@ -31307,7 +31478,11 @@ def get(customer_id: str, field_name: str, session):
 
 def _render_field_display(customer_id: str, field_name: str, value: str):
     """Helper function to render field in display mode with modern inline edit."""
-    display_value = value if value else "Не указан"
+    # Translate select field values to human-readable labels
+    if field_name == "order_source" and value:
+        display_value = ORDER_SOURCE_LABELS.get(value, value)
+    else:
+        display_value = value if value else "Не указан"
     # Use consistent dark gray for filled values, lighter gray for empty
     display_color = "#6b7280" if not value else "#374151"
 

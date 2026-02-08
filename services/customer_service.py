@@ -116,6 +116,9 @@ class Customer:
     # Status
     is_active: bool = True
 
+    # Order source (how customer was acquired)
+    order_source: Optional[str] = None
+
     # Notes (free-form text)
     notes: Optional[str] = None
 
@@ -176,6 +179,7 @@ def _parse_customer(data: dict, contacts: Optional[List[dict]] = None) -> Custom
         general_director_position=data.get("general_director_position", "Генеральный директор"),
         warehouse_addresses=warehouse_addresses,
         is_active=data.get("is_active", True),
+        order_source=data.get("order_source"),
         notes=data.get("notes"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
         updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")) if data.get("updated_at") else None,
@@ -628,6 +632,7 @@ def update_customer(
     general_director_position: Optional[str] = None,
     warehouse_addresses: Optional[List[str]] = None,
     is_active: Optional[bool] = None,
+    order_source: Optional[str] = None,
     notes: Optional[str] = None,
 ) -> Optional[Customer]:
     """
@@ -688,6 +693,8 @@ def update_customer(
             update_data["warehouse_addresses"] = warehouse_addresses
         if is_active is not None:
             update_data["is_active"] = is_active
+        if order_source is not None:
+            update_data["order_source"] = order_source
         if notes is not None:
             update_data["notes"] = notes
 
