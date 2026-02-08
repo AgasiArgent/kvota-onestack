@@ -1,11 +1,11 @@
 """
-TDD tests for replacing DaData city autocomplete with HERE Geocoding Autosuggest API.
+TDD tests for replacing DaData city autocomplete with HERE Geocoding API.
 
 These tests define the CONTRACT for the migration which does NOT exist yet.
 The developer must implement:
 
 1. New service: services/here_service.py with search_cities(query, count=10)
-2. HERE API: https://autosuggest.search.hereapi.com/v1/autosuggest?q={query}&apiKey={key}&resultTypes=city
+2. HERE API: https://geocode.search.hereapi.com/v1/geocode?q={query}&apiKey={key}&limit=10
 3. International city coverage (not just Russia)
 4. Return format: list of dicts with keys: city, region, country, display
 5. Environment variable: HERE_API_KEY
@@ -42,7 +42,7 @@ SAMPLE_HERE_RESPONSE = {
         {
             "title": "Moscow, Russia",
             "id": "here:cm:namedplace:20002830",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Moscow, Russia",
                 "city": "Moscow",
@@ -55,7 +55,7 @@ SAMPLE_HERE_RESPONSE = {
         {
             "title": "Moscow, Idaho, United States",
             "id": "here:cm:namedplace:20071854",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Moscow, Idaho, United States",
                 "city": "Moscow",
@@ -73,7 +73,7 @@ SAMPLE_HERE_RESPONSE_INTERNATIONAL = {
         {
             "title": "Beijing, China",
             "id": "here:cm:namedplace:20038980",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Beijing, China",
                 "city": "Beijing",
@@ -85,7 +85,7 @@ SAMPLE_HERE_RESPONSE_INTERNATIONAL = {
         {
             "title": "Istanbul, Turkey",
             "id": "here:cm:namedplace:20014219",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Istanbul, Turkey",
                 "city": "Istanbul",
@@ -97,7 +97,7 @@ SAMPLE_HERE_RESPONSE_INTERNATIONAL = {
         {
             "title": "Dubai, United Arab Emirates",
             "id": "here:cm:namedplace:20020478",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Dubai, United Arab Emirates",
                 "city": "Dubai",
@@ -114,7 +114,7 @@ SAMPLE_HERE_RESPONSE_SINGLE = {
         {
             "title": "Berlin, Germany",
             "id": "here:cm:namedplace:20187403",
-            "resultType": "city",
+            "resultType": "locality",
             "address": {
                 "label": "Berlin, Germany",
                 "city": "Berlin",

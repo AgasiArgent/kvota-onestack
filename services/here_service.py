@@ -1,8 +1,8 @@
 """
-HERE Geocoding Autosuggest API service for international city search.
+HERE Geocoding API service for international city search.
 
-Replaces DaData city search with HERE API for international coverage.
-API docs: https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-autosuggest-brief.html
+Replaces DaData city search with HERE Geocode API for international coverage.
+API docs: https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-geocode-brief.html
 """
 
 import os
@@ -10,11 +10,11 @@ import httpx
 
 
 HERE_API_KEY = os.getenv("HERE_API_KEY", "")
-HERE_AUTOSUGGEST_URL = "https://autosuggest.search.hereapi.com/v1/autosuggest"
+HERE_GEOCODE_URL = "https://geocode.search.hereapi.com/v1/geocode"
 
 
 def _call_here_api(query: str, limit: int = 10) -> dict:
-    """Call HERE Autosuggest API and return raw JSON response.
+    """Call HERE Geocode API and return raw JSON response.
 
     Args:
         query: Search query string
@@ -32,29 +32,46 @@ def _call_here_api(query: str, limit: int = 10) -> dict:
     params = {
         "q": query,
         "apiKey": HERE_API_KEY,
-        "resultTypes": "city",
         "limit": limit,
     }
 
-    response = httpx.get(HERE_AUTOSUGGEST_URL, params=params, timeout=5.0)
+    response = httpx.get(HERE_GEOCODE_URL, params=params, timeout=5.0)
     response.raise_for_status()
     return response.json()
 
 
 def _normalize_item(item: dict) -> dict:
-    """Normalize a single HERE API result item to our standard format."""
+    """Normalize a single HERE API result item to our standard format.
+
+    Handles both structured address fields (city, state, countryName)
+    and label-only responses by parsing the label string.
+    """
     address = item.get("address", {})
+
+    # Try structured fields first, fall back to parsing label
     city = address.get("city", "")
     region = address.get("state", "")
     country = address.get("countryName", "")
 
+    # Fall back to parsing label if structured fields are missing
+    if not city or not country:
+        label = address.get("label", item.get("title", ""))
+        if label:
+            parts = [p.strip() for p in label.split(",")]
+            if not city and len(parts) >= 1:
+                city = parts[0]
+            if not country and len(parts) >= 2:
+                country = parts[-1]
+            if not region and len(parts) >= 3:
+                region = parts[1]
+
     # Build display string with disambiguation
-    parts = [city]
+    display_parts = [city]
     if region and region != city:
-        parts.append(region)
+        display_parts.append(region)
     if country:
-        parts.append(country)
-    display = ", ".join(parts)
+        display_parts.append(country)
+    display = ", ".join(display_parts)
 
     return {
         "city": city,
@@ -65,7 +82,7 @@ def _normalize_item(item: dict) -> dict:
 
 
 def search_cities(query: str, count: int = 10) -> list[dict]:
-    """Search for cities using HERE Autosuggest API.
+    """Search for cities using HERE Geocode API.
 
     Args:
         query: City name query (min 2 chars)
@@ -83,7 +100,11 @@ def search_cities(query: str, count: int = 10) -> list[dict]:
         items = response_data.get("items", [])
         if not items:
             return []
-        return [_normalize_item(item) for item in items]
+        # Filter to only locality/city resultType items
+        city_items = [item for item in items if item.get("resultType") == "locality"]
+        if not city_items:
+            return []
+        return [_normalize_item(item) for item in city_items]
     except Exception as e:
         print(f"HERE city search failed for '{query}': {e}")
         return []
