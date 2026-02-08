@@ -6446,7 +6446,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
                         ),
                         style="width: 100%;"
                     ),
-                    A("→ изменить", href="/specifications", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
+                    A("→ изменить", href="/spec-control", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
                     cls="card",
                     style="margin-bottom: 1.5rem;"
                 ),
@@ -7106,191 +7106,6 @@ def get(session):
 
         session=session,
         current_path="/quotes"
-    )
-
-
-# ============================================================================
-# CUSTOMERS LIST
-# ============================================================================
-
-@rt("/customers")
-def get(session):
-    """
-    Customers List page with design system V2 styling.
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    result = supabase.table("customers") \
-        .select("id, name, email, phone, inn, created_at") \
-        .eq("organization_id", user["org_id"]) \
-        .order("name") \
-        .execute()
-
-    customers = result.data or []
-
-    # Design system styles
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 16px;
-    """
-
-    page_title_style = """
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 0;
-        font-size: 22px;
-        font-weight: 700;
-        color: #1e293b;
-        letter-spacing: -0.02em;
-    """
-
-    count_badge_style = """
-        display: inline-flex;
-        align-items: center;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-size: 12px;
-        font-weight: 600;
-        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-        color: #059669;
-        border: 1px solid #a7f3d0;
-    """
-
-    new_btn_style = """
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 18px;
-        font-size: 14px;
-        font-weight: 600;
-        color: white;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        border: none;
-        border-radius: 8px;
-        text-decoration: none;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
-    """
-
-    search_input_style = """
-        padding: 10px 14px 10px 38px;
-        font-size: 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #f8fafc;
-        color: #1e293b;
-        min-width: 280px;
-        transition: all 0.2s ease;
-    """
-
-    return page_layout("Клиенты",
-        # Header card with title and actions
-        Div(
-            Div(
-                icon("users", size=26, style="color: #10b981;"),
-                H1("Клиенты", style=page_title_style),
-                Span(f"{len(customers)}", style=count_badge_style),
-                style="display: flex; align-items: center; gap: 14px;"
-            ),
-            Div(
-                A(
-                    icon("plus", size=16),
-                    Span("Новый клиент"),
-                    href="/customers/new",
-                    style=new_btn_style
-                ),
-            ),
-            style=header_card_style
-        ),
-
-        # Enhanced table container
-        Div(
-            # Table header with search
-            Div(
-                Div(
-                    icon("search", size=16, style="color: #94a3b8; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);"),
-                    Input(
-                        type="text",
-                        placeholder="Поиск по названию, ИНН или email...",
-                        id="customers-search",
-                        style=search_input_style
-                    ),
-                    style="position: relative; display: inline-block;"
-                ),
-                cls="table-header-left"
-            ),
-            cls="table-header"
-        ),
-
-        # Table content
-        Div(
-            Div(
-                Table(
-                    Thead(Tr(
-                        Th("Название"),
-                        Th("ИНН"),
-                        Th("Email"),
-                        Th("Телефон"),
-                        Th("", cls="col-actions")
-                    )),
-                    Tbody(
-                        *[Tr(
-                            Td(A(c.get("name", "—"), href=f"/customers/{c['id']}", style="font-weight: 500; color: #3b82f6;")),
-                            Td(c.get("inn", "—"), style="font-family: monospace; color: #64748b;"),
-                            Td(c.get("email", "—")),
-                            Td(c.get("phone", "—")),
-                            Td(
-                                A(icon("eye", size=16), href=f"/customers/{c['id']}", cls="table-action-btn", title="Просмотр"),
-                                cls="col-actions"
-                            ),
-                            cls="clickable-row",
-                            onclick=f"window.location='/customers/{c['id']}'"
-                        ) for c in customers]
-                    ) if customers else Tbody(Tr(Td(
-                        Div(
-                            icon("users", size=32, style="color: #94a3b8; margin-bottom: 12px;"),
-                            Div("Нет клиентов", style="font-size: 15px; font-weight: 500; color: #64748b; margin-bottom: 8px;"),
-                            Div("Добавьте первого клиента для начала работы", style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;"),
-                            A(
-                                icon("plus", size=14),
-                                Span("Добавить клиента"),
-                                href="/customers/new",
-                                style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;"
-                            ),
-                            style="text-align: center; padding: 40px 24px;"
-                        ),
-                        colspan="5"
-                    ))),
-                    cls="table-enhanced"
-                ),
-                cls="table-enhanced-container"
-            ),
-            cls="table-responsive"
-        ),
-
-        # Table footer with count
-        Div(
-            Span(f"Всего: {len(customers)} клиентов", style="font-size: 13px; color: #64748b;"),
-            cls="table-footer"
-        ) if customers else None,
-
-        session=session,
-        current_path="/customers"
     )
 
 
@@ -9824,41 +9639,6 @@ def post(quote_id: str, session, change_type: str = "", client_comment: str = ""
 
 
 # ============================================================================
-# START NEGOTIATION
-# ============================================================================
-
-@rt("/quotes/{quote_id}/start-negotiation")
-def post(quote_id: str, session):
-    """Start client negotiation."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_roles = user.get("roles", [])
-
-    if not user_has_any_role(session, ["sales", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    result = transition_quote_status(
-        quote_id=quote_id,
-        to_status="client_negotiation",
-        actor_id=user["id"],
-        actor_roles=user_roles,
-        comment="Client negotiation started"
-    )
-
-    if result.success:
-        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
-    else:
-        return page_layout("Error",
-            Div(f"Error: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
-            session=session
-        )
-
-
-# ============================================================================
 # SUBMIT FOR SPEC CONTROL
 # ============================================================================
 
@@ -10124,60 +9904,6 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         })
     except Exception as e:
         print(f"Bulk insert error: {e}")
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-
-
-@rt("/quotes/{quote_id}/items", methods=["POST"])
-async def create_single_quote_item(quote_id: str, session, request):
-    """Create a single quote item (for Handsontable new row)"""
-    redirect = require_login(session)
-    if redirect:
-        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
-
-    user = session["user"]
-    supabase = get_supabase()
-
-    # Verify quote belongs to user's org
-    quote_result = supabase.table("quotes") \
-        .select("id, organization_id") \
-        .eq("id", quote_id) \
-        .eq("organization_id", user["org_id"]) \
-        .execute()
-
-    if not quote_result.data:
-        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
-
-    # Parse JSON body
-    body = await request.body()
-    try:
-        item_data = json.loads(body)
-    except:
-        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
-
-    # Prepare item for insert (row_num column doesn't exist, ordering is by created_at)
-    insert_data = {
-        "quote_id": quote_id,
-        "product_name": item_data.get("product_name", ""),
-        "product_code": item_data.get("product_code", ""),
-        "brand": item_data.get("brand", ""),
-        "quantity": int(item_data.get("quantity", 1)) if item_data.get("quantity") else 1,
-        "unit": item_data.get("unit", "шт")
-    }
-
-    try:
-        result = supabase.table("quote_items") \
-            .insert(insert_data) \
-            .execute()
-
-        if result.data:
-            return JSONResponse({
-                "success": True,
-                "item": {"id": result.data[0]["id"]}
-            })
-        else:
-            return JSONResponse({"success": False, "error": "Insert failed"}, status_code=500)
-    except Exception as e:
-        print(f"Single item insert error: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
@@ -14319,101 +14045,6 @@ def post(session, full_name: str, phone: str = "", date_of_birth: str = "",
             Div(Div("Не удалось сохранить профиль. Попробуйте позже.", cls="alert alert-error"),
                 btn_link("Назад к профилю", href="/profile", variant="secondary", icon_name="arrow-left")),
             session=session)
-
-
-@rt("/profile/{user_id}")
-def get(session, user_id: str):
-    """Admin view/edit other user's profile."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user, roles = session["user"], session["user"].get("roles", [])
-
-    if "admin" not in roles:
-        return page_layout("Доступ запрещён", H1("Доступ запрещён"),
-            P("Эта страница доступна только администраторам."),
-            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"), session=session)
-
-    supabase = get_supabase()
-    from services.user_profile_service import get_departments, get_sales_groups, get_organization_users
-
-    profile_result = supabase.table("user_profiles").select("*, departments(name), sales_groups(name)")        .eq("user_id", user_id).eq("organization_id", user["org_id"]).limit(1).execute()
-
-    profile = profile_result.data[0] if profile_result.data else {
-        "full_name": "", "position": "", "phone": "", "date_of_birth": None,
-        "hire_date": None, "location": "", "timezone": "Europe/Moscow", "bio": "",
-        "department_id": None, "sales_group_id": None, "manager_id": None
-    }
-
-    # Get email via RPC
-    try:
-        email_result = supabase.rpc("get_user_profile_data", {"p_user_id": user_id, "p_organization_id": user["org_id"]}).execute()
-        target_email = email_result.data[0].get("email") if email_result.data else "—"
-    except:
-        target_email = "—"
-
-    # Get Telegram status
-    tg_result = supabase.table("telegram_users").select("telegram_id, telegram_username, verified_at").eq("user_id", user_id).limit(1).execute()
-    tg_linked, tg_display = False, "—"
-    if tg_result.data and tg_result.data[0].get("verified_at"):
-        tg_linked, tg_data = True, tg_result.data[0]
-        tg_display = f"@{tg_data.get('telegram_username') or tg_data.get('telegram_id')}"
-
-    departments = get_departments(user["org_id"])
-    sales_groups = get_sales_groups(user["org_id"])
-    users = get_organization_users(user["org_id"])
-
-    return page_layout(f"Профиль пользователя",
-        H1(icon("user", size=28), f" Профиль: {profile.get('full_name') or 'Пользователь'}", cls="page-header"),
-        Div(Span("👨‍💼 Режим администратора", style="font-weight: 600; color: #ef4444;"),
-            Span(" — вы можете редактировать этот профиль", style="color: #666; font-size: 0.875rem;"),
-            cls="alert alert-info", style="background: #fef3c7; border-color: #fbbf24;"),
-        Form(
-            Div(H3("Личная информация"),
-                Div(Label("ФИО *", Input(name="full_name", value=profile.get("full_name") or "", placeholder="Иванов Иван Иванович", required=True)),
-                    Label("Email", Input(value=target_email, readonly=True, disabled=True, style="background: #f3f4f6; cursor: not-allowed;")),
-                    cls="form-row"),
-                Div(Label("Телефон", Input(name="phone", type="tel", value=profile.get("phone") or "", placeholder="+7 (999) 123-45-67")),
-                    Label("Дата рождения", Input(name="date_of_birth", type="date", value=profile.get("date_of_birth") or "")),
-                    cls="form-row"),
-                Div(Label("Telegram", Div(Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'};"),
-                        Small(" (привязан, редактирование недоступно)" if tg_linked else " (не привязан)", style="color: #666;"),
-                        style="display: flex; align-items: center; padding: 0.5rem; background: #f9fafb; border-radius: 4px;")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("Организация"),
-                Div(Label("Должность", Input(name="position", value=profile.get("position") or "", placeholder="Менеджер по продажам")),
-                    Label("Дата приема на работу", Input(name="hire_date", type="date", value=profile.get("hire_date") or "")),
-                    cls="form-row"),
-                Div(Label("Департамент", Select(Option("— Не выбрано —", value="", selected=not profile.get("department_id")),
-                        *[Option(dept["name"], value=dept["id"], selected=dept["id"] == profile.get("department_id")) for dept in departments], name="department_id")),
-                    Label("Группа продаж", Select(Option("— Не выбрано —", value="", selected=not profile.get("sales_group_id")),
-                        *[Option(sg["name"], value=sg["id"], selected=sg["id"] == profile.get("sales_group_id")) for sg in sales_groups], name="sales_group_id")),
-                    cls="form-row"),
-                Div(Label("Руководитель", Select(Option("— Не выбрано —", value="", selected=not profile.get("manager_id")),
-                        *[Option(u["full_name"], value=u["id"], selected=u["id"] == profile.get("manager_id")) for u in users if u.get("full_name") and u["id"] != user_id], name="manager_id")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("Настройки"),
-                Div(Label("Часовой пояс", Select(
-                        Option("Europe/Moscow (МСК, UTC+3)", value="Europe/Moscow", selected=profile.get("timezone") == "Europe/Moscow" or not profile.get("timezone")),
-                        Option("Asia/Shanghai (CST, UTC+8)", value="Asia/Shanghai", selected=profile.get("timezone") == "Asia/Shanghai"),
-                        Option("Asia/Hong_Kong (HKT, UTC+8)", value="Asia/Hong_Kong", selected=profile.get("timezone") == "Asia/Hong_Kong"),
-                        Option("Asia/Dubai (GST, UTC+4)", value="Asia/Dubai", selected=profile.get("timezone") == "Asia/Dubai"),
-                        Option("Europe/Istanbul (TRT, UTC+3)", value="Europe/Istanbul", selected=profile.get("timezone") == "Europe/Istanbul"),
-                        name="timezone")),
-                    Label("Офис/локация", Input(name="location", value=profile.get("location") or "", placeholder="Москва, офис на Тверской")),
-                    cls="form-row"),
-                cls="card"),
-            Div(H3("О себе"),
-                Label("Биография", Textarea(profile.get("bio") or "", name="bio", rows="4", placeholder="Расскажите немного о себе, своем опыте, интересах...")),
-                cls="card"),
-            Div(btn("Сохранить изменения", variant="primary", icon_name="save", type="submit"),
-                btn_link("К списку пользователей", href="/admin", variant="secondary", icon_name="arrow-left"),
-                cls="form-actions"),
-            method="post", action=f"/profile/{user_id}"),
-        session=session)
 
 
 @rt("/profile/{user_id}")
@@ -27095,60 +26726,6 @@ def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit:
         return Option(f"Ошибка поиска: {str(e)}", value="", disabled=True)
 
 
-@rt("/api/locations/search/json")
-def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit: int = 20):
-    """
-    Search locations for HTMX dropdown - JSON response format.
-
-    Same as /api/locations/search but returns JSON instead of HTML.
-    Useful for custom dropdown implementations.
-
-    Returns:
-        JSON array of {value, label} objects
-    """
-    # Check authentication
-    redirect = require_login(session)
-    if redirect:
-        return {"error": "Unauthorized", "items": []}
-
-    user = session["user"]
-    org_id = user.get("org_id")
-
-    if not org_id:
-        return {"error": "Organization not found", "items": []}
-
-    # Parse boolean flags
-    is_hub_only = hub_only.lower() == "true"
-    is_customs_only = customs_only.lower() == "true"
-
-    # Search locations
-    try:
-        if q and len(q.strip()) > 0:
-            from services.location_service import search_locations
-            locations = search_locations(
-                organization_id=org_id,
-                query=q.strip(),
-                is_hub_only=is_hub_only,
-                is_customs_only=is_customs_only,
-                limit=min(limit, 50),
-            )
-            items = [format_location_for_dropdown(loc) for loc in locations]
-        else:
-            items = get_locations_for_dropdown(
-                organization_id=org_id,
-                query=None,
-                is_hub_only=is_hub_only,
-                is_customs_only=is_customs_only,
-                limit=min(limit, 50),
-            )
-
-        return {"items": items, "count": len(items), "query": q}
-
-    except Exception as e:
-        print(f"Error in location search JSON API: {e}")
-        return {"error": str(e), "items": []}
-
-
 # ============================================================================
 # UI COMPONENTS - Reusable HTMX Dropdown Components (Feature UI-011)
 # ============================================================================
@@ -33021,7 +32598,6 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 Td(str(c.next_specification_number - 1 if c.next_specification_number > 1 else 0)),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
-                    A(icon("edit", size=14), href=f"/customer-contracts/{c.id}/edit", title="Редактировать", style="margin-right: 0.5rem;"),
                     A(icon("eye", size=14), href=f"/customer-contracts/{c.id}", title="Просмотр"),
                 ),
                 cls="clickable-row",
@@ -33431,7 +33007,6 @@ def get(contract_id: str, session):
                     ),
                     Div(
                         Span(status_text, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {status_color}; background: {status_bg};"),
-                        btn_link("Редактировать", href=f"/customer-contracts/{contract_id}/edit", variant="secondary", icon_name="edit", size="sm"),
                         style="display: flex; align-items: center; gap: 12px;"
                     ),
                     style="display: flex; justify-content: space-between; align-items: center;"
@@ -34570,8 +34145,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                 Td(f"{remaining_formatted} {inv.currency}", style="text-align: right; color: #dc3545;" if remaining > 0 else "text-align: right;"),
                 Td(Span(status_text, cls=f"status-badge {status_cls}")),
                 Td(
-                    A(icon("eye", size=14), href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 0.5rem;"),
-                    A(icon("edit", size=14), href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
+                    A(icon("eye", size=14), href=f"/supplier-invoices/{inv.id}", title="Просмотр"),
                 )
             )
         )
@@ -34592,8 +34166,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                     Span(f"{len(invoices)}", style="background: #e0e7ff; color: #4f46e5; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; margin-left: 12px;"),
                     style="display: flex; align-items: center;"
                 ),
-                btn_link("Добавить инвойс", href="/supplier-invoices/new", variant="primary", icon_name="plus"),
-                style="display: flex; justify-content: space-between; align-items: center;"
+                style="display: flex; align-items: center;"
             ),
             style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
@@ -34741,8 +34314,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                             ),
                             Td(status_badge(inv.status), style=td_style),
                             Td(
-                                A(icon("eye", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}", title="Просмотр", style="margin-right: 8px;"),
-                                A(icon("edit", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}/edit", title="Редактировать"),
+                                A(icon("eye", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}", title="Просмотр"),
                                 style=f"{td_style} text-align: right;"
                             )
                         )
@@ -34752,7 +34324,6 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                             Div(
                                 icon("inbox", size=40, color="#cbd5e1"),
                                 Div("Инвойсы не найдены", style="font-size: 16px; font-weight: 500; color: #64748b; margin-top: 12px;"),
-                                A("Добавить первый инвойс", href="/supplier-invoices/new", style="color: #6366f1; font-size: 14px; margin-top: 8px; display: inline-block;"),
                                 style="text-align: center; padding: 40px 20px;"
                             ),
                             colspan="9"
@@ -35090,7 +34661,6 @@ def get(invoice_id: str, session):
 
         # Actions
         Div(
-            btn_link("Редактировать", href=f"/supplier-invoices/{invoice_id}/edit", variant="secondary", icon_name="edit"),
             btn_link("Добавить платёж", href=f"/supplier-invoices/{invoice_id}/payments/new", variant="primary", icon_name="credit-card"),
             style="display: flex; gap: 12px;"
         ),
