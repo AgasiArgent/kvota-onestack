@@ -24637,6 +24637,11 @@ def get(session, deal_id: str):
 
     supabase = get_supabase()
 
+    # Verify deal belongs to user's organization
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    if not deal_check.data:
+        return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
     # Fetch unpaid plan-fact items for this deal (actual_amount IS NULL)
     try:
         unpaid_result = supabase.table("plan_fact_items").select(
@@ -24684,6 +24689,13 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
 
     user = session["user"]
     user_id = user["id"]
+    org_id = user["org_id"]
+
+    # Verify deal belongs to user's organization
+    supabase = get_supabase()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    if not deal_check.data:
+        return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
     from datetime import date as date_type
     from services.plan_fact_service import (
@@ -24769,6 +24781,14 @@ def delete(session, deal_id: str, item_id: str):
 
     if not user_has_any_role(session, ["finance", "admin"]):
         return RedirectResponse("/unauthorized", status_code=303)
+
+    # Verify deal belongs to user's organization
+    user = session["user"]
+    org_id = user["org_id"]
+    supabase = get_supabase()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    if not deal_check.data:
+        return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
     from services.plan_fact_service import clear_actual_payment, get_plan_fact_item
 
