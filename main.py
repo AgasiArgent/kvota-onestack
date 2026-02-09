@@ -29,11 +29,6 @@ if sentry_dsn:
     )
 
 from services.database import get_supabase, get_anon_client
-from services.specification_payment_service import (
-    create_specification_payment,
-    get_payments_for_specification,
-    get_income_payments,
-)
 
 # Import export services
 from services.export_data_mapper import fetch_export_data
@@ -10536,6 +10531,21 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
             'supplier_discount': item.get('supplier_discount'),
         }
 
+        # Sum per-item license costs (ДС, СС, СГР) stored in RUB
+        # license_ds_cost (numeric), license_ss_cost (numeric), license_sgr_cost (numeric)
+        total_license_cost = (
+            float(item.get('license_ds_cost') or 0)
+            + float(item.get('license_ss_cost') or 0)
+            + float(item.get('license_sgr_cost') or 0)
+        )
+
+        # Create per-item calc_variables copy and add license cost to brokerage_extra
+        # License costs are in RUB, convert to quote currency and add to brokerage_extra
+        item_calc_variables = dict(calc_variables)
+        if total_license_cost > 0:
+            license_cost_qc = to_quote(total_license_cost, 'RUB')
+            item_calc_variables['brokerage_extra'] = safe_decimal(calc_variables.get('brokerage_extra', 0)) + safe_decimal(license_cost_qc)
+
         # Calculate per-item exchange rate (2026-01-26)
         # Formula: exchange_rate = "how many units of source currency per 1 unit of quote currency"
         # Example: if quote is EUR and item is USD, and 1 EUR = 1.08 USD, then exchange_rate = 1.08
@@ -10550,7 +10560,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
 
         calc_input = map_variables_to_calculation_input(
             product=product,
-            variables=calc_variables,  # Use USD-converted values for calculation
+            variables=item_calc_variables,  # Per-item variables with license costs in brokerage_extra
             exchange_rate=exchange_rate
         )
         calc_inputs.append(calc_input)
@@ -17713,6 +17723,7 @@ def get(session, quote_id: str):
             Div(id="customs-spreadsheet", style="width: 100%; height: 350px; overflow: hidden;"),
             cls="handsontable-container"
         ),
+        Small("* Стоимость лицензий (ДС, СС, СГР) указана в рублях (RUB)", style="display: block; margin-top: 8px; color: #64748b; font-size: 12px;"),
         style=customs_card_style
     ) if items else Div(
         Div(
@@ -17909,7 +17920,7 @@ def get(session, quote_id: str):
         # Action buttons - sticky footer bar
         Div(
             Div(
-                btn("Сохранить расходы", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
+                btn("Сохранить данные", variant="secondary", icon_name="save", type="submit", name="action", value="save") if is_editable else None,
                 btn("✓ Завершить таможню", variant="success", icon_name=None, type="submit", name="action", value="complete") if can_complete_customs else None,
                 # Show message when editable but waiting for procurement
                 Span(icon("clock", size=16), " Ожидание завершения закупок",
@@ -18045,7 +18056,7 @@ def get(session, quote_id: str):
                 Span("ИНСТРУКЦИЯ", style="font-size: 11px; font-weight: 600; color: #1e40af; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
                 style="display: flex; align-items: center; margin-bottom: 8px;"
             ),
-            P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить расходы' для сохранения. Можно копировать из Excel.", style="margin: 0; font-size: 13px; color: #1e40af;"),
+            P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить данные' для сохранения. Можно копировать из Excel.", style="margin: 0; font-size: 13px; color: #1e40af;"),
             style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-radius: 12px; border: 1px solid #93c5fd; padding: 16px; margin-bottom: 12px;"
         ) if is_editable else None,
 
@@ -21777,8 +21788,6 @@ def get(session, spec_id: str):
         if signatory_result.data:
             signatory_info = signatory_result.data[0]
 
-    # Payments data is fetched in _build_spec_payments_section() below
-
     # Status badge helper with design system colors
     def spec_status_badge(status):
         status_map = {
@@ -22129,50 +22138,10 @@ def get(session, spec_id: str):
         # Transition history (Feature #88) - uses quote_id from the spec
         workflow_transition_history(quote_id) if quote_id else None,
 
-        # Payments section — show incoming payments for this specification
-        _build_spec_payments_section(spec_id, session),
-
         session=session
     )
 
 
-def _build_spec_payments_section(spec_id, session):
-    """Build payments UI section for specification detail page."""
-    payments = get_payments_for_specification(spec_id)
-    is_finance = user_has_any_role(session, ["finance", "admin"])
-
-    payment_rows = []
-    for p in payments:
-        payment_rows.append(
-            Tr(
-                Td(p.get("payment_date", "-")),
-                Td(f"{p.get('amount', 0)} {p.get('currency', '')}"),
-                Td(p.get("category", "")),
-                Td(p.get("comment", "") or ""),
-            )
-        )
-
-    table = Table(
-        Thead(Tr(Th("Дата"), Th("Сумма"), Th("Тип"), Th("Комментарий"))),
-        Tbody(*payment_rows) if payment_rows else Tbody(Tr(Td("Нет платежей", colspan="4", style="text-align:center; color:#94a3b8;"))),
-        style="width:100%; border-collapse:collapse; font-size:14px;",
-    ) if True else None
-
-    add_btn = A(
-        "Добавить платёж",
-        href=f"/specifications/{spec_id}/payments/new",
-        style="display:inline-block; padding:8px 16px; background:#2563eb; color:#fff; border-radius:6px; text-decoration:none; font-size:13px;",
-    ) if is_finance else None
-
-    return Div(
-        Div(
-            Span("ПЛАТЕЖИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-            add_btn,
-            style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;",
-        ),
-        table,
-        style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);",
-    )
 
 
 @rt("/spec-control/{spec_id}")
@@ -27847,53 +27816,48 @@ def post(
         return _supplier_form(error=f"Ошибка при создании: {e}", session=session)
 
 
+def _supplier_brand_row(a, supplier_id):
+    """Render a single brand row for the supplier brands table."""
+    primary_badge = Span(
+        icon("star", size=14, color="#f59e0b"),
+        " Основной",
+        style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 12px; font-weight: 600;"
+    ) if a.is_primary else Span("—", style="color: #94a3b8; font-size: 13px;")
+
+    toggle_label = "Убрать основной" if a.is_primary else "Сделать основным"
+    toggle_value = "false" if a.is_primary else "true"
+
+    return Tr(
+        Td(Span(a.brand, style="font-weight: 600; color: #1e293b; font-size: 14px;"), style="padding: 12px 16px;"),
+        Td(primary_badge, style="padding: 12px 16px;"),
+        Td(
+            Div(
+                btn(toggle_label, variant="ghost", size="sm", icon_name="star",
+                    hx_patch=f"/suppliers/{supplier_id}/brands/{a.id}",
+                    hx_vals=json.dumps({"is_primary": toggle_value}),
+                    hx_target="#brands-list",
+                    hx_swap="innerHTML"),
+                btn("Удалить", variant="danger", size="sm", icon_name="trash-2",
+                    hx_delete=f"/suppliers/{supplier_id}/brands/{a.id}",
+                    hx_target="#brands-list",
+                    hx_swap="innerHTML",
+                    hx_confirm="Удалить привязку бренда?"),
+                style="display: flex; gap: 8px;"
+            ),
+            style="padding: 12px 16px;"
+        ),
+        style="border-bottom: 1px solid #f1f5f9;"
+    )
+
+
 def _supplier_brands_tab(supplier_id, session):
     """Render the brands tab content for a supplier detail page."""
     from services.brand_supplier_assignment_service import get_assignments_for_supplier
 
     assignments = get_assignments_for_supplier(supplier_id)
 
-    # Build brand rows
-    brand_rows = []
-    for a in sorted(assignments, key=lambda x: x.brand):
-        primary_badge = Span(
-            icon("star", size=14, color="#f59e0b"),
-            " Основной",
-            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 12px; font-weight: 600;"
-        ) if a.is_primary else Span("—", style="color: #94a3b8; font-size: 13px;")
-
-        toggle_label = "Убрать основной" if a.is_primary else "Сделать основным"
-        toggle_value = "false" if a.is_primary else "true"
-
-        brand_rows.append(
-            Tr(
-                Td(Span(a.brand, style="font-weight: 600; color: #1e293b; font-size: 14px;"), style="padding: 12px 16px;"),
-                Td(primary_badge, style="padding: 12px 16px;"),
-                Td(
-                    Div(
-                        Button(
-                            icon("star", size=14), f" {toggle_label}",
-                            hx_patch=f"/suppliers/{supplier_id}/brands/{a.id}",
-                            hx_vals=json.dumps({"is_primary": toggle_value}),
-                            hx_target="#brands-list",
-                            hx_swap="innerHTML",
-                            style="background: none; border: 1px solid #e2e8f0; color: #64748b; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;",
-                        ),
-                        Button(
-                            icon("trash-2", size=14), " Удалить",
-                            hx_delete=f"/suppliers/{supplier_id}/brands/{a.id}",
-                            hx_target="#brands-list",
-                            hx_swap="innerHTML",
-                            hx_confirm="Удалить привязку бренда?",
-                            style="background: none; border: 1px solid #fecaca; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;",
-                        ),
-                        style="display: flex; gap: 8px;"
-                    ),
-                    style="padding: 12px 16px;"
-                ),
-                style="border-bottom: 1px solid #f1f5f9;"
-            )
-        )
+    # Build brand rows using shared helper
+    brand_rows = [_supplier_brand_row(a, supplier_id) for a in sorted(assignments, key=lambda x: x.brand)]
 
     if brand_rows:
         brands_table = Table(
@@ -27909,10 +27873,11 @@ def _supplier_brands_tab(supplier_id, session):
             style="width: 100%; border-collapse: collapse;"
         )
     else:
-        brands_table = Div(
-            icon("tag", size=32, style="color: #94a3b8; margin-bottom: 8px;"),
-            P("Бренды не привязаны к этому поставщику", style="color: #64748b; font-size: 14px; margin: 0;"),
-            style="text-align: center; padding: 40px 20px;"
+        brands_table = Table(
+            Tbody(
+                Tr(Td("Бренды не привязаны к этому поставщику.", colspan="3", style="text-align: center; padding: 2rem; color: #666;"))
+            ),
+            style="width: 100%; border-collapse: collapse;"
         )
 
     # Add brand form
@@ -27925,8 +27890,7 @@ def _supplier_brands_tab(supplier_id, session):
                 "Основной",
                 style="display: flex; align-items: center; font-size: 13px; color: #64748b; white-space: nowrap;"
             ),
-            Button(icon("plus", size=14), " Добавить бренд", type="submit",
-                   style="padding: 8px 16px; background: #6366f1; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;"),
+            btn("Добавить бренд", variant="success", size="sm", icon_name="plus", type="submit"),
             style="display: flex; gap: 12px; align-items: center;"
         ),
         hx_post=f"/suppliers/{supplier_id}/brands",
@@ -27944,46 +27908,8 @@ def _supplier_brands_list_partial(supplier_id):
 
     assignments = get_assignments_for_supplier(supplier_id)
 
-    brand_rows = []
-    for a in sorted(assignments, key=lambda x: x.brand):
-        primary_badge = Span(
-            icon("star", size=14, color="#f59e0b"),
-            " Основной",
-            style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: #fef3c7; color: #92400e; border-radius: 6px; font-size: 12px; font-weight: 600;"
-        ) if a.is_primary else Span("—", style="color: #94a3b8; font-size: 13px;")
-
-        toggle_label = "Убрать основной" if a.is_primary else "Сделать основным"
-        toggle_value = "false" if a.is_primary else "true"
-
-        brand_rows.append(
-            Tr(
-                Td(Span(a.brand, style="font-weight: 600; color: #1e293b; font-size: 14px;"), style="padding: 12px 16px;"),
-                Td(primary_badge, style="padding: 12px 16px;"),
-                Td(
-                    Div(
-                        Button(
-                            icon("star", size=14), f" {toggle_label}",
-                            hx_patch=f"/suppliers/{supplier_id}/brands/{a.id}",
-                            hx_vals=json.dumps({"is_primary": toggle_value}),
-                            hx_target="#brands-list",
-                            hx_swap="innerHTML",
-                            style="background: none; border: 1px solid #e2e8f0; color: #64748b; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;",
-                        ),
-                        Button(
-                            icon("trash-2", size=14), " Удалить",
-                            hx_delete=f"/suppliers/{supplier_id}/brands/{a.id}",
-                            hx_target="#brands-list",
-                            hx_swap="innerHTML",
-                            hx_confirm="Удалить привязку бренда?",
-                            style="background: none; border: 1px solid #fecaca; color: #dc2626; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;",
-                        ),
-                        style="display: flex; gap: 8px;"
-                    ),
-                    style="padding: 12px 16px;"
-                ),
-                style="border-bottom: 1px solid #f1f5f9;"
-            )
-        )
+    # Build brand rows using shared helper
+    brand_rows = [_supplier_brand_row(a, supplier_id) for a in sorted(assignments, key=lambda x: x.brand)]
 
     if brand_rows:
         return Table(
@@ -27999,15 +27925,16 @@ def _supplier_brands_list_partial(supplier_id):
             style="width: 100%; border-collapse: collapse;"
         )
     else:
-        return Div(
-            icon("tag", size=32, style="color: #94a3b8; margin-bottom: 8px;"),
-            P("Бренды не привязаны к этому поставщику", style="color: #64748b; font-size: 14px; margin: 0;"),
-            style="text-align: center; padding: 40px 20px;"
+        return Table(
+            Tbody(
+                Tr(Td("Бренды не привязаны к этому поставщику.", colspan="3", style="text-align: center; padding: 2rem; color: #666;"))
+            ),
+            style="width: 100%; border-collapse: collapse;"
         )
 
 
 @rt("/suppliers/{supplier_id}")
-def get(supplier_id: str, session, tab: str = "general"):
+def get(supplier_id: str, session, request, tab: str = "general"):
     """View single supplier details with tabbed interface."""
     redirect = require_login(session)
     if redirect:
@@ -28015,24 +27942,18 @@ def get(supplier_id: str, session, tab: str = "general"):
 
     # Check permissions
     if not user_has_any_role(session, ["admin", "procurement"]):
-        return page_layout("Access Denied",
-            Div("У вас нет прав для просмотра поставщиков.", cls="alert alert-error"),
-            session=session
-        )
+        return Div("У вас нет прав для просмотра поставщиков.", cls="alert alert-error")
 
     from services.supplier_service import get_supplier
 
     supplier = get_supplier(supplier_id)
 
     if not supplier:
-        return page_layout("Поставщик не найден",
-            Div(
-                H1(icon("x-circle", size=28), " Поставщик не найден", cls="page-header"),
-                P("Запрашиваемый поставщик не существует."),
-                btn_link("К списку поставщиков", href="/suppliers", variant="secondary", icon_name="arrow-left"),
-                cls="card"
-            ),
-            session=session
+        return Div(
+            H1(icon("x-circle", size=28), " Поставщик не найден", cls="page-header"),
+            P("Запрашиваемый поставщик не существует."),
+            btn_link("К списку поставщиков", href="/suppliers", variant="secondary", icon_name="arrow-left"),
+            cls="card"
         )
 
     status_text = "Активен" if supplier.is_active else "Неактивен"
@@ -28162,6 +28083,10 @@ def get(supplier_id: str, session, tab: str = "general"):
                 style="display: flex; gap: 24px; padding: 12px 0; border-top: 1px solid #e2e8f0;"
             ),
         )
+
+    # If this is an HTMX request (tab switch), return only the tab content
+    if request and request.headers.get("HX-Request"):
+        return tab_content
 
     return page_layout(f"Поставщик: {supplier.name}",
         # Header card with gradient
@@ -36210,139 +36135,6 @@ async def get_dadata_lookup_inn(inn: str, session):
         )
     except Exception as e:
         return Div(Small("Ошибка при поиске компании", style="color: #ef4444;"))
-
-
-# ============================================================================
-# SPECIFICATION PAYMENTS — incoming payment registration
-# ============================================================================
-
-@rt("/specifications/{spec_id}/payments/new")
-def get(session, spec_id: str):
-    """GET: show form to register an incoming payment for a specification."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    if not user_has_any_role(session, ["finance", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    org_id = user.get("org_id")
-    supabase = get_supabase()
-    spec_check = supabase.table("specifications").select("id").eq("id", spec_id).eq("organization_id", org_id).execute()
-    if not spec_check.data:
-        return RedirectResponse("/spec-control", status_code=303)
-
-    from datetime import date as _date
-    today = _date.today().isoformat()
-
-    return page_layout("Новый платёж по спецификации",
-        Div(
-            A("← Назад к спецификации", href=f"/spec-control/{spec_id}",
-              style="color: #64748b; text-decoration: none; font-size: 13px;"),
-            style="margin-bottom: 16px;",
-        ),
-        Div(
-            H2("Регистрация входящего платежа", style="margin-top:0; font-size:1.25rem; color:#1e293b;"),
-            Form(
-                Div(
-                    Label("Сумма *", For="amount", style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;"),
-                    Input(name="amount", id="amount", type="number", step="0.01", min="0.01",
-                          placeholder="0.00", required=True,
-                          style="width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;"),
-                    style="margin-bottom:12px;",
-                ),
-                Div(
-                    Label("Валюта *", For="currency", style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;"),
-                    Select(
-                        Option("RUB", value="RUB", selected=True),
-                        Option("USD", value="USD"),
-                        Option("EUR", value="EUR"),
-                        name="currency", id="currency",
-                        style="width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;",
-                    ),
-                    style="margin-bottom:12px;",
-                ),
-                Div(
-                    Label("Дата платежа *", For="payment_date", style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;"),
-                    Input(name="payment_date", id="payment_date", type="date", value=today, required=True,
-                          style="width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px;"),
-                    style="margin-bottom:12px;",
-                ),
-                Div(
-                    Label("Комментарий", For="comment", style="font-size:12px; font-weight:600; color:#64748b; display:block; margin-bottom:4px;"),
-                    Textarea(name="comment", id="comment", rows="3", placeholder="Необязательно",
-                             style="width:100%; padding:10px 14px; border:1px solid #e2e8f0; border-radius:6px; font-size:14px; resize:vertical;"),
-                    style="margin-bottom:16px;",
-                ),
-                Button("Сохранить платёж", type="submit",
-                       style="padding:10px 24px; background:#2563eb; color:#fff; border:none; border-radius:6px; font-size:14px; cursor:pointer;"),
-                action=f"/specifications/{spec_id}/payments/new",
-                method="POST",
-            ),
-            style="background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:24px; max-width:500px;",
-        ),
-        session=session,
-    )
-
-
-@rt("/specifications/{spec_id}/payments/new")
-def post(session, spec_id: str, amount: str = "", currency: str = "RUB", payment_date: str = "", comment: str = ""):
-    """POST: create an incoming payment for a specification."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session.get("user")
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-
-    if not user_has_any_role(session, ["finance", "admin"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    org_id = user.get("org_id")
-    user_id = user.get("id")
-
-    # Verify spec belongs to user's org
-    supabase = get_supabase()
-    spec_check = supabase.table("specifications").select("id").eq("id", spec_id).eq("organization_id", org_id).execute()
-    if not spec_check.data:
-        return RedirectResponse("/spec-control", status_code=303)
-
-    # Validate amount > 0
-    try:
-        from decimal import Decimal as _D
-        amt = _D(amount)
-        if amt <= 0:
-            return RedirectResponse(f"/specifications/{spec_id}/payments/new", status_code=303)
-    except Exception:
-        return RedirectResponse(f"/specifications/{spec_id}/payments/new", status_code=303)
-
-    # Validate date
-    try:
-        from datetime import date as _date
-        parsed_date = _date.fromisoformat(payment_date)
-    except (ValueError, TypeError):
-        return RedirectResponse(f"/specifications/{spec_id}/payments/new", status_code=303)
-
-    try:
-        create_specification_payment(
-            specification_id=spec_id,
-            organization_id=org_id,
-            payment_date=parsed_date,
-            amount=amt,
-            currency=currency,
-            category="income",
-            comment=comment or None,
-            created_by=user_id,
-        )
-    except ValueError:
-        return RedirectResponse(f"/specifications/{spec_id}/payments/new", status_code=303)
-
-    return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
 
 # ============================================================================
