@@ -22,9 +22,10 @@ import re
 import glob
 import os
 
-# Path constants
-MAIN_PY = "/Users/andreynovikov/workspace/tech/projects/kvota/onestack/main.py"
-MIGRATIONS_DIR = "/Users/andreynovikov/workspace/tech/projects/kvota/onestack/migrations"
+# Path constants (relative to project root)
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
+MAIN_PY = os.path.join(_PROJECT_ROOT, "main.py")
+MIGRATIONS_DIR = os.path.join(_PROJECT_ROOT, "migrations")
 
 
 def _read_main_source():
