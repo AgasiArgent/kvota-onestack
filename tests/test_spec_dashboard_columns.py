@@ -146,23 +146,12 @@ class TestSpecDashboardColumnHeaders:
     """
 
     def test_spec_tables_have_summa_header(self):
-        """Spec tables (not pending quotes table) must have a 'СУММА' or 'Сумма' column header."""
+        """Unified table must have a 'СУММА' or 'Сумма' column header."""
         source = _read_spec_control_function_source()
-        # Currently the spec table headers are: № СПЕЦИФИКАЦИИ, КЛИЕНТ, СТАТУС, ВАЛЮТА, ДАТА, actions
-        # The pending quotes table already has СУММА, but the spec tables do NOT.
-        # We need СУММА in the spec table headers (those that start with "№ СПЕЦИФИКАЦИИ")
-        spec_theads = re.findall(
-            r'Thead\(Tr\(Th\("№ СПЕЦИФИКАЦИИ"\).*?\)\)',
-            source,
-            re.DOTALL
-        )
-        assert len(spec_theads) > 0, "Should find spec table Thead definitions"
-        has_summa_in_spec_table = any(
-            'Th("СУММА"' in thead or 'Th("Сумма"' in thead
-            for thead in spec_theads
-        )
-        assert has_summa_in_spec_table, (
-            "Spec tables (with '№ СПЕЦИФИКАЦИИ' header) must include a 'Сумма' column header"
+        # After redesign: single unified table with Thead containing СУММА
+        has_summa = 'Th("СУММА"' in source or 'Th("Сумма"' in source
+        assert has_summa, (
+            "Unified spec-control table must include a 'СУММА' column header"
         )
 
     def test_spec_tables_have_profit_header(self):
@@ -175,26 +164,22 @@ class TestSpecDashboardColumnHeaders:
 
     def test_all_spec_tables_have_financial_headers(self):
         """
-        All specification section tables (pending_review, draft, approved, signed)
-        use the same spec_row() function, so the headers should be uniform.
-        The header row for spec tables must contain at least 8 Th columns
-        (adding Сумма and Профит to the existing 6).
+        Unified table header must contain at least 8 Th columns
+        including СУММА and ПРОФИТ.
         """
         source = _read_spec_control_function_source()
-        # Find all Thead definitions for spec tables (those with "СПЕЦИФИКАЦИИ" or "СТАТУС" header)
-        # The Thead lines contain multiple Th() calls on the same or adjacent lines
-        spec_theads = re.findall(
-            r'Thead\(Tr\(Th\("№ СПЕЦИФИКАЦИИ"\).*?\)\)',
+        # After redesign: single unified Thead with all columns
+        thead_match = re.search(
+            r'Thead\(Tr\((.*?)\)\)',
             source,
             re.DOTALL
         )
-        assert len(spec_theads) > 0, "Should find spec table Thead definitions"
-        for thead in spec_theads:
-            th_count = thead.count("Th(")
-            assert th_count >= 8, (
-                f"Spec table headers should have at least 8 columns (got {th_count}). "
-                "Expected: № СПЕЦИФИКАЦИИ, КЛИЕНТ, СТАТУС, ВАЛЮТА, СУММА, ПРОФИТ, ДАТА, actions"
-            )
+        assert thead_match is not None, "Should find unified table Thead definition"
+        th_count = thead_match.group(1).count("Th(")
+        assert th_count >= 8, (
+            f"Unified table headers should have at least 8 columns (got {th_count}). "
+            "Expected: #, НОМЕР, КЛИЕНТ, СТАТУС, ВАЛЮТА, СУММА, ПРОФИТ, ДАТА, actions"
+        )
 
 
 # ============================================================================
@@ -491,26 +476,26 @@ class TestSpecDashboardTableStructure:
 
     def test_spec_row_has_enough_td_cells(self):
         """
-        The spec_row() function must return a row with at least 8 Td cells:
-        spec_number, customer, status, currency, amount, profit, date, actions
+        The build_unified_row() function must return a row with at least 8 Td cells:
+        row_num, number, customer, status, currency, amount, profit, date, actions
         """
         source = _read_spec_control_function_source()
 
-        # Find the spec_row inner function body
-        spec_row_match = re.search(
-            r'def spec_row\(.*?\):\s*\n(.*?)(?=\n    def |\n    return \[)',
+        # After redesign: build_unified_row replaces spec_row
+        row_match = re.search(
+            r'def build_unified_row\(.*?\):\s*\n(.*?)(?=\n    def |\n    # )',
             source,
             re.DOTALL
         )
 
-        assert spec_row_match is not None, "spec_row function not found"
+        assert row_match is not None, "build_unified_row function not found"
 
-        spec_row_body = spec_row_match.group(1)
-        td_count = spec_row_body.count("Td(")
+        row_body = row_match.group(1)
+        td_count = row_body.count("Td(")
 
         assert td_count >= 8, (
-            f"spec_row must have at least 8 Td cells (got {td_count}). "
-            "Expected: spec_number, customer, status, currency, amount, profit, date, actions"
+            f"build_unified_row must have at least 8 Td cells (got {td_count}). "
+            "Expected: row_num, number, customer, status, currency, amount, profit, date, actions"
         )
 
     def test_colspan_updated_for_empty_tables(self):

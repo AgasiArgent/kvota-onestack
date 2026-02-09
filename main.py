@@ -5932,10 +5932,11 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
     ]
 
 
-def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_filter: str = None, q: str = None, partial: bool = False) -> list:
     """
     Spec Control workspace tab content.
-    Shows quotes pending specification and existing specifications.
+    Unified table with search, filter chips, status badges, and group separators.
+    When partial=True, returns only table rows for HTMX partial updates.
     """
     # Get quotes awaiting specification creation
     quotes_result = supabase.table("quotes") \
@@ -5956,16 +5957,22 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
 
     all_specs = specs_result.data or []
 
-    if status_filter and status_filter != "all":
-        if status_filter == "pending_quotes":
-            filtered_specs = []
-        else:
-            filtered_specs = [s for s in all_specs if s.get("status") == status_filter]
-    else:
-        filtered_specs = all_specs
+    # Status badge mapping (unified for all item types)
+    # Badge colors: pending=orange, draft=gray, pending_review=blue, approved/signed=green
+    def spec_status_badge(status):
+        status_map = {
+            "pending_spec_control": ("Ожидает", "bg-orange-200 text-orange-800"),
+            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
+            "pending_review": ("На проверке", "bg-blue-200 text-blue-800"),
+            "approved": ("Утверждена", "bg-green-200 text-green-800"),
+            "signed": ("Подписана", "bg-green-200 text-green-800"),
+        }
+        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
+        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
 
+    # Count specs by status
     draft_specs = [s for s in all_specs if s.get("status") == "draft"]
-    pending_review_specs = [s for s in all_specs if s.get("status") == "pending_review"]
+    review_specs = [s for s in all_specs if s.get("status") == "pending_review"]
     approved_specs = [s for s in all_specs if s.get("status") == "approved"]
     signed_specs = [s for s in all_specs if s.get("status") == "signed"]
 
@@ -5982,228 +5989,273 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
     stats = {
         "pending_quotes": len(pending_quotes),
         "draft_specs": len(draft_specs),
-        "pending_review": len(pending_review_specs),
+        "pending_review": len(review_specs),
         "approved": len(approved_specs),
         "signed": len(signed_specs),
         "total_specs": len(all_specs),
     }
 
-    def spec_status_badge(status):
-        status_map = {
-            "draft": ("Черновик", "bg-gray-200 text-gray-800"),
-            "pending_review": ("На проверке", "bg-yellow-200 text-yellow-800"),
-            "approved": ("Утверждена", "bg-blue-200 text-blue-800"),
-            "signed": ("Подписана", "bg-green-200 text-green-800"),
-        }
-        label, classes = status_map.get(status, (status, "bg-gray-200 text-gray-800"))
-        return Span(label, cls=f"px-2 py-1 rounded text-sm {classes}")
+    # --- Build combined_items list merging pending quotes and specs ---
+    status_order = {
+        "pending_spec_control": 0,
+        "draft": 1,
+        "pending_review": 2,
+        "approved": 3,
+        "signed": 4,
+    }
 
-    def deal_type_badge(deal_type):
-        if deal_type == "supply":
-            return Span("Поставка", cls="px-2 py-1 rounded text-sm bg-blue-100 text-blue-800")
-        elif deal_type == "transit":
-            return Span("Транзит", cls="px-2 py-1 rounded text-sm bg-yellow-100 text-yellow-800")
-        return None
+    combined_items = []
 
-    def pending_quote_row(quote):
-        customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
-        return Tr(
-            Td(A(quote.get("idn_quote", "-"), href=f"/quotes/{quote['id']}")),
-            Td(customer_name),
-            Td(deal_type_badge(quote.get("deal_type")) or "-"),
-            Td(f"{quote.get('total_amount', 0):,.2f} {quote.get('currency', 'RUB')}"),
-            Td(quote.get("created_at", "")[:10] if quote.get("created_at") else "-"),
-            Td(
-                btn_link("Создать спецификацию", href=f"/spec-control/create/{quote['id']}", variant="success", size="sm"),
-            ),
-        )
+    # Add pending quotes with type marker
+    for pq in pending_quotes:
+        customer_name = pq.get("customers", {}).get("name", "Unknown") if pq.get("customers") else "Unknown"
+        combined_items.append({
+            "type": "quote",
+            "id": pq.get("id"),
+            "number": pq.get("idn_quote", "-"),
+            "customer_name": customer_name,
+            "status": "pending_spec_control",
+            "currency": pq.get("currency", "RUB"),
+            "amount": float(pq.get("total_amount") or 0),
+            "profit": None,
+            "created_at": pq.get("created_at", ""),
+            "quote_id": pq.get("id"),
+            "spec_id": None,
+        })
 
-    def spec_row(spec, show_work_button=True):
+    # Add specs with type marker
+    for spec in all_specs:
         quote = spec.get("quotes", {}) or {}
         customer = quote.get("customers", {}) or {}
-        quote_idn = quote.get("idn_quote", "-")
-        customer_name = customer.get("name", "Unknown")
-        amount = float(quote.get("total_amount_usd") or 0)
-        profit = float(quote.get("total_profit_usd") or 0)
+        combined_items.append({
+            "type": "spec",
+            "id": spec.get("id"),
+            "number": spec.get("specification_number") or quote.get("idn_quote", "-"),
+            "customer_name": customer.get("name", "Unknown"),
+            "status": spec.get("status", "draft"),
+            "currency": spec.get("specification_currency", "-"),
+            "amount": float(quote.get("total_amount_usd") or 0),
+            "profit": float(quote.get("total_profit_usd") or 0),
+            "created_at": spec.get("created_at", ""),
+            "quote_id": spec.get("quote_id"),
+            "spec_id": spec.get("id"),
+        })
+
+    # Sort by status priority, then by date desc
+    combined_items = sorted(combined_items, key=lambda x: (status_order.get(x["status"], 99), -(datetime.fromisoformat(x["created_at"]).timestamp() if x["created_at"] else 0)))
+
+    # Apply status filter
+    if status_filter and status_filter != "all":
+        if status_filter == "pending_quotes":
+            combined_items = [item for item in combined_items if item["type"] == "quote"]
+        else:
+            combined_items = [item for item in combined_items if item["status"] == status_filter]
+
+    # Apply search filter (q parameter)
+    if q and q.strip():
+        search_term = q.lower().strip()
+        combined_items = [
+            item for item in combined_items
+            if search_term in (item.get("number") or "").lower()
+            or search_term in (item.get("customer_name") or "").lower()
+        ]
+
+    # --- Build unified table rows with group separators ---
+    def build_unified_row(item, row_num):
+        """Unified row builder for both pending quotes and specifications."""
+        number_cell = A(item["number"], href=f"/quotes/{item['quote_id']}") if item["type"] == "quote" else (item["number"] or "-")
+        amount_display = f"${item['amount']:,.0f}" if item["amount"] is not None else "-"
+        profit_display = f"${item['profit']:,.0f}" if item.get("profit") is not None else "-"
+        date_display = item["created_at"][:10] if item.get("created_at") else "-"
+
+        # Unified action column based on type/status
+        if item["type"] == "quote":
+            action = btn_link("Создать спецификацию", href=f"/spec-control/create/{item['quote_id']}", variant="success", size="sm")
+        elif item["status"] in ["draft", "pending_review"]:
+            action = btn_link("Редактировать", href=f"/spec-control/{item['spec_id']}", variant="primary", size="sm")
+        else:
+            action = btn_link("Просмотр", href=f"/spec-control/{item['spec_id']}", variant="ghost", size="sm")
 
         return Tr(
-            Td(spec.get("specification_number", "-") or A(quote_idn, href=f"/quotes/{spec.get('quote_id')}")),
-            Td(customer_name),
-            Td(spec_status_badge(spec.get("status", "draft"))),
-            Td(spec.get("specification_currency", "-")),
-            Td(f"${amount:,.0f}"),
-            Td(f"${profit:,.0f}"),
-            Td(spec.get("created_at", "")[:10] if spec.get("created_at") else "-"),
-            Td(
-                btn_link("Редактировать", href=f"/spec-control/{spec['id']}", variant="primary", size="sm") if show_work_button and spec.get("status") in ["draft", "pending_review"] else
-                btn_link("Просмотр", href=f"/spec-control/{spec['id']}", variant="ghost", size="sm"),
-            ),
+            Td(str(row_num)),
+            Td(number_cell),
+            Td(item["customer_name"]),
+            Td(spec_status_badge(item["status"])),
+            Td(item["currency"]),
+            Td(amount_display),
+            Td(profit_display),
+            Td(date_display),
+            Td(action),
         )
+
+    # Group separator labels
+    group_labels = {
+        "pending_spec_control": "Ожидают спецификации",
+        "draft": "Черновики",
+        "pending_review": "На проверке",
+        "approved": "Утверждены",
+        "signed": "Подписаны",
+    }
+
+    table_rows = []
+    current_status_group = None
+    row_num = 0
+
+    for item in combined_items:
+        if item["status"] != current_status_group:
+            current_status_group = item["status"]
+            group_label = group_labels.get(current_status_group, current_status_group)
+            table_rows.append(
+                Tr(
+                    Td(f"--- {group_label} ---", colspan="9",
+                       style="background: #f1f5f9; font-weight: 600; text-align: center; color: #475569; padding: 0.5rem;"),
+                    cls="group-separator"
+                )
+            )
+        row_num += 1
+        table_rows.append(build_unified_row(item, row_num))
+
+    # Empty state for unified table
+    if not table_rows:
+        table_rows.append(
+            Tr(Td("Ничего не найдено", colspan="9", style="text-align: center; color: #666; padding: 2rem;"))
+        )
+
+    # For HTMX partial requests (HX-Request header), return only table rows
+    if partial:
+        return tuple(table_rows)
+
+    # Filter URL base; chips and cards append status=all or status=... for filtering
+    filter_base_url = "/dashboard?tab=spec-control"
 
     return [
         H1(icon("files", size=28), " Контроль спецификаций", cls="page-header"),
 
+        # Clickable status cards with hx_get
         Div(
             Div(
                 Div(str(stats["pending_quotes"]), cls="stat-value", style="color: #f59e0b;"),
                 Div("Ожидают спецификации", style="font-size: 0.875rem;"),
                 cls="stat-card",
-                style="border-left: 4px solid #f59e0b;" if stats["pending_quotes"] > 0 else ""
+                style=("border-left: 4px solid #f59e0b; cursor: pointer;" if stats["pending_quotes"] > 0 else "cursor: pointer;"),
+                hx_get=f"{filter_base_url}&status_filter=pending_quotes",
+                hx_target="#spec-table-body",
+                hx_swap="innerHTML",
             ),
             Div(
                 Div(str(stats["pending_review"]), cls="stat-value", style="color: #3b82f6;"),
                 Div("На проверке", style="font-size: 0.875rem;"),
-                cls="stat-card"
+                cls="stat-card",
+                style="cursor: pointer;",
+                hx_get=f"{filter_base_url}&status_filter=pending_review",
+                hx_target="#spec-table-body",
+                hx_swap="innerHTML",
             ),
             Div(
                 Div(str(stats["approved"]), cls="stat-value", style="color: #22c55e;"),
                 Div("Утверждены", style="font-size: 0.875rem;"),
-                cls="stat-card"
+                cls="stat-card",
+                style="cursor: pointer;",
+                hx_get=f"{filter_base_url}&status_filter=approved",
+                hx_target="#spec-table-body",
+                hx_swap="innerHTML",
             ),
             Div(
                 Div(str(stats["signed"]), cls="stat-value", style="color: #10b981;"),
                 Div("Подписаны", style="font-size: 0.875rem;"),
-                cls="stat-card"
+                cls="stat-card",
+                style="cursor: pointer;",
+                hx_get=f"{filter_base_url}&status_filter=signed",
+                hx_target="#spec-table-body",
+                hx_swap="innerHTML",
             ),
             cls="grid",
             style="grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
         ),
 
+        # Itogo summary
         Div(
             Span(f"Итого: ${specs_total_amount:,.0f} | Профит: ${specs_total_profit:,.0f}",
                  style="font-size: 1rem; font-weight: 600;"),
             style="margin-bottom: 1.5rem; padding: 0.75rem 1rem; background: #f8fafc; border-radius: 0.5rem;"
         ),
 
+        # Search input + status chip buttons
         Div(
-            Label("Фильтр: ", For="status_filter"),
-            Select(
-                Option("Все", value="all", selected=not status_filter or status_filter == "all"),
-                Option(f"Ожидают спецификации ({stats['pending_quotes']})", value="pending_quotes", selected=status_filter == "pending_quotes"),
-                Option(f"Черновики ({stats['draft_specs']})", value="draft", selected=status_filter == "draft"),
-                Option(f"На проверке ({stats['pending_review']})", value="pending_review", selected=status_filter == "pending_review"),
-                Option(f"Утверждены ({stats['approved']})", value="approved", selected=status_filter == "approved"),
-                Option(f"Подписаны ({stats['signed']})", value="signed", selected=status_filter == "signed"),
-                id="status_filter",
-                onchange="window.location.href='/dashboard?tab=spec-control&status_filter=' + this.value"
+            Input(
+                type="text",
+                name="q",
+                placeholder="Поиск по номеру или клиенту...",
+                cls="border rounded px-3 py-1.5 w-64",
+                hx_get=f"{filter_base_url}",
+                hx_trigger="keyup changed delay:300ms",
+                hx_target="#spec-table-body",
+                hx_swap="innerHTML",
             ),
-            style="margin-bottom: 1.5rem;"
+            A(f"Все ({stats['pending_quotes'] + stats['total_specs']})",
+              cls="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700",
+              hx_get=f"{filter_base_url}&status_filter=all",
+              hx_target="#spec-table-body",
+              hx_swap="innerHTML",
+              style="cursor: pointer; text-decoration: none; margin-left: 0.5rem;"),
+            A(f"Ожидают ({stats['pending_quotes']})",
+              cls="px-3 py-1 rounded-full text-sm bg-orange-100 text-orange-700",
+              hx_get=f"{filter_base_url}&status_filter=pending_quotes",
+              hx_target="#spec-table-body",
+              hx_swap="innerHTML",
+              style="cursor: pointer; text-decoration: none; margin-left: 0.25rem;"),
+            A(f"Черновики ({stats['draft_specs']})",
+              cls="px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-700",
+              hx_get=f"{filter_base_url}&status_filter=draft",
+              hx_target="#spec-table-body",
+              hx_swap="innerHTML",
+              style="cursor: pointer; text-decoration: none; margin-left: 0.25rem;"),
+            A(f"Проверка ({stats['pending_review']})",
+              cls="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700",
+              hx_get=f"{filter_base_url}&status_filter=pending_review",
+              hx_target="#spec-table-body",
+              hx_swap="innerHTML",
+              style="cursor: pointer; text-decoration: none; margin-left: 0.25rem;"),
+            A(f"Подписаны ({stats['signed']})",
+              cls="px-3 py-1 rounded-full text-sm bg-green-100 text-green-700",
+              hx_get=f"{filter_base_url}&status_filter=signed",
+              hx_target="#spec-table-body",
+              hx_swap="innerHTML",
+              style="cursor: pointer; text-decoration: none; margin-left: 0.25rem;"),
+            cls="flex items-center gap-2",
+            style="margin-bottom: 1.5rem; flex-wrap: wrap;"
         ),
 
+        # Unified table
         Div(
             Div(
                 Div(
-                    H3(f"КП ожидающие спецификации", style="margin: 0;"),
-                    cls="table-header"
-                ),
-                Div(
                     Table(
-                        Thead(Tr(Th("№ КП"), Th("КЛИЕНТ"), Th("ТИП СДЕЛКИ"), Th("СУММА", cls="col-money"), Th("ДАТА"), Th("", cls="col-actions"))),
+                        Thead(Tr(
+                            Th("#"),
+                            Th("НОМЕР"),
+                            Th("КЛИЕНТ"),
+                            Th("СТАТУС"),
+                            Th("ВАЛЮТА"),
+                            Th("СУММА"),
+                            Th("ПРОФИТ"),
+                            Th("ДАТА"),
+                            Th("", cls="col-actions"),
+                        )),
                         Tbody(
-                            *[pending_quote_row(q) for q in pending_quotes]
-                        ) if pending_quotes else Tbody(Tr(Td("Нет КП, ожидающих спецификации", colspan="6", style="text-align: center; color: #666;"))),
+                            *table_rows,
+                            id="spec-table-body",
+                        ),
                     cls="unified-table"),
                     cls="table-responsive"
                 ),
                 Div(
-                    Span(f"Записей: {stats['pending_quotes']}"),
+                    Span(f"Записей: {len(combined_items)}"),
                     cls="table-footer"
                 ),
                 cls="table-container", style="margin: 0; margin-bottom: 2rem;"
             )
-        ) if not status_filter or status_filter in ["all", "pending_quotes"] else None,
-
-        Div(
-            Div(
-                Div(
-                    H3(f"Спецификации на проверке", style="margin: 0;"),
-                    cls="table-header"
-                ),
-                Div(
-                    Table(
-                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("СУММА"), Th("ПРОФИТ"), Th("ДАТА"), Th("", cls="col-actions"))),
-                        Tbody(
-                            *[spec_row(s) for s in pending_review_specs]
-                        ) if pending_review_specs else Tbody(Tr(Td("Нет спецификаций на проверке", colspan="8", style="text-align: center; color: #666;"))),
-                    cls="unified-table"),
-                    cls="table-responsive"
-                ),
-                Div(
-                    Span(f"Записей: {stats['pending_review']}"),
-                    cls="table-footer"
-                ),
-                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
-            )
-        ) if not status_filter or status_filter in ["all", "pending_review"] else None,
-
-        Div(
-            Div(
-                Div(
-                    H3(f"Черновики", style="margin: 0;"),
-                    cls="table-header"
-                ),
-                Div(
-                    Table(
-                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("СУММА"), Th("ПРОФИТ"), Th("ДАТА"), Th("", cls="col-actions"))),
-                        Tbody(
-                            *[spec_row(s) for s in draft_specs]
-                        ) if draft_specs else Tbody(Tr(Td("Нет черновиков", colspan="8", style="text-align: center; color: #666;"))),
-                    cls="unified-table"),
-                    cls="table-responsive"
-                ),
-                Div(
-                    Span(f"Записей: {stats['draft_specs']}"),
-                    cls="table-footer"
-                ),
-                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
-            )
-        ) if status_filter == "draft" else None,
-
-        Div(
-            Div(
-                Div(
-                    H3(f"Утверждённые спецификации", style="margin: 0;"),
-                    cls="table-header"
-                ),
-                Div(
-                    Table(
-                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("СУММА"), Th("ПРОФИТ"), Th("ДАТА"), Th("", cls="col-actions"))),
-                        Tbody(
-                            *[spec_row(s, show_work_button=False) for s in approved_specs]
-                        ) if approved_specs else Tbody(Tr(Td("Нет утверждённых спецификаций", colspan="8", style="text-align: center; color: #666;"))),
-                    cls="unified-table"),
-                    cls="table-responsive"
-                ),
-                Div(
-                    Span(f"Записей: {stats['approved']}"),
-                    cls="table-footer"
-                ),
-                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
-            )
-        ) if status_filter == "approved" else None,
-
-        Div(
-            Div(
-                Div(
-                    H3(f"Подписанные спецификации", style="margin: 0;"),
-                    cls="table-header"
-                ),
-                Div(
-                    Table(
-                        Thead(Tr(Th("№ СПЕЦИФИКАЦИИ"), Th("КЛИЕНТ"), Th("СТАТУС"), Th("ВАЛЮТА"), Th("СУММА"), Th("ПРОФИТ"), Th("ДАТА"), Th("", cls="col-actions"))),
-                        Tbody(
-                            *[spec_row(s, show_work_button=False) for s in signed_specs]
-                        ) if signed_specs else Tbody(Tr(Td("Нет подписанных спецификаций", colspan="8", style="text-align: center; color: #666;"))),
-                    cls="unified-table"),
-                    cls="table-responsive"
-                ),
-                Div(
-                    Span(f"Записей: {stats['signed']}"),
-                    cls="table-footer"
-                ),
-                cls="table-container", style="margin: 0; margin-bottom: 2rem;"
-            )
-        ) if status_filter == "signed" or (not status_filter or status_filter == "all") and signed_specs else None,
+        ),
     ]
 
 
@@ -6814,13 +6866,14 @@ def get(session):
 
 
 @rt("/dashboard")
-def get(session, tab: str = None, status_filter: str = None):
+def get(session, request, tab: str = None, status_filter: str = None, q: str = None):
     """
     Unified Dashboard with role-based tabs.
 
     - Admin/top_manager see all tabs including overview
     - Single-role users see their workspace directly without tabs
     - Multi-role users see relevant tabs
+    - HTMX requests for spec-control return partial HTML (table body only)
     """
     redirect = require_login(session)
     if redirect:
@@ -6835,6 +6888,11 @@ def get(session, tab: str = None, status_filter: str = None):
     roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
     if not roles:
         roles = []
+
+    # HTMX partial response: spec-control filter/search returns only table rows
+    is_htmx = request.headers.get("hx-request") == "true"
+    if is_htmx and tab == "spec-control":
+        return _dashboard_spec_control_content(user_id, org_id, supabase, status_filter, q, partial=True)
 
     # Get visible tabs for this user
     visible_tabs = get_dashboard_tabs(roles)
@@ -6875,7 +6933,7 @@ def get(session, tab: str = None, status_filter: str = None):
     elif tab == "quote-control":
         content = _dashboard_quote_control_content(user_id, org_id, supabase, status_filter)
     elif tab == "spec-control":
-        content = _dashboard_spec_control_content(user_id, org_id, supabase, status_filter)
+        content = _dashboard_spec_control_content(user_id, org_id, supabase, status_filter, q)
     elif tab == "finance":
         content = _dashboard_finance_content(user_id, org_id, supabase)
     elif tab == "sales":
