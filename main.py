@@ -6188,7 +6188,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                 placeholder="Поиск по номеру или клиенту...",
                 cls="border rounded px-3 py-1.5 w-64",
                 hx_get=f"{filter_base_url}",
-                hx_trigger="keyup changed delay:300ms",
+                hx_trigger="input delay:300ms",
                 hx_target="#spec-table-body",
                 hx_swap="innerHTML",
             ),
@@ -23142,7 +23142,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         query = supabase.table("deals").select(
             "id, deal_number, signed_at, total_amount, currency, status, created_at, "
             "specifications(id, specification_number, proposal_idn), "
-            "quotes(id, idn_quote, customer_name, customers(name, company_name))"
+            "quotes(id, idn_quote, customer_name, customers(name))"
         ).eq("organization_id", org_id)
 
         if target_status:
@@ -23174,7 +23174,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         spec = deal.get("specifications", {}) or {}
         quote = deal.get("quotes", {}) or {}
         customer = quote.get("customers", {}) or {}
-        customer_name = customer.get("company_name") or customer.get("name") or quote.get("customer_name", "Неизвестно")
+        customer_name = customer.get("name") or quote.get("customer_name", "Неизвестно")
 
         # Format amount
         amount = float(deal.get("total_amount", 0) or 0)
