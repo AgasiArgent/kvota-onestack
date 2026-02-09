@@ -18,6 +18,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
 from supabase import create_client
+from supabase.client import ClientOptions
 
 
 # Initialize Supabase client with service role for admin operations
@@ -29,7 +30,7 @@ def _get_supabase():
     """Get Supabase client with service role key for admin operations."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY, options=ClientOptions(schema="kvota"))
 
 
 @dataclass

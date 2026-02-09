@@ -24240,11 +24240,514 @@ def get(session, deal_id: str):
             style="margin-bottom: 24px;"
         ),
 
+        # Payments section (Feature 86af6ykhh)
+        _deal_payments_section(deal_id, plan_fact_items, categories),
+
         # Transition history (Feature #88) - uses quote_id from the deal
         workflow_transition_history(quote.get("id")) if quote.get("id") else None,
 
         session=session
     )
+
+
+# ============================================================================
+# DEAL PAYMENTS SECTION (Feature 86af6ykhh)
+# ============================================================================
+
+def _deal_payments_section(deal_id, plan_fact_items, categories):
+    """
+    Render the PLATEZHI (payments) section showing registered payments
+    and a button to add new payments.
+
+    Args:
+        deal_id: UUID of the deal
+        plan_fact_items: List of plan-fact item dicts (with plan_fact_categories nested)
+        categories: List of category dicts
+    """
+    # Filter paid items (actual_amount is not null)
+    paid_items = [item for item in plan_fact_items if item.get("actual_amount") is not None]
+
+    # Build paid items table rows
+    cell_style = "padding: 10px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+    th_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+
+    if paid_items:
+        rows = []
+        for item in paid_items:
+            category = item.get("plan_fact_categories", {}) or {}
+            category_name = category.get("name", "Прочее")
+            is_income = category.get("is_income", False)
+            category_color = "#10b981" if is_income else "#6366f1"
+
+            actual_amount = float(item.get("actual_amount", 0) or 0)
+            actual_currency = item.get("actual_currency", "RUB")
+            actual_date = item.get("actual_date", "")[:10] if item.get("actual_date") else "-"
+
+            planned_amount = float(item.get("planned_amount", 0) or 0)
+            planned_currency = item.get("planned_currency", "RUB")
+
+            variance = item.get("variance_amount")
+            if variance is not None:
+                variance_val = float(variance)
+                if variance_val > 0:
+                    variance_str = f"+{variance_val:,.2f}"
+                    variance_color = "#ef4444" if not is_income else "#10b981"
+                elif variance_val < 0:
+                    variance_str = f"{variance_val:,.2f}"
+                    variance_color = "#10b981" if not is_income else "#ef4444"
+                else:
+                    variance_str = "0.00"
+                    variance_color = "#6b7280"
+            else:
+                variance_str = "-"
+                variance_color = "#6b7280"
+
+            rows.append(Tr(
+                Td(
+                    Span(category_name, style=f"color: {category_color}; font-weight: 600; display: block;"),
+                    Span(item.get("description", "-") or "-", style="color: #64748b; font-size: 12px;"),
+                    style=cell_style
+                ),
+                Td(actual_date, style=cell_style),
+                Td(f"{actual_amount:,.2f} {actual_currency}", style=f"{cell_style} text-align: right; font-weight: 500; color: #10b981;"),
+                Td(f"{planned_amount:,.2f} {planned_currency}", style=f"{cell_style} text-align: right;"),
+                Td(variance_str, style=f"{cell_style} text-align: right; color: {variance_color}; font-weight: 600;"),
+                Td(item.get("payment_document", "") or "-", style=f"{cell_style} font-family: monospace; font-size: 12px;"),
+                Td(
+                    Button(
+                        icon("x", size=14),
+                        hx_delete=f"/finance/{deal_id}/payments/{item['id']}",
+                        hx_target="#deal-payments-section",
+                        hx_swap="outerHTML",
+                        hx_confirm="Отменить регистрацию этого платежа?",
+                        style="background: none; border: 1px solid #fecaca; color: #ef4444; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;",
+                        title="Отменить платёж"
+                    ),
+                    style=cell_style
+                ),
+            ))
+
+        payments_table = Table(
+            Thead(Tr(
+                Th("Категория / Описание", style=th_style),
+                Th("Дата оплаты", style=th_style),
+                Th("Сумма факт", style=f"{th_style} text-align: right;"),
+                Th("Сумма план", style=f"{th_style} text-align: right;"),
+                Th("Отклонение", style=f"{th_style} text-align: right;"),
+                Th("Документ", style=th_style),
+                Th("", style=th_style),
+            )),
+            Tbody(*rows),
+            style="width: 100%; border-collapse: collapse;"
+        )
+    else:
+        payments_table = Div(
+            icon("inbox", size=32, color="#cbd5e1"),
+            Div("Платежи ещё не зарегистрированы", style="font-size: 14px; color: #64748b; margin-top: 8px;"),
+            style="text-align: center; padding: 32px 20px; color: #94a3b8;"
+        )
+
+    return Div(
+        Div(
+            Div(
+                icon("credit-card", size=14, color="#64748b"),
+                Span("ПЛАТЕЖИ", style="margin-left: 6px;"),
+                Span(f"{len(paid_items)}", style="background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;") if paid_items else "",
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
+            ),
+            # Auth: payments/new route checks user_has_any_role for finance/admin
+            Button(
+                icon("plus", size=14),
+                " Зарегистрировать платёж",
+                hx_get=f"/finance/{deal_id}/payments/new",
+                hx_target="#payment-form-container",
+                hx_swap="innerHTML",
+                style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+            ),
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+        ),
+        Div(
+            payments_table,
+            style="background: white; border-radius: 8px; overflow: hidden;"
+        ),
+        Div(id="payment-form-container", style="margin-top: 16px;"),
+        id="deal-payments-section",
+        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+    )
+
+
+def _payment_registration_form(deal_id, unpaid_items, categories):
+    """
+    Render the payment registration form with two modes:
+    - mode='plan': select an existing unpaid plan-fact item to register against
+    - mode='new': create an ad-hoc payment (new plan-fact item + immediate actual)
+
+    Args:
+        deal_id: UUID of the deal
+        unpaid_items: List of unpaid plan-fact item dicts (actual_amount is NULL)
+        categories: List of category dicts for ad-hoc mode
+    """
+    from datetime import date as date_type
+
+    today = date_type.today().isoformat()
+
+    # Build unpaid items options for plan mode
+    if unpaid_items and len(unpaid_items) > 0:
+        unpaid_options = [
+            Option(
+                f"{item.get('description', 'Без описания')} - {float(item.get('planned_amount', 0)):,.2f} {item.get('planned_currency', 'RUB')}",
+                value=item["id"]
+            )
+            for item in unpaid_items
+        ]
+        plan_mode_section = Div(
+            Label("Плановый платёж", fr="item_id", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+            Select(
+                Option("-- Выберите плановый платёж --", value=""),
+                *unpaid_options,
+                name="item_id",
+                id="item_id",
+                style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+            ),
+            style="margin-bottom: 12px;"
+        )
+    else:
+        plan_mode_section = Div(
+            P("Нет неоплаченных плановых позиций", style="color: #64748b; font-size: 13px; font-style: italic;"),
+            style="margin-bottom: 12px;"
+        )
+
+    # Category options for new (ad-hoc) mode
+    category_options = [
+        Option(cat.get("name", cat.get("code", "")), value=cat["id"])
+        for cat in categories
+    ]
+
+    return Div(
+        H3("Регистрация платежа", style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 16px 0;"),
+
+        Form(
+            # Mode selector
+            Div(
+                Label("Режим", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                Select(
+                    Option("По плану (существующая позиция)", value="plan"),
+                    Option("Новый (внеплановый платёж)", value="new"),
+                    name="mode",
+                    id="payment_mode",
+                    style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;",
+                    onchange="document.getElementById('plan_mode_fields').style.display = this.value === 'plan' ? 'block' : 'none'; document.getElementById('new_mode_fields').style.display = this.value === 'new' ? 'block' : 'none';"
+                ),
+                style="margin-bottom: 12px;"
+            ),
+
+            # Plan mode fields
+            Div(
+                plan_mode_section,
+                id="plan_mode_fields",
+                style="display: block;"
+            ),
+
+            # New (ad-hoc) mode fields
+            Div(
+                Div(
+                    Label("Категория", fr="category_id", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Select(
+                        Option("-- Выберите категорию --", value=""),
+                        *category_options,
+                        name="category_id",
+                        id="category_id",
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+                    ),
+                    style="margin-bottom: 12px;"
+                ),
+                Div(
+                    Label("Описание", fr="description", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Input(
+                        type="text",
+                        name="description",
+                        id="description",
+                        placeholder="Описание платежа",
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                    ),
+                    style="margin-bottom: 12px;"
+                ),
+                id="new_mode_fields",
+                style="display: none;"
+            ),
+
+            # Common fields for both modes
+            Div(
+                Div(
+                    Label("Сумма *", fr="actual_amount", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Input(
+                        type="number",
+                        name="actual_amount",
+                        id="actual_amount",
+                        step="0.01",
+                        min="0.01",
+                        required=True,
+                        placeholder="0.00",
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                    ),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Валюта", fr="actual_currency", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Select(
+                        Option("RUB", value="RUB", selected=True),
+                        Option("USD", value="USD"),
+                        Option("EUR", value="EUR"),
+                        Option("CNY", value="CNY"),
+                        Option("TRY", value="TRY"),
+                        name="actual_currency",
+                        id="actual_currency",
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;"
+                    ),
+                    style="width: 120px;"
+                ),
+                style="display: flex; gap: 12px; margin-bottom: 12px;"
+            ),
+            Div(
+                Div(
+                    Label("Дата оплаты *", fr="actual_date", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Input(
+                        type="date",
+                        name="actual_date",
+                        id="actual_date",
+                        value=today,
+                        required=True,
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                    ),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Документ оплаты", fr="payment_document", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
+                    Input(
+                        type="text",
+                        name="payment_document",
+                        id="payment_document",
+                        placeholder="PP-2026-001",
+                        style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; box-sizing: border-box;"
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 12px; margin-bottom: 16px;"
+            ),
+
+            # Submit buttons
+            Div(
+                Button(
+                    "Зарегистрировать",
+                    type="submit",
+                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 8px; padding: 8px 20px; cursor: pointer; font-size: 14px; font-weight: 500;"
+                ),
+                Button(
+                    "Отмена",
+                    type="button",
+                    onclick="this.closest('#payment-form-container').innerHTML = '';",
+                    style="background: white; color: #64748b; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 20px; cursor: pointer; font-size: 14px;"
+                ),
+                style="display: flex; gap: 8px;"
+            ),
+            method="POST",
+            action=f"/finance/{deal_id}/payments",
+        ),
+        style="background: #fafbfc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;"
+    )
+
+
+# ============================================================================
+# DEAL PAYMENT ROUTES (Feature 86af6ykhh)
+# ============================================================================
+
+@rt("/finance/{deal_id}/payments/new")
+def get(session, deal_id: str):
+    """
+    GET /finance/{deal_id}/payments/new - Returns the payment registration form.
+    Supports two modes: plan (existing item) and new (ad-hoc).
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    supabase = get_supabase()
+
+    # Fetch unpaid plan-fact items for this deal (actual_amount IS NULL)
+    try:
+        unpaid_result = supabase.table("plan_fact_items").select(
+            "id, description, planned_amount, planned_currency, planned_date, actual_amount, "
+            "plan_fact_categories(id, code, name, is_income)"
+        ).eq("deal_id", deal_id).is_("actual_amount", "null").order("planned_date").execute()
+        unpaid_items = unpaid_result.data or []
+    except Exception as e:
+        print(f"Error fetching unpaid items: {e}")
+        unpaid_items = []
+
+    # Fetch all categories
+    try:
+        categories_result = supabase.table("plan_fact_categories").select(
+            "id, code, name, is_income, sort_order"
+        ).order("sort_order").execute()
+        categories = categories_result.data or []
+    except Exception as e:
+        print(f"Error fetching categories: {e}")
+        categories = []
+
+    # Form fields rendered by _payment_registration_form:
+    # actual_amount, actual_currency, actual_date, payment_document
+    # Form method=POST action=/finance/{deal_id}/payments
+    return _payment_registration_form(deal_id, unpaid_items, categories)
+
+
+@rt("/finance/{deal_id}/payments")
+def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
+         actual_amount: str = "", actual_currency: str = "RUB",
+         actual_date: str = "", payment_document: str = "",
+         category_id: str = "", description: str = ""):
+    """
+    POST /finance/{deal_id}/payments - Register a payment.
+    Two modes:
+      - mode='plan': records actual payment on an existing plan-fact item
+      - mode='new': creates a new plan-fact item with actual data (ad-hoc)
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    user_id = user["id"]
+
+    from datetime import date as date_type
+    from services.plan_fact_service import (
+        register_payment_for_item,
+        create_plan_fact_item,
+        record_actual_payment,
+    )
+
+    # Validate actual_amount
+    try:
+        amount_val = float(actual_amount)
+    except (ValueError, TypeError):
+        amount_val = None
+
+    if not actual_amount or amount_val is None:
+        return P("Ошибка: сумма обязательна", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+    if amount_val <= 0:
+        return P("Ошибка: сумма должна быть больше нуля", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+    # Parse actual_date
+    try:
+        parsed_date = date_type.fromisoformat(actual_date) if actual_date else date_type.today()
+    except ValueError:
+        parsed_date = date_type.today()
+
+    if mode == "plan" and item_id:
+        # Mode plan: register payment for existing plan-fact item
+        result = register_payment_for_item(
+            item_id=item_id,
+            actual_amount=amount_val,
+            actual_date=parsed_date,
+            actual_currency=actual_currency,
+            payment_document=payment_document or None,
+        )
+        if not result.success:
+            # Check if item is already paid
+            error_msg = result.error or "Ошибка регистрации платежа"
+            return P(f"Ошибка: {error_msg}", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+    elif mode == "new":
+        # Mode new: create ad-hoc plan-fact item then register payment
+        if not category_id:
+            return P("Ошибка: выберите категорию для нового платежа", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+        new_item = create_plan_fact_item(
+            deal_id=deal_id,
+            category_id=category_id,
+            planned_amount=amount_val,
+            planned_date=parsed_date,
+            planned_currency=actual_currency,
+            description=description or "Внеплановый платёж",
+            created_by=user_id,
+        )
+        if not new_item:
+            return P("Ошибка: не удалось создать позицию", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+        # Now register actual payment on the newly created item
+        result = record_actual_payment(
+            item_id=new_item.id,
+            actual_amount=amount_val,
+            actual_date=parsed_date,
+            actual_currency=actual_currency,
+            payment_document=payment_document or None,
+        )
+        if not result:
+            return P("Ошибка: позиция создана, но не удалось записать платёж", style="color: #ef4444; font-size: 14px; padding: 12px;")
+    else:
+        return P("Ошибка: выберите плановый платёж или режим 'Новый'", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
+
+
+@rt("/finance/{deal_id}/payments/{item_id}")
+def delete(session, deal_id: str, item_id: str):
+    """
+    DELETE /finance/{deal_id}/payments/{item_id} - Clear the actual payment
+    from a plan-fact item (sets actual fields to NULL).
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    from services.plan_fact_service import clear_actual_payment, get_plan_fact_item
+
+    # Validate item exists and belongs to this deal
+    existing_item = get_plan_fact_item(item_id)
+    if not existing_item:
+        return P("Ошибка: платёж не найден (404)", style="color: #ef4444; font-size: 14px; padding: 12px;")
+    if existing_item.deal_id != deal_id:
+        return P("Ошибка: платёж не принадлежит этой сделке", style="color: #ef4444; font-size: 14px; padding: 12px;")
+
+    # Clear actual payment fields
+    clear_actual_payment(item_id)
+
+    # Re-fetch items and return updated section
+    supabase = get_supabase()
+    try:
+        plan_fact_result = supabase.table("plan_fact_items").select(
+            "id, description, planned_amount, planned_currency, planned_date, "
+            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
+            "variance_amount, payment_document, notes, created_at, "
+            "plan_fact_categories(id, code, name, is_income, sort_order)"
+        ).eq("deal_id", deal_id).order("planned_date").execute()
+        plan_fact_items = plan_fact_result.data or []
+    except Exception as e:
+        print(f"Error re-fetching plan_fact_items: {e}")
+        plan_fact_items = []
+
+    try:
+        categories_result = supabase.table("plan_fact_categories").select(
+            "id, code, name, is_income, sort_order"
+        ).order("sort_order").execute()
+        categories = categories_result.data or []
+    except Exception as e:
+        print(f"Error re-fetching categories: {e}")
+        categories = []
+
+    return _deal_payments_section(deal_id, plan_fact_items, categories)
 
 
 # ============================================================================
