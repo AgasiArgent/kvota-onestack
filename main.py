@@ -23968,7 +23968,7 @@ def get(session, deal_id: str):
             "specifications(id, specification_number, proposal_idn, sign_date, validity_period, "
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
-            "quotes(id, idn_quote, customer_name, customers(name, company_name))"
+            "quotes(id, idn_quote, customers(name))"
         ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
 
         deal = deal_result.data
@@ -24016,7 +24016,7 @@ def get(session, deal_id: str):
     spec = deal.get("specifications", {}) or {}
     quote = deal.get("quotes", {}) or {}
     customer = quote.get("customers", {}) or {}
-    customer_name = customer.get("company_name") or customer.get("name") or quote.get("customer_name", "Неизвестно")
+    customer_name = customer.get("name", "Неизвестно")
 
     deal_number = deal.get("deal_number", "-")
     spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
