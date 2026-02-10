@@ -8258,6 +8258,10 @@ def get(quote_id: str, session):
                 btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="spin"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg> Сохранение...';
                 btn.style.pointerEvents = 'none';
 
+                // Save delivery city before saving items (BUG-2 fix)
+                var cityInput = document.getElementById('delivery-city-input');
+                if (cityInput) saveDeliveryCity(cityInput.value);
+
                 // Call global saveAllItems function
                 if (typeof window.saveAllItems === 'function') {{
                     window.saveAllItems().then(function(success) {{
@@ -8362,6 +8366,10 @@ def get(quote_id: str, session):
                     btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg> Сохранение...';
                     btn.style.pointerEvents = 'none';
                 }}
+
+                // Save delivery city before saving items (BUG-2 fix)
+                var cityInput = document.getElementById('delivery-city-input');
+                if (cityInput) saveDeliveryCity(cityInput.value);
 
                 // First save all items, then submit
                 if (typeof window.saveAllItems === 'function') {{
@@ -19391,7 +19399,7 @@ def get_cost_analysis(session, quote_id: str):
 
     # Fetch quote with org isolation check (organization_id must match)
     quote_result = supabase.table("quotes") \
-        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_time, payment_terms, advance_to_supplier, workflow_status") \
+        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status") \
         .eq("id", quote_id) \
         .execute()
 
