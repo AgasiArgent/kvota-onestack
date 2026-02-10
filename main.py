@@ -21921,7 +21921,19 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
     }
 
     # Insert specification
-    result = supabase.table("specifications").insert(spec_data).execute()
+    try:
+        result = supabase.table("specifications").insert(spec_data).execute()
+    except Exception as e:
+        print(f"[ERROR] Specification INSERT failed. spec_data keys: {list(spec_data.keys())}")
+        print(f"[ERROR] Exception: {e}")
+        if sentry_dsn:
+            sentry_sdk.capture_exception(e)
+        return page_layout("Ошибка",
+            H1("Ошибка создания спецификации"),
+            P("Произошла ошибка при сохранении спецификации. Обратитесь к администратору."),
+            A("← Назад", href=f"/spec-control/create/{quote_id}"),
+            session=session
+        )
 
     if result.data:
         spec_id = result.data[0]["id"]
@@ -23608,7 +23620,7 @@ ERPS_COLUMN_GROUPS = {
 ERPS_VIEWS = {
     'full': ['spec', 'auto', 'finance', 'procurement', 'logistics', 'management', 'system'],
     'compact': ['spec'],  # Will be further filtered to key columns only
-    'finance': ['spec', 'finance', 'management'],
+    'finance': ['spec', 'auto', 'finance', 'management'],
     'logistics': ['spec', 'auto', 'logistics'],
     'procurement': ['spec', 'auto', 'procurement'],
 }
