@@ -6121,9 +6121,10 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
             Tr(Td("Ничего не найдено", colspan="9", style="text-align: center; color: #666; padding: 2rem;"))
         )
 
-    # For HTMX partial requests (HX-Request header), return only table rows
+    # For HTMX partial requests (HX-Request header), return table rows + OOB counter update
     if partial:
-        return tuple(table_rows)
+        counter_oob = Span(f"Записей: {row_num}", id="spec-record-count", hx_swap_oob="true")
+        return (*table_rows, counter_oob)
 
     # Filter URL base; chips and cards append status=all or status=... for filtering
     filter_base_url = "/dashboard?tab=spec-control"
@@ -6250,7 +6251,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                     cls="table-responsive"
                 ),
                 Div(
-                    Span(f"Записей: {len(combined_items)}"),
+                    Span(f"Записей: {len(combined_items)}", id="spec-record-count"),
                     cls="table-footer"
                 ),
                 cls="table-container", style="margin: 0; margin-bottom: 2rem;"
@@ -28419,10 +28420,7 @@ def _supplier_brand_row(a, supplier_id):
                     hx_target="#brands-list",
                     hx_swap="innerHTML"),
                 btn("Удалить", variant="danger", size="sm", icon_name="trash-2",
-                    hx_delete=f"/suppliers/{supplier_id}/brands/{a.id}",
-                    hx_target="#brands-list",
-                    hx_swap="innerHTML",
-                    hx_confirm="Удалить привязку бренда?"),
+                    onclick=f"let b=this; b.innerText='Точно?'; b.style.background='#dc2626'; b.onclick=function(){{ htmx.ajax('DELETE', '/suppliers/{supplier_id}/brands/{a.id}', {{target:'#brands-list', swap:'innerHTML'}}); }}"),
                 style="display: flex; gap: 8px;"
             ),
             style="padding: 12px 16px;"

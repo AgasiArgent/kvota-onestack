@@ -548,11 +548,11 @@ class TestBrandHTMXIntegration:
             assert "hx-post" in html, "Add brand form must use HTMX (hx-post)"
 
     def test_delete_uses_htmx(self, client, supplier_id, sample_assignments):
-        """Delete action should use HTMX for inline removal."""
+        """Delete action should use inline HTMX ajax (no confirm dialog)."""
         with patch("services.brand_supplier_assignment_service.get_assignments_for_supplier", return_value=sample_assignments):
             response = client.get(f"/suppliers/{supplier_id}?tab=brands")
             html = response.text
-            assert "hx-delete" in html, "Delete action must use HTMX (hx-delete)"
+            assert "htmx.ajax" in html and "DELETE" in html, "Delete action must use htmx.ajax DELETE (inline confirm, no browser dialog)"
 
     def test_toggle_primary_uses_htmx(self, client, supplier_id, sample_assignments):
         """Toggle primary should use HTMX for inline update."""
