@@ -6042,7 +6042,14 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
         })
 
     # Sort by status priority, then by date desc
-    combined_items = sorted(combined_items, key=lambda x: (status_order.get(x["status"], 99), -(datetime.fromisoformat(x["created_at"]).timestamp() if x["created_at"] else 0)))
+    def _safe_ts(val):
+        if not val:
+            return 0
+        try:
+            return datetime.fromisoformat(val).timestamp()
+        except (ValueError, TypeError):
+            return 0
+    combined_items = sorted(combined_items, key=lambda x: (status_order.get(x["status"], 99), -_safe_ts(x["created_at"])))
 
     # Apply status filter
     if status_filter and status_filter != "all":
@@ -6121,10 +6128,12 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
             Tr(Td("Ничего не найдено", colspan="9", style="text-align: center; color: #666; padding: 2rem;"))
         )
 
-    # For HTMX partial requests (HX-Request header), return table rows + OOB counter update
+    # For HTMX partial requests (HX-Request header), return table rows only
+    # Note: Can't mix Span OOB with Tr elements — HTMX wraps response in <table><tbody>
+    # for parsing, and non-table elements get stripped by browser HTML parser.
+    # Counter update is done client-side via htmx:afterSwap event.
     if partial:
-        counter_oob = Span(f"Записей: {row_num}", id="spec-record-count", hx_swap_oob="true")
-        return (*table_rows, counter_oob)
+        return tuple(table_rows)
 
     # Filter URL base; chips and cards append status=all or status=... for filtering
     filter_base_url = "/dashboard?tab=spec-control"
@@ -6254,6 +6263,18 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
                     Span(f"Записей: {len(combined_items)}", id="spec-record-count"),
                     cls="table-footer"
                 ),
+                # Client-side counter update after HTMX swaps table rows
+                Script("""
+                    document.body.addEventListener('htmx:afterSwap', function(evt) {
+                        if (evt.detail.target.id === 'spec-table-body') {
+                            var rows = evt.detail.target.querySelectorAll('tr');
+                            var count = 0;
+                            rows.forEach(function(r) { if (r.querySelector('td[colspan]') === null) count++; });
+                            var el = document.getElementById('spec-record-count');
+                            if (el) el.textContent = 'Записей: ' + count;
+                        }
+                    });
+                """),
                 cls="table-container", style="margin: 0; margin-bottom: 2rem;"
             )
         ),
@@ -23143,7 +23164,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         query = supabase.table("deals").select(
             "id, deal_number, signed_at, total_amount, currency, status, created_at, "
             "specifications(id, specification_number, proposal_idn), "
-            "quotes(id, idn_quote, customer_name, customers(name))"
+            "quotes(id, idn_quote, customers(name))"
         ).eq("organization_id", org_id)
 
         if target_status:
@@ -23175,7 +23196,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         spec = deal.get("specifications", {}) or {}
         quote = deal.get("quotes", {}) or {}
         customer = quote.get("customers", {}) or {}
-        customer_name = customer.get("name") or quote.get("customer_name", "Неизвестно")
+        customer_name = customer.get("name", "Неизвестно")
 
         # Format amount
         amount = float(deal.get("total_amount", 0) or 0)
