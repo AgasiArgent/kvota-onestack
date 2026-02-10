@@ -19391,7 +19391,7 @@ def get_cost_analysis(session, quote_id: str):
 
     # Fetch quote with org isolation check (organization_id must match)
     quote_result = supabase.table("quotes") \
-        .select("id, organization_id, idn_quote, title, currency, seller_company, delivery_terms, delivery_time, payment_terms, advance_to_supplier, workflow_status") \
+        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_time, payment_terms, advance_to_supplier, workflow_status") \
         .eq("id", quote_id) \
         .execute()
 
