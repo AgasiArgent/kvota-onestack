@@ -1687,9 +1687,10 @@ def complete_customs(
     quote_id: str,
     actor_id: str,
     actor_roles: List[str]
-) -> TransitionResult:
+    ) -> TransitionResult:
     """
     Mark customs work as complete and check for auto-transition.
+    Validates all quote_items have hs_code filled. Returns error if any hs_code is missing.
 
     This function:
     1. Validates the user has customs or admin role
@@ -1762,6 +1763,29 @@ def complete_customs(
         return TransitionResult(
             success=False,
             error_message="Customs already completed",
+            quote_id=quote_id,
+            from_status=current_status
+        )
+
+    # Validate all quote_items have hs_code before completing customs
+    try:
+        items_response = supabase.table("quote_items") \
+            .select("id, hs_code") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        items_data = items_response.data or []
+        missing_hs_items = [item for item in items_data if not (item.get("hs_code") or "").strip()]
+        if missing_hs_items:
+            return TransitionResult(
+                success=False,
+                error_message=f"Cannot complete customs: {len(missing_hs_items)} items missing HS code (ТН ВЭД)",
+                quote_id=quote_id,
+                from_status=current_status
+            )
+    except Exception as e:
+        return TransitionResult(
+            success=False,
+            error_message=f"Failed to validate HS codes: {str(e)}",
             quote_id=quote_id,
             from_status=current_status
         )

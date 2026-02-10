@@ -14509,15 +14509,38 @@ def get(quote_id: str, session):
             border_color = "#3b82f6"
             header_icon = icon("package", size=16, color="#3b82f6")
 
+        # Collect items belonging to this invoice for the details table
+        invoice_items_list = [item for item in my_items if item.get("invoice_id") == inv["id"]]
+
+        # Build invoice_items_table rows for the details section
+        invoice_items_table = []
+        for item in invoice_items_list:
+            item_name = item.get("name") or item.get("product_name") or "—"
+            item_qty = item.get("quantity", 0) or 0
+            item_price = item.get("purchase_price_original", 0) or 0
+            invoice_items_table.append(
+                Tr(
+                    Td(item_name, style="padding: 0.25rem 0.5rem; font-size: 0.8rem; border-bottom: 1px solid #f1f5f9;"),
+                    Td(str(item_qty), style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: center; border-bottom: 1px solid #f1f5f9;"),
+                    Td(f"{item_price:,.2f} {currency_sym}", style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: right; border-bottom: 1px solid #f1f5f9;"),
+                )
+            )
+
         return Div(
-            # Invoice header
+            # Invoice header with chevron toggle
             Div(
                 Div(
                     header_icon,
                     Span(f" Инвойс #{idx}", style="font-weight: 600; font-size: 1rem; margin-left: 6px;"),
                     style="display: flex; align-items: center;"
                 ),
-                Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #64748b; background: #e2e8f0; padding: 0.125rem 0.5rem; border-radius: 999px;"),
+                Div(
+                    Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #64748b; background: #e2e8f0; padding: 0.125rem 0.5rem; border-radius: 999px; margin-right: 0.5rem;"),
+                    Span(icon("chevron-down", size=14, color="#64748b"),
+                         id=f"invoice-chevron-{inv['id']}",
+                         style="transition: transform 0.2s; display: inline-flex; align-items: center;"),
+                    style="display: flex; align-items: center;"
+                ),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
             ),
 
@@ -14562,14 +14585,31 @@ def get(quote_id: str, session):
                 style="font-size: 0.75rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
             ),
 
+            # Collapsible invoice details section (hidden by default)
+            Div(
+                Table(
+                    Thead(
+                        Tr(
+                            Th("Наименование", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: left; border-bottom: 2px solid #e2e8f0;"),
+                            Th("Кол-во", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: center; border-bottom: 2px solid #e2e8f0;"),
+                            Th("Цена", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: right; border-bottom: 2px solid #e2e8f0;"),
+                        )
+                    ),
+                    Tbody(*invoice_items_table) if invoice_items_table else Tbody(Tr(Td("Нет позиций", colspan="3", style="padding: 0.5rem; text-align: center; color: #94a3b8; font-size: 0.8rem;"))),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                id=f"invoice-details-{inv['id']}",
+                style="display: none; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0;"
+            ),
+
             # Action buttons for pending invoices
             Div(
                 A("Редактировать", href="#", cls="text-blue-600 text-sm",
-                  onclick=f"openEditInvoiceModal('{inv['id']}'); return false;",
-                  style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;"),
+                  style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;",
+                  **{"onclick": f"openEditInvoiceModal('{inv['id']}'); return false;"}),
                 A("Назначить ↓", href="#", cls="text-green-600 text-sm",
-                  onclick=f"assignSelectedToInvoice('{inv['id']}'); return false;",
-                  style="font-size: 0.75rem; color: #059669;"),
+                  style="font-size: 0.75rem; color: #059669;",
+                  **{"onclick": f"assignSelectedToInvoice('{inv['id']}'); return false;"}),
                 style="margin-top: 0.5rem;"
             ) if can_edit and not is_completed else None,
 
@@ -14579,8 +14619,8 @@ def get(quote_id: str, session):
                     Span(icon("check", size=14, color="white"), style="margin-right: 4px; display: inline-flex; vertical-align: middle;"),
                     Span("Завершить инвойс"),
                     href="#",
-                    onclick=f"completeInvoice('{inv['id']}'); return false;",
-                    style="font-size: 0.75rem; color: white; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);"
+                    style="font-size: 0.75rem; color: white; background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; display: inline-flex; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);",
+                    **{"onclick": f"completeInvoice('{inv['id']}'); return false;"}
                 ),
                 style="margin-top: 0.75rem;"
             ) if can_edit and not is_completed else None,
@@ -14591,8 +14631,8 @@ def get(quote_id: str, session):
                     icon("lock-open", size=12, color="#64748b"),
                     Span(" Вернуть в работу", style="margin-left: 4px;"),
                     href="#",
-                    onclick=f"reopenInvoice('{inv['id']}'); return false;",
-                    style="font-size: 0.75rem; color: #64748b; text-decoration: underline; display: inline-flex; align-items: center;"
+                    style="font-size: 0.75rem; color: #64748b; text-decoration: underline; display: inline-flex; align-items: center;",
+                    **{"onclick": f"reopenInvoice('{inv['id']}'); return false;"}
                 ),
                 style="margin-top: 0.5rem;"
             ) if can_edit and is_completed else None,
@@ -14600,7 +14640,7 @@ def get(quote_id: str, session):
             cls="card",
             style=f"padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid {border_color}; cursor: pointer; background: {card_bg}; border-radius: 8px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.04);" + (" opacity: 0.9;" if is_completed else ""),
             id=f"invoice-card-{inv['id']}",
-            onclick=f"selectInvoice('{inv['id']}')"
+            onclick=f"toggleInvoiceDetails('{inv['id']}'); selectInvoice('{inv['id']}')"
         )
 
     return page_layout(f"Закупки — {quote_idn}",
@@ -15220,7 +15260,7 @@ def get(quote_id: str, session):
                 .catch(function(err) {{ alert('Ошибка: ' + err.message); }});
             }};
 
-            // Invoice selection
+            // Invoice selection — also toggles invoice-details section
             window.selectInvoice = function(invoiceId) {{
                 document.querySelectorAll('[id^="invoice-card-"]').forEach(function(el) {{
                     el.style.background = 'white';
@@ -15228,6 +15268,20 @@ def get(quote_id: str, session):
                 var card = document.getElementById('invoice-card-' + invoiceId);
                 if (card) card.style.background = '#eff6ff';
                 selectedInvoiceId = invoiceId;
+            }};
+
+            // Toggle invoice details expand/collapse
+            window.toggleInvoiceDetails = function(invoiceId) {{
+                var details = document.getElementById('invoice-details-' + invoiceId);
+                if (!details) return;
+                var chevron = document.getElementById('invoice-chevron-' + invoiceId);
+                if (details.style.display === 'none' || details.style.display === '') {{
+                    details.style.display = 'block';
+                    if (chevron) chevron.style.transform = 'rotate(180deg)';
+                }} else {{
+                    details.style.display = 'none';
+                    if (chevron) chevron.style.transform = 'rotate(0deg)';
+                }}
             }};
 
             // Assign selected items to invoice
@@ -15573,25 +15627,39 @@ async def api_create_invoice(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "No items selected"}, status_code=400)
 
     # Generate invoice number
-    count_result = supabase.table("invoices").select("id", count="exact").eq("quote_id", quote_id).execute()
+    count_result = supabase.table("supplier_invoices").select("id", count="exact").eq("organization_id", org_id).eq("supplier_id", supplier_id).execute()
     idx = (count_result.count or 0) + 1
     invoice_number = f"INV-{idx:02d}-{quote.get('idn_quote', quote_id[:8])}"
 
+    # Calculate total amount from selected items
+    items_for_total = supabase.table("quote_items") \
+        .select("purchase_price_original, quantity") \
+        .in_("id", item_ids) \
+        .eq("quote_id", quote_id) \
+        .execute()
+
+    total_amount = sum(
+        (float(item.get("purchase_price_original", 0) or 0)) * (float(item.get("quantity", 1) or 1))
+        for item in (items_for_total.data or [])
+    )
+    if total_amount <= 0:
+        total_amount = 0.01  # supplier_invoices requires total_amount > 0
+
     try:
-        # Create invoice with all fields
+        # Create invoice in supplier_invoices table (visible in registry)
         invoice_data = {
-            "quote_id": quote_id,
+            "organization_id": org_id,
             "supplier_id": supplier_id,
-            "buyer_company_id": buyer_company_id,
-            "pickup_location_id": pickup_location_id,
-            "pickup_country": pickup_country,
-            "currency": currency,
             "invoice_number": invoice_number,
-            "total_weight_kg": float(total_weight_kg),
-            "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
+            "invoice_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "total_amount": total_amount,
+            "currency": currency,
+            "status": "pending",
+            "created_by": user["id"],
+            "notes": f"Quote: {quote.get('idn_quote', quote_id[:8])}",
         }
 
-        result = supabase.table("invoices").insert(invoice_data).execute()
+        result = supabase.table("supplier_invoices").insert(invoice_data).execute()
 
         if not result.data:
             return JSONResponse({"success": False, "error": "Failed to create invoice"}, status_code=500)
@@ -15655,7 +15723,7 @@ async def api_update_invoice(quote_id: str, session, request):
 
     supabase = get_supabase()
 
-    # Build update data
+    # Build update data for supplier_invoices table
     update_data = {}
 
     invoice_number = form.get("invoice_number")
@@ -15666,13 +15734,13 @@ async def api_update_invoice(quote_id: str, session, request):
     if currency:
         update_data["currency"] = currency
 
-    weight = form.get("total_weight_kg")
-    if weight:
-        update_data["total_weight_kg"] = float(weight)
+    total_amount = form.get("total_amount")
+    if total_amount:
+        update_data["total_amount"] = float(total_amount)
 
-    volume = form.get("total_volume_m3")
-    if volume:
-        update_data["total_volume_m3"] = float(volume)
+    notes = form.get("notes")
+    if notes is not None:
+        update_data["notes"] = notes.strip()
 
     # Handle file upload if provided
     invoice_file = form.get("invoice_file")
@@ -15683,7 +15751,7 @@ async def api_update_invoice(quote_id: str, session, request):
 
     try:
         if update_data:
-            supabase.table("invoices").update(update_data).eq("id", invoice_id).execute()
+            supabase.table("supplier_invoices").update(update_data).eq("id", invoice_id).execute()
 
             # Also update currency on linked items
             if currency:
@@ -15755,11 +15823,11 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
             .eq("quote_id", quote_id) \
             .execute()
 
-        # Delete invoice (scoped to quote_id for safety)
-        supabase.table("invoices") \
+        # Delete invoice from supplier_invoices (scoped to organization for safety)
+        supabase.table("supplier_invoices") \
             .delete() \
             .eq("id", invoice_id) \
-            .eq("quote_id", quote_id) \
+            .eq("organization_id", org_id) \
             .execute()
 
         return JSONResponse({"success": True})
@@ -15795,11 +15863,11 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
     if not quote_result.data:
         return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
 
-    # Get invoice
-    invoice_result = supabase.table("invoices") \
+    # Get invoice from supplier_invoices
+    invoice_result = supabase.table("supplier_invoices") \
         .select("*") \
         .eq("id", invoice_id) \
-        .eq("quote_id", quote_id) \
+        .eq("organization_id", org_id) \
         .single() \
         .execute()
 
@@ -15808,8 +15876,8 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
 
     invoice = invoice_result.data
 
-    # Check invoice is in pending_procurement status
-    if invoice.get("status") != "pending_procurement":
+    # Check invoice is in pending status
+    if invoice.get("status") != "pending":
         return JSONResponse({"success": False, "error": "Invoice is not in procurement stage"}, status_code=400)
 
     # Get items in this invoice
@@ -15844,12 +15912,11 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         }, status_code=400)
 
     try:
-        # Update invoice status
-        supabase.table("invoices") \
+        # Update invoice status in supplier_invoices
+        supabase.table("supplier_invoices") \
             .update({
-                "status": "pending_logistics",
-                "procurement_completed_at": "now()",
-                "procurement_completed_by": user_id
+                "status": "partially_paid",
+                "notes": (invoice.get("notes") or "") + " | Procurement completed"
             }) \
             .eq("id", invoice_id) \
             .execute()
@@ -16176,6 +16243,26 @@ async def api_complete_procurement(quote_id: str, session):
             .in_("id", my_item_ids) \
             .execute()
 
+    # Get supplier_invoices linked to this quote's items for status tracking
+    invoice_ids_result = supabase.table("quote_items") \
+        .select("invoice_id") \
+        .eq("quote_id", quote_id) \
+        .not_.is_("invoice_id", "null") \
+        .execute()
+
+    linked_invoice_ids = list(set(
+        item["invoice_id"] for item in (invoice_ids_result.data or [])
+        if item.get("invoice_id")
+    ))
+
+    if linked_invoice_ids:
+        # Update supplier_invoices status to reflect procurement completion
+        supabase.table("supplier_invoices") \
+            .update({"status": "pending"}) \
+            .in_("id", linked_invoice_ids) \
+            .eq("organization_id", org_id) \
+            .execute()
+
     # Check if ALL items are complete and trigger workflow transition
     user_roles = get_user_roles_from_session(session)
     completion_result = complete_procurement(
@@ -16243,22 +16330,29 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
     my_brands_lower = [b.lower() for b in my_brands]
 
-    # Get invoices
-    invoices_result = supabase.table("invoices") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .order("created_at") \
-        .execute()
-
-    invoices = invoices_result.data or []
-
-    # Get items
+    # Get items first to find linked invoice IDs
     items_result = supabase.table("quote_items") \
-        .select("id, brand, invoice_id, purchase_price_original, quantity") \
+        .select("id, name, brand, invoice_id, purchase_price_original, quantity") \
         .eq("quote_id", quote_id) \
         .execute()
 
     all_items = items_result.data or []
+
+    # Get invoices from supplier_invoices via linked item invoice_ids
+    linked_inv_ids = list(set(
+        item["invoice_id"] for item in all_items
+        if item.get("invoice_id")
+    ))
+
+    if linked_inv_ids:
+        invoices_result = supabase.table("supplier_invoices") \
+            .select("*") \
+            .in_("id", linked_inv_ids) \
+            .order("created_at") \
+            .execute()
+        invoices = invoices_result.data or []
+    else:
+        invoices = []
     if is_admin:
         my_items = all_items
     else:
@@ -16295,11 +16389,32 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
             for item in my_items if item.get("invoice_id") == inv["id"]
         )
 
+        # Collect items for this invoice_items_table details
+        invoice_items_list = [item for item in my_items if item.get("invoice_id") == inv["id"]]
+        invoice_items_table = []
+        for item in invoice_items_list:
+            item_name = item.get("name") or item.get("product_name") or "—"
+            item_qty = item.get("quantity", 0) or 0
+            item_price = item.get("purchase_price_original", 0) or 0
+            invoice_items_table.append(
+                Tr(
+                    Td(item_name, style="padding: 0.25rem 0.5rem; font-size: 0.8rem; border-bottom: 1px solid #f1f5f9;"),
+                    Td(str(item_qty), style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: center; border-bottom: 1px solid #f1f5f9;"),
+                    Td(f"{item_price:,.2f} {currency_sym}", style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: right; border-bottom: 1px solid #f1f5f9;"),
+                )
+            )
+
         cards.append(
             Div(
                 Div(
                     Span(f"📦 Инвойс #{idx}", style="font-weight: 600;"),
-                    Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px;"),
+                    Div(
+                        Span(f"{items_in_invoice} поз.", style="font-size: 0.75rem; color: #666; background: #f3f4f6; padding: 0.125rem 0.5rem; border-radius: 999px; margin-right: 0.5rem;"),
+                        Span(icon("chevron-down", size=14, color="#64748b"),
+                             id=f"invoice-chevron-{inv['id']}",
+                             style="transition: transform 0.2s; display: inline-flex; align-items: center;"),
+                        style="display: flex; align-items: center;"
+                    ),
                     style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
                 ),
                 Div(
@@ -16314,6 +16429,22 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
                     Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500;") if total_sum > 0 else None,
                     style="font-size: 0.75rem;"
                 ),
+                # Collapsible invoice details section (hidden by default)
+                Div(
+                    Table(
+                        Thead(
+                            Tr(
+                                Th("Наименование", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: left; border-bottom: 2px solid #e2e8f0;"),
+                                Th("Кол-во", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: center; border-bottom: 2px solid #e2e8f0;"),
+                                Th("Цена", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: right; border-bottom: 2px solid #e2e8f0;"),
+                            )
+                        ),
+                        Tbody(*invoice_items_table) if invoice_items_table else Tbody(Tr(Td("Нет позиций", colspan="3", style="padding: 0.5rem; text-align: center; color: #94a3b8; font-size: 0.8rem;"))),
+                        style="width: 100%; border-collapse: collapse;"
+                    ),
+                    id=f"invoice-details-{inv['id']}",
+                    style="display: none; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #e2e8f0;"
+                ),
                 Div(
                     A("Редактировать", href="#", onclick=f"openEditInvoiceModal('{inv['id']}'); return false;",
                       style="font-size: 0.75rem; color: #3b82f6; margin-right: 0.75rem;"),
@@ -16324,7 +16455,7 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
                 cls="card",
                 style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 3px solid #3b82f6;",
                 id=f"invoice-card-{inv['id']}",
-                onclick=f"selectInvoice('{inv['id']}')"
+                onclick=f"toggleInvoiceDetails('{inv['id']}'); selectInvoice('{inv['id']}')"
             )
         )
 
@@ -17896,6 +18027,7 @@ def get(session, quote_id: str):
             'id': item.get('id'),
             'row_num': idx + 1,
             'brand': item.get('brand', ''),
+            'product_code': item.get('product_code', ''),
             'product_name': item.get('product_name', ''),
             'quantity': item.get('quantity', 1),
             'supplier_country': item.get('supplier_country', ''),
@@ -18503,7 +18635,7 @@ def get(session, quote_id: str):
                     hot = new Handsontable(container, {{
                         licenseKey: 'non-commercial-and-evaluation',
                         data: initialData,
-                        colHeaders: ['№', 'Бренд', 'Наименование', 'Кол-во', 'Страна закупки', 'Код ТН ВЭД', 'Пошлина %', 'ДС', 'Ст-ть ДС', 'СС', 'Ст-ть СС', 'СГР', 'Ст-ть СГР'],
+                        colHeaders: ['№', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Страна закупки', 'Код ТН ВЭД', 'Пошлина %', 'ДС', 'Ст-ть ДС', 'СС', 'Ст-ть СС', 'СГР', 'Ст-ть СГР'],
                         columns: [
                             {{data: 'row_num', readOnly: true, type: 'numeric', width: 40,
                               renderer: function(instance, td, row, col, prop, value, cellProperties) {{
@@ -18515,6 +18647,14 @@ def get(session, quote_id: str):
                               }}
                             }},
                             {{data: 'brand', readOnly: true, type: 'text', width: 100,
+                              renderer: function(instance, td, row, col, prop, value, cellProperties) {{
+                                  td.innerHTML = value || '—';
+                                  td.style.color = '#666';
+                                  td.style.background = '#f9fafb';
+                                  return td;
+                              }}
+                            }},
+                            {{data: 'product_code', readOnly: true, type: 'text', width: 100,
                               renderer: function(instance, td, row, col, prop, value, cellProperties) {{
                                   td.innerHTML = value || '—';
                                   td.style.color = '#666';
@@ -18760,6 +18900,21 @@ async def post(session, quote_id: str, request):
 
     # If action is complete, mark customs as done
     if action == "complete":
+        # Validate all items have hs_code before completing customs
+        hs_check = supabase.table("quote_items") \
+            .select("id, hs_code, product_name") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        hs_items = hs_check.data or []
+        missing_hs = [item for item in hs_items if not (item.get("hs_code") or "").strip()]
+        if missing_hs:
+            missing_names = ", ".join(
+                item.get("product_name", f"ID {item['id']}")[:30] for item in missing_hs[:3]
+            )
+            suffix = f" и ещё {len(missing_hs) - 3}" if len(missing_hs) > 3 else ""
+            print(f"Customs completion blocked: {len(missing_hs)} items without hs_code: {missing_names}{suffix}")
+            return RedirectResponse(f"/customs/{quote_id}?error=hs_code_missing", status_code=303)
+
         user_roles = get_user_roles_from_session(session)
         result = complete_customs(quote_id, user_id, user_roles)
 
@@ -25406,6 +25561,17 @@ def get(session, deal_id: str):
         print(f"Error fetching categories: {e}")
         categories = []
 
+    # Build logistics section (P2.7+P2.8) - 7-stage accordion via _deals_logistics_tab
+    logistics_section = Div(
+        Div(
+            icon("truck", size=14, color="#64748b"),
+            Span("ЛОГИСТИКА", style="margin-left: 6px;"),
+            style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+        ),
+        _deals_logistics_tab(deal_id, deal, session),
+        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+    )
+
     # Extract deal info
     spec = deal.get("specifications", {}) or {}
     quote = deal.get("quotes", {}) or {}
@@ -25716,6 +25882,9 @@ def get(session, deal_id: str):
 
         # Payments section (Feature 86af6ykhh)
         _deal_payments_section(deal_id, plan_fact_items, categories),
+
+        # Logistics section (P2.7+P2.8) - 7-stage accordion
+        logistics_section,
 
         # Transition history (Feature #88) - uses quote_id from the deal
         workflow_transition_history(quote.get("id")) if quote.get("id") else None,
@@ -38206,96 +38375,8 @@ async def get_dadata_lookup_inn(inn: str, session):
 
 @rt("/deals/{deal_id}")
 def get(session, deal_id: str, tab: str = "info"):
-    """
-    Deal detail page with tabs: Info, Logistics, Payments.
-
-    Tabs:
-    - info: Deal information and plan-fact summary
-    - logistics: 7-stage logistics pipeline with expense tracking
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["finance", "admin", "top_manager", "logistics"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Fetch deal with org check
-    try:
-        deal_result = supabase.table("deals").select(
-            "id, deal_number, signed_at, total_amount, currency, status, organization_id, "
-            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn), "
-            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
-
-        deal = deal_result.data
-        if not deal:
-            return page_layout("Ошибка",
-                H1("Сделка не найдена"),
-                P(f"Сделка не найдена или нет доступа."),
-                btn_link("Назад", href="/deals", variant="secondary", icon_name="arrow-left"),
-                session=session
-            )
-    except Exception as e:
-        print(f"Error fetching deal: {e}")
-        return page_layout("Ошибка",
-            H1("Ошибка загрузки"),
-            P(str(e)),
-            session=session
-        )
-
-    deal_number = deal.get("deal_number", "-")
-    spec = deal.get("specifications", {}) or {}
-    quote = deal.get("quotes", {}) or {}
-    customer = quote.get("customers", {}) or {}
-    customer_name = customer.get("name", "Неизвестно")
-
-    # Tab navigation
-    tab_items = [
-        ("info", "Информация", "info"),
-        ("logistics", "Логистика", "truck"),
-    ]
-
-    tabs_html = Div(
-        *[A(
-            icon(ic, size=14),
-            f" {label}",
-            href=f"/deals/{deal_id}?tab={t}",
-            style=f"padding: 8px 16px; text-decoration: none; border-bottom: 2px solid {'#3b82f6' if tab == t else 'transparent'}; color: {'#1e293b' if tab == t else '#64748b'}; font-weight: {'600' if tab == t else '400'}; font-size: 13px; display: inline-flex; align-items: center; gap: 4px;"
-        ) for t, label, ic in tab_items],
-        style="display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 16px;"
-    )
-
-    # Tab content
-    if tab == "logistics":
-        tab_content = _deals_logistics_tab(deal_id, deal, session)
-    else:
-        tab_content = Div(
-            H3(f"Сделка {deal_number}"),
-            P(f"Клиент: {customer_name}"),
-            P(f"Сумма: {deal.get('total_amount', 0)} {deal.get('currency', 'RUB')}"),
-            P(f"Статус: {deal.get('status', '-')}"),
-            style="padding: 16px;"
-        )
-
-    return page_layout(f"Сделка {deal_number}",
-        Div(
-            A(icon("arrow-left", size=14), " К списку сделок", href="/deals",
-              style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px;"),
-            H2(f"Сделка {deal_number}", style="margin: 0 0 4px 0; font-size: 18px;"),
-            P(f"{customer_name}", style="color: #64748b; margin: 0 0 16px 0; font-size: 13px;"),
-            tabs_html,
-            tab_content,
-            style="padding: 20px;"
-        ),
-        session=session,
-        current_path="/deals"
-    )
+    """Redirect to /finance/{deal_id} - logistics now lives on the finance page."""
+    return RedirectResponse(f"/finance/{deal_id}", status_code=301)
 
 
 def _deals_logistics_tab(deal_id, deal, session):
@@ -38343,7 +38424,7 @@ def _deals_logistics_tab(deal_id, deal, session):
                 Button(next_label, type="submit",
                        style="padding: 4px 12px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;"),
                 method="post",
-                action=f"/deals/{deal_id}/stages/{stage.id}/status",
+                action=f"/finance/{deal_id}/stages/{stage.id}/status",
             )
 
         # Expense form (only for non-gtd_upload stages)
@@ -38376,7 +38457,7 @@ def _deals_logistics_tab(deal_id, deal, session):
                         Button("Добавить", type="submit",
                                style="padding: 6px 16px; font-size: 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer;"),
                         method="post",
-                        action=f"/deals/{deal_id}/stages/{stage.id}/expenses",
+                        action=f"/finance/{deal_id}/stages/{stage.id}/expenses",
                     ),
                     style="margin-top: 8px;"
                 ),
@@ -38419,59 +38500,11 @@ def _deals_logistics_tab(deal_id, deal, session):
     return Div(*stage_cards)
 
 
-@rt("/deals/{deal_id}/tab/logistics")
-def get(session, deal_id: str):
-    """HTMX target: logistics tab content for deal detail."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["finance", "admin", "top_manager", "logistics"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Verify deal belongs to org (organization_id check)
-    try:
-        deal_result = supabase.table("deals").select("id, organization_id").eq("id", deal_id).eq("organization_id", org_id).execute()
-        if not deal_result.data:
-            return P("Сделка не найдена", style="color: #ef4444;")
-        deal = deal_result.data[0]
-    except Exception as e:
-        return P(f"Ошибка: {e}", style="color: #ef4444;")
-
-    stages = get_stages_for_deal(deal_id)
-
-    if not stages:
-        return Div(P("Этапы не найдены.", style="color: #64748b;"))
-
-    # Render stages with stage_code references
-    stage_items = []
-    for stage in stages:
-        code = stage.stage_code
-        name = STAGE_NAMES.get(code, code)
-        summary = get_stage_summary(stage.id) if stage_allows_expenses(code) else {}
-
-        stage_items.append(
-            Div(
-                Span(f"{name} ({code})", style="font-weight: 500;"),
-                Span(f" - {stage.status}", style="color: #64748b; font-size: 12px;"),
-                Span(f" | {summary.get('expense_count', 0)} расх.", style="color: #94a3b8; font-size: 11px;") if summary else "",
-                style="padding: 8px 0; border-bottom: 1px solid #f1f5f9;"
-            )
-        )
-
-    return Div(*stage_items, id="logistics-stages-accordion")
-
-
-@rt("/deals/{deal_id}/stages/{stage_id}/expenses")
+@rt("/finance/{deal_id}/stages/{stage_id}/expenses")
 def post(session, deal_id: str, stage_id: str,
          description: str = "", amount: float = 0, currency: str = "RUB",
          expense_date: str = ""):
-    """POST /deals/{deal_id}/stages/{stage_id}/expenses - Add expense to stage.
+    """POST /finance/{deal_id}/stages/{stage_id}/expenses - Add expense to stage.
 
     Rejects expense on gtd_upload stage (stage_allows_expenses check).
     """
@@ -38515,12 +38548,12 @@ def post(session, deal_id: str, stage_id: str,
         category_id=cat_id,
     )
 
-    return RedirectResponse(f"/deals/{deal_id}?tab=logistics", status_code=303)
+    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
 
 
-@rt("/deals/{deal_id}/stages/{stage_id}/status")
+@rt("/finance/{deal_id}/stages/{stage_id}/status")
 def post(session, deal_id: str, stage_id: str, status: str = ""):
-    """POST /deals/{deal_id}/stages/{stage_id}/status - Update stage status.
+    """POST /finance/{deal_id}/stages/{stage_id}/status - Update stage status.
 
     Calls update_stage_status from logistics_service.
     """
@@ -38543,7 +38576,7 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
 
     result = update_stage_status(stage_id, status, deal_id=deal_id)
 
-    return RedirectResponse(f"/deals/{deal_id}?tab=logistics", status_code=303)
+    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
 
 
 # ============================================================================
