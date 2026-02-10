@@ -22038,6 +22038,15 @@ def get(session, spec_id: str):
     status = spec.get("status", "draft")
     quote_workflow_status = quote.get("workflow_status", "draft")
 
+    # Bug C2: Check if a deal actually exists for this spec (for signed status label)
+    has_deal = False
+    if status == "signed":
+        existing_deal = supabase.table("deals") \
+            .select("id, deal_number") \
+            .eq("specification_id", spec_id) \
+            .execute()
+        has_deal = bool(existing_deal and existing_deal.data)
+
     # TODO: seller_companies relationship not yet implemented in database
     seller_company_name = ""
     seller_company_code = ""
@@ -22428,12 +22437,15 @@ def get(session, spec_id: str):
                 ),
                 style="margin-top: 16px;"
             ) if status == "approved" and spec.get("signed_scan_url") else None,
-            # Info for already signed specs
+            # Info for already signed specs - show deal status based on actual deal existence
             Div(
                 Div(style="height: 1px; background: #e2e8f0; margin: 16px 0;"),
                 P(
                     icon("check-circle", size=14, color="#16a34a"), " Спецификация подписана. Сделка создана.",
                     style="margin-bottom: 0; color: #16a34a; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
+                ) if has_deal else P(
+                    icon("alert-circle", size=14, color="#d97706"), " Спецификация подписана. Сделка не создана.",
+                    style="margin-bottom: 0; color: #d97706; font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 8px;"
                 ),
                 style="margin-top: 16px;"
             ) if status == "signed" else None,
@@ -22478,7 +22490,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
     # Verify spec exists and belongs to org
     spec_result = supabase.table("specifications") \
-        .select("id, status, quote_id") \
+        .select("id, status, quote_id, contract_id, specification_currency, sign_date") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -22500,11 +22512,81 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         if new_status not in valid_statuses:
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
-        # Update only the status
+        # Update the status
         supabase.table("specifications") \
             .update({"status": new_status}) \
             .eq("id", spec_id) \
             .execute()
+
+        # Bug C2: When admin sets status to "signed", also create a deal record
+        if new_status == "signed":
+            # Idempotency: check if a deal already exists for this spec
+            existing_deal = supabase.table("deals") \
+                .select("id, deal_number") \
+                .eq("specification_id", spec_id) \
+                .execute()
+
+            if not existing_deal.data:
+                # Fetch quote data for total_amount and customer info
+                quote_id = spec.get("quote_id")
+                quote_result = supabase.table("quotes") \
+                    .select("id, total_amount, customers(id, name)") \
+                    .eq("id", quote_id) \
+                    .execute()
+
+                total_amount = (quote_result.data[0].get("total_amount") or 0) if quote_result.data else 0
+
+                # Use specification_currency and sign_date from initial spec query
+                spec_currency = spec.get("specification_currency") or "RUB"
+                spec_sign_date = spec.get("sign_date")
+
+                # Generate deal number
+                try:
+                    deal_number_result = supabase.rpc("generate_deal_number", {"org_id": org_id}).execute()
+                    deal_number = deal_number_result.data if deal_number_result.data else None
+                except Exception:
+                    deal_number = None
+
+                if not deal_number:
+                    from datetime import datetime
+                    year = datetime.now().year
+                    count_result = supabase.table("deals") \
+                        .select("id", count="exact") \
+                        .eq("organization_id", org_id) \
+                        .execute()
+                    seq_num = (count_result.count or 0) + 1
+                    deal_number = f"DEAL-{year}-{seq_num:04d}"
+
+                from datetime import date
+                sign_date = spec_sign_date or date.today().isoformat()
+
+                # Insert deal record
+                deal_data = {
+                    "specification_id": spec_id,
+                    "quote_id": quote_id,
+                    "organization_id": org_id,
+                    "deal_number": deal_number,
+                    "signed_at": sign_date,
+                    "total_amount": float(total_amount) if total_amount else 0.0,
+                    "currency": spec_currency,
+                    "status": "active",
+                    "created_by": user_id,
+                }
+                supabase.table("deals").insert(deal_data).execute()
+
+                # Update quote workflow_status to deal_signed
+                try:
+                    from services import transition_quote_status, WorkflowStatus
+                    transition_quote_status(
+                        quote_id=quote_id,
+                        to_status=WorkflowStatus.DEAL_SIGNED,
+                        actor_id=user_id,
+                        actor_roles=get_user_roles_from_session(session),
+                        comment=f"Сделка {deal_number} создана (admin)",
+                        supabase=supabase
+                    )
+                except Exception:
+                    pass  # Workflow transition optional
 
         return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
@@ -22531,10 +22613,36 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
     if action == "approve" and current_status == "draft":
         new_status = "approved"
 
+    # Extract contract_id and specification_number for auto-numbering
+    contract_id = kwargs.get("contract_id") or None
+    specification_number = kwargs.get("specification_number") or None
+
+    # Auto-number from contract if contract_id changed
+    if contract_id and not specification_number:
+        if contract_id != spec.get("contract_id"):
+            try:
+                contract_result = supabase.table("customer_contracts") \
+                    .select("contract_number, next_specification_number") \
+                    .eq("id", contract_id) \
+                    .execute()
+
+                if contract_result.data:
+                    contract = contract_result.data[0]
+                    next_spec_num = contract.get("next_specification_number", 1)
+                    contract_num = contract.get("contract_number", "")
+                    specification_number = f"{contract_num}-{next_spec_num}"
+
+                    supabase.table("customer_contracts") \
+                        .update({"next_specification_number": next_spec_num + 1}) \
+                        .eq("id", contract_id) \
+                        .execute()
+            except Exception as e:
+                print(f"Error auto-generating specification number on update: {e}")
+
     # Build update data
     update_data = {
         "quote_version_id": kwargs.get("quote_version_id") or None,
-        "specification_number": kwargs.get("specification_number") or None,
+        "specification_number": specification_number,
         "proposal_idn": kwargs.get("proposal_idn") or None,
         "item_ind_sku": kwargs.get("item_ind_sku") or None,
         "sign_date": kwargs.get("sign_date") or None,
@@ -22554,6 +22662,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         "our_legal_entity": kwargs.get("our_legal_entity") or None,
         "client_legal_entity": kwargs.get("client_legal_entity") or None,
         "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "contract_id": contract_id,
         "status": new_status,
     }
 
