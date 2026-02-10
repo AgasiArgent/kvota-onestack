@@ -22667,11 +22667,19 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         "status": new_status,
     }
 
+    # DEBUG: hardcode marker + log full update_data
+    update_data["delivery_days"] = 777  # TEMP DEBUG MARKER - if 777 appears in DB, save path runs
+    print(f"[DEBUG spec-save UPDATE] spec_id={spec_id}, update_data_keys={list(update_data.keys())}, contract_id={update_data.get('contract_id')!r}, delivery_days={update_data.get('delivery_days')!r}")
+
     # Update specification
-    supabase.table("specifications") \
-        .update(update_data) \
-        .eq("id", spec_id) \
-        .execute()
+    try:
+        result = supabase.table("specifications") \
+            .update(update_data) \
+            .eq("id", spec_id) \
+            .execute()
+        print(f"[DEBUG spec-save RESULT] data={result.data[:1] if result.data else 'EMPTY'}")
+    except Exception as e:
+        print(f"[DEBUG spec-save ERROR] {e}")
 
     return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
