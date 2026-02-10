@@ -258,14 +258,14 @@ class TestAutoNumbering:
             r'if\s+contract_id\s+and\s+not\s+specification_number',
             post_handler_source
         )
-        # Also verify contract_id is read from kwargs
-        has_contract_from_kwargs = re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)',
+        # Also verify contract_id is an explicit parameter (not kwargs.get)
+        has_contract_param = re.search(
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             post_handler_source
         )
-        assert has_contract_guard and has_contract_from_kwargs, (
-            "When no contract_id in kwargs, specification_number must remain as-is. "
-            "contract_id must come from kwargs.get('contract_id')."
+        assert has_contract_guard and has_contract_param, (
+            "When no contract_id provided, specification_number must remain as-is. "
+            "contract_id must be an explicit parameter normalized with 'or None'."
         )
 
 
@@ -280,17 +280,17 @@ class TestDeliveryDaysFallback:
     - If delivery_days is empty/None, fallback to calc_variables.delivery_time
     """
 
-    def test_delivery_days_read_from_kwargs(self, post_handler_source):
+    def test_delivery_days_read_from_parameter(self, post_handler_source):
         """
-        delivery_days is first read from kwargs (form submission).
+        delivery_days is received as an explicit typed parameter and converted via safe_int.
         """
-        has_kwargs_read = re.search(
-            r'delivery_days\s*=\s*safe_int\(kwargs\.get\(["\']delivery_days["\']\)\)',
+        has_param_read = re.search(
+            r'delivery_days_val\s*=\s*safe_int\(delivery_days\)',
             post_handler_source
         )
-        assert has_kwargs_read, (
-            "delivery_days must first be read from kwargs via safe_int(). "
-            "Expected: delivery_days = safe_int(kwargs.get('delivery_days'))"
+        assert has_param_read, (
+            "delivery_days must be converted via safe_int() from the explicit parameter. "
+            "Expected: delivery_days_val = safe_int(delivery_days)"
         )
 
     def test_delivery_days_fallback_to_calc_variables(self, post_handler_source):
@@ -643,34 +643,29 @@ class TestSpecDataColumnAlignment:
     def test_contract_id_value_comes_from_variable(self, post_handler_source):
         """
         contract_id in spec_data must reference the contract_id variable
-        (which was read from kwargs and processed for auto-numbering).
-        Not a raw kwargs.get() -- it should use the processed variable.
+        (explicit parameter, processed for auto-numbering).
         """
-        # The handler sets contract_id = kwargs.get("contract_id") or None
-        # Then uses it in auto-numbering
-        # Then puts the same variable in spec_data
         has_variable_reference = re.search(
             r'"contract_id":\s*contract_id',
             post_handler_source
         )
         assert has_variable_reference, (
             "spec_data['contract_id'] must reference the processed contract_id variable, "
-            "not a raw kwargs.get(). The variable is set earlier and used for auto-numbering."
+            "not an inline value. The variable is set earlier and used for auto-numbering."
         )
 
     def test_delivery_days_value_comes_from_variable(self, post_handler_source):
         """
-        delivery_days in spec_data must reference the delivery_days variable
+        delivery_days in spec_data must reference the delivery_days_val variable
         (which includes the fallback from calc_variables.delivery_time).
         """
         has_variable_reference = re.search(
-            r'"delivery_days":\s*delivery_days',
+            r'"delivery_days":\s*delivery_days_val',
             post_handler_source
         )
         assert has_variable_reference, (
-            "spec_data['delivery_days'] must reference the processed delivery_days variable "
-            "(which includes fallback from calc_variables.delivery_time), "
-            "not a raw kwargs.get()."
+            "spec_data['delivery_days'] must reference the processed delivery_days_val variable "
+            "(which includes fallback from calc_variables.delivery_time)."
         )
 
 

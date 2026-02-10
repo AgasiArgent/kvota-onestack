@@ -113,7 +113,7 @@ class TestContractIdInUpdateData:
     def test_contract_id_value_references_variable(self, update_handler_source):
         """
         update_data['contract_id'] must reference a processed contract_id variable,
-        not a raw kwargs.get() inline. The variable is set earlier for auto-numbering.
+        not an inline value. The variable is set earlier for auto-numbering.
         """
         has_variable_ref = re.search(
             r'"contract_id":\s*contract_id',
@@ -121,21 +121,21 @@ class TestContractIdInUpdateData:
         )
         assert has_variable_ref, (
             "update_data['contract_id'] must reference the processed contract_id variable, "
-            "not a raw kwargs.get(). The variable is needed for auto-numbering comparison."
+            "not an inline value. The variable is needed for auto-numbering comparison."
         )
 
-    def test_contract_id_extracted_from_kwargs(self, update_handler_source):
+    def test_contract_id_normalized_from_parameter(self, update_handler_source):
         """
-        contract_id must be extracted from kwargs before the update_data dict,
+        contract_id must be normalized (or None) before the update_data dict,
         just like the create handler does.
         """
-        has_extraction = re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)',
+        has_normalization = re.search(
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             update_handler_source
         )
-        assert has_extraction, (
-            "contract_id must be extracted from kwargs before building update_data. "
-            "Expected: contract_id = kwargs.get('contract_id') or similar pattern."
+        assert has_normalization, (
+            "contract_id must be normalized before building update_data. "
+            "Expected: contract_id = contract_id or None"
         )
 
 
@@ -342,33 +342,32 @@ class TestEdgeCases:
             "so that manual specification_number is preserved when provided."
         )
 
-    def test_specification_number_extracted_from_kwargs(self, update_handler_source):
+    def test_specification_number_normalized_from_parameter(self, update_handler_source):
         """
-        specification_number must be extracted from kwargs into a variable
+        specification_number must be normalized (or None) from the explicit parameter
         BEFORE the auto-numbering logic, so it can be checked in the guard.
         """
-        # Find specification_number extraction before the auto-numbering
-        has_extraction = re.search(
-            r'specification_number\s*=\s*kwargs\.get\(["\']specification_number["\']\)',
+        has_normalization = re.search(
+            r'specification_number\s*=\s*specification_number\s+or\s+None',
             update_handler_source
         )
-        assert has_extraction, (
-            "specification_number must be extracted from kwargs into a variable "
+        assert has_normalization, (
+            "specification_number must be normalized from the explicit parameter "
             "before auto-numbering logic. Expected: "
-            "specification_number = kwargs.get('specification_number') or similar."
+            "specification_number = specification_number or None"
         )
 
     def test_contract_id_or_none_normalization(self, update_handler_source):
         """
         contract_id must be normalized to None when empty string.
-        Expected: 'contract_id = kwargs.get("contract_id") or None'
+        Expected: 'contract_id = contract_id or None'
         """
         has_normalization = re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)\s*or\s*None',
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             update_handler_source
         )
         assert has_normalization, (
-            "contract_id must be normalized: kwargs.get('contract_id') or None. "
+            "contract_id must be normalized: contract_id or None. "
             "Empty string from form must become None for proper DB storage."
         )
 
@@ -442,25 +441,25 @@ class TestCreateUpdateParity:
             "The create handler has it but the update handler does not."
         )
 
-    def test_both_handlers_extract_contract_id_from_kwargs(
+    def test_both_handlers_normalize_contract_id(
         self, create_handler_source, update_handler_source
     ):
         """
-        Both handlers must extract contract_id from kwargs before data dict building.
+        Both handlers must normalize contract_id (or None) before data dict building.
         """
-        create_extracts = bool(re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)',
+        create_normalizes = bool(re.search(
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             create_handler_source
         ))
-        update_extracts = bool(re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)',
+        update_normalizes = bool(re.search(
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             update_handler_source
         ))
 
-        assert create_extracts, "create handler must extract contract_id from kwargs"
-        assert update_extracts, (
-            "update handler must extract contract_id from kwargs (PARITY BUG). "
-            "The create handler extracts it but the update handler does not."
+        assert create_normalizes, "create handler must normalize contract_id"
+        assert update_normalizes, (
+            "update handler must normalize contract_id (PARITY BUG). "
+            "The create handler normalizes it but the update handler does not."
         )
 
     def test_both_handlers_have_auto_numbering(
@@ -530,18 +529,17 @@ class TestCurrentCodeHasBug:
             "When contract is selected on edit, spec number is not auto-generated."
         )
 
-    def test_update_handler_currently_lacks_contract_extraction(self):
+    def test_update_handler_currently_has_contract_normalization(self):
         """
-        The update handler currently does NOT extract contract_id from kwargs.
-        This test asserts extraction IS present, so it FAILS now.
+        The update handler must normalize contract_id from the explicit parameter.
         """
         source = _read_update_handler_source()
-        has_extraction = bool(re.search(
-            r'contract_id\s*=\s*kwargs\.get\(["\']contract_id["\']\)',
+        has_normalization = bool(re.search(
+            r'contract_id\s*=\s*contract_id\s+or\s+None',
             source
         ))
-        assert has_extraction, (
-            "BUG CONFIRMED: update handler does not extract contract_id from kwargs. "
+        assert has_normalization, (
+            "BUG CONFIRMED: update handler does not normalize contract_id. "
             "The form field value is completely ignored on save."
         )
 

@@ -21799,7 +21799,18 @@ def get(session, quote_id: str):
 
 
 @rt("/spec-control/create/{quote_id}")
-def post(session, quote_id: str, action: str = "create", **kwargs):
+def post(session, quote_id: str, action: str = "create",
+         contract_id: str = "", specification_number: str = "",
+         delivery_days: str = "", quote_version_id: str = "",
+         proposal_idn: str = "", item_ind_sku: str = "",
+         sign_date: str = "", validity_period: str = "",
+         specification_currency: str = "", exchange_rate_to_ruble: str = "",
+         client_payment_term_after_upd: str = "", client_payment_terms: str = "",
+         cargo_pickup_country: str = "", readiness_period: str = "",
+         goods_shipment_country: str = "", delivery_city_russia: str = "",
+         cargo_type: str = "", logistics_period: str = "",
+         delivery_days_type: str = "", our_legal_entity: str = "",
+         client_legal_entity: str = "", supplier_payment_country: str = ""):
     """
     Create a new specification from form data.
 
@@ -21819,10 +21830,6 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
-
-    # FastHTML wraps form data in kwargs['kwargs'] dict
-    if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
-        kwargs = kwargs['kwargs']
 
     # Verify quote exists and belongs to org
     quote_result = supabase.table("quotes") \
@@ -21857,8 +21864,8 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
             return default
 
     # v3.0: Handle contract_id for auto-numbering
-    contract_id = kwargs.get("contract_id") or None
-    specification_number = kwargs.get("specification_number") or None
+    contract_id = contract_id or None
+    specification_number = specification_number or None
 
     # Auto-generate specification number from contract if selected and no manual number provided
     if contract_id and not specification_number:
@@ -21885,8 +21892,8 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
             print(f"Error auto-generating specification number: {e}")
 
     # Pre-fill delivery_days from calc_variables.delivery_time
-    delivery_days = safe_int(kwargs.get("delivery_days"))
-    if not delivery_days:
+    delivery_days_val = safe_int(delivery_days)
+    if not delivery_days_val:
         try:
             calc_vars_result = supabase.table("quote_calculation_variables") \
                 .select("variables") \
@@ -21894,7 +21901,7 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
                 .execute()
             if calc_vars_result.data:
                 variables = calc_vars_result.data[0].get("variables", {})
-                delivery_days = safe_int(variables.get("delivery_time"))
+                delivery_days_val = safe_int(variables.get("delivery_time"))
         except Exception as e:
             print(f"Error fetching delivery_time from calc_variables: {e}")
 
@@ -21902,27 +21909,27 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
     spec_data = {
         "quote_id": quote_id,
         "organization_id": org_id,
-        "quote_version_id": kwargs.get("quote_version_id") or None,
+        "quote_version_id": quote_version_id or None,
         "specification_number": specification_number,
-        "proposal_idn": kwargs.get("proposal_idn") or None,
-        "item_ind_sku": kwargs.get("item_ind_sku") or None,
-        "sign_date": kwargs.get("sign_date") or None,
-        "validity_period": kwargs.get("validity_period") or None,
-        "specification_currency": kwargs.get("specification_currency") or "USD",
-        "exchange_rate_to_ruble": safe_decimal(kwargs.get("exchange_rate_to_ruble")),
-        "client_payment_term_after_upd": safe_int(kwargs.get("client_payment_term_after_upd")),
-        "client_payment_terms": kwargs.get("client_payment_terms") or None,
-        "cargo_pickup_country": kwargs.get("cargo_pickup_country") or None,
-        "readiness_period": kwargs.get("readiness_period") or None,
-        "goods_shipment_country": kwargs.get("goods_shipment_country") or None,
-        "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
-        "cargo_type": kwargs.get("cargo_type") or None,
-        "logistics_period": kwargs.get("logistics_period") or None,
-        "delivery_days": delivery_days,  # Pre-filled from calc_variables.delivery_time
-        "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
-        "our_legal_entity": kwargs.get("our_legal_entity") or None,
-        "client_legal_entity": kwargs.get("client_legal_entity") or None,
-        "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "proposal_idn": proposal_idn or None,
+        "item_ind_sku": item_ind_sku or None,
+        "sign_date": sign_date or None,
+        "validity_period": validity_period or None,
+        "specification_currency": specification_currency or "USD",
+        "exchange_rate_to_ruble": safe_decimal(exchange_rate_to_ruble),
+        "client_payment_term_after_upd": safe_int(client_payment_term_after_upd),
+        "client_payment_terms": client_payment_terms or None,
+        "cargo_pickup_country": cargo_pickup_country or None,
+        "readiness_period": readiness_period or None,
+        "goods_shipment_country": goods_shipment_country or None,
+        "delivery_city_russia": delivery_city_russia or None,
+        "cargo_type": cargo_type or None,
+        "logistics_period": logistics_period or None,
+        "delivery_days": delivery_days_val,  # Pre-filled from calc_variables.delivery_time
+        "delivery_days_type": delivery_days_type or "рабочих дней",
+        "our_legal_entity": our_legal_entity or None,
+        "client_legal_entity": client_legal_entity or None,
+        "supplier_payment_country": supplier_payment_country or None,
         "contract_id": contract_id,  # v3.0: Link to customer contract
         "status": "draft",
         "created_by": user_id,
@@ -22466,7 +22473,18 @@ def get(session, spec_id: str):
 
 
 @rt("/spec-control/{spec_id}")
-def post(session, spec_id: str, action: str = "save", new_status: str = "", **kwargs):
+def post(session, spec_id: str, action: str = "save", new_status: str = "",
+         contract_id: str = "", specification_number: str = "",
+         delivery_days: str = "", quote_version_id: str = "",
+         proposal_idn: str = "", item_ind_sku: str = "",
+         sign_date: str = "", validity_period: str = "",
+         specification_currency: str = "", exchange_rate_to_ruble: str = "",
+         client_payment_term_after_upd: str = "", client_payment_terms: str = "",
+         cargo_pickup_country: str = "", readiness_period: str = "",
+         goods_shipment_country: str = "", delivery_city_russia: str = "",
+         cargo_type: str = "", logistics_period: str = "",
+         delivery_days_type: str = "", our_legal_entity: str = "",
+         client_legal_entity: str = "", supplier_payment_country: str = ""):
     """
     Save specification changes or change status.
 
@@ -22491,10 +22509,6 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
-
-    # FastHTML wraps form data in kwargs['kwargs'] dict
-    if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
-        kwargs = kwargs['kwargs']
 
     # Verify spec exists and belongs to org
     spec_result = supabase.table("specifications") \
@@ -22536,10 +22550,10 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
             if not existing_deal.data:
                 # Fetch quote data for total_amount and customer info
-                quote_id = spec.get("quote_id")
+                quote_id_val = spec.get("quote_id")
                 quote_result = supabase.table("quotes") \
                     .select("id, total_amount, customers(id, name)") \
-                    .eq("id", quote_id) \
+                    .eq("id", quote_id_val) \
                     .execute()
 
                 total_amount = (quote_result.data[0].get("total_amount") or 0) if quote_result.data else 0
@@ -22566,15 +22580,15 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
                     deal_number = f"DEAL-{year}-{seq_num:04d}"
 
                 from datetime import date
-                sign_date = spec_sign_date or date.today().isoformat()
+                deal_sign_date = spec_sign_date or date.today().isoformat()
 
                 # Insert deal record
                 deal_data = {
                     "specification_id": spec_id,
-                    "quote_id": quote_id,
+                    "quote_id": quote_id_val,
                     "organization_id": org_id,
                     "deal_number": deal_number,
-                    "signed_at": sign_date,
+                    "signed_at": deal_sign_date,
                     "total_amount": float(total_amount) if total_amount else 0.0,
                     "currency": spec_currency,
                     "status": "active",
@@ -22586,7 +22600,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
                 try:
                     from services import transition_quote_status, WorkflowStatus
                     transition_quote_status(
-                        quote_id=quote_id,
+                        quote_id=quote_id_val,
                         to_status=WorkflowStatus.DEAL_SIGNED,
                         actor_id=user_id,
                         actor_roles=get_user_roles_from_session(session),
@@ -22617,13 +22631,13 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
     # Determine new status based on action
     # Simplified workflow: draft -> approved (no pending_review step)
-    new_status = current_status
+    resolved_status = current_status
     if action == "approve" and current_status == "draft":
-        new_status = "approved"
+        resolved_status = "approved"
 
     # Extract contract_id and specification_number for auto-numbering
-    contract_id = kwargs.get("contract_id") or None
-    specification_number = kwargs.get("specification_number") or None
+    contract_id = contract_id or None
+    specification_number = specification_number or None
 
     # Auto-number from contract if contract_id changed
     if contract_id and not specification_number:
@@ -22649,29 +22663,29 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
     # Build update data
     update_data = {
-        "quote_version_id": kwargs.get("quote_version_id") or None,
+        "quote_version_id": quote_version_id or None,
         "specification_number": specification_number,
-        "proposal_idn": kwargs.get("proposal_idn") or None,
-        "item_ind_sku": kwargs.get("item_ind_sku") or None,
-        "sign_date": kwargs.get("sign_date") or None,
-        "validity_period": kwargs.get("validity_period") or None,
-        "specification_currency": kwargs.get("specification_currency") or "USD",
-        "exchange_rate_to_ruble": safe_decimal(kwargs.get("exchange_rate_to_ruble")),
-        "client_payment_term_after_upd": safe_int(kwargs.get("client_payment_term_after_upd")),
-        "client_payment_terms": kwargs.get("client_payment_terms") or None,
-        "cargo_pickup_country": kwargs.get("cargo_pickup_country") or None,
-        "readiness_period": kwargs.get("readiness_period") or None,
-        "goods_shipment_country": kwargs.get("goods_shipment_country") or None,
-        "delivery_city_russia": kwargs.get("delivery_city_russia") or None,
-        "cargo_type": kwargs.get("cargo_type") or None,
-        "logistics_period": kwargs.get("logistics_period") or None,
-        "delivery_days": safe_int(kwargs.get("delivery_days")),
-        "delivery_days_type": kwargs.get("delivery_days_type") or "рабочих дней",
-        "our_legal_entity": kwargs.get("our_legal_entity") or None,
-        "client_legal_entity": kwargs.get("client_legal_entity") or None,
-        "supplier_payment_country": kwargs.get("supplier_payment_country") or None,
+        "proposal_idn": proposal_idn or None,
+        "item_ind_sku": item_ind_sku or None,
+        "sign_date": sign_date or None,
+        "validity_period": validity_period or None,
+        "specification_currency": specification_currency or "USD",
+        "exchange_rate_to_ruble": safe_decimal(exchange_rate_to_ruble),
+        "client_payment_term_after_upd": safe_int(client_payment_term_after_upd),
+        "client_payment_terms": client_payment_terms or None,
+        "cargo_pickup_country": cargo_pickup_country or None,
+        "readiness_period": readiness_period or None,
+        "goods_shipment_country": goods_shipment_country or None,
+        "delivery_city_russia": delivery_city_russia or None,
+        "cargo_type": cargo_type or None,
+        "logistics_period": logistics_period or None,
+        "delivery_days": safe_int(delivery_days),
+        "delivery_days_type": delivery_days_type or "рабочих дней",
+        "our_legal_entity": our_legal_entity or None,
+        "client_legal_entity": client_legal_entity or None,
+        "supplier_payment_country": supplier_payment_country or None,
         "contract_id": contract_id,
-        "status": new_status,
+        "status": resolved_status,
     }
 
     # Update specification
