@@ -2948,11 +2948,7 @@ function toggleTheme() {
 
 function updateThemeIcon(theme) {
     // Icons are toggled via CSS based on data-theme attribute
-    // Only update the text label
-    // Theme toggle is now icon-only, no text to update
-    if (text) {
-        // Icon changes are handled by CSS based on data-theme attribute
-    }
+    // Theme toggle is icon-only, no text to update
 }
 
 // Initialize theme on page load
@@ -3019,8 +3015,9 @@ window.addEventListener('error', function(e) {
     });
 });
 
-// Intercept HTMX requests
-document.body.addEventListener('htmx:afterRequest', function(e) {
+// Intercept HTMX requests (defer until body exists)
+document.addEventListener('DOMContentLoaded', function() {
+  document.body.addEventListener('htmx:afterRequest', function(e) {
     const xhr = e.detail.xhr;
     window._feedbackHTMXRequests.push({
         url: e.detail.pathInfo?.requestPath || e.detail.requestConfig?.path,
@@ -3031,6 +3028,7 @@ document.body.addEventListener('htmx:afterRequest', function(e) {
     if (window._feedbackHTMXRequests.length > 10) {
         window._feedbackHTMXRequests.shift();
     }
+  });
 });
 
 // Collect debug context
@@ -7592,18 +7590,16 @@ def get(quote_id: str, session):
                     Input(
                         type="text",
                         value=quote.get("delivery_city") or "",
-                        placeholder="Москва",
+                        placeholder="Введите город",
                         name="delivery_city",
+                        id="delivery-city-input",
                         list="cities-datalist",
                         style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_get="/api/cities/search",
                         hx_trigger="input changed delay:300ms",
                         hx_target="#cities-datalist",
-                        hx_include="[name='delivery_city']",
                         hx_vals='js:{"q": event.target.value}',
                         hx_swap="innerHTML",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        **{"_": f"on change send patch to me with {{field: 'delivery_city', value: my value}}"}
                     ),
                     Datalist(id="cities-datalist"),
                     style="flex: 1 1 120px; min-width: 120px;"
@@ -7614,8 +7610,9 @@ def get(quote_id: str, session):
                     Input(
                         type="text",
                         value=quote.get("delivery_country") or "",
-                        placeholder="Россия",
+                        placeholder="Введите страну",
                         name="delivery_country",
+                        id="delivery-country-input",
                         style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
@@ -8381,6 +8378,36 @@ def get(quote_id: str, session):
                 return true;
             }}
 
+            // Save delivery_city via fetch PATCH (separate from hx-get autocomplete)
+            function saveDeliveryCity(value) {{
+                fetch('/quotes/{quote_id}/inline', {{
+                    method: 'PATCH',
+                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                    body: 'field=delivery_city&value=' + encodeURIComponent(value)
+                }});
+            }}
+
+            // Auto-fill delivery_country from datalist option data-country attribute
+            function syncCountryFromCity(cityInput) {{
+                var datalist = document.getElementById('cities-datalist');
+                var countryInput = document.getElementById('delivery-country-input');
+                if (!datalist || !countryInput) return;
+
+                var options = datalist.querySelectorAll('option');
+                for (var i = 0; i < options.length; i++) {{
+                    if (options[i].value === cityInput.value) {{
+                        var country = options[i].getAttribute('data-country');
+                        if (country) {{
+                            countryInput.value = country;
+                            // Trigger change event to save country via HTMX
+                            countryInput.dispatchEvent(new Event('change', {{bubbles: true}}));
+                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
+                        }}
+                        break;
+                    }}
+                }}
+            }}
+
             // Run validation on page load and on changes
             document.addEventListener('DOMContentLoaded', function() {{
                 updateSubmitButtonState();
@@ -8389,6 +8416,16 @@ def get(quote_id: str, session):
                 document.querySelectorAll('input, select').forEach(function(el) {{
                     el.addEventListener('change', updateSubmitButtonState);
                 }});
+
+                // Delivery city: save on change + auto-fill country
+                var cityInput = document.getElementById('delivery-city-input');
+                if (cityInput) {{
+                    cityInput.addEventListener('change', function() {{
+                        saveDeliveryCity(this.value);
+                        syncCountryFromCity(this);
+                        if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
+                    }});
+                }}
             }});
 
             // Also update after Handsontable changes
@@ -10588,6 +10625,9 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
     calc_variables['logistics_hub_customs'] = logistics_hub_customs_qc
     calc_variables['logistics_customs_client'] = logistics_customs_client_qc
     calc_variables['dm_fee_value'] = dm_fee_value_qc
+
+    # seller_company name comes directly from DB (already matches SellerCompany enum)
+    # No normalization needed -- DB names were updated to match enum values exactly
 
     calc_inputs = []
     for item in items:
@@ -18987,6 +19027,20 @@ CALC_SUMMARY_MAP = {
     "AG16": "calc_ag16_dm_fee",
 }
 
+# ============================================================================
+# JANNA CHECKLIST CONSTANTS (Task 86af8hcmv)
+# ============================================================================
+
+# Minimum markup rules for Janna's checklist (item #1)
+MIN_MARKUP_RULES = {
+    'pmt_1': {'code': 'pmt_1', 'name': '100% предоплата', 'min_markup_supply': 8.0, 'min_markup_transit': 0.0},
+    'pmt_2': {'code': 'pmt_2', 'name': '100% постоплата', 'min_markup_supply': 15.0, 'min_markup_transit': 8.0},
+    'pmt_3': {'code': 'pmt_3', 'name': 'Частичная оплата', 'min_markup_supply': 12.5, 'min_markup_transit': 5.0},
+}
+
+# Countries requiring VAT clarification (checklist item #3)
+VAT_SENSITIVE_COUNTRIES = ['Turkey', 'Poland', 'Lithuania']
+
 
 def get_user_calc_columns(user_id: str, supabase) -> list:
     """Get user's custom column selection from user_settings."""
@@ -19114,6 +19168,306 @@ def get(session, status_filter: str = None):
     if status_filter:
         url += f"&status_filter={status_filter}"
     return RedirectResponse(url, status_code=303)
+
+
+# ============================================================================
+# JANNA CHECKLIST HELPER FUNCTIONS (Task 86af8hcmv)
+# ============================================================================
+
+def calculate_forex_risk_auto(prepayment_percent):
+    """
+    Auto-calculate forex risk based on prepayment percentage.
+
+    Rules:
+        100%    -> 0.0% risk (fully prepaid, no forex exposure)
+        45-55%  -> 1.5% risk (balanced payment)
+        other   -> 3.0% risk (conservative default)
+    """
+    if prepayment_percent is None:
+        return 3.0
+    if prepayment_percent == 100:
+        return 0.0
+    if 45 <= prepayment_percent <= 55:
+        return 1.5
+    return 3.0
+
+
+def check_markup_vs_payment_terms(deal_type, markup, payment_terms_code=None, prepayment_percent=None):
+    """
+    Check if markup meets minimum threshold for the given payment terms and deal type.
+
+    Returns dict with: ok (bool), min_markup (float), payment_terms_code or inferred_code, message/details.
+    """
+    inferred = False
+    if not payment_terms_code:
+        inferred = True
+        if prepayment_percent is not None and prepayment_percent == 100:
+            payment_terms_code = 'pmt_1'
+        elif prepayment_percent is not None and prepayment_percent == 0:
+            payment_terms_code = 'pmt_2'
+        else:
+            payment_terms_code = 'pmt_3'
+
+    rule = MIN_MARKUP_RULES.get(payment_terms_code, MIN_MARKUP_RULES['pmt_3'])
+
+    if deal_type == 'transit':
+        min_markup = rule['min_markup_transit']
+    else:
+        min_markup = rule['min_markup_supply']
+
+    ok = markup >= min_markup
+
+    result = {
+        'ok': ok,
+        'min_markup': min_markup,
+        'payment_terms_code': payment_terms_code,
+    }
+
+    if inferred:
+        result['inferred_code'] = payment_terms_code
+
+    if ok:
+        result['message'] = f"Наценка {markup}% >= минимум {min_markup}% ({rule['name']})"
+        result['details'] = f"Наценка {markup}% >= минимум {min_markup}% ({rule['name']})"
+    else:
+        result['message'] = f"Наценка {markup}% ниже минимума {min_markup}% для {rule['name']}"
+        result['details'] = f"Наценка {markup}% ниже минимума {min_markup}% для {rule['name']}"
+
+    return result
+
+
+def check_vat_sensitive_countries(items):
+    """
+    Check if any items come from VAT-sensitive countries.
+
+    Returns dict with: status, value, details, flagged_items, countries.
+    """
+    if not items:
+        return {
+            'status': 'info',
+            'value': 'Нет позиций для проверки',
+            'details': None,
+            'flagged_items': [],
+            'countries': [],
+        }
+
+    flagged_items = []
+    flagged_countries = set()
+
+    vat_countries_lower = [c.lower() for c in VAT_SENSITIVE_COUNTRIES]
+
+    for item in items:
+        country = item.get('supplier_country')
+        if country and country.lower() in vat_countries_lower:
+            flagged_items.append(item)
+            flagged_countries.add(country)
+
+    if flagged_items:
+        countries_list = sorted(flagged_countries)
+        return {
+            'status': 'warning',
+            'value': f"Страны с НДС: {', '.join(countries_list)}",
+            'details': f"{len(flagged_items)} позиций из стран, требующих уточнения НДС",
+            'flagged_items': flagged_items,
+            'countries': countries_list,
+        }
+
+    return {
+        'status': 'info',
+        'value': 'Все страны стандартные',
+        'details': None,
+        'flagged_items': [],
+        'countries': [],
+    }
+
+
+def compare_quote_vs_invoice_prices(quote_id, items, supabase):
+    """
+    Compare purchase prices from quote items vs supplier invoice prices.
+
+    Flags mismatches > 5%.
+    Returns dict with: status, value, details, mismatches.
+    """
+    if not items:
+        return {
+            'status': 'info',
+            'value': 'Нет позиций для сверки',
+            'details': [],
+            'mismatches': [],
+        }
+
+    item_ids = [item['id'] for item in items]
+
+    try:
+        invoice_result = supabase.table("supplier_invoice_items") \
+            .select("*") \
+            .in_("quote_item_id", item_ids) \
+            .execute()
+        invoice_items = invoice_result.data or []
+    except Exception:
+        invoice_items = []
+
+    if not invoice_items:
+        return {
+            'status': 'warning',
+            'value': 'Нет инвойсов поставщиков',
+            'details': [],
+            'mismatches': [],
+            'no_invoices': True,
+        }
+
+    # Build lookup: quote_item_id -> invoice unit_price
+    invoice_prices = {}
+    for inv_item in invoice_items:
+        qid = inv_item.get('quote_item_id')
+        if qid:
+            invoice_prices[qid] = float(inv_item.get('unit_price', 0) or 0)
+
+    mismatches = []
+    for item in items:
+        item_id = item['id']
+        if item_id not in invoice_prices:
+            continue
+
+        quote_price = float(item.get('purchase_price_original', 0) or 0)
+        invoice_price = invoice_prices[item_id]
+
+        if quote_price == 0:
+            continue
+
+        diff_pct = abs(invoice_price - quote_price) / quote_price * 100
+
+        if diff_pct > 5:
+            mismatches.append({
+                'product_name': item.get('product_name', '—'),
+                'quote_price': quote_price,
+                'invoice_price': invoice_price,
+                'diff_percent': round(diff_pct, 1),
+            })
+
+    if mismatches:
+        return {
+            'status': 'warning',
+            'value': f"{len(mismatches)} расхождений > 5%",
+            'details': mismatches,
+            'mismatches': mismatches,
+        }
+
+    return {
+        'status': 'ok',
+        'value': 'Цены совпадают',
+        'details': [],
+        'mismatches': [],
+    }
+
+
+def build_janna_checklist(quote, calc_vars, calc_summary, items, supabase=None):
+    """
+    Build the 7-item Janna checklist for quote control.
+
+    Items:
+    1. Наценка vs условия оплаты (auto)
+    2. Цены КП vs инвойс закупки (auto)
+    3. Страна + НДС (auto_flag)
+    4. Логистика (reference)
+    5. Таможня (reference)
+    6. Курсовая разница (auto)
+    7. Откат / ЛПР (approval)
+    """
+    checklist = []
+
+    deal_type = quote.get('deal_type') or calc_vars.get('offer_sale_type', 'supply')
+    markup = float(calc_vars.get('markup', 0) or 0)
+    payment_terms_code = calc_vars.get('payment_terms_code')
+    prepayment_percent = calc_vars.get('client_prepayment_percent')
+    if prepayment_percent is not None:
+        prepayment_percent = float(prepayment_percent)
+    lpr_reward = float(calc_vars.get('lpr_reward', 0) or 0)
+
+    # 1. Наценка vs условия оплаты
+    markup_result = check_markup_vs_payment_terms(
+        deal_type=deal_type,
+        markup=markup,
+        payment_terms_code=payment_terms_code,
+        prepayment_percent=prepayment_percent,
+    )
+    checklist.append({
+        'name': 'Наценка vs условия оплаты',
+        'status': 'ok' if markup_result['ok'] else 'error',
+        'value': f"{markup}% (мин. {markup_result['min_markup']}%)",
+        'details': markup_result.get('details', ''),
+        'type': 'auto',
+    })
+
+    # 2. Цены КП vs инвойс закупки
+    invoice_result = compare_quote_vs_invoice_prices(
+        quote_id=quote.get('id', ''),
+        items=items,
+        supabase=supabase,
+    ) if supabase else {'status': 'info', 'value': 'Нет данных', 'details': [], 'mismatches': []}
+    checklist.append({
+        'name': 'Цены КП ↔ инвойс закупки',
+        'status': invoice_result['status'],
+        'value': invoice_result['value'],
+        'details': str(invoice_result.get('details', '')),
+        'type': 'auto',
+    })
+
+    # 3. Страна + НДС
+    vat_result = check_vat_sensitive_countries(items)
+    checklist.append({
+        'name': 'Страна + НДС',
+        'status': vat_result['status'],
+        'value': vat_result['value'],
+        'details': vat_result.get('details'),
+        'type': 'auto_flag',
+    })
+
+    # 4. Логистика
+    total_logistics = float(calc_summary.get('calc_v16_total_logistics', 0) or 0)
+    logistics_status = 'ok' if total_logistics > 0 else 'warning'
+    checklist.append({
+        'name': 'Логистика',
+        'status': logistics_status,
+        'value': f"{total_logistics:,.2f}" if total_logistics else 'Не рассчитана',
+        'details': f"Итого логистика из расчёта",
+        'type': 'reference',
+    })
+
+    # 5. Таможня
+    customs_duty = float(calc_vars.get('customs_duty', 0) or calc_vars.get('customs_rate', 0) or 0)
+    customs_status = 'ok' if customs_duty >= 0 else 'warning'
+    checklist.append({
+        'name': 'Таможня',
+        'status': customs_status,
+        'value': f"{customs_duty}%" if customs_duty else 'Не указана',
+        'details': 'Ставка таможенной пошлины',
+        'type': 'reference',
+    })
+
+    # 6. Курсовая разница
+    auto_forex = calculate_forex_risk_auto(prepayment_percent)
+    actual_forex = float(calc_vars.get('forex_risk_percent', auto_forex) or auto_forex)
+    forex_status = 'ok' if actual_forex >= 0 else 'warning'
+    checklist.append({
+        'name': 'Курсовая разница',
+        'status': forex_status,
+        'value': f"{auto_forex}%",
+        'details': f"Авто-расчёт по предоплате {prepayment_percent}%" if prepayment_percent is not None else "Предоплата не указана",
+        'type': 'auto',
+    })
+
+    # 7. Откат / ЛПР
+    lpr_status = 'warning' if lpr_reward > 0 else 'ok'
+    checklist.append({
+        'name': 'Откат / ЛПР',
+        'status': lpr_status,
+        'value': f"{lpr_reward}" if lpr_reward > 0 else 'Нет',
+        'details': 'Требует согласования' if lpr_reward > 0 else None,
+        'type': 'approval',
+    })
+
+    return checklist
 
 
 # ============================================================================
@@ -19404,164 +19758,19 @@ def get(session, quote_id: str, preset: str = None):
             style=f"padding: 0.75rem; background: {cfg['bg']}; border: 1px solid {cfg['border']}; border-radius: 8px; cursor: help; box-shadow: 0 1px 3px rgba(0,0,0,0.04);"
         )
 
-    # Generate checklist
-    checklist_items = []
-
-    # 1. Deal type
+    # Generate Janna's 7-item checklist (Task 86af8hcmv)
     deal_type_display = "Поставка" if deal_type == "supply" else ("Транзит" if deal_type == "transit" else deal_type or "Не указан")
-    deal_status = "ok" if deal_type else "warning"
-    checklist_items.append(checklist_item(
-        "1. Тип сделки",
-        "Поставка или транзит - влияет на минимальную наценку",
-        deal_type_display,
-        deal_status,
-        f"Мин. наценка: {min_markup_supply}% (поставка) / {min_markup_transit}% (транзит)"
-    ))
+    janna_checklist_data = build_janna_checklist(quote, calc_vars, calc_summary, items, supabase)
 
-    # 2. Incoterms
-    incoterms_status = "ok" if incoterms else "warning"
-    checklist_items.append(checklist_item(
-        "2. Базис поставки (Incoterms)",
-        "Обычно DDP. Влияет на распределение расходов и рисков",
-        incoterms or "Не указан",
-        incoterms_status,
-        "DDP = все расходы до клиента включены в цену"
-    ))
-
-    # 3. Currency
-    currency_status = "warning" if currency == "RUB" else "ok"
-    checklist_items.append(checklist_item(
-        "3. Валюта КП",
-        "Проверить корректность конвертации. Рубли требуют согласования",
-        currency,
-        currency_status,
-        f"Курс: {exchange_rate}" if exchange_rate != 1.0 else None
-    ))
-
-    # 4. Payment terms
-    payment_display = f"{prepayment}% предоплата"
-    if payment_terms:
-        payment_display += f" ({payment_terms})"
-    payment_status = "ok" if prepayment == 100 else "warning"
-    checklist_items.append(checklist_item(
-        "4. Условия расчётов с клиентом",
-        "Не 100% предоплата требует согласования",
-        payment_display,
-        payment_status,
-        "100% предоплата = минимальный риск" if prepayment == 100 else "Отсрочка = требует согласования"
-    ))
-
-    # 5. Supplier advance
-    supplier_advance_display = f"{supplier_advance}%"
-    advance_status = "ok" if supplier_advance <= 50 else "warning"
-    checklist_items.append(checklist_item(
-        "5. Размер аванса поставщику",
-        "Проверить соответствие договорённостям с поставщиком",
-        supplier_advance_display,
-        advance_status,
-        "Стандарт: 30-50% аванс"
-    ))
-
-    # 6. Purchase prices - use calculated total from summary, not raw item prices
-    total_purchase = float(calc_summary.get("calc_s16_total_purchase_price", 0) or 0)
-    # Fallback to item prices if summary not available
-    if total_purchase == 0:
-        total_purchase = sum(float(item.get("purchase_price", 0) or 0) * int(item.get("quantity", 1) or 1) for item in items)
-
-    # VAT rate: 22% for 2026+ (Russian government mandate), 20% before
-    from datetime import date
-    current_year = date.today().year
-    vat_rate = 22 if current_year >= 2026 else 20
-
-    checklist_items.append(checklist_item(
-        "6. Закупочные цены и НДС",
-        "Проверить корректность закупочных цен",
-        f"Итого закупка: {format_money(total_purchase, currency)} | НДС: {vat_rate}%",
-        "info",
-        f"Позиций с ценами: {len([i for i in items if i.get('purchase_price')])}/{len(items)}"
-    ))
-
-    # 7. Logistics
-    logistics_status = "ok" if total_logistics > 0 else "warning"
-    checklist_items.append(checklist_item(
-        "7. Корректность логистики",
-        "Стоимость должна быть рассчитана, не 'из головы'",
-        f"Участок 1 (до таможни): {format_money(logistics_first_leg, currency)} | Участок 2 (до клиента): {format_money(logistics_last_leg, currency)}",
-        logistics_status,
-        f"Итого логистика: {format_money(total_logistics, currency)}"
-    ))
-
-    # 8. Minimum markup
-    min_markup = min_markup_supply if deal_type == "supply" else min_markup_transit
-    markup_status = "ok" if markup >= min_markup else "error"
-    checklist_items.append(checklist_item(
-        "8. Минимальные наценки",
-        f"Минимум: {min_markup}% для {'поставки' if deal_type == 'supply' else 'транзита'}",
-        f"{markup}%",
-        markup_status,
-        "Наценка в норме" if markup >= min_markup else f"Ниже минимума на {min_markup - markup}%"
-    ))
-
-    # 9. LPR reward
-    lpr_status = "warning" if lpr_reward > 0 else "ok"
-    checklist_items.append(checklist_item(
-        "9. Вознаграждение ЛПРа",
-        "Наличие вознаграждения требует согласования",
-        f"{lpr_reward}" if lpr_reward else "Нет",
-        lpr_status,
-        "Требует согласования топ-менеджера" if lpr_reward > 0 else None
-    ))
-
-    # 10. Forex risk
-    forex_status = "ok" if forex_risk > 0 else "info"
-    checklist_items.append(checklist_item(
-        "10. % курсовой разницы",
-        "Заложен ли риск изменения курса валют",
-        f"{forex_risk}%" if forex_risk else "Не учтён",
-        forex_status,
-        "Рекомендуется 2-5% при длительных сроках поставки"
-    ))
-
-    # 11. Invoice verification (v3.0 Feature UI-022)
-    # Check invoices created by procurement team (from 'invoices' table)
-    # These are internal invoices grouping quote_items by supplier
-    invoices_result = supabase.table("invoices") \
-        .select("id, invoice_number, supplier_id, currency, total_weight_kg") \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    invoices_list = invoices_result.data or []
-    invoice_count = len(invoices_list)
-
-    # Count items with invoice_id set (linked to invoices)
-    items_with_invoice = sum(1 for item in items if item.get("invoice_id"))
-    total_items = len(items)
-
-    if total_items > 0:
-        if invoice_count > 0 and items_with_invoice == total_items:
-            invoice_status = "ok"
-            invoice_value = f"{invoice_count} инвойс(ов), все позиции ({items_with_invoice}/{total_items})"
-        elif invoice_count > 0:
-            invoice_status = "warning"
-            invoice_value = f"{invoice_count} инвойс(ов), {items_with_invoice}/{total_items} позиций привязано"
-        else:
-            invoice_status = "error"
-            invoice_value = "Нет инвойсов от поставщиков"
-
+    # Render checklist items as cards
+    checklist_items = []
+    for idx, cl_item in enumerate(janna_checklist_data):
         checklist_items.append(checklist_item(
-            "11. Наличие инвойсов от поставщиков",
-            "Проверка внутренних инвойсов и привязки позиций",
-            invoice_value,
-            invoice_status,
-            f"Инвойсы: {', '.join(inv['invoice_number'] for inv in invoices_list)}" if invoices_list else "Создайте инвойсы на вкладке Закупки"
-        ))
-    else:
-        checklist_items.append(checklist_item(
-            "11. Наличие инвойсов от поставщиков",
-            "Проверка внутренних инвойсов и привязки позиций",
-            "Нет позиций для проверки",
-            "info",
-            None
+            f"{idx + 1}. {cl_item['name']}",
+            cl_item.get('details', '') or '',
+            cl_item.get('value', '—'),
+            cl_item.get('status', 'info'),
+            cl_item.get('details'),
         ))
 
     # Load invoicing summary for detail section (using supplier_invoice_items for per-item breakdown)
@@ -20749,7 +20958,7 @@ def post(session, quote_id: str, comment: str = ""):
 
     try:
         # Transition quote to pending_sales_review for justification
-        result = transition_quote(
+        result = transition_quote_status(
             quote_id=quote_id,
             to_status=WorkflowStatus.PENDING_SALES_REVIEW,
             actor_id=user_id,

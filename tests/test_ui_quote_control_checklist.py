@@ -379,12 +379,12 @@ class TestMainPyIntegration:
         # Check that we query the invoices table directly
         assert 'table("invoices")' in content
 
-    def test_checklist_item_11_in_main(self):
-        """main.py should have checklist item 11 for invoices."""
+    def test_checklist_uses_janna_7_items(self):
+        """main.py should use build_janna_checklist with 7 items (replaced old 11-item checklist)."""
         with open("main.py", "r") as f:
             content = f.read()
 
-        assert "11. Наличие инвойсов от поставщиков" in content
+        assert "build_janna_checklist" in content
 
     def test_invoice_id_check_in_main(self):
         """main.py should check quote_items.invoice_id for coverage."""
