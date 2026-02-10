@@ -23617,6 +23617,64 @@ ERPS_VIEWS = {
 ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'priority_tag']
 
 
+def fmt_days_until_payment(days):
+    """Color-coded badge for days until advance payment deadline.
+
+    - days > 7: green badge (safe zone)
+    - 1 <= days <= 7: yellow/amber badge (urgent zone)
+    - days <= 0: red badge with 'ПРОСРОЧЕНО' and abs(days)
+    - days is None: gray '-'
+    """
+    if days is None:
+        return Span("-", style="color: #9ca3af;")
+    days_int = int(days)
+    if days_int > 7:
+        return Span(
+            f"{days_int} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #d1fae5; color: #059669; font-weight: 600; font-size: 0.7rem;"
+        )
+    elif days_int > 0:
+        return Span(
+            f"{days_int} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #fef3c7; color: #d97706; font-weight: 600; font-size: 0.7rem;"
+        )
+    else:
+        overdue_days = abs(days_int)
+        return Span(
+            f"ПРОСРОЧЕНО {overdue_days} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #fee2e2; color: #dc2626; font-weight: 600; font-size: 0.7rem;"
+        )
+
+
+def fmt_remaining_payment_with_percent(remaining_usd, total_usd):
+    """Format remaining payment as '$X,XXX.XX (XX.X%)' with color coding.
+
+    Color thresholds based on remaining/total ratio:
+    - > 50%: red (high debt)
+    - 20-50%: amber/yellow (medium debt)
+    - <= 20%: green (mostly paid)
+    - None/zero total: gray '-'
+    """
+    if remaining_usd is None or total_usd is None or total_usd == 0:
+        return Span("-", style="color: #9ca3af;")
+    remaining_val = float(remaining_usd)
+    total_val = float(total_usd)
+    if total_val <= 0:
+        return Span("-", style="color: #9ca3af;")
+    pct = (remaining_val / total_val) * 100
+    text = f"${remaining_val:,.2f} ({pct:.1f}%)"
+    if pct > 50:
+        color = "#dc2626"
+    elif pct > 20:
+        color = "#d97706"
+    else:
+        color = "#059669"
+    return Span(text, style=f"color: {color}; font-weight: 500; font-size: 0.7rem;")
+
+
 def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: str = None):
     """ERPS tab - Единый реестр подписанных спецификаций with configurable views"""
     supabase = get_supabase()
@@ -24001,8 +24059,14 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             Td(spec.get('client_name', '-'), cls="sticky-client"),
         ]
         for col in columns:
-            value = spec.get(col['key'])
-            formatted = format_value(value, col['type'])
+            col_key = col['key']
+            value = spec.get(col_key)
+            if col_key == 'days_until_advance':
+                formatted = fmt_days_until_payment(value)
+            elif col_key == 'remaining_payment_usd':
+                formatted = fmt_remaining_payment_with_percent(value, spec.get('spec_sum_usd'))
+            else:
+                formatted = format_value(value, col['type'])
             cell_style = f"background: {col['color']};"
             cell_cls = type_to_class.get(col['type'], '')
             if col.get('is_last_in_group'):
@@ -24010,11 +24074,65 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             row_cells.append(Td(formatted, style=cell_style, cls=cell_cls))
         rows.append(Tr(*row_cells))
 
+    # Calculate summary footer totals
+    total_outstanding = sum(
+        float(s.get('remaining_payment_usd') or 0) for s in specs
+    )
+    overdue_count = len([
+        s for s in specs
+        if s.get('days_until_advance') is not None
+        and s['days_until_advance'] <= 0
+    ])
+    urgent_count = len([
+        s for s in specs
+        if s.get('days_until_advance') is not None
+        and 1 <= s['days_until_advance'] <= 7
+    ])
+
+    colspan_total = str(2 + len(columns))
+    tfoot_style = "padding: 0.5rem 0.6rem; font-size: 0.75rem; border-top: 2px solid #e5e7eb;"
+    summary_footer = Tfoot(
+        Tr(
+            Td(
+                Strong("ИТОГО К ПОЛУЧЕНИЮ:"),
+                style=f"{tfoot_style} text-align: left;"
+            ),
+            Td(
+                Strong(f"${total_outstanding:,.2f}"),
+                colspan=str(int(colspan_total) - 1),
+                style=f"{tfoot_style} text-align: left; color: #dc2626;"
+            ),
+        ),
+        Tr(
+            Td(
+                Strong("ПРОСРОЧЕНО:"),
+                style=f"{tfoot_style} text-align: left;"
+            ),
+            Td(
+                Strong(str(overdue_count)),
+                colspan=str(int(colspan_total) - 1),
+                style=f"{tfoot_style} text-align: left; color: #dc2626;"
+            ),
+        ),
+        Tr(
+            Td(
+                Strong("СРОЧНО (1-7 дней):"),
+                style=f"{tfoot_style} text-align: left;"
+            ),
+            Td(
+                Strong(str(urgent_count)),
+                colspan=str(int(colspan_total) - 1),
+                style=f"{tfoot_style} text-align: left; color: #d97706;"
+            ),
+        ),
+    )
+
     # Build table
     if specs:
         table = Table(
             Thead(Tr(*header_cells)),
             Tbody(*rows),
+            summary_footer,
             cls="erps-table"
         )
     else:
