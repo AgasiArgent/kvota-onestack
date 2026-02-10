@@ -21820,6 +21820,10 @@ def post(session, quote_id: str, action: str = "create", **kwargs):
 
     supabase = get_supabase()
 
+    # FastHTML wraps form data in kwargs['kwargs'] dict
+    if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
+        kwargs = kwargs['kwargs']
+
     # Verify quote exists and belongs to org
     quote_result = supabase.table("quotes") \
         .select("id, organization_id") \
@@ -22488,6 +22492,10 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
 
     supabase = get_supabase()
 
+    # FastHTML wraps form data in kwargs['kwargs'] dict
+    if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
+        kwargs = kwargs['kwargs']
+
     # Verify spec exists and belongs to org
     spec_result = supabase.table("specifications") \
         .select("id, status, quote_id, contract_id, specification_currency, sign_date") \
@@ -22499,7 +22507,6 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         return RedirectResponse("/spec-control", status_code=303)
 
     spec = spec_result.data[0]
-    print(f"[DEBUG spec-save] action={action}, contract_id={kwargs.get('contract_id')!r}, delivery_days={kwargs.get('delivery_days')!r}, specification_number={kwargs.get('specification_number')!r}, all_kwargs_keys={list(kwargs.keys())}")
     current_status = spec.get("status", "draft")
 
     # Bug #8: Admin override - allow admins to change status directly
@@ -22667,19 +22674,11 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         "status": new_status,
     }
 
-    # DEBUG: hardcode marker + log full update_data
-    update_data["delivery_days"] = 777  # TEMP DEBUG MARKER - if 777 appears in DB, save path runs
-    print(f"[DEBUG spec-save UPDATE] spec_id={spec_id}, update_data_keys={list(update_data.keys())}, contract_id={update_data.get('contract_id')!r}, delivery_days={update_data.get('delivery_days')!r}")
-
     # Update specification
-    try:
-        result = supabase.table("specifications") \
-            .update(update_data) \
-            .eq("id", spec_id) \
-            .execute()
-        print(f"[DEBUG spec-save RESULT] data={result.data[:1] if result.data else 'EMPTY'}")
-    except Exception as e:
-        print(f"[DEBUG spec-save ERROR] {e}")
+    supabase.table("specifications") \
+        .update(update_data) \
+        .eq("id", spec_id) \
+        .execute()
 
     return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
