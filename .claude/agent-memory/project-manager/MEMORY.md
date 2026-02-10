@@ -11,9 +11,12 @@
 - Running average: 4.0 tasks/session (28 total / 7 sessions, but 1 reverted)
 
 ## ClickUp Patterns
-- kvota list has 56 tasks (39 existing + 17 new as of session 8 init)
+- kvota list ID: 901324690894 (54 open tasks as of session 8 update)
+- sprint 2 list ID: 901325258087 (6 tasks)
 - sprint list is empty
-- Scripts work reliably: list-tasks.sh, start-work.sh, complete-task.sh
+- No shell scripts exist; use direct ClickUp API calls per skill.md
+- find-task.sh does NOT exist; search by listing tasks and filtering client-side
+- Time tracking: use start/end timestamps (not just duration); response only returns entry ID
 - Task IDs are alphanumeric (e.g., 86af5uphp)
 - **CRITICAL PROCESS**: Do NOT mark tasks complete until team-lead explicitly confirms after browser testing. Flow: dev implements -> tests pass -> code review PASS -> team-lead browser tests -> THEN complete in ClickUp.
 
@@ -32,3 +35,9 @@
 - 86af5wqng, 86aezuyvy (route audit, clickable rows)
 - 86af159nn (INN autofill / customer modal) -- COMPLETE
 - 86aezuyvw (city autocomplete / HERE geocoding) -- COMPLETE
+- 86af8hcmv (P1.3 Janna checklist) -- COMPLETE
+- 86af972h9 (BUG: spec form persistence) -- COMPLETE, 180min
+- 86af972k0 (BUG: deal creation admin signing) -- COMPLETE, 60min
+- 86af972nv (BUG: ERPS spec_sum_usd) -- COMPLETE, 30min
+- 86af972pq (BUG: spec-control duplicate) -- COMPLETE, 30min
+- 86af972qz (BUG: deal visibility FK) -- COMPLETE, 30min
