@@ -5955,6 +5955,10 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
 
     all_specs = specs_result.data or []
 
+    # Filter out pending quotes that already have a specification (prevent duplicates)
+    spec_quote_ids = {s.get("quote_id") for s in all_specs if s.get("quote_id")}
+    pending_quotes = [q for q in pending_quotes if q["id"] not in spec_quote_ids]
+
     # Status badge mapping (unified for all item types)
     # Badge colors: pending=orange, draft=gray, pending_review=blue, approved/signed=green
     def spec_status_badge(status):
@@ -23383,9 +23387,10 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
 
     try:
         query = supabase.table("deals").select(
+            # FK hints resolve ambiguity: !specifications(deals_specification_id_fkey), !quotes(deals_quote_id_fkey)
             "id, deal_number, signed_at, total_amount, currency, status, created_at, "
-            "specifications(id, specification_number, proposal_idn), "
-            "quotes(id, idn_quote, customers(name))"
+            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn), "
+            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
         ).eq("organization_id", org_id)
 
         if target_status:
@@ -24303,11 +24308,12 @@ def get(session, deal_id: str):
     # Fetch deal with related data
     try:
         deal_result = supabase.table("deals").select(
+            # FK hints resolve ambiguity: !specifications(deals_specification_id_fkey), !quotes(deals_quote_id_fkey)
             "id, deal_number, signed_at, total_amount, currency, status, created_at, "
-            "specifications(id, specification_number, proposal_idn, sign_date, validity_period, "
+            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn, sign_date, validity_period, "
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
-            "quotes(id, idn_quote, customers(name))"
+            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
         ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
 
         deal = deal_result.data
