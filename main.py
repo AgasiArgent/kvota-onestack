@@ -22499,6 +22499,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "", **kw
         return RedirectResponse("/spec-control", status_code=303)
 
     spec = spec_result.data[0]
+    print(f"[DEBUG spec-save] action={action}, contract_id={kwargs.get('contract_id')!r}, delivery_days={kwargs.get('delivery_days')!r}, specification_number={kwargs.get('specification_number')!r}, all_kwargs_keys={list(kwargs.keys())}")
     current_status = spec.get("status", "draft")
 
     # Bug #8: Admin override - allow admins to change status directly
