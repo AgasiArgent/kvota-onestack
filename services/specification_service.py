@@ -774,6 +774,52 @@ def get_specifications_for_signing(organization_id: str, limit: int = 20) -> Lis
         return []
 
 
+def validate_quote_items_have_idn_sku(quote_id: str) -> tuple:
+    """
+    Validate that all quote_items for a quote have non-null, non-empty idn_sku.
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Tuple of (is_valid: bool, error_message: Optional[str]).
+        - (True, None) when all items have idn_sku or quote has no items.
+        - (False, error_message) listing positions missing idn_sku.
+    """
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table('quote_items') \
+            .select('id, position, product_name, idn_sku') \
+            .eq('quote_id', quote_id) \
+            .execute()
+
+        items = result.data if result.data else []
+
+        if not items:
+            return (True, None)
+
+        missing = []
+        for item in items:
+            idn_sku = item.get('idn_sku')
+            if idn_sku is None or (isinstance(idn_sku, str) and not idn_sku.strip()):
+                position = item.get('position', '?')
+                product_name = item.get('product_name', 'Без названия')
+                if product_name and len(product_name) > 50:
+                    product_name = product_name[:50] + '...'
+                missing.append(f"Позиция {position}: {product_name}")
+
+        if missing:
+            error_msg = "Не все позиции имеют IDN-SKU. Заполните IDN-SKU для:\n" + "\n".join(missing)
+            return (False, error_msg)
+
+        return (True, None)
+
+    except Exception as e:
+        print(f"Error validating quote items IDN-SKU: {e}")
+        return (False, f"Ошибка валидации IDN-SKU: {e}")
+
+
 def get_recently_signed_specifications(
     organization_id: str,
     days: int = 30,

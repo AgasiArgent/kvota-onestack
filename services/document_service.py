@@ -83,6 +83,7 @@ VALID_DOCUMENT_TYPES = {
     "founding_docs",
     "license",
     "specification_signed_scan",
+    "upd",
     "other",
 }
 
@@ -100,6 +101,7 @@ DOCUMENT_TYPE_LABELS = {
     "founding_docs": "Учредительные документы",
     "license": "Лицензия",
     "specification_signed_scan": "Подписанная спецификация",
+    "upd": "УПД (универсальный передаточный документ)",
     "other": "Прочее",
 }
 
@@ -783,13 +785,13 @@ def get_allowed_document_types_for_entity(entity_type: str) -> List[Dict[str, st
     """
     # Define relevant document types per entity
     entity_document_types = {
-        "supplier_invoice": ["invoice_scan", "proforma_scan", "payment_order", "other"],
+        "supplier_invoice": ["invoice_scan", "proforma_scan", "payment_order", "upd", "other"],
         # Quote shows ALL types because it aggregates from invoices and items
         "quote": [
             "invoice_scan", "proforma_scan", "payment_order",  # Invoice-related
             "certificate",  # Item-related
             "contract", "ttn", "cmr", "bill_of_lading", "customs_declaration",  # Quote-related
-            "founding_docs", "license", "other"  # Other
+            "founding_docs", "license", "upd", "other"  # Other
         ],
         "specification": ["contract", "ttn", "cmr", "bill_of_lading", "customs_declaration", "other"],
         "quote_item": ["certificate", "other"],

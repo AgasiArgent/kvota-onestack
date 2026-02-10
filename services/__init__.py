@@ -199,6 +199,8 @@ from .specification_service import (
     get_specification_stats,
     get_specifications_for_signing,
     get_recently_signed_specifications,
+    # IDN-SKU validation (Feature P2.2)
+    validate_quote_items_have_idn_sku,
 )
 from .deal_service import (
     # Data class
@@ -1016,6 +1018,8 @@ __all__ = [
     "get_specification_stats",
     "get_specifications_for_signing",
     "get_recently_signed_specifications",
+    # IDN-SKU validation (Feature P2.2)
+    "validate_quote_items_have_idn_sku",
     # Create from quote (Feature #74)
     "CreateSpecFromQuoteResult",
     "create_specification_from_quote",

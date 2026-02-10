@@ -63,7 +63,7 @@ from services.approval_service import request_approval, count_pending_approvals,
 from services.deal_service import count_deals_by_status, get_deals_by_status
 
 # Import specification service (Feature #86)
-from services.specification_service import count_specifications_by_status
+from services.specification_service import count_specifications_by_status, validate_quote_items_have_idn_sku
 
 # Import quote approval service (Bug #8 follow-up - Multi-department approval)
 from services.quote_approval_service import (
@@ -12265,6 +12265,183 @@ def get(quote_id: str, session):
 
 
 # ============================================================================
+# DOCUMENT CHAIN (P2.10)
+# ============================================================================
+
+def _build_document_chain(quote_id):
+    """
+    Build document chain structure for a quote.
+
+    Groups all documents related to a quote into 5 stages:
+    - quote: Documents directly attached to the quote (entity_type='quote')
+    - specification: Documents attached to specifications (entity_type='specification')
+    - supplier_invoice: Documents attached to supplier invoices (entity_type='supplier_invoice')
+    - upd: Documents with document_type='upd' (from any entity)
+    - customs_declaration: Documents with document_type='customs_declaration' (from any entity)
+
+    Args:
+        quote_id: Quote UUID
+
+    Returns:
+        Dict with 5 stage keys, each mapping to a list of documents
+    """
+    all_docs = get_all_documents_for_quote(quote_id)
+
+    chain = {
+        "quote": [],
+        "specification": [],
+        "supplier_invoice": [],
+        "customs_declaration": [],
+        "upd": [],
+    }
+
+    for doc in all_docs:
+        # First check document_type for upd and customs_declaration
+        if doc.document_type == "upd":
+            chain["upd"].append(doc)
+        elif doc.document_type == "customs_declaration":
+            chain["customs_declaration"].append(doc)
+        elif doc.entity_type == "quote":
+            chain["quote"].append(doc)
+        elif doc.entity_type == "specification":
+            chain["specification"].append(doc)
+        elif doc.entity_type == "supplier_invoice":
+            chain["supplier_invoice"].append(doc)
+        else:
+            # Default: attach to quote stage
+            chain["quote"].append(doc)
+
+    return chain
+
+
+@rt("/quotes/{quote_id}/document-chain")
+def get(quote_id: str, session):
+    """Document chain visualization for a quote - shows all documents grouped by stage."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+    user_roles = get_session_user_roles(session)
+
+    supabase = get_supabase()
+
+    # Get quote details
+    quote_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, status") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            Div("Запрошенное КП не существует или у вас нет доступа.", cls="card"),
+            A("← К списку КП", href="/quotes"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    quote_number = quote.get("idn_quote") or quote_id[:8]
+
+    # Build document chain
+    chain = _build_document_chain(quote_id)
+
+    # Define chain stages with Russian labels and icons
+    chain_stages = [
+        {"key": "quote", "label": "КП", "icon": "file-text", "color": "#3b82f6"},
+        {"key": "specification", "label": "Спецификация", "icon": "clipboard-list", "color": "#8b5cf6"},
+        {"key": "supplier_invoice", "label": "Инвойс", "icon": "receipt", "color": "#f59e0b"},
+        {"key": "customs_declaration", "label": "ГТД", "icon": "shield", "color": "#ef4444"},
+        {"key": "upd", "label": "УПД", "icon": "file-check", "color": "#22c55e"},
+    ]
+
+    # Build stage cards
+    stage_cards = []
+    for stage in chain_stages:
+        docs = chain.get(stage["key"], [])
+        doc_count = len(docs)
+
+        # Build document list for this stage
+        doc_items = []
+        for doc in docs:
+            doc_items.append(
+                Div(
+                    I(cls=f"fa-solid {get_file_icon(doc.mime_type)}", style=f"margin-right: 0.5rem; color: {stage['color']};"),
+                    A(doc.original_filename,
+                      href=f"/documents/{doc.id}/view",
+                      target="_blank",
+                      style="text-decoration: none; color: #1e293b; font-size: 13px;"),
+                    Span(
+                        get_document_type_label(doc.document_type),
+                        style="margin-left: 8px; font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;"
+                    ) if doc.document_type else "",
+                    style="display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9;"
+                )
+            )
+
+        stage_cards.append(
+            Div(
+                # Stage header
+                Div(
+                    Div(
+                        icon(stage["icon"], size=20, color=stage["color"]),
+                        Span(stage["label"], style=f"font-size: 14px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+                        style="display: flex; align-items: center;"
+                    ),
+                    Span(
+                        str(doc_count),
+                        style=f"background: {stage['color']}20; color: {stage['color']}; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid " + stage["color"] + ";"
+                ),
+                # Document list or empty state
+                Div(*doc_items) if doc_items else Div(
+                    Span("Нет документов", style="font-size: 13px; color: #94a3b8; font-style: italic;"),
+                    style="padding: 12px 0; text-align: center;"
+                ),
+                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            )
+        )
+
+    return page_layout(
+        f"Цепочка документов КП {quote_number}",
+
+        # Role-based tabs
+        quote_detail_tabs(quote_id, "document_chain", user_roles),
+
+        # Header
+        Div(
+            Div(
+                icon("link", size=24, color="#1e40af"),
+                H1(f" Цепочка документов КП {quote_number}",
+                   style="display: inline; margin: 0; margin-left: 8px; font-size: 1.5rem;"),
+                style="display: flex; align-items: center;"
+            ),
+            P("Визуализация документооборота по КП: от коммерческого предложения до таможенной декларации",
+              style="color: #64748b; margin-top: 0.5rem; font-size: 0.875rem;"),
+            style="margin-bottom: 1.5rem;"
+        ),
+
+        # Chain timeline
+        Div(
+            *stage_cards,
+            style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 2rem;"
+        ),
+
+        # Back button
+        Div(
+            A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
+              style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none;"),
+            style="margin-top: 2rem;"
+        ),
+
+        session=session
+    )
+
+
+# ============================================================================
 # VERSION HISTORY ROUTES
 # ============================================================================
 
@@ -13642,6 +13819,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
             "label": "Документы",
             "icon": "folder",
             "href": f"/quotes/{quote_id}/documents",
+            "roles": None,  # All users with quote access
+        },
+        {
+            "id": "document_chain",
+            "label": "Цепочка документов",
+            "icon": "link",
+            "href": f"/quotes/{quote_id}/document-chain",
             "roles": None,  # All users with quote access
         },
     ]
@@ -22534,6 +22718,21 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
         if new_status not in valid_statuses:
             return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 
+        # Validate IDN-SKU before signing (Feature P2.2)
+        if new_status == "signed":
+            quote_id_for_validation = spec.get("quote_id")
+            is_valid, idn_sku_error = validate_quote_items_have_idn_sku(quote_id_for_validation)
+            if not is_valid:
+                return page_layout("Ошибка валидации IDN-SKU",
+                    H1("Не все позиции имеют IDN-SKU"),
+                    Div(
+                        idn_sku_error,
+                        cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626; white-space: pre-line;"
+                    ),
+                    A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                    session=session
+                )
+
         # Update the status
         supabase.table("specifications") \
             .update({"status": new_status}) \
@@ -23100,6 +23299,20 @@ def post(session, spec_id: str):
                 session=session
             )
 
+        # Validate all quote items have IDN-SKU (Feature P2.2)
+        quote_id = spec.get("quote_id")
+        is_valid, idn_sku_error = validate_quote_items_have_idn_sku(quote_id)
+        if not is_valid:
+            return page_layout("Ошибка валидации IDN-SKU",
+                H1("Не все позиции имеют IDN-SKU"),
+                Div(
+                    idn_sku_error,
+                    cls="card", style="background: #fee2e2; border-left: 4px solid #dc2626; white-space: pre-line;"
+                ),
+                A("← Назад к спецификации", href=f"/spec-control/{spec_id}"),
+                session=session
+            )
+
         # Check if deal already exists for this spec
         existing_deal = supabase.table("deals") \
             .select("id, deal_number") \
@@ -23118,7 +23331,6 @@ def post(session, spec_id: str):
             )
 
         # Get quote data for total amount calculation
-        quote_id = spec.get("quote_id")
         quote_result = supabase.table("quotes") \
             .select("id, total_amount, customers(id, name)") \
             .eq("id", quote_id) \
@@ -23348,14 +23560,14 @@ def get(session):
 # ============================================================================
 
 @rt("/finance")
-def get(session, tab: str = "workspace", status_filter: str = None, view: str = "full", groups: str = None):
+def get(session, tab: str = "workspace", status_filter: str = None, view: str = "full", groups: str = None, payment_type: str = "all", payment_status: str = "all", date_from: str = "", date_to: str = "", deal_filter: str = "", customer_filter: str = ""):
     """
-    Finance page with tabs: Workspace, ERPS, Calendar
+    Finance page with tabs: Workspace, ERPS, Payments
 
     Tabs:
     - workspace: Shows active deals and plan-fact management
     - erps: Единый реестр подписанных спецификаций (with configurable views)
-    - calendar: Календарь платежей
+    - payments: Unified payments tab across all deals
 
     ERPS Views:
     - full: All 30 columns
@@ -23426,9 +23638,9 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
             A(icon("table", size=16), " ERPS",
               href="/finance?tab=erps",
               cls="finance-tab" + (" active" if tab == "erps" else "")),
-            A(icon("calendar", size=16), " Календарь",
-              href="/finance?tab=calendar",
-              cls="finance-tab" + (" active" if tab == "calendar" else "")),
+            A(icon("credit-card", size=16), " Платежи",
+              href='/finance?tab=payments',
+              cls="finance-tab" + (" active" if tab == 'payments' else "")),
             cls="finance-tabs"
         )
     )
@@ -23436,6 +23648,8 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
     # Render selected tab
     if tab == "erps":
         content = finance_erps_tab(session, user, org_id, view=view, custom_groups=groups)
+    elif tab == 'payments':
+        content = finance_payments_tab(session, user, org_id, payment_type=payment_type, payment_status=payment_status, date_from=date_from, date_to=date_to, deal_filter=deal_filter, customer_filter=customer_filter, view=view)
     elif tab == "calendar":
         content = finance_calendar_tab(session, user, org_id)
     else:
@@ -24312,6 +24526,365 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
 
         # Table
         Div(table, cls="erps-table-container")
+    )
+
+
+def render_payments_grouped(items):
+    """Render payments grouped by customer with subtotals per customer group."""
+    from collections import defaultdict
+
+    # Group items by customer name from deal chain
+    customer_groups = defaultdict(list)
+    for item in items:
+        deals = item.get("deals") or {}
+        specs = deals.get("specifications") or {}
+        quotes = specs.get("quotes") or {}
+        customers = quotes.get("customers") or {}
+        customer_name = customers.get("name", "Неизвестно")
+        customer_groups[customer_name].append(item)
+
+    rows = []
+    for customer_name, group_items in sorted(customer_groups.items()):
+        # Calculate subtotals for this customer
+        subtotal_planned = sum(float(i.get("planned_amount") or 0) for i in group_items)
+        subtotal_actual = sum(float(i.get("actual_amount") or 0) for i in group_items if i.get("actual_amount") is not None)
+
+        # Customer header row (collapsed summary)
+        rows.append(
+            Tr(
+                Td(Strong(customer_name), colspan="4", style="background: #f8fafc; font-weight: 600; color: #1e293b;"),
+                Td(Span(f"{len(group_items)} записей", style="font-size: 0.8rem; color: #64748b;"), style="background: #f8fafc;"),
+                Td(f"{subtotal_planned:,.0f} ₽", style="background: #f8fafc; text-align: right; font-weight: 600;"),
+                Td(f"{subtotal_actual:,.0f} ₽", style="background: #f8fafc; text-align: right; font-weight: 600;"),
+                Td("", style="background: #f8fafc;"),
+                Td("", style="background: #f8fafc;"),
+                style="border-top: 2px solid #e2e8f0;"
+            )
+        )
+
+        # Individual items in this group
+        for item in group_items:
+            cat = item.get("plan_fact_categories") or {}
+            is_income = cat.get("is_income", False)
+            deals_data = item.get("deals") or {}
+            deal_id = deals_data.get("id", "")
+            deal_number = deals_data.get("deal_number", "—")
+
+            planned_amt = float(item.get("planned_amount") or 0)
+            actual_amt = item.get("actual_amount")
+            actual_amt_str = f"{float(actual_amt):,.0f} ₽" if actual_amt is not None else "—"
+            variance = item.get("variance_amount")
+            variance_str = f"{float(variance):,.0f} ₽" if variance is not None else "—"
+
+            badge_style = "background: #dcfce7; color: #166534;" if is_income else "background: #fee2e2; color: #991b1b;"
+            type_label = "Приход" if is_income else "Расход"
+
+            row_style = "cursor: pointer;"
+            # Check overdue: unpaid and planned_date < today
+            planned_date_str = item.get("planned_date") or ""
+            if planned_date_str and actual_amt is None:
+                try:
+                    pd = datetime.strptime(planned_date_str[:10], "%Y-%m-%d").date()
+                    if pd < date.today():
+                        row_style += " background: #fefce8;"
+                except Exception:
+                    pass
+
+            rows.append(
+                Tr(
+                    Td(planned_date_str[:10] if planned_date_str else "—"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
+                    Td(""),  # customer already shown in header
+                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
+                    Td(item.get("description") or "—"),
+                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right;"),
+                    Td(actual_amt_str, style="text-align: right;"),
+                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—"),
+                    Td(variance_str, style="text-align: right;"),
+                    style=row_style,
+                    onclick=f"window.location='/finance/{deal_id}'" if deal_id else "",
+                )
+            )
+
+    return rows
+
+
+def finance_payments_tab(session, user, org_id, payment_type="all", payment_status="all", date_from="", date_to="", deal_filter="", customer_filter="", view="flat"):
+    """Unified payments tab - shows ALL plan_fact_items across ALL deals for the organization."""
+    supabase = get_supabase()
+
+    # Query plan_fact_items with JOINs: plan_fact_categories, deals, specifications, quotes, customers
+    # Filter by organization_id via deals.organization_id
+    try:
+        query = supabase.table("plan_fact_items").select(
+            "*, plan_fact_categories(id, code, name, is_income, sort_order), "
+            "deals!plan_fact_items_deal_id_fkey(id, deal_number, organization_id, "
+            "specifications(quotes(customers(id, name))))"
+        ).order("planned_date", desc=True)
+
+        result = query.execute()
+        all_items = result.data or []
+    except Exception as e:
+        print(f"Error fetching plan_fact_items for payments tab: {e}")
+        all_items = []
+
+    # Filter by org_id via deals.organization_id
+    items = []
+    for item in all_items:
+        deals = item.get("deals") or {}
+        if deals.get("organization_id") == org_id:
+            items.append(item)
+
+    # Apply filters
+    filtered_items = []
+    for item in items:
+        cat = item.get("plan_fact_categories") or {}
+        is_income = cat.get("is_income", False)
+
+        # Filter by payment_type
+        if payment_type == "income" and not is_income:
+            continue
+        if payment_type == "expense" and is_income:
+            continue
+
+        # Filter by payment_status
+        if payment_status == "planned" and item.get("actual_amount") is not None:
+            continue
+        if payment_status == "paid" and item.get("actual_amount") is None:
+            continue
+        if payment_status == "overdue":
+            planned_date_str = item.get("planned_date") or ""
+            if item.get("actual_amount") is not None:
+                continue
+            if planned_date_str:
+                try:
+                    pd = datetime.strptime(planned_date_str[:10], "%Y-%m-%d").date()
+                    if pd >= date.today():
+                        continue
+                except Exception:
+                    continue
+            else:
+                continue
+
+        # Filter by date_from
+        if date_from:
+            planned_date_str = item.get("planned_date") or ""
+            if planned_date_str and planned_date_str[:10] < date_from:
+                continue
+
+        # Filter by date_to
+        if date_to:
+            planned_date_str = item.get("planned_date") or ""
+            if planned_date_str and planned_date_str[:10] > date_to:
+                continue
+
+        # Filter by deal_filter
+        if deal_filter:
+            deals_data = item.get("deals") or {}
+            if deal_filter not in (deals_data.get("deal_number") or "") and deal_filter != deals_data.get("id", ""):
+                continue
+
+        # Filter by customer_filter
+        if customer_filter:
+            deals_data = item.get("deals") or {}
+            specs = deals_data.get("specifications") or {}
+            quotes = specs.get("quotes") or {}
+            customers = quotes.get("customers") or {}
+            cust_id = customers.get("id", "")
+            cust_name = customers.get("name", "")
+            if customer_filter != cust_id and customer_filter.lower() not in cust_name.lower():
+                continue
+
+        filtered_items.append(item)
+
+    # Calculate summary totals (income/expense, is_income based)
+    income_planned = 0.0
+    income_actual = 0.0
+    expense_planned = 0.0
+    expense_actual = 0.0
+
+    for item in filtered_items:
+        cat = item.get("plan_fact_categories") or {}
+        is_income = cat.get("is_income", False)
+        planned_amt = float(item.get("planned_amount") or 0)
+        actual_amt = float(item.get("actual_amount") or 0) if item.get("actual_amount") is not None else 0.0
+
+        if is_income:
+            income_planned += planned_amt
+            if item.get("actual_amount") is not None:
+                income_actual += actual_amt
+        else:
+            expense_planned += planned_amt
+            if item.get("actual_amount") is not None:
+                expense_actual += actual_amt
+
+    net_balance = income_actual - expense_actual
+
+    # Filter bar with dropdowns and date inputs
+    filter_bar = Div(
+        # View toggle: По записям / По клиентам
+        Div(
+            A("По записям", href=f"/finance?tab=payments&view=flat&payment_type={payment_type}&payment_status={payment_status}&date_from={date_from}&date_to={date_to}&deal_filter={deal_filter}&customer_filter={customer_filter}",
+              style=f"padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; text-decoration: none; font-weight: 500; {'background: #1e293b; color: white;' if view != 'grouped' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("По клиентам", href=f"/finance?tab=payments&view=grouped&payment_type={payment_type}&payment_status={payment_status}&date_from={date_from}&date_to={date_to}&deal_filter={deal_filter}&customer_filter={customer_filter}",
+              style=f"padding: 6px 14px; border-radius: 6px; font-size: 0.8rem; text-decoration: none; font-weight: 500; {'background: #1e293b; color: white;' if view == 'grouped' else 'background: #f1f5f9; color: #64748b;'}"),
+            style="display: flex; gap: 4px; align-items: center;"
+        ),
+        # Payment type filter
+        Div(
+            Label("Тип:", style="font-size: 0.8rem; color: #64748b; margin-right: 4px;"),
+            A("Все", href=f"/finance?tab=payments&payment_type=all&payment_status={payment_status}&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #1e293b; color: white;' if payment_type == 'all' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("Приход", href=f"/finance?tab=payments&payment_type=income&payment_status={payment_status}&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #16a34a; color: white;' if payment_type == 'income' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("Расход", href=f"/finance?tab=payments&payment_type=expense&payment_status={payment_status}&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #dc2626; color: white;' if payment_type == 'expense' else 'background: #f1f5f9; color: #64748b;'}"),
+            style="display: flex; gap: 4px; align-items: center;"
+        ),
+        # Payment status filter
+        Div(
+            Label("Статус:", style="font-size: 0.8rem; color: #64748b; margin-right: 4px;"),
+            A("Все", href=f"/finance?tab=payments&payment_type={payment_type}&payment_status=all&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #1e293b; color: white;' if payment_status == 'all' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("План", href=f"/finance?tab=payments&payment_type={payment_type}&payment_status=planned&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #1e293b; color: white;' if payment_status == 'planned' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("Оплачено", href=f"/finance?tab=payments&payment_type={payment_type}&payment_status=paid&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #1e293b; color: white;' if payment_status == 'paid' else 'background: #f1f5f9; color: #64748b;'}"),
+            A("Просрочено", href=f"/finance?tab=payments&payment_type={payment_type}&payment_status=overdue&date_from={date_from}&date_to={date_to}&view={view}&customer_filter={customer_filter}",
+              style=f"padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; text-decoration: none; {'background: #eab308; color: white;' if payment_status == 'overdue' else 'background: #f1f5f9; color: #64748b;'}"),
+            style="display: flex; gap: 4px; align-items: center;"
+        ),
+        # Date range
+        Div(
+            Label("С:", style="font-size: 0.8rem; color: #64748b;"),
+            Input(type="date", name="date_from", value=date_from, style="font-size: 0.8rem; padding: 4px; border: 1px solid #e2e8f0; border-radius: 4px;",
+                  onchange=f"window.location='/finance?tab=payments&payment_type={payment_type}&payment_status={payment_status}&date_from='+this.value+'&date_to={date_to}&view={view}&customer_filter={customer_filter}'"),
+            Label("По:", style="font-size: 0.8rem; color: #64748b;"),
+            Input(type="date", name="date_to", value=date_to, style="font-size: 0.8rem; padding: 4px; border: 1px solid #e2e8f0; border-radius: 4px;",
+                  onchange=f"window.location='/finance?tab=payments&payment_type={payment_type}&payment_status={payment_status}&date_from={date_from}&date_to='+this.value+'&view={view}&customer_filter={customer_filter}'"),
+            style="display: flex; gap: 6px; align-items: center;"
+        ),
+        style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 16px; align-items: center;"
+    )
+
+    # Build table rows (flat or grouped view)
+    if view == "grouped":
+        table_rows = render_payments_grouped(filtered_items)
+    else:
+        table_rows = []
+        for item in filtered_items:
+            cat = item.get("plan_fact_categories") or {}
+            is_income = cat.get("is_income", False)
+            deals_data = item.get("deals") or {}
+            deal_id = deals_data.get("id", "")
+            deal_number = deals_data.get("deal_number", "—")
+            specs = deals_data.get("specifications") or {}
+            quotes = specs.get("quotes") or {}
+            customers = quotes.get("customers") or {}
+            customer_name = customers.get("name", "—")
+
+            planned_amt = float(item.get("planned_amount") or 0)
+            actual_amt = item.get("actual_amount")
+            actual_amt_str = f"{float(actual_amt):,.0f} ₽" if actual_amt is not None else "—"
+            variance = item.get("variance_amount")
+            variance_str = f"{float(variance):,.0f} ₽" if variance is not None else "—"
+
+            badge_style = "background: #dcfce7; color: #166534;" if is_income else "background: #fee2e2; color: #991b1b;"
+            type_label = "Приход" if is_income else "Расход"
+
+            row_style = "cursor: pointer;"
+            # Check overdue: unpaid and planned_date < today
+            planned_date_str = item.get("planned_date") or ""
+            if planned_date_str and actual_amt is None:
+                try:
+                    pd = datetime.strptime(planned_date_str[:10], "%Y-%m-%d").date()
+                    if pd < date.today():
+                        row_style += " background: #fefce8;"
+                except Exception:
+                    pass
+
+            table_rows.append(
+                Tr(
+                    Td(planned_date_str[:10] if planned_date_str else "—"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
+                    Td(customer_name),
+                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
+                    Td(item.get("description") or "—"),
+                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right;"),
+                    Td(actual_amt_str, style="text-align: right;"),
+                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—"),
+                    Td(variance_str, style="text-align: right;"),
+                    style=row_style,
+                    onclick=f"window.location='/finance/{deal_id}'" if deal_id else "",
+                )
+            )
+
+    # Payments table with 9 columns
+    table = Table(
+        Thead(
+            Tr(
+                Th("План. дата"),
+                Th("Сделка"),
+                Th("Клиент"),
+                Th("Категория"),
+                Th("Описание"),
+                Th("Сумма план", style="text-align: right;"),
+                Th("Сумма факт", style="text-align: right;"),
+                Th("Дата факт"),
+                Th("Отклонение", style="text-align: right;"),
+            )
+        ),
+        Tbody(*table_rows) if table_rows else Tbody(
+            Tr(Td("Нет данных", colspan="9", style="text-align: center; padding: 2rem; color: #666;"))
+        ),
+        cls="unified-table"
+    )
+
+    # Summary footer with Итого
+    summary_footer = Div(
+        Div(
+            Div(
+                Span("Поступления (план):", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {income_planned:,.0f} ₽", style="font-weight: 600; color: #166534; font-size: 0.85rem;"),
+                style="margin-right: 20px;"
+            ),
+            Div(
+                Span("Поступления (факт):", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {income_actual:,.0f} ₽", style="font-weight: 600; color: #166534; font-size: 0.85rem;"),
+                style="margin-right: 20px;"
+            ),
+            Div(
+                Span("Выплаты (план):", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {expense_planned:,.0f} ₽", style="font-weight: 600; color: #991b1b; font-size: 0.85rem;"),
+                style="margin-right: 20px;"
+            ),
+            Div(
+                Span("Выплаты (факт):", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {expense_actual:,.0f} ₽", style="font-weight: 600; color: #991b1b; font-size: 0.85rem;"),
+                style="margin-right: 20px;"
+            ),
+            Div(
+                Span("Баланс:", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {net_balance:,.0f} ₽", style=f"font-weight: 700; font-size: 0.95rem; color: {'#166534' if net_balance >= 0 else '#991b1b'};"),
+            ),
+            style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;"
+        ),
+        style="padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 12px;"
+    )
+
+    return Div(
+        Div(
+            Div(
+                H3("Платежи", style="margin: 0;"),
+                Span(f"Итого записей: {len(filtered_items)}", style="color: #64748b; font-size: 0.85rem;"),
+                style="display: flex; align-items: center; gap: 12px;",
+                cls="table-header"
+            ),
+            filter_bar,
+            Div(table, cls="table-responsive"),
+            summary_footer,
+            cls="table-container"
+        )
     )
 
 
@@ -31519,6 +32092,56 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 )
             )
 
+        # Get customer debt summary
+        from services.plan_fact_service import get_customer_debt_summary
+        debt_summary = get_customer_debt_summary(customer_id)
+        total_debt = debt_summary.get("total_debt", 0)
+        overdue_count = debt_summary.get("overdue_count", 0)
+        overdue_amount = debt_summary.get("overdue_amount", 0)
+        last_payment_date = debt_summary.get("last_payment_date")
+        last_payment_amount = debt_summary.get("last_payment_amount")
+        unpaid_count = debt_summary.get("unpaid_count", 0)
+
+        # Build debt card
+        overdue_badge = Span(f"{overdue_count} просрочено", style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;") if overdue_count > 0 else Span("Нет просрочек", style="background: #dcfce7; color: #166534; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;")
+
+        last_payment_info = ""
+        if last_payment_date and last_payment_amount:
+            last_payment_info = f"Последний платёж: {last_payment_amount:,.0f} ₽ ({last_payment_date})"
+        elif last_payment_date:
+            last_payment_info = f"Последний платёж: {last_payment_date}"
+        else:
+            last_payment_info = "Последний платёж: нет данных"
+
+        debt_card = Div(
+            Div(
+                Span(icon("wallet", size=14), " Задолженность", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                A("Подробнее →", href=f"/finance?tab=payments&customer_filter={customer_id}",
+                  style="font-size: 0.75rem; color: #3b82f6; text-decoration: none;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
+            ),
+            Div(
+                Div(
+                    Div("Долг", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                    Div(f"{total_debt:,.0f} ₽", style=f"font-size: 1.25rem; font-weight: 700; color: {'#991b1b' if total_debt > 0 else '#166534'};"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Div("Неоплачено", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                    Div(f"{unpaid_count} позиций", style="font-size: 0.875rem; font-weight: 500; color: #374151;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    overdue_badge,
+                    style="flex: 1; display: flex; align-items: center;"
+                ),
+                style="display: flex; gap: 1rem; margin-bottom: 0.5rem;"
+            ),
+            Div(last_payment_info, style="color: #6b7280; font-size: 0.8rem;"),
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 0.75rem; border: 1px solid #e5e7eb;"
+        )
+
         tab_content = Div(
             # Row 1: Three cards side by side with equal height
             Div(
@@ -31616,6 +32239,12 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     hx_push_url="true",
                 ),
                 style="display: flex; gap: 1rem; margin-bottom: 1rem; align-items: stretch;"
+            ),
+
+            # Row 1.5: Debt summary card
+            Div(
+                debt_card,
+                style="margin-bottom: 1rem;"
             ),
 
             # Row 2: Two tables side by side (Quotes + Specifications) with stats in headers
@@ -35535,6 +36164,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                             Th("Оплачено", style=f"{th_style} text-align: right;"),
                             Th("Остаток", style=f"{th_style} text-align: right;"),
                             Th("Статус", style=th_style),
+                            Th("Документы", style=f"{th_style} text-align: center;"),
                             Th("", style=th_style)
                         )
                     ),
@@ -35564,6 +36194,15 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                             ),
                             Td(status_badge(inv.status), style=td_style),
                             Td(
+                                Span(
+                                    icon("paperclip", size=14, color="#64748b"),
+                                    f" {doc_cnt}",
+                                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #64748b;"
+                                ) if (doc_cnt := count_documents_for_entity("supplier_invoice", str(inv.id))) > 0 else
+                                Span("—", style="color: #cbd5e1;"),
+                                style=f"{td_style} text-align: center;"
+                            ),
+                            Td(
                                 A(icon("eye", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}", title="Просмотр"),
                                 style=f"{td_style} text-align: right;"
                             )
@@ -35576,7 +36215,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                                 Div("Инвойсы не найдены", style="font-size: 16px; font-weight: 500; color: #64748b; margin-top: 12px;"),
                                 style="text-align: center; padding: 40px 20px;"
                             ),
-                            colspan="9"
+                            colspan="10"
                         ))
                     ),
                     style="width: 100%; border-collapse: collapse;"
@@ -35908,6 +36547,9 @@ def get(invoice_id: str, session):
             P(invoice.notes or "Нет примечаний", style="color: #64748b; font-size: 14px; line-height: 1.6;"),
             style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ) if invoice.notes else "",
+
+        # Documents section
+        _documents_section("supplier_invoice", invoice_id, session, can_upload=True, can_delete=user_has_any_role(session, ["admin", "finance"])),
 
         # Actions
         Div(

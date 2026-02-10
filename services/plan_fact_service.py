@@ -2258,6 +2258,99 @@ def get_payment_registration_preview(item_id: str) -> Dict[str, Any]:
     }
 
 
+def get_customer_debt_summary(customer_id: str) -> Dict[str, Any]:
+    """
+    Get debt summary for a customer by traversing the chain:
+    customers -> quotes -> specifications -> deals -> plan_fact_items
+
+    Args:
+        customer_id: UUID of the customer
+
+    Returns:
+        Dict with keys: total_debt, last_payment_date, last_payment_amount,
+        overdue_count, overdue_amount, unpaid_count
+    """
+    supabase = get_supabase()
+    today = date.today()
+
+    result_summary = {
+        "total_debt": 0,
+        "last_payment_date": None,
+        "last_payment_amount": None,
+        "overdue_count": 0,
+        "overdue_amount": 0,
+        "unpaid_count": 0,
+    }
+
+    try:
+        # Step 1: Get deals for this customer via the chain:
+        # customers -> quotes -> specifications -> deals
+        deals_result = supabase.table("deals").select(
+            "id, specifications(quotes(customer_id))"
+        ).execute()
+
+        deal_ids = []
+        for deal in (deals_result.data or []):
+            specs = deal.get("specifications") or {}
+            quotes = specs.get("quotes") or {}
+            if quotes.get("customer_id") == customer_id:
+                deal_ids.append(deal.get("id"))
+
+        # If customer has no deals, there's no debt — return zeros immediately
+        if not deal_ids:
+            return result_summary
+
+        # Step 2: Query plan_fact_items for unpaid items (actual_amount IS NULL)
+        # These represent the customer's total debt (income items only)
+        unpaid_result = supabase.table("plan_fact_items").select(
+            "id, deal_id, planned_amount, actual_amount, planned_date, "
+            "plan_fact_categories(is_income)"
+        ).is_("actual_amount", "null").execute()
+
+        unpaid_items = unpaid_result.data or []
+        # Filter to customer's deals
+        unpaid_items = [i for i in unpaid_items if i.get("deal_id") in deal_ids]
+        # Only income items represent debt owed BY the customer;
+        # expense items (supplier/logistics payments) are not customer debt
+        unpaid_income = [i for i in unpaid_items if (i.get("plan_fact_categories") or {}).get("is_income")]
+
+        result_summary["unpaid_count"] = len(unpaid_income)
+        result_summary["total_debt"] = sum(float(i.get("planned_amount") or 0) for i in unpaid_income)
+
+        # Step 3: Count overdue items (unpaid income + planned_date < today)
+        overdue_items = []
+        for item in unpaid_income:
+            planned_date_str = item.get("planned_date") or ""
+            if planned_date_str:
+                try:
+                    pd = datetime.strptime(str(planned_date_str)[:10], "%Y-%m-%d").date()
+                    if pd < today:
+                        overdue_items.append(item)
+                except Exception:
+                    pass
+
+        result_summary["overdue_count"] = len(overdue_items)
+        result_summary["overdue_amount"] = sum(float(i.get("planned_amount") or 0) for i in overdue_items)
+
+        # Step 4: Find last payment (most recent actual_date among paid items for this customer)
+        paid_result = supabase.table("plan_fact_items").select(
+            "id, deal_id, actual_amount, actual_date"
+        ).not_("actual_amount", "is", "null").order("actual_date", desc=True).execute()
+
+        paid_items = [i for i in (paid_result.data or []) if i.get("deal_id") in deal_ids]
+
+        if paid_items:
+            last_paid = paid_items[0]
+            result_summary["last_payment_date"] = last_paid.get("actual_date")
+            result_summary["last_payment_amount"] = float(last_paid.get("actual_amount") or 0)
+
+        return result_summary
+
+    except Exception as e:
+        print(f"Error getting customer debt summary: {e}")
+        return result_summary
+
+
 def get_variance_summary(item_id: str) -> Dict[str, Any]:
     """
     Get detailed variance analysis for a paid item.

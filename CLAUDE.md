@@ -188,6 +188,14 @@
 
 ---
 
+## 🔗 Entity Relationships
+
+**Quote → Specification → Deal** is the same business entity at different lifecycle stages. Never create separate data layers (e.g., payments) for specs and deals — they share data via `deals.specification_id` (1:1 unique constraint).
+
+**Details:** See `BUSINESS_LOGIC.md` for full entity relationships, payment architecture, and data flow.
+
+---
+
 ## 🔧 Technical Decisions
 
 ### Navigation Architecture
