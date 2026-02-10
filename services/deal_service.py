@@ -12,6 +12,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from .database import get_supabase
+from .logistics_service import initialize_logistics_stages
 
 
 # ============================================================================
@@ -1075,6 +1076,13 @@ def create_deal_from_specification(
                 error="Failed to create deal record",
                 extracted_data=extracted_data
             )
+
+        # 7b. Auto-initialize 7 logistics stages for the new deal
+        try:
+            initialize_logistics_stages(deal.id, created_by)
+        except Exception as e:
+            print(f"Warning: Failed to initialize logistics stages: {e}")
+            # Don't fail the whole operation if logistics init fails
 
         # 8. Update specification status to 'signed' if requested
         specification_updated = False
