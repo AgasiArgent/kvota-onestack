@@ -26328,12 +26328,26 @@ def get(session, deal_id: str, tab: str = "main"):
             style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
         )
 
-    # Tab navigation
-    tabs_nav = tab_nav([
+    # Tab navigation — plain <a> links (no HTMX) to avoid page duplication
+    _finance_tabs = [
         {'id': 'main', 'label': 'Основное', 'icon': 'file-text', 'url': f'/finance/{deal_id}?tab=main'},
         {'id': 'plan-fact', 'label': 'План-факт платежей', 'icon': 'list', 'url': f'/finance/{deal_id}?tab=plan-fact'},
         {'id': 'logistics', 'label': 'Логистика', 'icon': 'truck', 'url': f'/finance/{deal_id}?tab=logistics'},
-    ], active_tab=tab, target_id="tab-content")
+    ]
+    tabs_nav = Div(
+        *[
+            A(
+                icon(t["icon"], size=16, cls="tab-icon"),
+                Span(t["label"]),
+                href=t["url"],
+                cls=f"tab tab-lifted {'tab-active' if t['id'] == tab else ''}",
+                style="display: inline-flex; align-items: center; gap: 0.375rem;",
+            )
+            for t in _finance_tabs
+        ],
+        role="tablist",
+        cls="tabs tabs-lifted",
+    )
 
     # Build tab content based on selected tab
     if tab == "plan-fact":
@@ -26701,7 +26715,7 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
     )
 
 
-def _payment_registration_form(deal_id, unpaid_items, categories, source: str = "", preselect_category_id: str = ""):
+def _payment_registration_form(deal_id, unpaid_items, categories, source: str = "", preselect_category_id: str = "", source_tab: str = ""):
     """
     Render the payment registration form with two modes:
     - mode='plan': select an existing unpaid plan-fact item to register against
@@ -26713,6 +26727,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
         categories: List of category dicts for ad-hoc mode
         source: If 'erps', redirects back to ERPS tab after save
         preselect_category_id: If set, pre-selects category and defaults to 'new' mode
+        source_tab: If set, redirects back to this tab after save (e.g. 'logistics')
     """
     from datetime import date as date_type
 
@@ -26759,8 +26774,9 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
 
     return Div(
         Form(
-            # Hidden source field for redirect control
+            # Hidden fields for redirect control
             Input(type="hidden", name="source", value=source),
+            Input(type="hidden", name="source_tab", value=source_tab),
             # Mode selector
             Div(
                 Label("Режим", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
@@ -26866,7 +26882,20 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
                     ),
                     style="flex: 1;"
                 ),
-                style="display: flex; gap: 12px; margin-bottom: 16px;"
+                style="display: flex; gap: 12px; margin-bottom: 12px;"
+            ),
+
+            # File upload (optional)
+            Div(
+                Label("Прикрепить документ", fr="payment_file", style="font-size: 12px; font-weight: 500; color: #64748b; display: block; margin-bottom: 4px;"),
+                Input(
+                    type="file",
+                    name="payment_file",
+                    id="payment_file",
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx",
+                    style="width: 100%; padding: 6px 10px; border: 1px dashed #d1d5db; border-radius: 8px; font-size: 12px; box-sizing: border-box; background: #f9fafb; color: #64748b; cursor: pointer;"
+                ),
+                style="margin-bottom: 16px;"
             ),
 
             # Submit buttons
@@ -26886,6 +26915,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
             ),
             method="POST",
             action=f"/finance/{deal_id}/payments",
+            enctype="multipart/form-data",
         ),
         style="background: #fafbfc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;"
     )
@@ -26953,19 +26983,23 @@ def get(session, deal_id: str, source: str = "", stage_id: str = ""):
     # Form fields rendered by _payment_registration_form:
     # actual_amount, actual_currency, actual_date, payment_document
     # Form method=POST action=/finance/{deal_id}/payments
-    return _payment_registration_form(deal_id, unpaid_items, categories, source=source, preselect_category_id=preselect_category_id)
+    # If opened from a logistics stage, redirect back to logistics tab after save
+    source_tab = "logistics" if stage_id else ""
+    return _payment_registration_form(deal_id, unpaid_items, categories, source=source, preselect_category_id=preselect_category_id, source_tab=source_tab)
 
 
 @rt("/finance/{deal_id}/payments")
-def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
+async def post(session, request, deal_id: str, mode: str = "plan", item_id: str = "",
          actual_amount: str = "", actual_currency: str = "RUB",
          actual_date: str = "", payment_document: str = "",
-         category_id: str = "", description: str = "", source: str = ""):
+         category_id: str = "", description: str = "", source: str = "",
+         source_tab: str = ""):
     """
     POST /finance/{deal_id}/payments - Register a payment.
     Two modes:
       - mode='plan': records actual payment on an existing plan-fact item
       - mode='new': creates a new plan-fact item with actual data (ad-hoc)
+    Supports optional file upload (payment_file) via multipart/form-data.
     """
     redirect = require_login(session)
     if redirect:
@@ -27074,9 +27108,34 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
     else:
         return P("Ошибка: выберите плановый платёж или режим 'Новый'", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
-    # Redirect based on source - if from ERPS tab, go back there
+    # Handle optional file upload after successful payment
+    try:
+        form = await request.form()
+        payment_file = form.get("payment_file")
+        if payment_file and hasattr(payment_file, 'filename') and payment_file.filename:
+            file_content = await payment_file.read()
+            if file_content:
+                doc_description = payment_document if payment_document else f"Платёж {amount_val:,.2f} {actual_currency}"
+                doc, error = upload_document(
+                    organization_id=org_id,
+                    entity_type="deal",
+                    entity_id=deal_id,
+                    file_content=file_content,
+                    filename=payment_file.filename,
+                    document_type="payment_order",
+                    description=doc_description,
+                    uploaded_by=user_id,
+                )
+                if error:
+                    print(f"Warning: Failed to upload payment document: {error}")
+    except Exception as e:
+        print(f"Warning: Error uploading payment file: {e}")
+
+    # Redirect based on source/source_tab
     if source == "erps":
         return RedirectResponse("/finance?tab=erps", status_code=303)
+    if source_tab and source_tab in ("main", "plan-fact", "logistics"):
+        return RedirectResponse(f"/finance/{deal_id}?tab={source_tab}", status_code=303)
     return RedirectResponse(f"/finance/{deal_id}?tab=plan-fact", status_code=303)
 
 
@@ -39136,7 +39195,7 @@ def get(session, deal_id: str, tab: str = "info"):
 
 
 def _deals_logistics_tab(deal_id, deal, session):
-    """Render the logistics tab content with 7-stage accordion."""
+    """Render the logistics tab content with compact horizontal stage cards."""
     stages = get_stages_for_deal(deal_id)
 
     if not stages:
@@ -39159,18 +39218,19 @@ def _deals_logistics_tab(deal_id, deal, session):
             'completed': ('Завершён', '#10b981', '#d1fae5'),
         }
         label, color, bg = status_styles.get(status, ('?', '#6b7280', '#f1f5f9'))
-        status_badge = Span(label, style=f"background: {bg}; color: {color}; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+        status_badge = Span(label, style=f"background: {bg}; color: {color}; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;")
 
-        # Expense summary
+        # Expense summary (compact: count + total)
         summary = get_stage_summary(stage.id)
         expense_info = ""
         if allows_exp and summary.get('expense_count', 0) > 0:
-            expense_info = Span(
-                f"{summary['expense_count']} расх. | План: {summary['total_planned']:,.0f}",
-                style="color: #64748b; font-size: 11px; margin-left: 8px;"
+            expense_info = Div(
+                Span(f"{summary['expense_count']} расх.", style="color: #64748b; font-size: 11px;"),
+                Span(f"{summary['total_planned']:,.0f}", style="color: #374151; font-size: 11px; font-weight: 500; margin-left: 4px;"),
+                style="margin-top: 6px;"
             )
 
-        # Status update form
+        # Status update button
         status_form = ""
         if status != 'completed':
             next_status = 'in_progress' if status == 'pending' else 'completed'
@@ -39178,61 +39238,46 @@ def _deals_logistics_tab(deal_id, deal, session):
             status_form = Form(
                 Input(type="hidden", name="status", value=next_status),
                 Button(next_label, type="submit",
-                       style="padding: 4px 12px; font-size: 11px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer;"),
+                       style="padding: 3px 10px; font-size: 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; width: 100%;"),
                 method="post",
                 action=f"/finance/{deal_id}/stages/{stage.id}/status",
             )
 
-        # Button to add expense via payment modal (replaces old inline expense forms)
+        # Button to add expense via payment modal
         add_expense_btn = ""
         if allows_exp:
             add_expense_btn = Button(
-                icon("plus", size=12),
-                " Добавить расход",
+                icon("plus", size=10),
+                " Расход",
                 hx_get=f"/finance/{deal_id}/payments/new?stage_id={stage.id}",
                 hx_target="#deal-payment-modal-body",
                 hx_swap="innerHTML",
                 onclick="document.getElementById('deal-payment-modal').style.display='flex';",
-                style="padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;"
+                style="padding: 3px 8px; font-size: 10px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; width: 100%;"
             )
 
-        # Expenses list
-        expenses = get_expenses_for_stage(stage.id)
-        expenses_list = ""
-        if expenses:
-            expense_rows = []
-            for exp in expenses:
-                pa = float(exp.get('actual_amount', 0) or exp.get('planned_amount', 0) or 0)
-                pc = exp.get('actual_currency') or exp.get('planned_currency', 'RUB')
-                expense_rows.append(
-                    Div(
-                        Span(exp.get('description', '-'), style="font-weight: 500; font-size: 13px;"),
-                        Span(f" {pa:,.2f} {pc}", style="color: #64748b; font-size: 12px; margin-left: 8px;"),
-                        style="padding: 4px 0; border-bottom: 1px solid #f1f5f9;"
-                    )
-                )
-            expenses_list = Div(*expense_rows, style="margin-top: 8px;")
-
+        # Build card with compact vertical layout
         card = Div(
+            # Header: stage name
+            Div(stage_name, style="font-weight: 600; font-size: 13px; margin-bottom: 4px;"),
+            # Status badge
+            Div(status_badge, style="margin-bottom: 4px;"),
+            # Expense summary
+            expense_info if expense_info else "",
+            # Action buttons
             Div(
-                Span(stage_name, style="font-weight: 600; font-size: 14px;"),
-                status_badge,
-                expense_info if expense_info else "",
-                style="display: flex; align-items: center; gap: 8px;"
-            ),
-            Div(
-                status_form,
+                status_form if status_form else "",
                 add_expense_btn if add_expense_btn else "",
-                style="display: flex; align-items: center; gap: 8px; margin-top: 8px;"
-            ) if status_form or add_expense_btn else (
-                Div(add_expense_btn, style="margin-top: 8px;") if add_expense_btn else ""
-            ),
-            expenses_list if expenses_list else "",
-            style="padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: white;"
+                style="display: flex; flex-direction: column; gap: 4px; margin-top: auto;"
+            ) if status_form or add_expense_btn else "",
+            style="padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; min-height: 120px; display: flex; flex-direction: column;"
         )
         stage_cards.append(card)
 
-    return Div(*stage_cards)
+    return Div(
+        *stage_cards,
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px;"
+    )
 
 
 @rt("/finance/{deal_id}/stages/{stage_id}/expenses")

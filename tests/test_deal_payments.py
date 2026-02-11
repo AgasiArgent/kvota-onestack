@@ -439,7 +439,7 @@ class TestRegisterPaymentRoute:
         source = _read_main_source()
         # Find POST handler for /finance/{deal_id}/payments
         match = re.search(
-            r'@rt\(\s*"/finance/\{deal_id\}/payments"\s*\)\s*\ndef post\(.*?\n(.*?)(?=\n@rt\()',
+            r'@rt\(\s*"/finance/\{deal_id\}/payments"\s*\)\s*\n(?:async )?def post\(.*?\n(.*?)(?=\n@rt\()',
             source,
             re.DOTALL,
         )
@@ -541,7 +541,7 @@ class TestPaymentPostValidation:
     def _get_post_handler_source(self):
         source = _read_main_source()
         match = re.search(
-            r'@rt\(\s*"/finance/\{deal_id\}/payments"\s*\)\s*\ndef post\(.*?\n(.*?)(?=\n@rt\()',
+            r'@rt\(\s*"/finance/\{deal_id\}/payments"\s*\)\s*\n(?:async )?def post\(.*?\n(.*?)(?=\n@rt\()',
             source,
             re.DOTALL,
         )

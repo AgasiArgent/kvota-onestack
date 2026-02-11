@@ -67,6 +67,7 @@ VALID_ENTITY_TYPES = {
     "customer",
     "seller_company",
     "buyer_company",
+    "deal",
 }
 
 # Valid document types
