@@ -101,7 +101,7 @@ SELECT
 
   -- Дней до следующего планового платежа (from plan_fact_items)
   (
-    SELECT EXTRACT(DAY FROM (MIN(pfi.planned_date) - CURRENT_DATE))::INT
+    SELECT (MIN(pfi.planned_date) - CURRENT_DATE)
     FROM kvota.plan_fact_items pfi
     WHERE pfi.deal_id = d.id
       AND pfi.actual_amount IS NULL
