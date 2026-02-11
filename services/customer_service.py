@@ -1546,7 +1546,7 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
     Returns:
         List of quote dicts with fields:
         - id, idn, workflow_status, deal_type, created_at
-        - total_sum: sum of all items (unit_price * quantity)
+        - total_sum: sum of all items (base_price_vat * quantity)
         - total_profit: difference between sale and purchase prices
     """
     try:
@@ -1566,7 +1566,7 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
 
         # Get quote items for all quotes
         items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, unit_price, purchase_price_original"
+            "quote_id, quantity, base_price_vat, purchase_price_original"
         ).in_("quote_id", quote_ids).execute()
 
         # Calculate sums and profits per quote
@@ -1578,11 +1578,11 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
                     quote_totals[quote_id] = {"sum": 0, "profit": 0}
 
                 quantity = item.get("quantity", 0) or 0
-                unit_price = item.get("unit_price", 0) or 0
+                sale_price = item.get("base_price_vat", 0) or 0
                 purchase_price = item.get("purchase_price_original", 0) or 0
 
-                item_total = quantity * unit_price
-                item_profit = quantity * (unit_price - purchase_price)
+                item_total = quantity * sale_price
+                item_profit = quantity * (sale_price - purchase_price)
 
                 quote_totals[quote_id]["sum"] += item_total
                 quote_totals[quote_id]["profit"] += item_profit
@@ -1630,7 +1630,7 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
         # Get specifications for these quotes
         # Use explicit FK hint to avoid PostgREST ambiguous relationship error
         # (specifications has both quote_id->quotes and quote_version_id->quote_versions->quotes)
-        specs_result = supabase.table("specifications").select("*, quotes!specifications_quote_id_fkey(idn, customer_id)")\
+        specs_result = supabase.table("specifications").select("*, quotes!specifications_quote_id_fkey(idn_quote, customer_id)")\
             .in_("quote_id", quote_ids)\
             .order("sign_date", desc=True)\
             .execute()
@@ -1643,7 +1643,7 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
 
         # Get quote items to calculate sums
         items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, unit_price, purchase_price_original"
+            "quote_id, quantity, base_price_vat, purchase_price_original"
         ).in_("quote_id", spec_quote_ids).execute()
 
         # Calculate sums and profits per quote
@@ -1655,11 +1655,11 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
                     quote_totals[quote_id] = {"sum": 0, "profit": 0}
 
                 quantity = item.get("quantity", 0) or 0
-                unit_price = item.get("unit_price", 0) or 0
+                sale_price = item.get("base_price_vat", 0) or 0
                 purchase_price = item.get("purchase_price_original", 0) or 0
 
-                item_total = quantity * unit_price
-                item_profit = quantity * (unit_price - purchase_price)
+                item_total = quantity * sale_price
+                item_profit = quantity * (sale_price - purchase_price)
 
                 quote_totals[quote_id]["sum"] += item_total
                 quote_totals[quote_id]["profit"] += item_profit
@@ -1716,15 +1716,15 @@ def get_customer_statistics(customer_id: str) -> Dict[str, Any]:
 
         # Get all quote items to calculate quotes sum
         items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, unit_price"
+            "quote_id, quantity, base_price_vat"
         ).in_("quote_id", quote_ids).execute()
 
         quotes_sum = 0
         if items_result.data:
             for item in items_result.data:
                 quantity = item.get("quantity", 0) or 0
-                unit_price = item.get("unit_price", 0) or 0
-                quotes_sum += quantity * unit_price
+                sale_price = item.get("base_price_vat", 0) or 0
+                quotes_sum += quantity * sale_price
 
         # Get specifications count
         specs_result = supabase.table("specifications").select("id, quote_id")\
@@ -1739,14 +1739,14 @@ def get_customer_statistics(customer_id: str) -> Dict[str, Any]:
             spec_quote_ids = [s["quote_id"] for s in specs_result.data if s.get("quote_id")]
             if spec_quote_ids:
                 spec_items_result = supabase.table("quote_items").select(
-                    "quote_id, quantity, unit_price"
+                    "quote_id, quantity, base_price_vat"
                 ).in_("quote_id", spec_quote_ids).execute()
 
                 if spec_items_result.data:
                     for item in spec_items_result.data:
                         quantity = item.get("quantity", 0) or 0
-                        unit_price = item.get("unit_price", 0) or 0
-                        specifications_sum += quantity * unit_price
+                        sale_price = item.get("base_price_vat", 0) or 0
+                        specifications_sum += quantity * sale_price
 
         return {
             "quotes_count": quotes_count,
@@ -1770,17 +1770,17 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
     Get all unique items (products) ever requested by customer with detailed info.
 
     This returns all products from all quote_items for all quotes of this customer,
-    even if no price was given.
+    grouped by product_name, even if no price was given.
 
     Args:
         customer_id: Customer UUID
 
     Returns:
         List of unique products with aggregated info:
-        - product details
+        - product details (name, sku from quote_items columns)
         - times_requested (count)
         - total_quantity (sum of all quantities requested)
-        - last_price (most recent unit_price)
+        - last_price (most recent base_price_vat)
         - last_requested_at
         - brands requested
         - was_sold (boolean - was this item in a deal?)
@@ -1804,9 +1804,9 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
             if q.get("workflow_status") == "deal"
         ])
 
-        # Get all quote items with product details
+        # Get all quote items (no products table join - quote_items has product info inline)
         result = supabase.table("quote_items").select(
-            "*, products(id, name, sku, brand, unit), quotes(id, idn, created_at, workflow_status)"
+            "*, quotes!quote_items_quote_id_fkey(id, idn_quote, created_at, workflow_status)"
         )\
             .in_("quote_id", quote_ids)\
             .order("created_at", desc=True)\
@@ -1815,7 +1815,7 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
         if not result.data:
             return []
 
-        # Group by product_id and aggregate
+        # Group by product_name (normalized lowercase) and aggregate
         from collections import defaultdict
 
         product_map = defaultdict(lambda: {
@@ -1830,45 +1830,54 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
         })
 
         for item in result.data:
-            product_id = item["product_id"]
+            # Use product_name as grouping key (normalized)
+            product_name = (item.get("product_name") or "").strip()
+            group_key = product_name.lower() if product_name else item.get("id", "unknown")
             quote_id = item["quote_id"]
 
-            product_map[product_id]["product"] = item.get("products")
-            product_map[product_id]["times_requested"] += 1
+            # Build product info from quote_items columns
+            product_map[group_key]["product"] = {
+                "name": product_name or "Без названия",
+                "sku": item.get("product_code") or "",
+                "brand": item.get("brand") or "",
+                "unit": item.get("unit") or "шт",
+            }
+            product_map[group_key]["times_requested"] += 1
 
             # Add quantity
             quantity = item.get("quantity", 0) or 0
-            product_map[product_id]["total_quantity"] += quantity
+            product_map[group_key]["total_quantity"] += quantity
 
-            # Track latest price
-            if item.get("unit_price"):
+            # Track latest price (base_price_vat is the selling price)
+            if item.get("base_price_vat"):
                 # Update price if this is the most recent request
-                if item.get("quotes") and item["quotes"].get("created_at"):
-                    request_date = item["quotes"]["created_at"]
-                    if not product_map[product_id]["last_requested_at"] or \
-                       request_date > product_map[product_id]["last_requested_at"]:
-                        product_map[product_id]["last_price"] = item["unit_price"]
-                        product_map[product_id]["last_requested_at"] = request_date
+                quote_data = item.get("quotes") or {}
+                request_date = quote_data.get("created_at")
+                if request_date:
+                    if not product_map[group_key]["last_requested_at"] or \
+                       request_date > product_map[group_key]["last_requested_at"]:
+                        product_map[group_key]["last_price"] = item["base_price_vat"]
+                        product_map[group_key]["last_requested_at"] = request_date
 
             # Track brands
             if item.get("brand"):
-                product_map[product_id]["brands"].add(item["brand"])
+                product_map[group_key]["brands"].add(item["brand"])
 
             # Track quotes
-            if item.get("quotes"):
-                quote_idn = item["quotes"].get("idn")
-                if quote_idn and quote_idn not in product_map[product_id]["quotes"]:
-                    product_map[product_id]["quotes"].append(quote_idn)
+            quote_data = item.get("quotes") or {}
+            quote_idn = quote_data.get("idn_quote")
+            if quote_idn and quote_idn not in product_map[group_key]["quotes"]:
+                product_map[group_key]["quotes"].append(quote_idn)
 
             # Check if was sold (quote became a deal)
             if quote_id in deal_quote_ids:
-                product_map[product_id]["was_sold"] = True
+                product_map[group_key]["was_sold"] = True
 
         # Convert to list
         items = []
-        for product_id, data in product_map.items():
+        for group_key, data in product_map.items():
             items.append({
-                "product_id": product_id,
+                "product_id": group_key,
                 "product": data["product"],
                 "times_requested": data["times_requested"],
                 "total_quantity": data["total_quantity"],

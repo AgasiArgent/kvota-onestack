@@ -5140,7 +5140,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
 
     # Sales manager summary blocks (only for sales roles)
-    is_sales = any(r in roles for r in ["sales", "sales_manager", "head_of_sales"])
+    is_sales = any(r in roles for r in ["sales", "sales_manager", "head_of_sales", "admin", "top_manager"])
     sales_blocks = _get_sales_summary_blocks(user_id, org_id, date_from, date_to, supabase) if is_sales else []
 
     return [
@@ -24497,7 +24497,7 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
                 Span(" Финансы", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
                 style="display: flex; align-items: center;"
             ),
-            P("Сделки, ERPS и календарь платежей",
+            P("Сделки, Контроль платежей и календарь платежей",
               style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
             style=header_card_style
         ),
@@ -25054,8 +25054,6 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             min-width: 110px;
             max-width: 110px;
             text-align: left;
-            border-right: 2px solid #d97706;
-            box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2);
         }
         .erps-table th.sticky-client {
             vertical-align: middle;
@@ -25066,8 +25064,28 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             writing-mode: horizontal-tb;
             transform: none;
         }
+        /* Sticky columns: Action (+ button) */
+        .erps-table th.sticky-action,
+        .erps-table td.sticky-action {
+            position: sticky !important;
+            left: 195px !important;
+            z-index: 20 !important;
+            background: #f0fdf4 !important;
+            width: 40px;
+            min-width: 40px;
+            max-width: 40px;
+            text-align: center;
+            border-right: 2px solid #d97706;
+            box-shadow: 4px 0 6px -2px rgba(0,0,0,0.2);
+        }
+        .erps-table th.sticky-action {
+            vertical-align: middle;
+            height: auto;
+            padding: 0.5rem;
+        }
         .erps-table th.sticky-idn,
-        .erps-table th.sticky-client {
+        .erps-table th.sticky-client,
+        .erps-table th.sticky-action {
             z-index: 25 !important;
         }
         /* View selector styles */
@@ -25221,14 +25239,14 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
     header_cells = [
         Th(Span("IDN", cls="th-text"), cls="sticky-idn", style="background: #fef3c7;"),
         Th(Span("Клиент", cls="th-text"), cls="sticky-client"),
+        # Action column header (sticky, right after IDN and Client)
+        Th(Span("+", cls="th-text"), cls="sticky-action"),
     ]
     for col in columns:
         cell_style = f"background: {col['color']};"
         cell_cls = "block-end" if col.get('is_last_in_group') else ""
         # Wrap label in span for vertical text
         header_cells.append(Th(Span(col['label'], cls="th-text"), style=cell_style, cls=cell_cls))
-    # Action column header
-    header_cells.append(Th(Span("", cls="th-text"), style="background: #f0fdf4; width: 40px; min-width: 40px; max-width: 40px;"))
 
     # Map column types to CSS classes
     type_to_class = {
@@ -25243,9 +25261,26 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
     for spec in specs:
         deal_id = spec.get('deal_id', '')
         row_click_url = f"/finance/{deal_id}?tab=plan-fact" if deal_id else ""
+        # Action cell - "Add payment" button (sticky, right after IDN and Client)
+        if deal_id:
+            erps_pay_path = "new?source=erps"
+            erps_pay_url = f"/finance/{deal_id}/payments/{erps_pay_path}"
+            action_btn = Button(
+                icon("plus", size=12),
+                hx_get=erps_pay_url,
+                hx_target="#erps-payment-modal-body",
+                hx_swap="innerHTML",
+                onclick="event.stopPropagation(); document.getElementById('erps-payment-modal').style.display='flex';",
+                title="Добавить платёж",
+                style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 11px; line-height: 1;"
+            )
+        else:
+            action_btn = ""
+
         row_cells = [
             Td(spec.get('idn', '-'), cls="sticky-idn"),
             Td(spec.get('client_name', '-'), cls="sticky-client"),
+            Td(action_btn, cls="sticky-action"),
         ]
         # Columns that represent profit and should use conditional coloring
         profit_columns = {'spec_profit_usd', 'actual_profit_usd'}
@@ -25268,23 +25303,6 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             if col.get('is_last_in_group'):
                 cell_cls = f"{cell_cls} block-end" if cell_cls else "block-end"
             row_cells.append(Td(formatted, style=cell_style, cls=cell_cls))
-
-        # Action cell - "Add payment" button (stops event propagation to prevent row click)
-        if deal_id:
-            erps_pay_path = "new?source=erps"
-            erps_pay_url = f"/finance/{deal_id}/payments/{erps_pay_path}"
-            action_btn = Button(
-                icon("plus", size=12),
-                hx_get=erps_pay_url,
-                hx_target="#erps-payment-modal-body",
-                hx_swap="innerHTML",
-                onclick="event.stopPropagation(); document.getElementById('erps-payment-modal').style.display='flex';",
-                title="Добавить платёж",
-                style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 11px; line-height: 1;"
-            )
-        else:
-            action_btn = ""
-        row_cells.append(Td(action_btn, style="background: #f0fdf4; text-align: center; width: 40px; min-width: 40px; max-width: 40px;", cls="erps-action-cell"))
 
         row_style = f"cursor: pointer;" if deal_id else ""
         row_onclick = f"window.location.href='{row_click_url}';" if deal_id else ""
@@ -33210,7 +33228,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     q_date = "—"
             quotes_rows.append(
                 Tr(
-                    Td(A(q.get("idn") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500;")),
+                    Td(A(q.get("idn_quote") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500;")),
                     Td(f"{q.get('total_sum', 0):,.0f} ₽", style="text-align: right;"),
                     Td(f"{q.get('total_profit', 0):,.0f} ₽", style="text-align: right; color: #10b981;"),
                     Td(q_date),
@@ -33232,7 +33250,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     s_date = datetime.fromisoformat(s["created_at"].replace("Z", "+00:00")).strftime("%d.%m.%Y")
                 except:
                     s_date = "—"
-            spec_idn = s.get("idn") or (s.get("quotes", {}) or {}).get("idn") or f"#{s['id'][:8]}"
+            spec_idn = s.get("idn") or (s.get("quotes") or {}).get("idn_quote") or f"#{s['id'][:8]}"
             specs_rows.append(
                 Tr(
                     Td(A(spec_idn, href=f"/specifications/{s['id']}", style="font-weight: 500;")),
@@ -33662,7 +33680,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
             quotes_rows.append(
                 Tr(
-                    Td(A(Strong(quote.get("idn", "—")), href=f"/quotes/{quote['id']}")),
+                    Td(A(Strong(quote.get("idn_quote", "—")), href=f"/quotes/{quote['id']}")),
                     Td(f"{total_sum:,.0f} ₽" if total_sum else "—", style="text-align: right;"),
                     Td(f"{total_profit:,.0f} ₽" if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
                     Td(created_at or "—", style="font-size: 0.9em;"),
@@ -33728,7 +33746,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
             # Get quote IDN if available
             quote_idn = ""
             if spec.get("quotes"):
-                quote_idn = spec["quotes"].get("idn", "")
+                quote_idn = (spec["quotes"] or {}).get("idn_quote", "")
 
             # Format sum and profit
             total_sum = spec.get("total_sum", 0)
