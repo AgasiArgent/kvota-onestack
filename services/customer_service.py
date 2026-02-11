@@ -75,14 +75,38 @@ class CustomerContact:
     updated_at: Optional[datetime] = None
 
     def get_full_name(self) -> str:
-        """Get full name in Russian format: Фамилия Имя Отчество"""
+        """Get full name in Russian format: Фамилия Имя Отчество.
+
+        Handles deduplication when the 'name' field already contains the full
+        combined name (last_name + first_name + patronymic) and the separate
+        last_name/patronymic fields are also populated. This happens when a
+        contact is created with the full name in the 'name' field and later
+        edited to fill in last_name and patronymic separately.
+        """
+        name = self.name or ""
+        last_name = self.last_name or ""
+        patronymic = self.patronymic or ""
+
+        # If name already contains last_name and/or patronymic, extract the
+        # first-name-only portion to avoid duplication.
+        name_for_assembly = name
+        if last_name and name.startswith(last_name + " "):
+            # name = "Мамут Рахал Иванович", last_name = "Мамут"
+            # -> strip the last_name prefix so we get "Рахал Иванович"
+            name_for_assembly = name[len(last_name):].strip()
+        if patronymic and name_for_assembly.endswith(" " + patronymic):
+            # name_for_assembly = "Рахал Иванович", patronymic = "Иванович"
+            # -> strip the patronymic suffix so we get "Рахал"
+            name_for_assembly = name_for_assembly[: -len(patronymic)].strip()
+
         parts = []
-        if self.last_name:
-            parts.append(self.last_name)
-        parts.append(self.name)
-        if self.patronymic:
-            parts.append(self.patronymic)
-        return " ".join(parts)
+        if last_name:
+            parts.append(last_name)
+        if name_for_assembly:
+            parts.append(name_for_assembly)
+        if patronymic:
+            parts.append(patronymic)
+        return " ".join(parts) if parts else name
 
 
 @dataclass
