@@ -27995,7 +27995,7 @@ def get(user_id: str, session):
 
 
 @rt("/admin/users/{user_id}/roles/update")
-def post(user_id: str, session, roles: list = []):
+def post(user_id: str, session, roles: list = None):
     """Update user roles inline - returns updated badges HTML fragment."""
     redirect = require_login(session)
     if redirect:
@@ -28018,8 +28018,10 @@ def post(user_id: str, session, roles: list = []):
     # Get current roles
     current_roles = get_user_role_codes(user_id, org_id)
 
-    # Convert single value to list
-    if isinstance(roles, str):
+    # Normalize input
+    if roles is None:
+        roles = []
+    elif isinstance(roles, str):
         roles = [roles]
 
     # Safety: prevent empty roles (user must have at least 1 role)
