@@ -2719,7 +2719,7 @@ def sidebar(session, current_path: str = ""):
     if is_admin or any(r in roles for r in ["finance", "top_manager"]):
         finance_items = [
             {"icon": "briefcase", "label": "Сделки", "href": "/deals", "roles": ["finance", "top_manager", "admin"]},
-            {"icon": "file-text", "label": "ERPS", "href": "/finance?tab=erps", "roles": ["finance", "top_manager", "admin"]},
+            {"icon": "file-text", "label": "Контроль платежей", "href": "/finance?tab=erps", "roles": ["finance", "top_manager", "admin"]},
             {"icon": "calendar", "label": "Календарь", "href": "/payments/calendar", "roles": ["finance", "top_manager", "admin"]},
         ]
         menu_sections.append({"title": "Финансы", "items": finance_items})
@@ -4480,7 +4480,7 @@ DASHBOARD_TABS = [
         "id": "overview",
         "icon": "bar-chart-3",
         "label": "Обзор",
-        "roles": ["admin", "top_manager"],  # Only admin/top_manager see overview
+        "roles": ["admin", "top_manager", "sales", "sales_manager", "head_of_sales"],  # Admin, top_manager, and sales roles see overview
         "priority": 0,
     },
     {
@@ -4967,7 +4967,124 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     return sections
 
 
-def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: dict, supabase) -> list:
+def _get_sales_summary_blocks(user_id: str, org_id: str, date_from: str, date_to: str, supabase) -> list:
+    """
+    Sales manager summary blocks: my requests (pending), my specs, my quotes.
+    Returns list of FastHTML elements (date filter + 3 summary cards).
+    """
+    # Default date range: last 30 days
+    if not date_from:
+        date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not date_to:
+        date_to = datetime.now().strftime("%Y-%m-%d")
+
+    date_to_end = date_to + "T23:59:59"
+
+    # Q1: All my quotes (single query — pending is derived below)
+    all_quotes_result = supabase.table("quotes") \
+        .select("id, total_amount, workflow_status") \
+        .eq("organization_id", org_id) \
+        .eq("created_by", user_id) \
+        .gte("created_at", date_from) \
+        .lte("created_at", date_to_end) \
+        .execute()
+
+    all_quotes = all_quotes_result.data or []
+    all_count = len(all_quotes)
+    all_sum = sum(
+        Decimal(str(q.get("total_amount") or 0))
+        for q in all_quotes
+    )
+
+    # Derive pending_procurement subset from all_quotes (saves 1 DB round-trip)
+    pending_quotes = [q for q in all_quotes if q.get("workflow_status") == "pending_procurement"]
+    pending_count = len(pending_quotes)
+    pending_sum = sum(
+        Decimal(str(q.get("total_amount") or 0))
+        for q in pending_quotes
+    )
+
+    # Q2: My specifications (via parent quote created_by)
+    specs_result = supabase.table("specifications") \
+        .select("id, created_at, quotes!inner(created_by, total_amount)") \
+        .eq("organization_id", org_id) \
+        .eq("quotes.created_by", user_id) \
+        .gte("created_at", date_from) \
+        .lte("created_at", date_to_end) \
+        .execute()
+
+    specs = specs_result.data or []
+    specs_count = len(specs)
+    specs_sum = sum(
+        Decimal(str((s.get("quotes") or {}).get("total_amount") or 0))
+        for s in specs
+    )
+
+    card_style = "background: white; border-radius: 0.75rem; padding: 1.25rem; border: 1px solid #e5e7eb; display: flex; flex-direction: column;"
+    label_style = "color: #6b7280; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;"
+    count_style_tpl = "font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; color: {};"
+    sum_style = "font-size: 0.95rem; color: #374151; margin-bottom: 0.75rem;"
+    link_style = "color: #3b82f6; font-size: 0.875rem; text-decoration: none; margin-top: auto; display: flex; align-items: center; gap: 0.25rem;"
+
+    return [
+        # Date range filter
+        Div(
+            Form(
+                Div(
+                    Div(
+                        Span(icon("calendar", size=16), " Период:", style="font-weight: 500; color: #374151; margin-right: 0.75rem; display: flex; align-items: center; gap: 0.25rem;"),
+                        Label("С ", Input(type="date", name="date_from", value=date_from, style="padding: 0.375rem 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem;"), style="display: flex; align-items: center; gap: 0.25rem;"),
+                        Label("По ", Input(type="date", name="date_to", value=date_to, style="padding: 0.375rem 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem;"), style="display: flex; align-items: center; gap: 0.25rem;"),
+                        style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;"
+                    ),
+                    style="display: flex; align-items: center;"
+                ),
+                Hidden(name="tab", value="overview"),
+                hx_get="/dashboard",
+                hx_target="#tab-content",
+                hx_trigger="change delay:300ms",
+            ),
+            style="margin-bottom: 1.25rem;"
+        ),
+
+        # Section header
+        H2(icon("briefcase", size=22), " Мои показатели", style="margin-bottom: 0.75rem; font-size: 1.25rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;"),
+
+        # 3-column grid of summary cards
+        Div(
+            # Block 1: My requests (pending procurement)
+            Div(
+                Div("Мои запросы (в работе)", style=label_style),
+                Div(str(pending_count), style=count_style_tpl.format("#3b82f6")),
+                Div(format_money(pending_sum), style=sum_style),
+                A("Посмотреть все ", icon("arrow-right", size=14), href="/quotes?status=pending_procurement", style=link_style),
+                style=card_style,
+            ),
+
+            # Block 2: My specifications
+            Div(
+                Div("Мои СП", style=label_style),
+                Div(str(specs_count), style=count_style_tpl.format("#10b981")),
+                Div(format_money(specs_sum), style=sum_style),
+                A("Посмотреть все ", icon("arrow-right", size=14), href="/dashboard?tab=spec-control", style=link_style),
+                style=card_style,
+            ),
+
+            # Block 3: My quotes (all)
+            Div(
+                Div("Мои КП", style=label_style),
+                Div(str(all_count), style=count_style_tpl.format("#f59e0b")),
+                Div(format_money(all_sum), style=sum_style),
+                A("Посмотреть все ", icon("arrow-right", size=14), href="/quotes", style=link_style),
+                style=card_style,
+            ),
+
+            style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;"
+        ),
+    ]
+
+
+def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: dict, supabase, date_from: str = None, date_to: str = None) -> list:
     """
     Overview tab content - overall stats and role-specific task summaries.
     Used for admin and top_manager roles.
@@ -5022,6 +5139,10 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         for r in roles
     ] if roles else [Span("Нет ролей", style="color: #9ca3af; font-size: 0.875rem;")]
 
+    # Sales manager summary blocks (only for sales roles)
+    is_sales = any(r in roles for r in ["sales", "sales_manager", "head_of_sales"])
+    sales_blocks = _get_sales_summary_blocks(user_id, org_id, date_from, date_to, supabase) if is_sales else []
+
     return [
         # Header with roles
         Div(
@@ -5032,6 +5153,9 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
             ),
             style="margin-bottom: 1rem;"
         ),
+
+        # Sales manager summary blocks (date filter + 3 cards)
+        *sales_blocks,
 
         # Overall stats cards
         Div(
@@ -6450,7 +6574,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
     month_deals_result = supabase.table("quotes") \
         .select("id, total_amount_usd, total_profit_usd") \
         .eq("organization_id", org_id) \
-        .eq("created_by_user_id", user_id) \
+        .eq("created_by", user_id) \
         .eq("workflow_status", "deal") \
         .gte("updated_at", first_day_of_month.isoformat()) \
         .execute()
@@ -6498,7 +6622,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
     active_quotes_result = supabase.table("quotes") \
         .select("id, idn_quote, workflow_status, total_amount_usd, total_profit_usd, customers(name)") \
         .eq("organization_id", org_id) \
-        .eq("created_by_user_id", user_id) \
+        .eq("created_by", user_id) \
         .not_.in_("workflow_status", ["deal", "rejected", "cancelled"]) \
         .order("created_at", desc=True) \
         .limit(10) \
@@ -6974,14 +7098,15 @@ def get(session):
 
 
 @rt("/dashboard")
-def get(session, request, tab: str = None, status_filter: str = None, q: str = None):
+def get(session, request, tab: str = None, status_filter: str = None, q: str = None, date_from: str = None, date_to: str = None):
     """
     Unified Dashboard with role-based tabs.
 
     - Admin/top_manager see all tabs including overview
+    - Sales managers see overview with personal summary blocks
     - Single-role users see their workspace directly without tabs
     - Multi-role users see relevant tabs
-    - HTMX requests for spec-control return partial HTML (table body only)
+    - HTMX requests for spec-control/overview return partial HTML
     """
     redirect = require_login(session)
     if redirect:
@@ -6997,10 +7122,12 @@ def get(session, request, tab: str = None, status_filter: str = None, q: str = N
     if not roles:
         roles = []
 
-    # HTMX partial response: spec-control filter/search returns only table rows
+    # HTMX partial responses
     is_htmx = request.headers.get("hx-request") == "true"
     if is_htmx and tab == "spec-control":
         return _dashboard_spec_control_content(user_id, org_id, supabase, status_filter, q, partial=True)
+    if is_htmx and tab == "overview":
+        return _dashboard_overview_content(user_id, org_id, roles, user, supabase, date_from, date_to)
 
     # Get visible tabs for this user
     visible_tabs = get_dashboard_tabs(roles)
@@ -7031,7 +7158,7 @@ def get(session, request, tab: str = None, status_filter: str = None, q: str = N
 
     # Build tab content based on active tab
     if tab == "overview":
-        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
+        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase, date_from, date_to)
     elif tab == "procurement":
         content = _dashboard_procurement_content(user_id, org_id, supabase, status_filter, roles)
     elif tab == "logistics":
@@ -7047,7 +7174,7 @@ def get(session, request, tab: str = None, status_filter: str = None, q: str = N
     elif tab == "sales":
         content = _dashboard_sales_content(user_id, org_id, user, supabase)
     else:
-        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase)
+        content = _dashboard_overview_content(user_id, org_id, roles, user, supabase, date_from, date_to)
 
     # Build page with or without tabs
     if show_tabs:
@@ -7099,10 +7226,90 @@ def version_badge(quote_id, current_ver, total_count):
     )
 
 
+def _calculate_quotes_stage_stats(quotes: list) -> dict:
+    """
+    Group quotes by workflow_status stage and calculate count + total sum per stage.
+    Returns dict keyed by stage group with {count, sum, label, icon_name, color} values.
+
+    All workflow statuses are mapped to logical groups so no quotes are silently dropped:
+      - draft
+      - pending_procurement
+      - logistics: pending_logistics, pending_customs, pending_logistics_and_customs
+      - control: pending_quote_control, pending_sales_review, pending_approval
+      - pending_spec_control
+      - client: sent_to_client, client_negotiation, pending_signature
+      - approved
+      - deal
+      - closed: rejected, cancelled
+    """
+    stage_groups = {
+        "draft": {
+            "statuses": ["draft"],
+            "label": "Черновик", "icon_name": "file-edit",
+            "color": "#6b7280", "bg": "#f3f4f6", "border": "#d1d5db",
+        },
+        "pending_procurement": {
+            "statuses": ["pending_procurement"],
+            "label": "Закупки", "icon_name": "shopping-cart",
+            "color": "#d97706", "bg": "#fffbeb", "border": "#fcd34d",
+        },
+        "logistics": {
+            "statuses": ["pending_logistics", "pending_customs", "pending_logistics_and_customs"],
+            "label": "Лог+Там", "icon_name": "truck",
+            "color": "#2563eb", "bg": "#eff6ff", "border": "#93c5fd",
+        },
+        "control": {
+            "statuses": ["pending_quote_control", "pending_sales_review", "pending_approval"],
+            "label": "Контроль", "icon_name": "clipboard-check",
+            "color": "#ea580c", "bg": "#fff7ed", "border": "#fdba74",
+        },
+        "pending_spec_control": {
+            "statuses": ["pending_spec_control"],
+            "label": "Проверка", "icon_name": "search",
+            "color": "#0891b2", "bg": "#ecfeff", "border": "#67e8f9",
+        },
+        "client": {
+            "statuses": ["sent_to_client", "client_negotiation", "pending_signature"],
+            "label": "Клиент", "icon_name": "send",
+            "color": "#0d9488", "bg": "#f0fdfa", "border": "#99f6e4",
+        },
+        "approved": {
+            "statuses": ["approved"],
+            "label": "Согласован", "icon_name": "check-circle",
+            "color": "#059669", "bg": "#ecfdf5", "border": "#6ee7b7",
+        },
+        "deal": {
+            "statuses": ["deal"],
+            "label": "Сделка", "icon_name": "briefcase",
+            "color": "#16a34a", "bg": "#f0fdf4", "border": "#86efac",
+        },
+        "closed": {
+            "statuses": ["rejected", "cancelled"],
+            "label": "Закрыт", "icon_name": "x-circle",
+            "color": "#dc2626", "bg": "#fef2f2", "border": "#fecaca",
+        },
+    }
+    stats = {}
+    for group_key, cfg in stage_groups.items():
+        matched_statuses = set(cfg["statuses"])
+        group_quotes = [q for q in quotes if q.get("workflow_status") in matched_statuses]
+        total_sum = sum(float(q.get("total_amount") or 0) for q in group_quotes)
+        stats[group_key] = {
+            "count": len(group_quotes),
+            "sum": total_sum,
+            "label": cfg["label"],
+            "icon_name": cfg["icon_name"],
+            "color": cfg["color"],
+            "bg": cfg["bg"],
+            "border": cfg["border"],
+        }
+    return stats
+
+
 @rt("/quotes")
 def get(session):
     """
-    Quotes List page with design system V2 styling.
+    Quotes List page — redesigned with summary stage blocks and compact table.
     """
     redirect = require_login(session)
     if redirect:
@@ -7112,7 +7319,7 @@ def get(session):
     supabase = get_supabase()
 
     result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), workflow_status, total_amount, total_profit_usd, created_at, quote_versions!quote_versions_quote_id_fkey(version)") \
+        .select("id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, quote_versions!quote_versions_quote_id_fkey(version)") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True) \
         .execute()
@@ -7125,154 +7332,164 @@ def get(session):
         q["version_count"] = len(versions)
         q["current_version"] = max([v.get("version", 1) for v in versions]) if versions else 1
 
-    # Design system styles
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 16px;
-    """
+    # Calculate stage stats for summary blocks
+    stage_stats = _calculate_quotes_stage_stats(quotes)
 
-    page_title_style = """
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin: 0;
-        font-size: 22px;
-        font-weight: 700;
-        color: #1e293b;
-        letter-spacing: -0.02em;
-    """
+    # -- Styles --
+    header_card_style = (
+        "background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);"
+        "border-radius: 12px; border: 1px solid #e2e8f0;"
+        "box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+        "padding: 16px 24px; margin-bottom: 16px;"
+        "display: flex; justify-content: space-between; align-items: center;"
+        "flex-wrap: wrap; gap: 12px;"
+    )
+    page_title_style = (
+        "display: flex; align-items: center; gap: 12px;"
+        "margin: 0; font-size: 20px; font-weight: 700;"
+        "color: #1e293b; letter-spacing: -0.02em;"
+    )
+    count_badge_style = (
+        "display: inline-flex; align-items: center;"
+        "padding: 3px 10px; border-radius: 9999px;"
+        "font-size: 12px; font-weight: 600;"
+        "background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);"
+        "color: #1e40af; border: 1px solid #bfdbfe;"
+    )
+    new_btn_style = (
+        "display: inline-flex; align-items: center; gap: 8px;"
+        "padding: 8px 16px; font-size: 13px; font-weight: 600;"
+        "color: white; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);"
+        "border: none; border-radius: 8px; text-decoration: none;"
+        "transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);"
+    )
 
-    count_badge_style = """
-        display: inline-flex;
-        align-items: center;
-        padding: 4px 12px;
-        border-radius: 9999px;
-        font-size: 12px;
-        font-weight: 600;
-        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-        color: #1e40af;
-        border: 1px solid #bfdbfe;
-    """
+    # Build summary stage cards
+    stage_card_style_tpl = (
+        "display: flex; flex-direction: column; align-items: center; gap: 2px;"
+        "padding: 10px 6px; border-radius: 10px; min-width: 80px; flex: 1;"
+        "border: 1px solid {border}; background: {bg};"
+        "transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: default;"
+    )
+    stage_cards = []
+    for stage_key in ["draft", "pending_procurement", "logistics", "control", "pending_spec_control", "client", "approved", "deal", "closed"]:
+        s = stage_stats[stage_key]
+        card_style = stage_card_style_tpl.format(border=s["border"], bg=s["bg"])
+        stage_cards.append(
+            Div(
+                Div(
+                    icon(s["icon_name"], size=16, style=f"color: {s['color']};"),
+                    Span(s["label"], style=f"font-size: 11px; font-weight: 600; color: {s['color']}; text-transform: uppercase; letter-spacing: 0.03em;"),
+                    style="display: flex; align-items: center; gap: 4px;"
+                ),
+                Div(str(s["count"]), style=f"font-size: 22px; font-weight: 700; color: {s['color']}; line-height: 1.2;"),
+                Div(
+                    format_money(s["sum"]) if s["sum"] else "—",
+                    style="font-size: 11px; color: #64748b; font-weight: 500;"
+                ),
+                style=card_style,
+            )
+        )
 
-    new_btn_style = """
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 18px;
-        font-size: 14px;
-        font-weight: 600;
-        color: white;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        border: none;
-        border-radius: 8px;
-        text-decoration: none;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
-    """
+    summary_grid = Div(
+        *stage_cards,
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 16px;",
+    )
 
-    search_input_style = """
-        padding: 10px 14px 10px 38px;
-        font-size: 14px;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        background: #f8fafc;
-        color: #1e293b;
-        min-width: 280px;
-        transition: all 0.2s ease;
-    """
+    # Build table rows
+    table_rows = []
+    for q in quotes:
+        customer_name = (q.get("customers") or {}).get("name", "—")
+        customer_id = (q.get("customers") or {}).get("id")
+        created_date = format_date_russian(q.get("created_at")) if q.get("created_at") else "—"
+        idn_label = q.get("idn_quote", f"#{q['id'][:8]}")
+        quote_currency = q.get("currency", "RUB")
+
+        customer_cell = (
+            A(customer_name, href=f"/customers/{customer_id}",
+              style="color: #1e293b; text-decoration: none; font-weight: 500;",
+              onclick="event.stopPropagation();")
+            if customer_id else Span(customer_name, style="color: #94a3b8;")
+        )
+
+        table_rows.append(Tr(
+            Td(created_date, style="font-size: 12px; color: #64748b; white-space: nowrap; padding: 8px 12px;"),
+            Td(
+                A(idn_label, href=f"/quotes/{q['id']}",
+                  style="font-weight: 600; color: #3b82f6; text-decoration: none;",
+                  onclick="event.stopPropagation();"),
+                style="padding: 8px 12px;"
+            ),
+            Td(customer_cell, style="padding: 8px 12px;"),
+            Td(workflow_status_badge(q.get("workflow_status", "draft")), style="padding: 8px 12px;"),
+            Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
+               style="text-align: center; padding: 8px 12px;"),
+            Td(format_money(q.get("total_amount"), quote_currency), cls="col-money",
+               style="padding: 8px 12px; font-size: 13px;"),
+            Td(format_money(q.get("total_profit_usd"), "USD"), cls="col-money",
+               style=f"padding: 8px 12px; font-size: 13px; color: {profit_color(q.get('total_profit_usd'))}; font-weight: 500;"),
+            Td(
+                A(icon("eye", size=14), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
+                A(icon("pencil", size=14), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
+                cls="col-actions", style="padding: 8px 12px;"
+            ),
+            cls="clickable-row",
+            onclick=f"window.location='/quotes/{q['id']}'"
+        ))
 
     return page_layout("Коммерческие предложения",
         # Header card with title and actions
         Div(
             Div(
-                icon("file-text", size=26, style="color: #3b82f6;"),
+                icon("file-text", size=22, style="color: #3b82f6;"),
                 H1("Коммерческие предложения", style=page_title_style),
                 Span(f"{len(quotes)}", style=count_badge_style),
-                style="display: flex; align-items: center; gap: 14px;"
+                style="display: flex; align-items: center; gap: 12px;"
             ),
             Div(
                 A(
-                    icon("plus", size=16),
+                    icon("plus", size=14),
                     Span("Новое КП"),
                     href="/quotes/new",
-                    style=new_btn_style
+                    style=new_btn_style,
+                    cls="btn",
                 ),
             ),
             style=header_card_style
         ),
 
-        # Enhanced table container with new design system
-        Div(
-            # Table header with search
-            Div(
-                Div(
-                    icon("search", size=16, style="color: #94a3b8; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);"),
-                    Input(
-                        type="text",
-                        placeholder="Поиск по номеру или клиенту...",
-                        id="quotes-search",
-                        style=search_input_style
-                    ),
-                    style="position: relative; display: inline-block;"
-                ),
-                cls="table-header-left"
-            ),
-            cls="table-header"
-        ),
+        # Summary stage blocks
+        summary_grid,
 
-        # Table content with enhanced styling
+        # Table content with compact styling
         Div(
             Div(
                 Table(
                     Thead(Tr(
-                        Th("№ КП"),
-                        Th("Клиент"),
-                        Th("Статус"),
-                        Th("Версии", style="text-align: center; width: 80px;"),
-                        Th("Сумма", cls="col-money"),
-                        Th("Профит", cls="col-money"),
-                        Th("Дата"),
-                        Th("", cls="col-actions")
+                        Th("Дата", style="padding: 10px 12px;"),
+                        Th("IDN", style="padding: 10px 12px;"),
+                        Th("Клиент", style="padding: 10px 12px;"),
+                        Th("Статус", style="padding: 10px 12px;"),
+                        Th("Версии", style="text-align: center; width: 70px; padding: 10px 12px;"),
+                        Th("Сумма", cls="col-money", style="padding: 10px 12px;"),
+                        Th("Профит", cls="col-money", style="padding: 10px 12px;"),
+                        Th("", cls="col-actions", style="padding: 10px 12px;"),
                     )),
                     Tbody(
-                        *[Tr(
-                            Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
-                            Td((q.get("customers") or {}).get("name", "—")),
-                            Td(status_badge_v2(q.get("workflow_status", "draft"))),
-                            Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
-                               style="text-align: center;"),
-                            Td(format_money(q.get("total_amount")), cls="col-money"),
-                            profit_cell(q.get("total_profit_usd")),
-                            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
-                            Td(
-                                A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
-                                A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
-                                cls="col-actions"
-                            ),
-                            cls="clickable-row",
-                            onclick=f"window.location='/quotes/{q['id']}'"
-                        ) for q in quotes]
+                        *table_rows
                     ) if quotes else Tbody(Tr(Td(
                         Div(
-                            icon("file-text", size=32, style="color: #94a3b8; margin-bottom: 12px;"),
-                            Div("Нет коммерческих предложений", style="font-size: 15px; font-weight: 500; color: #64748b; margin-bottom: 8px;"),
-                            Div("Создайте первое КП для начала работы", style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;"),
+                            icon("file-text", size=28, style="color: #94a3b8; margin-bottom: 8px;"),
+                            Div("Нет коммерческих предложений", style="font-size: 14px; font-weight: 500; color: #64748b; margin-bottom: 6px;"),
+                            Div("Создайте первое КП для начала работы", style="font-size: 12px; color: #94a3b8; margin-bottom: 12px;"),
                             A(
                                 icon("plus", size=14),
                                 Span("Создать первое КП"),
                                 href="/quotes/new",
-                                style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;"
+                                style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #3b82f6; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; text-decoration: none;",
+                                cls="btn",
                             ),
-                            style="text-align: center; padding: 40px 24px;"
+                            style="text-align: center; padding: 32px 24px;"
                         ),
                         colspan="8"
                     ))),
@@ -7285,7 +7502,7 @@ def get(session):
 
         # Table footer with count
         Div(
-            Span(f"Всего: {len(quotes)} КП", style="font-size: 13px; color: #64748b;"),
+            Span(f"Всего: {len(quotes)} КП", style="font-size: 12px; color: #64748b;"),
             cls="table-footer"
         ) if quotes else None,
 
@@ -7562,16 +7779,8 @@ def get(quote_id: str, session):
             pass
 
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
-        # Compact header with inline editing
-        Div(
-            # Title row
-            Div(
-                H2(f"КП {quote.get('idn_quote', '')}", style="margin: 0;"),
-                workflow_status_badge(workflow_status),
-                style="display: flex; align-items: center; gap: 1rem;"
-            ),
-            style="margin-bottom: 1rem;"
-        ),
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, (customer or {}).get("name")),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "overview", user.get("roles", [])),
@@ -7579,20 +7788,18 @@ def get(quote_id: str, session):
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
 
-        # Compact inline-editable details card with gradient styling
+        # Card 1: Основная информация
         Div(
-            # Section header: ДЕТАЛИ КП
             Div(
                 icon("file-text", size=16, color="#64748b"),
-                Span(" ДЕТАЛИ КП", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+                Span(" ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
-
-            # Row 1: Customer and Seller Company
+            # 2-column grid: Customer + Seller
             Div(
                 # Customer dropdown
                 Div(
-                    Label("КЛИЕНТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Div("КЛИЕНТ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Select(
                         Option("Выберите клиента...", value="", selected=(not quote.get("customer_id"))),
                         *[Option(
@@ -7613,11 +7820,10 @@ def get(quote_id: str, session):
                             if (event.detail.successful) { window.location.reload(); }
                         });
                     """),
-                    style="flex: 1; min-width: 200px;"
                 ),
                 # Seller Company dropdown
                 Div(
-                    Label("ПРОДАВЕЦ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Div("ПРОДАВЕЦ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Select(
                         Option("—", value=""),
                         *[Option(
@@ -7633,40 +7839,38 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "seller_company_id", value: event.target.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1; min-width: 200px;"
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1.25rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
             ),
-
-            # Row 1.5: Contact Person
+            # Contact Person (full width)
             Div(
-                Div(
-                    Label("КОНТАКТНОЕ ЛИЦО", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Select(
-                        Option("— Не выбрано —", value=""),
-                        *[Option(
-                            f"{'⭐ ' if c.get('is_lpr') else ''}{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
-                            value=c["id"],
-                            selected=(c["id"] == quote.get("contact_person_id"))
-                        ) for c in contacts],
-                        name="contact_person_id",
-                        id="inline-contact-person",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "contact_person_id", value: event.target.value}',
-                        hx_swap="none"
-                    ),
-                    style="flex: 1; min-width: 200px; max-width: 400px;"
+                Div("КОНТАКТНОЕ ЛИЦО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                Select(
+                    Option("— Не выбрано —", value=""),
+                    *[Option(
+                        f"{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
+                        value=c["id"],
+                        selected=(c["id"] == quote.get("contact_person_id"))
+                    ) for c in contacts],
+                    name="contact_person_id",
+                    id="inline-contact-person",
+                    style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; max-width: 400px;",
+                    hx_patch=f"/quotes/{quote_id}/inline",
+                    hx_trigger="change",
+                    hx_vals='js:{field: "contact_person_id", value: event.target.value}',
+                    hx_swap="none"
                 ),
-                style="display: flex; gap: 1rem; margin-bottom: 1.25rem;"
             ),
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+        ),
 
-            # Section header: ДОСТАВКА
+        # Card 2: Доставка
+        Div(
             Div(
                 icon("truck", size=16, color="#64748b"),
-                Span(" ДОСТАВКА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+                Span(" ДОСТАВКА", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
 
             # Row 2: Delivery City, Country, Method, Terms (flexbox)
@@ -7782,36 +7986,46 @@ def get(quote_id: str, session):
                 ),
                 style="display: flex; flex-wrap: wrap; gap: 1rem;"
             ),
-            # Section header: СРОКИ И ИНФОРМАЦИЯ
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+        ),
+
+        # Card 3: Дополнительная информация
+        Div(
             Div(
                 icon("clock", size=16, color="#64748b"),
-                Span(" СРОКИ И ИНФОРМАЦИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-top: 1.25rem; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;"
+                Span(" ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
-
-            # Row: Created at, Creator, Validity days, Expiry date
+            # 2-column grid
             Div(
                 # Created at
                 Div(
-                    Label("ДАТА СОЗДАНИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Span(
-                        created_at_display,
-                        style="font-size: 14px; color: #334155; padding: 8px 0; display: block;"
-                    ),
-                    style="flex: 1 1 140px; min-width: 140px;"
+                    Div("ДАТА СОЗДАНИЯ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                    Div(created_at_display, style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
                 ),
                 # Creator
                 Div(
-                    Label("СОЗДАЛ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Span(
-                        creator_name or "—",
-                        style="font-size: 14px; color: #334155; padding: 8px 0; display: block;"
-                    ),
-                    style="flex: 1 1 160px; min-width: 160px;"
+                    Div("СОЗДАЛ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                    Div(creator_name or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
                 ),
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+            ),
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+        ),
+
+        # Card 4: Информация для печати
+        Div(
+            Div(
+                icon("printer", size=16, color="#64748b"),
+                Span(" ИНФОРМАЦИЯ ДЛЯ ПЕЧАТИ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
+            ),
+            Div(
                 # Validity days (inline-editable)
                 Div(
-                    Label("СРОК ДЕЙСТВИЯ (ДНЕЙ)", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Div("СРОК ДЕЙСТВИЯ (ДНЕЙ)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Input(
                         type="number",
                         value=str(quote.get("validity_days") or 30),
@@ -7823,20 +8037,19 @@ def get(quote_id: str, session):
                         hx_vals='js:{field: "validity_days", value: event.target.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1 1 160px; min-width: 160px;"
                 ),
                 # Expiry date (calculated, with red/green indicator)
                 Div(
-                    Label("ДЕЙСТВИТЕЛЕН ДО", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Div("ДЕЙСТВИТЕЛЕН ДО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Span(
                         expiry_display,
                         style=f"font-size: 14px; padding: 6px 10px; border-radius: 6px; display: inline-block; font-weight: 500; {'background: #fef2f2; color: #dc2626;' if is_expired else 'background: #f0fdf4; color: #16a34a;'}" if expiry_display != "\u2014" else "font-size: 14px; color: #334155; padding: 8px 0; display: block;"
                     ),
-                    style="flex: 1 1 140px; min-width: 140px;"
                 ),
-                style="display: flex; flex-wrap: wrap; gap: 1rem;"
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
             ),
-            cls="card", style="padding: 1.25rem; margin-bottom: 1rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ),
 
         # Products (Handsontable spreadsheet) with gradient styling
@@ -8734,20 +8947,24 @@ def get(quote_id: str, session):
 
         # Actions section (only for non-draft quotes - after calculation)
         Div(
-            H3("Действия"),
             Div(
-                btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
-                style="display: flex; gap: 0.5rem;"
+                # Left: primary actions
+                Div(
+                    btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                    btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
+                ),
+                # Right: export/download
+                Div(
+                    btn_link("Спецификация PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
+                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
+                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
+                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
+                ),
+                style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;"
             ),
-            H4("Экспорт", style="margin-top: 1rem;"),
-            Div(
-                btn_link("Спецификация PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
-                btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
-                btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
-                style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
-            ),
-            cls="card"
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
         ) if workflow_status != "draft" else None,
 
         # Activity log (workflow transitions history)
@@ -12270,7 +12487,7 @@ def get(quote_id: str, session):
 
     # Get quote details
     quote_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, status") \
+        .select("id, idn_quote, customer_id, status, workflow_status, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -12285,10 +12502,11 @@ def get(quote_id: str, session):
 
     quote = quote_result.data[0]
     quote_number = quote.get("idn_quote") or quote_id[:8]
+    workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
 
     # Get customer name
-    customer_name = "—"
-    if quote.get("customer_id"):
+    customer_name = (quote.get("customers") or {}).get("name", "—")
+    if customer_name == "—" and quote.get("customer_id"):
         customer_result = supabase.table("customers") \
             .select("name") \
             .eq("id", quote["customer_id"]) \
@@ -12373,20 +12591,11 @@ def get(quote_id: str, session):
     return page_layout(
         f"Документы КП {quote_number}",
 
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
+
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "documents", user_roles),
-
-        # Header with modern styling
-        Div(
-            Div(
-                icon("folder", size=24, color="#1e40af"),
-                H1(f" Документы КП {quote_number}",
-                   style="display: inline; margin: 0; margin-left: 8px; font-size: 1.5rem;"),
-                style="display: flex; align-items: center;"
-            ),
-            P(f"Клиент: {customer_name}", style="color: #64748b; margin-top: 0.5rem;"),
-            style="margin-bottom: 1.5rem;"
-        ),
 
         # Info card with gradient styling
         Div(
@@ -12485,7 +12694,7 @@ def get(quote_id: str, session):
 
     # Get quote details
     quote_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, status") \
+        .select("id, idn_quote, customer_id, status, workflow_status, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .execute()
@@ -12500,6 +12709,8 @@ def get(quote_id: str, session):
 
     quote = quote_result.data[0]
     quote_number = quote.get("idn_quote") or quote_id[:8]
+    workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
+    customer_name = (quote.get("customers") or {}).get("name", "—")
 
     # Build document chain
     chain = _build_document_chain(quote_id)
@@ -12564,22 +12775,11 @@ def get(quote_id: str, session):
     return page_layout(
         f"Цепочка документов КП {quote_number}",
 
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
+
         # Role-based tabs
         quote_detail_tabs(quote_id, "document_chain", user_roles),
-
-        # Header
-        Div(
-            Div(
-                icon("link", size=24, color="#1e40af"),
-                H1(f" Цепочка документов КП {quote_number}",
-                   style="display: inline; margin: 0; margin-left: 8px; font-size: 1.5rem;"),
-                style="display: flex; align-items: center;"
-            ),
-            P("Визуализация документооборота по КП: от коммерческого предложения до таможенной декларации",
-              style="color: #64748b; margin-top: 0.5rem; font-size: 0.875rem;"),
-            cls="card-elevated",
-            style="margin-bottom: 1.5rem;"
-        ),
 
         # Chain timeline
         Div(
@@ -13613,6 +13813,31 @@ def workflow_status_badge(status_str: str):
         return Span(name, cls=f"status-badge-v2 status-badge-v2--{variant}")
 
     return Span(status_str or "—", cls="status-badge-v2 status-badge-v2--neutral")
+
+
+def quote_header(quote: dict, workflow_status: str, customer_name: str = None):
+    """
+    Persistent header shown on all quote detail tabs.
+    Shows IDN, status badge, and customer name in a clean card layout.
+    """
+    idn = quote.get("idn_quote", "")
+    client = customer_name or "—"
+
+    return Div(
+        # Top row: IDN + Status badge
+        Div(
+            H1(f"КП {idn}" if idn else "Коммерческое предложение",
+               style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;"),
+            workflow_status_badge(workflow_status),
+            style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;"
+        ),
+        # Client name row
+        Div(
+            Span(client, style="font-size: 1.125rem; color: #475569; font-weight: 500;"),
+            style="margin-top: 0.375rem;"
+        ),
+        style="background: white; padding: 1.25rem 1.5rem; border-radius: 0.75rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);"
+    )
 
 
 def workflow_progress_bar(status_str: str):
@@ -14788,25 +15013,11 @@ def get(quote_id: str, session):
         )
 
     return page_layout(f"Закупки — {quote_idn}",
-        # Breadcrumbs
-        Div(
-            A("← Назад к задачам", href="/tasks"),
-            style="margin-bottom: 1rem;"
-        ),
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "procurement", user.get("roles", [])),
-
-        # Header with gradient styling
-        Div(
-            H1(f"Закупки: {quote_idn}", style="margin: 0; font-size: 1.5rem;"),
-            Div(
-                Span(f"Клиент: {customer_name}", style="margin-right: 1.5rem; color: #64748b;"),
-                workflow_status_badge(workflow_status),
-                style="margin-top: 0.5rem;"
-            ),
-            style="margin-bottom: 1rem;"
-        ),
 
         # Workflow progress bar
         workflow_progress_bar(workflow_status),
@@ -17502,25 +17713,11 @@ def get(session, quote_id: str):
     ) if logistics_done else None
 
     return page_layout(f"Logistics - {quote.get('idn_quote', '')}",
-        # Back link
-        Div(
-            A("← К задачам", href="/tasks", style="color: #666; font-size: 0.875rem;"),
-            style="margin-bottom: 1rem;"
-        ),
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "logistics", user.get("roles", [])),
-
-        # Header
-        Div(
-            H1(f"Логистика: {quote.get('idn_quote', '')}", cls="page-header"),
-            Div(
-                Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
-                workflow_status_badge(workflow_status),
-                style="display: flex; align-items: center; gap: 0.5rem;"
-            ),
-            style="margin-bottom: 1rem;"
-        ),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
@@ -18571,25 +18768,11 @@ def get(session, quote_id: str):
     progress_percent = int(items_with_hs / total_items * 100) if total_items > 0 else 0
 
     return page_layout(f"Customs - {quote.get('idn_quote', '')}",
-        # Back link
-        Div(
-            A("← К задачам", href="/tasks", style="color: #666; font-size: 0.875rem;"),
-            style="margin-bottom: 1rem;"
-        ),
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "customs", user.get("roles", [])),
-
-        # Header
-        Div(
-            H1(icon("shield-check", size=28), f" Таможня: {quote.get('idn_quote', '')}", cls="page-header"),
-            Div(
-                Span(f"Клиент: {customer_name}", style="margin-right: 1rem;"),
-                workflow_status_badge(workflow_status),
-                style="display: flex; align-items: center; gap: 0.5rem;"
-            ),
-            style="margin-bottom: 1rem;"
-        ),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
@@ -19701,7 +19884,7 @@ def get_cost_analysis(session, quote_id: str):
 
     # Fetch quote with org isolation check (organization_id must match)
     quote_result = supabase.table("quotes") \
-        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status") \
+        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status, customers(name)") \
         .eq("id", quote_id) \
         .execute()
 
@@ -19714,6 +19897,7 @@ def get_cost_analysis(session, quote_id: str):
         )
 
     quote = quote_result.data[0]
+    customer_name = (quote.get("customers") or {}).get("name", "—")
 
     # Org isolation: check organization_id matches user's org_id
     if quote.get("organization_id") != org_id:
@@ -19742,6 +19926,7 @@ def get_cost_analysis(session, quote_id: str):
     if not calc_results:
         return page_layout(
             f"Кост-анализ — {quote.get('idn_quote', '')}",
+            quote_header(quote, quote.get("workflow_status", "draft"), customer_name),
             tabs,
             Div(
                 Div(
@@ -19967,6 +20152,7 @@ def get_cost_analysis(session, quote_id: str):
 
     return page_layout(
         f"Кост-анализ — {quote.get('idn_quote', '')}",
+        quote_header(quote, quote.get("workflow_status", "draft"), customer_name),
         tabs,
         content,
         session=session
@@ -20642,25 +20828,11 @@ def get(session, quote_id: str, preset: str = None):
         )
 
     return page_layout(f"Проверка КП - {quote.get('idn_quote', '')}",
-        # Back link
-        Div(
-            A("← К задачам", href="/tasks", style="color: #3b82f6; text-decoration: none;"),
-            style="margin-bottom: 1rem;"
-        ),
+        # Persistent header with IDN, status, client name
+        quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
         quote_detail_tabs(quote_id, "control", user.get("roles", [])),
-
-        # Header with gradient styling
-        Div(
-            Div(
-                icon("clipboard-check", size=24, color="#1e40af"),
-                H1(f" Проверка КП {quote.get('idn_quote', '')}", style="margin: 0; margin-left: 8px; font-size: 1.5rem;"),
-                style="display: flex; align-items: center;"
-            ),
-            P(f"Клиент: {customer_name} | Сумма: {format_money(quote_total)} {currency}", style="color: #64748b; margin-top: 0.5rem;"),
-            style="margin-bottom: 1rem;"
-        ),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
@@ -24282,7 +24454,7 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
             A(icon("briefcase", size=16), " Рабочая зона",
               href="/finance?tab=workspace",
               cls="finance-tab" + (" active" if tab == "workspace" else "")),
-            A(icon("table", size=16), " ERPS",
+            A(icon("table", size=16), " Контроль платежей",
               href="/finance?tab=erps",
               cls="finance-tab" + (" active" if tab == "erps" else "")),
             A(icon("credit-card", size=16), " Платежи",
@@ -24564,6 +24736,7 @@ ERPS_COLUMN_GROUPS = {
         'color': '#e9d5ff',
         'columns': [
             ('days_until_advance', 'Остаток дней до аванса', 'number', 'text-align: right;'),
+            ('days_until_next_payment', 'Дней до след. платежа', 'number', 'text-align: right;'),
             ('planned_advance_usd', 'Планируемая сумма аванса USD', 'money', 'text-align: right;'),
             ('total_paid_usd', 'Всего оплачено USD', 'money', 'text-align: right;'),
             ('remaining_payment_usd', 'Остаток к оплате USD', 'money', 'text-align: right; color: #dc2626;'),
@@ -24626,7 +24799,7 @@ ERPS_VIEWS = {
 }
 
 # Compact view shows only these specific columns from spec group
-ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'priority_tag']
+ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'days_until_next_payment', 'priority_tag']
 
 
 def fmt_days_until_payment(days):
@@ -25044,7 +25217,7 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         })();
     """)
 
-    # Build table headers with vertical text
+    # Build table headers with vertical text - add action column
     header_cells = [
         Th(Span("IDN", cls="th-text"), cls="sticky-idn", style="background: #fef3c7;"),
         Th(Span("Клиент", cls="th-text"), cls="sticky-client"),
@@ -25054,6 +25227,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         cell_cls = "block-end" if col.get('is_last_in_group') else ""
         # Wrap label in span for vertical text
         header_cells.append(Th(Span(col['label'], cls="th-text"), style=cell_style, cls=cell_cls))
+    # Action column header
+    header_cells.append(Th(Span("", cls="th-text"), style="background: #f0fdf4; width: 40px; min-width: 40px; max-width: 40px;"))
 
     # Map column types to CSS classes
     type_to_class = {
@@ -25063,9 +25238,11 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         'number': 'col-number',
     }
 
-    # Build table rows
+    # Build table rows - clickable rows with action button
     rows = []
     for spec in specs:
+        deal_id = spec.get('deal_id', '')
+        row_click_url = f"/finance/{deal_id}?tab=plan-fact" if deal_id else ""
         row_cells = [
             Td(spec.get('idn', '-'), cls="sticky-idn"),
             Td(spec.get('client_name', '-'), cls="sticky-client"),
@@ -25076,6 +25253,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             col_key = col['key']
             value = spec.get(col_key)
             if col_key == 'days_until_advance':
+                formatted = fmt_days_until_payment(value)
+            elif col_key == 'days_until_next_payment':
                 formatted = fmt_days_until_payment(value)
             elif col_key == 'remaining_payment_usd':
                 formatted = fmt_remaining_payment_with_percent(value, spec.get('spec_sum_usd'))
@@ -25089,7 +25268,27 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             if col.get('is_last_in_group'):
                 cell_cls = f"{cell_cls} block-end" if cell_cls else "block-end"
             row_cells.append(Td(formatted, style=cell_style, cls=cell_cls))
-        rows.append(Tr(*row_cells))
+
+        # Action cell - "Add payment" button (stops event propagation to prevent row click)
+        if deal_id:
+            erps_pay_path = "new?source=erps"
+            erps_pay_url = f"/finance/{deal_id}/payments/{erps_pay_path}"
+            action_btn = Button(
+                icon("plus", size=12),
+                hx_get=erps_pay_url,
+                hx_target="#erps-payment-modal-body",
+                hx_swap="innerHTML",
+                onclick="event.stopPropagation(); document.getElementById('erps-payment-modal').style.display='flex';",
+                title="Добавить платёж",
+                style="background: #10b981; color: white; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 11px; line-height: 1;"
+            )
+        else:
+            action_btn = ""
+        row_cells.append(Td(action_btn, style="background: #f0fdf4; text-align: center; width: 40px; min-width: 40px; max-width: 40px;", cls="erps-action-cell"))
+
+        row_style = f"cursor: pointer;" if deal_id else ""
+        row_onclick = f"window.location.href='{row_click_url}';" if deal_id else ""
+        rows.append(Tr(*row_cells, style=row_style, onclick=row_onclick))
 
     # Calculate summary footer totals
     total_outstanding = sum(
@@ -25106,7 +25305,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         and 1 <= s['days_until_advance'] <= 7
     ])
 
-    colspan_total = str(2 + len(columns))
+    # Include action column in colspan
+    colspan_total = str(3 + len(columns))
     tfoot_style = "padding: 0.5rem 0.6rem; font-size: 0.75rem; border-top: 2px solid #e5e7eb;"
     summary_footer = Tfoot(
         Tr(
@@ -25153,18 +25353,81 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             cls="erps-table"
         )
     else:
-        colspan = 2 + len(columns)
+        colspan = 3 + len(columns)
         table = Table(
             Thead(Tr(*header_cells)),
             Tbody(Tr(Td("Нет данных", colspan=str(colspan), style="text-align: center; padding: 2rem; color: #666;"))),
             cls="erps-table"
         )
 
+    # Modal CSS for payment form
+    modal_css = """
+        #erps-payment-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #erps-payment-modal .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .erps-action-cell {
+            position: relative;
+            z-index: 5;
+        }
+    """
+
+    # Payment modal overlay (hidden by default, populated via HTMX)
+    payment_modal = Div(
+        Div(
+            Div(
+                Div(
+                    H3("Добавить платёж", style="margin: 0; font-size: 16px; font-weight: 600; color: #1e293b;"),
+                    Button(
+                        icon("x", size=16),
+                        onclick="document.getElementById('erps-payment-modal').style.display='none';",
+                        style="background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+                ),
+                Div(id="erps-payment-modal-body"),
+                cls="modal-content"
+            ),
+            onclick="if(event.target===this) this.style.display='none';",
+            style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"
+        ),
+        id="erps-payment-modal",
+    )
+
+    # Export placeholder button
+    export_btn = Button(
+        icon("download", size=14),
+        " Выгрузить данные",
+        disabled=True,
+        title="В разработке",
+        style="background: white; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: not-allowed; display: inline-flex; align-items: center; gap: 6px;"
+    )
+
     # Build complete UI
     return Div(
         Style(erps_css),
+        Style(modal_css),
         custom_js,
-        H2("Единый реестр подписанных спецификаций (ERPS)", style="margin-bottom: 1rem;"),
+        Div(
+            H2("Контроль платежей", style="margin-bottom: 0;"),
+            export_btn,
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+        ),
 
         # View selector
         Div(
@@ -25180,7 +25443,10 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
         P(f"Всего спецификаций: {len(specs)} | Колонок: {2 + len(columns)}", style="margin-bottom: 1rem; color: #666; font-size: 0.875rem;"),
 
         # Table
-        Div(table, cls="erps-table-container")
+        Div(table, cls="erps-table-container"),
+
+        # Payment modal
+        payment_modal,
     )
 
 
@@ -26343,7 +26609,7 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
     )
 
 
-def _payment_registration_form(deal_id, unpaid_items, categories):
+def _payment_registration_form(deal_id, unpaid_items, categories, source: str = ""):
     """
     Render the payment registration form with two modes:
     - mode='plan': select an existing unpaid plan-fact item to register against
@@ -26353,6 +26619,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories):
         deal_id: UUID of the deal
         unpaid_items: List of unpaid plan-fact item dicts (actual_amount is NULL)
         categories: List of category dicts for ad-hoc mode
+        source: If 'erps', redirects back to ERPS tab after save
     """
     from datetime import date as date_type
 
@@ -26394,6 +26661,8 @@ def _payment_registration_form(deal_id, unpaid_items, categories):
         H3("Регистрация платежа", style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 16px 0;"),
 
         Form(
+            # Hidden source field for redirect control
+            Input(type="hidden", name="source", value=source),
             # Mode selector
             Div(
                 Label("Режим", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
@@ -26512,7 +26781,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories):
                 Button(
                     "Отмена",
                     type="button",
-                    onclick="this.closest('#payment-form-container').innerHTML = '';",
+                    onclick="var modal=document.getElementById('erps-payment-modal'); if(modal) modal.style.display='none'; else this.closest('#payment-form-container').innerHTML='';" if source == "erps" else "this.closest('#payment-form-container').innerHTML = '';",
                     style="background: white; color: #64748b; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 20px; cursor: pointer; font-size: 14px;"
                 ),
                 style="display: flex; gap: 8px;"
@@ -26529,10 +26798,11 @@ def _payment_registration_form(deal_id, unpaid_items, categories):
 # ============================================================================
 
 @rt("/finance/{deal_id}/payments/new")
-def get(session, deal_id: str):
+def get(session, deal_id: str, source: str = ""):
     """
     GET /finance/{deal_id}/payments/new - Returns the payment registration form.
     Supports two modes: plan (existing item) and new (ad-hoc).
+    source param: if 'erps', form redirects back to ERPS tab after save.
     """
     redirect = require_login(session)
     if redirect:
@@ -26575,14 +26845,14 @@ def get(session, deal_id: str):
     # Form fields rendered by _payment_registration_form:
     # actual_amount, actual_currency, actual_date, payment_document
     # Form method=POST action=/finance/{deal_id}/payments
-    return _payment_registration_form(deal_id, unpaid_items, categories)
+    return _payment_registration_form(deal_id, unpaid_items, categories, source=source)
 
 
 @rt("/finance/{deal_id}/payments")
 def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
          actual_amount: str = "", actual_currency: str = "RUB",
          actual_date: str = "", payment_document: str = "",
-         category_id: str = "", description: str = ""):
+         category_id: str = "", description: str = "", source: str = ""):
     """
     POST /finance/{deal_id}/payments - Register a payment.
     Two modes:
@@ -26675,6 +26945,9 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
     else:
         return P("Ошибка: выберите плановый платёж или режим 'Новый'", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
+    # Redirect based on source - if from ERPS tab, go back there
+    if source == "erps":
+        return RedirectResponse("/finance?tab=erps", status_code=303)
     return RedirectResponse(f"/finance/{deal_id}", status_code=303)
 
 
