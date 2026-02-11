@@ -4807,27 +4807,62 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         total_spec_work = pending_specs + pending_spec_quotes
 
         if total_spec_work > 0:
+            # Fetch specifications needing attention (draft + pending_review)
+            spec_items_result = supabase.table("specifications") \
+                .select("id, specification_number, status, created_at, quotes(id, idn_quote, customers(name))") \
+                .eq("organization_id", org_id) \
+                .in_("status", ["draft", "pending_review"]) \
+                .order("created_at", desc=True) \
+                .limit(5) \
+                .execute()
+            spec_items = spec_items_result.data or []
+
+            # Also fetch quotes pending spec control
+            spec_ctrl_quotes_result = supabase.table("quotes") \
+                .select("id, idn_quote, customers(name), created_at") \
+                .eq("organization_id", org_id) \
+                .eq("workflow_status", "pending_spec_control") \
+                .order("created_at", desc=True) \
+                .limit(5) \
+                .execute()
+            spec_ctrl_quotes = spec_ctrl_quotes_result.data or []
+
+            # Build table rows from specs needing attention
+            spec_table_rows = []
+            for s in spec_items:
+                sq = s.get("quotes") or {}
+                sc = sq.get("customers") or {}
+                spec_status = s.get("status", "draft")
+                status_label = {"draft": "Черновик", "pending_review": "На проверке"}.get(spec_status, spec_status)
+                spec_table_rows.append(Tr(
+                    Td(s.get("specification_number") or "—", style="font-weight: 500;"),
+                    Td(sc.get("name", "—")),
+                    Td(Span(status_label, style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: {'#f3f4f6' if spec_status == 'draft' else '#fef3c7'}; color: {'#6b7280' if spec_status == 'draft' else '#d97706'}; font-weight: 500;")),
+                    Td(s.get("created_at", "")[:10] if s.get("created_at") else "—"),
+                    Td(A("Открыть", href=f"/specifications/{s['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ))
+            # Add rows for quotes pending spec control
+            for q in spec_ctrl_quotes:
+                qc = q.get("customers") or {}
+                spec_table_rows.append(Tr(
+                    Td(q.get("idn_quote") or "—", style="font-weight: 500;"),
+                    Td(qc.get("name", "—")),
+                    Td(Span("Ожидает спец.", style="display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: #ede9fe; color: #4338ca; font-weight: 500;")),
+                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(A("Создать", href=f"/spec-control", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                ))
+
             sections.append(
                 Div(
                     H2(icon("file-text", size=20), f" Спецификации: требуют внимания ({total_spec_work})",
                        style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
                     Div(
-                        Div(
-                            Div(str(pending_spec_quotes), style="font-size: 20px; font-weight: 700; color: #4338ca;"),
-                            Div("КП для создания спец.", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
-                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
+                        Table(
+                            Thead(Tr(Th("ИНД"), Th("Клиент"), Th("Статус"), Th("Создано"), Th("Действие"))),
+                            Tbody(*spec_table_rows) if spec_table_rows else Tbody(Tr(Td("Нет данных", colspan="5", style="text-align: center;"))),
+                            cls="table-enhanced"
                         ),
-                        Div(
-                            Div(str(spec_counts.get('draft', 0)), style="font-size: 20px; font-weight: 700; color: #6366f1;"),
-                            Div("Черновики", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
-                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
-                        ),
-                        Div(
-                            Div(str(spec_counts.get('pending_review', 0)), style="font-size: 20px; font-weight: 700; color: #818cf8;"),
-                            Div("На проверке", style="font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em;"),
-                            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); padding: 12px; border-radius: 8px; text-align: center;"
-                        ),
-                        style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;"
+                        cls="table-enhanced-container"
                     ),
                     A("Открыть раздел Спецификации →", href="/spec-control", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #6366f1; font-weight: 500;"),
                     cls="card-elevated", style="border-left: 4px solid #6366f1; padding: 16px;"
@@ -5014,17 +5049,20 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
 
         # Recent quotes
         H2(icon("file-text", size=22), " Последние КП", cls="section-header"),
-        Table(
-            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Действия"))),
-            Tbody(
-                *[Tr(
-                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(workflow_status_badge(q.get("workflow_status") or q.get("status", "draft"))),
-                    Td(format_money(q.get("total_amount"))),
-                    Td(A("Открыть", href=f"/quotes/{q['id']}"))
-                ) for q in recent_quotes]
-            ) if recent_quotes else Tbody(Tr(Td("Нет КП", colspan="5", style="text-align: center;")))
+        Div(
+            Table(
+                Thead(Tr(Th("КП #"), Th("Клиент"), Th("Статус"), Th("Сумма"), Th("Действия"))),
+                Tbody(
+                    *[Tr(
+                        Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                        Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                        Td(workflow_status_badge(q.get("workflow_status") or q.get("status", "draft"))),
+                        Td(format_money(q.get("total_amount"))),
+                        Td(A("Открыть", href=f"/quotes/{q['id']}"))
+                    ) for q in recent_quotes]
+                ) if recent_quotes else Tbody(Tr(Td("Нет КП", colspan="5", style="text-align: center;")))
+            , cls="table-enhanced"),
+            cls="table-enhanced-container"
         ),
         A("Все КП →", href="/quotes"),
     ]
@@ -6549,21 +6587,24 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
                              style="float: right; color: #6b7280; font-size: 0.875rem; font-weight: normal;"),
                         style="margin-bottom: 1rem;"
                     ),
-                    Table(
-                        Thead(Tr(
-                            Th("ИНД"),
-                            Th("Клиент"),
-                            Th("Статус"),
-                            Th("Сумма", style="text-align: right;"),
-                            Th("Профит", style="text-align: right;"),
-                            Th("Дедлайн"),
-                        )),
-                        Tbody(
-                            *[build_spec_row(s) for s in active_specs]
-                        ) if active_specs else Tbody(
-                            Tr(Td("Нет активных спецификаций", colspan="6", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                    Div(
+                        Table(
+                            Thead(Tr(
+                                Th("ИНД"),
+                                Th("Клиент"),
+                                Th("Статус"),
+                                Th("Сумма", style="text-align: right;"),
+                                Th("Профит", style="text-align: right;"),
+                                Th("Дедлайн"),
+                            )),
+                            Tbody(
+                                *[build_spec_row(s) for s in active_specs]
+                            ) if active_specs else Tbody(
+                                Tr(Td("Нет активных спецификаций", colspan="6", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                            ),
+                            cls="table-enhanced", style="width: 100%;"
                         ),
-                        style="width: 100%;"
+                        cls="table-enhanced-container"
                     ),
                     A("→ изменить", href="/spec-control", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
                     cls="card",
@@ -6573,20 +6614,23 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
                 # Active Quotes section
                 Div(
                     H3("Активные КП", style="margin-bottom: 1rem;"),
-                    Table(
-                        Thead(Tr(
-                            Th("ИНД"),
-                            Th("Клиент"),
-                            Th("Статус"),
-                            Th("Сумма USD", style="text-align: right;"),
-                            Th("Профит USD", style="text-align: right;"),
-                        )),
-                        Tbody(
-                            *[build_quote_row(q) for q in active_quotes]
-                        ) if active_quotes else Tbody(
-                            Tr(Td("Нет активных КП", colspan="5", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                    Div(
+                        Table(
+                            Thead(Tr(
+                                Th("ИНД"),
+                                Th("Клиент"),
+                                Th("Статус"),
+                                Th("Сумма USD", style="text-align: right;"),
+                                Th("Профит USD", style="text-align: right;"),
+                            )),
+                            Tbody(
+                                *[build_quote_row(q) for q in active_quotes]
+                            ) if active_quotes else Tbody(
+                                Tr(Td("Нет активных КП", colspan="5", style="text-align: center; color: #9ca3af; padding: 2rem;"))
+                            ),
+                            cls="table-enhanced", style="width: 100%;"
                         ),
-                        style="width: 100%;"
+                        cls="table-enhanced-container"
                     ),
                     A("→ изменить", href="/quotes", style="display: block; margin-top: 0.75rem; color: #3b82f6; font-size: 0.875rem;"),
                     cls="card",
@@ -25499,7 +25543,7 @@ def finance_calendar_tab(session, user, org_id):
         ) if payments else Tbody(
             Tr(Td("Нет данных", colspan="9", style="text-align: center; padding: 2rem; color: #666;"))
         ),
-        cls="unified-table"
+        cls="table-enhanced"
     )
 
     return Div(
@@ -25513,7 +25557,7 @@ def finance_calendar_tab(session, user, org_id):
                 Span(f"Всего записей: {len(payments)}"),
                 cls="table-footer"
             ),
-            cls="table-container"
+            cls="table-enhanced-container"
         )
     )
 
