@@ -10581,6 +10581,33 @@ SUPPLIER_COUNTRY_MAPPING = {
     "BG": "Болгария",
     "PL": "Польша",
     "AE": "ОАЭ",
+    # Additional ISO codes for UI display
+    "DE": "Германия",
+    "IT": "Италия",
+    "FR": "Франция",
+    "JP": "Япония",
+    "KR": "Корея",
+    "IN": "Индия",
+    "US": "США",
+    "GB": "Великобритания",
+    "ES": "Испания",
+    "CZ": "Чехия",
+    "NL": "Нидерланды",
+    "BE": "Бельгия",
+    "AT": "Австрия",
+    "CH": "Швейцария",
+    "SE": "Швеция",
+    "FI": "Финляндия",
+    "DK": "Дания",
+    "TW": "Тайвань",
+    "VN": "Вьетнам",
+    "TH": "Таиланд",
+    "MY": "Малайзия",
+    "SG": "Сингапур",
+    "SA": "Саудовская Аравия",
+    "KZ": "Казахстан",
+    "BY": "Беларусь",
+    "UZ": "Узбекистан",
     # English names
     "Turkey": "Турция",
     "Russia": "Россия",
@@ -10590,6 +10617,13 @@ SUPPLIER_COUNTRY_MAPPING = {
     "Bulgaria": "Болгария",
     "Poland": "Польша",
     "UAE": "ОАЭ",
+    "Germany": "Германия",
+    "Italy": "Италия",
+    "France": "Франция",
+    "Japan": "Япония",
+    "South Korea": "Корея",
+    "Korea": "Корея",
+    "India": "Индия",
     # Special values
     "OTHER": "Прочие",
     "other": "Прочие",
@@ -10605,6 +10639,45 @@ def map_supplier_country(value: str) -> str:
     if not value:
         return "Прочие"
     return SUPPLIER_COUNTRY_MAPPING.get(value, "Прочие")
+
+# Shared mapping from ISO country codes to Russian names for UI display.
+# Used by supplier list, customs workspace, logistics, and other pages.
+COUNTRY_NAME_MAP = {
+    "RU": "Россия",
+    "CN": "Китай",
+    "TR": "Турция",
+    "DE": "Германия",
+    "US": "США",
+    "KR": "Корея",
+    "JP": "Япония",
+    "IT": "Италия",
+    "FR": "Франция",
+    "PL": "Польша",
+    "LT": "Литва",
+    "LV": "Латвия",
+    "BG": "Болгария",
+    "KZ": "Казахстан",
+    "BY": "Беларусь",
+    "UZ": "Узбекистан",
+    "AE": "ОАЭ",
+    "IN": "Индия",
+    "GB": "Великобритания",
+    "ES": "Испания",
+    "CZ": "Чехия",
+    "NL": "Нидерланды",
+    "BE": "Бельгия",
+    "AT": "Австрия",
+    "CH": "Швейцария",
+    "SE": "Швеция",
+    "FI": "Финляндия",
+    "DK": "Дания",
+    "TW": "Тайвань",
+    "VN": "Вьетнам",
+    "TH": "Таиланд",
+    "MY": "Малайзия",
+    "SG": "Сингапур",
+    "SA": "Саудовская Аравия",
+}
 
 
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
@@ -18114,7 +18187,7 @@ def get(session, quote_id: str):
             'product_code': item.get('product_code', ''),
             'product_name': item.get('product_name', ''),
             'quantity': item.get('quantity', 1),
-            'supplier_country': item.get('supplier_country', ''),
+            'supplier_country': COUNTRY_NAME_MAP.get(item.get('supplier_country', ''), item.get('supplier_country', '')),
             'hs_code': item.get('hs_code') or '',
             'customs_duty': float(item.get('customs_duty') or 0),
         }
@@ -29776,7 +29849,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
 
     # Build country options for filter
     country_options = [Option("Все страны", value="")] + [
-        Option(c, value=c, selected=(c == country)) for c in countries
+        Option(COUNTRY_NAME_MAP.get(c, c), value=c, selected=(c == country)) for c in countries
     ]
 
     # Status options
@@ -29798,7 +29871,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
                     A(Strong(s.supplier_code), href=f"/suppliers/{s.id}", style="font-family: monospace; color: var(--accent);")
                 ),
                 Td(s.name),
-                Td(f"{s.country or '—'}, {s.city or '—'}" if s.country else "—"),
+                Td(f"{COUNTRY_NAME_MAP.get(s.country or '', s.country or '—')}, {s.city}" if s.country and s.city else COUNTRY_NAME_MAP.get(s.country or '', s.country or '—') if s.country else "—"),
                 Td(s.inn or "—"),
                 Td(s.contact_person or "—"),
                 Td(s.contact_email or "—"),
