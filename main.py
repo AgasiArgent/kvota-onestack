@@ -7685,7 +7685,7 @@ def get(quote_id: str, session):
                         hx_get="/api/cities/search",
                         hx_trigger="input changed delay:300ms",
                         hx_target="#cities-datalist",
-                        hx_vals='js:{"q": event.target.value}',
+                        hx_vals='js:{"q": document.getElementById("delivery-city-input").value}',
                         hx_swap="innerHTML",
                     ),
                     Datalist(id="cities-datalist"),
@@ -10316,6 +10316,7 @@ def get(quote_id: str, session):
                         Label("Город доставки", style=label_style),
                         Input(
                             name="delivery_city",
+                            id="edit-delivery-city-input",
                             type="text",
                             value=quote.get("delivery_city", "") or "",
                             placeholder="Москва, Пекин и т.д.",
@@ -10324,7 +10325,7 @@ def get(quote_id: str, session):
                             hx_get="/api/cities/search",
                             hx_trigger="input changed delay:300ms",
                             hx_target="#city-datalist",
-                            hx_vals='js:{"q": event.target.value}',
+                            hx_vals='js:{"q": document.getElementById("edit-delivery-city-input").value}',
                             hx_swap="innerHTML"
                         ),
                         Datalist(id="city-datalist"),
@@ -24315,6 +24316,9 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
             A(icon("credit-card", size=16), " Платежи",
               href='/finance?tab=payments',
               cls="finance-tab" + (" active" if tab == 'payments' else "")),
+            A(icon("file-text", size=16), " Инвойсы",
+              href="/finance?tab=invoices",
+              cls="finance-tab" + (" active" if tab == "invoices" else "")),
             cls="finance-tabs"
         )
     )
@@ -24326,6 +24330,8 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
         content = finance_payments_tab(session, user, org_id, payment_type=payment_type, payment_status=payment_status, date_from=date_from, date_to=date_to, deal_filter=deal_filter, customer_filter=customer_filter, view=view)
     elif tab == "calendar":
         content = finance_calendar_tab(session, user, org_id)
+    elif tab == "invoices":
+        content = finance_invoices_tab(session, user, org_id)
     else:
         content = finance_workspace_tab(session, user, org_id, status_filter)
 
@@ -25553,6 +25559,147 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
                 cls="table-header"
             ),
             filter_bar,
+            Div(table, cls="table-responsive"),
+            summary_footer,
+            cls="table-container"
+        )
+    )
+
+
+def finance_invoices_tab(session, user, org_id):
+    """Invoices tab - Supplier invoices registry for the finance section."""
+    supabase = get_supabase()
+
+    # Query supplier_invoices with supplier name join
+    try:
+        result = supabase.table("supplier_invoices") \
+            .select("id, invoice_number, invoice_date, due_date, total_amount, currency, status, notes, created_at, "
+                    "suppliers!supplier_invoices_supplier_id_fkey(id, name)") \
+            .eq("organization_id", org_id) \
+            .order("created_at", desc=True) \
+            .limit(200) \
+            .execute()
+        invoices = result.data or []
+    except Exception as e:
+        print(f"Error fetching supplier invoices for finance tab: {e}")
+        invoices = []
+
+    # Status label and style helper
+    def invoice_status_display(status):
+        status_map = {
+            "pending": ("Ожидает", "background: #fef3c7; color: #92400e;"),
+            "partially_paid": ("Частично", "background: #dbeafe; color: #1e40af;"),
+            "paid": ("Оплачен", "background: #dcfce7; color: #166534;"),
+            "overdue": ("Просрочен", "background: #fee2e2; color: #991b1b;"),
+            "cancelled": ("Отменён", "background: #f1f5f9; color: #64748b;"),
+        }
+        label, style = status_map.get(status, (status or "—", "background: #f1f5f9; color: #64748b;"))
+        return Span(label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; {style}")
+
+    # Calculate summary totals by currency
+    totals_by_currency = {}
+    count_by_status = {"pending": 0, "partially_paid": 0, "paid": 0, "overdue": 0, "cancelled": 0}
+    for inv in invoices:
+        cur = inv.get("currency", "USD")
+        amt = float(inv.get("total_amount", 0) or 0)
+        if cur not in totals_by_currency:
+            totals_by_currency[cur] = 0.0
+        totals_by_currency[cur] += amt
+        st = inv.get("status", "pending")
+        if st in count_by_status:
+            count_by_status[st] += 1
+
+    # Build table rows
+    table_rows = []
+    for idx, inv in enumerate(invoices, 1):
+        supplier_data = inv.get("suppliers") or {}
+        supplier_name = supplier_data.get("name", "—") if isinstance(supplier_data, dict) else "—"
+        invoice_number = inv.get("invoice_number", "—")
+        invoice_date = inv.get("invoice_date", "")
+        due_date = inv.get("due_date", "")
+        total_amount = float(inv.get("total_amount", 0) or 0)
+        currency = inv.get("currency", "USD")
+        status = inv.get("status", "pending")
+
+        # Format date
+        date_display = format_date_russian(invoice_date) if invoice_date else "—"
+        due_date_display = format_date_russian(due_date) if due_date else "—"
+
+        # Row highlight for overdue
+        row_style = "cursor: default;"
+        if status == "overdue":
+            row_style += " background: #fefce8;"
+
+        table_rows.append(
+            Tr(
+                Td(str(idx), style="color: #94a3b8; font-size: 0.85rem;"),
+                Td(invoice_number, style="font-weight: 500;"),
+                Td(supplier_name),
+                Td(date_display),
+                Td(due_date_display),
+                Td(f"{total_amount:,.2f} {currency}", style="text-align: right; font-weight: 500;"),
+                Td(invoice_status_display(status)),
+                style=row_style,
+            )
+        )
+
+    # Build table
+    table = Table(
+        Thead(
+            Tr(
+                Th("№", style="width: 40px;"),
+                Th("НОМЕР ИНВОЙСА"),
+                Th("ПОСТАВЩИК"),
+                Th("ДАТА"),
+                Th("СРОК ОПЛАТЫ"),
+                Th("СУММА", style="text-align: right;"),
+                Th("СТАТУС"),
+            )
+        ),
+        Tbody(*table_rows) if table_rows else Tbody(
+            Tr(Td("Нет инвойсов от поставщиков", colspan="7", style="text-align: center; padding: 2rem; color: #666;"))
+        ),
+        cls="unified-table"
+    )
+
+    # Summary totals
+    total_parts = []
+    for cur, amt in sorted(totals_by_currency.items()):
+        total_parts.append(
+            Div(
+                Span(f"Итого ({cur}):", style="color: #64748b; font-size: 0.85rem;"),
+                Span(f" {amt:,.2f} {cur}", style="font-weight: 600; color: #1e293b; font-size: 0.85rem;"),
+                style="margin-right: 20px;"
+            )
+        )
+
+    # Status counts
+    status_parts = []
+    status_labels = {"pending": "Ожидает", "partially_paid": "Частично", "paid": "Оплачен", "overdue": "Просрочен"}
+    for st, label in status_labels.items():
+        cnt = count_by_status.get(st, 0)
+        if cnt > 0:
+            status_parts.append(
+                Span(f"{label}: {cnt}", style="color: #64748b; font-size: 0.8rem; margin-right: 12px;")
+            )
+
+    summary_footer = Div(
+        Div(
+            *total_parts,
+            *status_parts,
+            style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;"
+        ),
+        style="padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 12px;"
+    ) if invoices else Div()
+
+    return Div(
+        Div(
+            Div(
+                H3("Инвойсы от поставщиков", style="margin: 0;"),
+                Span(f"Итого записей: {len(invoices)}", style="color: #64748b; font-size: 0.85rem;"),
+                style="display: flex; align-items: center; gap: 12px;",
+                cls="table-header"
+            ),
             Div(table, cls="table-responsive"),
             summary_footer,
             cls="table-container"
