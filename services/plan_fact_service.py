@@ -158,6 +158,44 @@ def get_all_categories() -> List[PlanFactCategory]:
         return []
 
 
+def get_categories_for_role(user_roles: list) -> List[Dict[str, Any]]:
+    """
+    Get plan-fact categories filtered by user role.
+
+    - Logistics-only users (no finance/admin/top_manager) see only logistics_* categories.
+    - Finance, admin, top_manager users see ALL categories.
+
+    Args:
+        user_roles: List of role code strings for the current user.
+
+    Returns:
+        List of category dicts (id, code, name, is_income, sort_order).
+    """
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table('plan_fact_categories').select(
+            'id, code, name, is_income, sort_order'
+        ).order('sort_order').execute()
+
+        categories = result.data or []
+
+        # If user has finance, admin, or top_manager role, return all categories
+        privileged_roles = {'finance', 'admin', 'top_manager'}
+        if any(role in privileged_roles for role in user_roles):
+            return categories
+
+        # If user has only logistics role (no privileged roles), filter to logistics_* categories
+        if 'logistics' in user_roles:
+            return [cat for cat in categories if cat.get('code', '').startswith('logistics_')]
+
+        # Default: return all categories (for other roles like customs, procurement, etc.)
+        return categories
+    except Exception as e:
+        print(f"Error getting categories for role: {e}")
+        return []
+
+
 def get_category(category_id: str) -> Optional[PlanFactCategory]:
     """
     Get a category by ID.

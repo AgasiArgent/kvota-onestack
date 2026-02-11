@@ -260,19 +260,19 @@ class TestLogisticsTabFormActions:
             "Currently uses: action=f\"/deals/{deal_id}/stages/{stage.id}/status\""
         )
 
-    def test_expense_form_action_uses_finance_prefix(self):
-        """Expense form action must point to /finance/{deal_id}/stages/...."""
+    def test_no_inline_expense_form_in_logistics_tab(self):
+        """Inline expense forms were removed — expenses are added via plan-fact tab."""
         source = _read_main_source()
         body = _find_function_body(source, "_deals_logistics_tab")
         assert body is not None, "_deals_logistics_tab function not found"
-        # Find the expense form action
-        has_finance_expense = (
-            'action=f"/finance/{deal_id}/stages/' in body
-            and '/expenses' in body
+        # Inline expense forms were removed in favor of unified plan-fact interface
+        has_inline_expense_form = (
+            '/expenses' in body
+            and 'action=' in body
         )
-        assert has_finance_expense, (
-            "_deals_logistics_tab expense form action must use /finance/ prefix. "
-            "Currently uses: action=f\"/deals/{deal_id}/stages/{stage.id}/expenses\""
+        assert not has_inline_expense_form, (
+            "_deals_logistics_tab should NOT have inline expense forms. "
+            "Expenses are now added via the plan-fact tab."
         )
 
     def test_no_deals_prefix_in_form_actions(self):

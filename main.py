@@ -62,10 +62,11 @@ from services.approval_service import request_approval, count_pending_approvals,
 # Import deal service (Feature #86)
 from services.deal_service import count_deals_by_status, get_deals_by_status
 from services.logistics_service import (
-    get_stages_for_deal, update_stage_status, add_expense_to_stage,
+    get_stages_for_deal, update_stage_status,
     get_expenses_for_stage, get_stage_summary, stage_allows_expenses,
     STAGE_NAMES, STAGE_CODES, STAGE_CATEGORY_MAP,
 )
+from services.plan_fact_service import get_categories_for_role
 
 # Import specification service (Feature #86)
 from services.specification_service import count_specifications_by_status, validate_quote_items_have_idn_sku
@@ -26110,10 +26111,11 @@ def get(session, deal_id: str):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    # Check if user has finance role
-    if not user_has_any_role(session, ["finance", "admin"]):
+    # Check if user has finance, admin, or logistics role
+    if not user_has_any_role(session, ["finance", "admin", "logistics", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
+    user_roles = user.get("roles", [])
     supabase = get_supabase()
 
     # Fetch deal with related data
@@ -26158,15 +26160,8 @@ def get(session, deal_id: str):
         print(f"Error fetching plan_fact_items: {e}")
         plan_fact_items = []
 
-    # Fetch all categories for reference
-    try:
-        categories_result = supabase.table("plan_fact_categories").select(
-            "id, code, name, is_income, sort_order"
-        ).order("sort_order").execute()
-        categories = categories_result.data or []
-    except Exception as e:
-        print(f"Error fetching categories: {e}")
-        categories = []
+    # Fetch categories filtered by user role
+    categories = get_categories_for_role(user_roles)
 
     # Build logistics section (P2.7+P2.8) - 7-stage accordion via _deals_logistics_tab
     logistics_section = Div(
@@ -26331,7 +26326,14 @@ def get(session, deal_id: str):
             P("Плановые платежи ещё не созданы", style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;"),
             Div(
                 btn_link("Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", variant="primary", icon_name="refresh-cw"),
-                btn_link("Добавить вручную", href=f"/finance/{deal_id}/plan-fact/new", variant="success", icon_name="plus"),
+                Button(
+                    icon("plus", size=14),
+                    " Добавить вручную",
+                    hx_get=f"/finance/{deal_id}/payments/new",
+                    hx_target="#payment-form-container",
+                    hx_swap="innerHTML",
+                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+                ),  # Auth: HTMX target checks user_has_any_role for finance/admin
                 style="display: flex; gap: 8px; justify-content: center;"
             ),
             style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
@@ -26473,7 +26475,14 @@ def get(session, deal_id: str):
                     style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
                 ),
                 Div(
-                    btn_link("Добавить платёж", href=f"/finance/{deal_id}/plan-fact/new", variant="success", size="sm", icon_name="plus"),
+                    Button(
+                        icon("plus", size=14),
+                        " Добавить платёж",
+                        hx_get=f"/finance/{deal_id}/payments/new",
+                        hx_target="#payment-form-container",
+                        hx_swap="innerHTML",
+                        style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+                    ),
                     btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
                     style="display: flex; gap: 8px;"
                 ) if plan_fact_items else "",
@@ -26484,11 +26493,10 @@ def get(session, deal_id: str):
                 plan_fact_table,
                 style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
             ),
+            # Payment form container (loaded via HTMX from /finance/{deal_id}/payments/new)
+            Div(id="payment-form-container", style="margin-top: 16px;"),
             style="margin-bottom: 24px;"
         ),
-
-        # Payments section (Feature 86af6ykhh)
-        _deal_payments_section(deal_id, plan_fact_items, categories),
 
         # Logistics section (P2.7+P2.8) - 7-stage accordion
         logistics_section,
@@ -26826,11 +26834,12 @@ def get(session, deal_id: str, source: str = ""):
     if redirect:
         return redirect
 
-    if not user_has_any_role(session, ["finance", "admin"]):
+    if not user_has_any_role(session, ["finance", "admin", "logistics", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     user = session["user"]
     org_id = user["org_id"]
+    user_roles = user.get("roles", [])
 
     supabase = get_supabase()
 
@@ -26850,15 +26859,8 @@ def get(session, deal_id: str, source: str = ""):
         print(f"Error fetching unpaid items: {e}")
         unpaid_items = []
 
-    # Fetch all categories
-    try:
-        categories_result = supabase.table("plan_fact_categories").select(
-            "id, code, name, is_income, sort_order"
-        ).order("sort_order").execute()
-        categories = categories_result.data or []
-    except Exception as e:
-        print(f"Error fetching categories: {e}")
-        categories = []
+    # Fetch categories filtered by user role
+    categories = get_categories_for_role(user_roles)
 
     # Form fields rendered by _payment_registration_form:
     # actual_amount, actual_currency, actual_date, payment_document
@@ -26881,7 +26883,7 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
     if redirect:
         return redirect
 
-    if not user_has_any_role(session, ["finance", "admin"]):
+    if not user_has_any_role(session, ["finance", "admin", "logistics", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     user = session["user"]
@@ -26950,6 +26952,27 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
         if not new_item:
             return P("Ошибка: не удалось создать позицию", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
+        # Auto-link logistics_stage_id if the category is a logistics category.
+        # This keeps stage summaries working on the logistics tab.
+        try:
+            cat_row = supabase.table("plan_fact_categories").select("code").eq("id", category_id).execute()
+            cat_code = cat_row.data[0]["code"] if cat_row.data else ""
+            if cat_code.startswith("logistics_"):
+                # Reverse lookup: category_code -> stage_code via STAGE_CATEGORY_MAP
+                stage_code = None
+                for sc, cc in STAGE_CATEGORY_MAP.items():
+                    if cc == cat_code:
+                        stage_code = sc
+                        break
+                if stage_code:
+                    stage_row = supabase.table("logistics_stages").select("id").eq("deal_id", deal_id).eq("stage_code", stage_code).execute()
+                    if stage_row.data:
+                        supabase.table("plan_fact_items").update(
+                            {"logistics_stage_id": stage_row.data[0]["id"]}
+                        ).eq("id", new_item.id).execute()
+        except Exception as e:
+            print(f"Warning: could not auto-link logistics_stage_id: {e}")
+
         # Now register actual payment on the newly created item
         result = record_actual_payment(
             item_id=new_item.id,
@@ -27002,30 +27025,8 @@ def delete(session, deal_id: str, item_id: str):
     # Clear actual payment fields
     clear_actual_payment(item_id)
 
-    # Re-fetch items and return updated section
-    supabase = get_supabase()
-    try:
-        plan_fact_result = supabase.table("plan_fact_items").select(
-            "id, description, planned_amount, planned_currency, planned_date, "
-            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
-            "variance_amount, payment_document, notes, created_at, "
-            "plan_fact_categories(id, code, name, is_income, sort_order)"
-        ).eq("deal_id", deal_id).order("planned_date").execute()
-        plan_fact_items = plan_fact_result.data or []
-    except Exception as e:
-        print(f"Error re-fetching plan_fact_items: {e}")
-        plan_fact_items = []
-
-    try:
-        categories_result = supabase.table("plan_fact_categories").select(
-            "id, code, name, is_income, sort_order"
-        ).order("sort_order").execute()
-        categories = categories_result.data or []
-    except Exception as e:
-        print(f"Error re-fetching categories: {e}")
-        categories = []
-
-    return _deal_payments_section(deal_id, plan_fact_items, categories)
+    # Redirect back to deal page to refresh all sections
+    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
 
 
 # ============================================================================
@@ -27311,6 +27312,18 @@ def get(session, deal_id: str, item_id: str):
     redirect = require_login(session)
     if redirect:
         return redirect
+
+    # Validate item_id is a valid UUID to prevent DB errors
+    import uuid as uuid_mod
+    try:
+        uuid_mod.UUID(item_id)
+    except (ValueError, AttributeError):
+        return page_layout("Ошибка",
+            H1("Некорректный ID"),
+            P(f"Идентификатор записи '{item_id}' не является допустимым UUID."),
+            btn_link("Назад к сделке", href=f"/finance/{deal_id}", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
 
     user = session["user"]
     user_id = user["id"]
@@ -39082,40 +39095,12 @@ def _deals_logistics_tab(deal_id, deal, session):
                 action=f"/finance/{deal_id}/stages/{stage.id}/status",
             )
 
-        # Expense form (only for non-gtd_upload stages)
-        expense_form = ""
+        # Help text pointing to plan-fact tab (replaces old inline expense forms)
+        add_expense_hint = ""
         if allows_exp:
-            expense_form = Div(
-                Details(
-                    Summary("+ Добавить расход", style="cursor: pointer; color: #3b82f6; font-size: 12px; font-weight: 500;"),
-                    Form(
-                        Div(
-                            Input(type="text", name="description", placeholder="Описание", required=True,
-                                  style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
-                            style="margin-bottom: 8px;"
-                        ),
-                        Div(
-                            Input(type="number", name="amount", placeholder="Сумма", required=True, step="0.01",
-                                  style="flex: 1; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
-                            Select(
-                                Option("RUB", value="RUB"),
-                                Option("USD", value="USD"),
-                                Option("EUR", value="EUR"),
-                                Option("CNY", value="CNY"),
-                                name="currency",
-                                style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"
-                            ),
-                            Input(type="date", name="expense_date", required=True,
-                                  style="padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
-                            style="display: flex; gap: 8px; margin-bottom: 8px;"
-                        ),
-                        Button("Добавить", type="submit",
-                               style="padding: 6px 16px; font-size: 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer;"),
-                        method="post",
-                        action=f"/finance/{deal_id}/stages/{stage.id}/expenses",
-                    ),
-                    style="margin-top: 8px;"
-                ),
+            add_expense_hint = Span(
+                "Добавить расход \u2192 вкладка План-факт",
+                style="color: #94a3b8; font-size: 11px; font-style: italic; display: block; margin-top: 6px;"
             )
 
         # Expenses list
@@ -39147,7 +39132,7 @@ def _deals_logistics_tab(deal_id, deal, session):
                 style="margin-top: 8px;"
             ) if status_form else "",
             expenses_list if expenses_list else "",
-            expense_form,
+            add_expense_hint if add_expense_hint else "",
             style="padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: white;"
         )
         stage_cards.append(card)
@@ -39159,50 +39144,11 @@ def _deals_logistics_tab(deal_id, deal, session):
 def post(session, deal_id: str, stage_id: str,
          description: str = "", amount: float = 0, currency: str = "RUB",
          expense_date: str = ""):
-    """POST /finance/{deal_id}/stages/{stage_id}/expenses - Add expense to stage.
+    """POST /finance/{deal_id}/stages/{stage_id}/expenses - DEPRECATED.
 
-    Rejects expense on gtd_upload stage (stage_allows_expenses check).
+    Inline expense forms have been removed. Expenses are now added via the
+    unified plan-fact tab. This route redirects to the deal page.
     """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["finance", "admin", "logistics"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    supabase = get_supabase()
-
-    # Verify deal belongs to org
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
-    if not deal_check.data:
-        return RedirectResponse("/deals", status_code=303)
-
-    # Look up the logistics category for the stage
-    try:
-        stage_row = supabase.table("logistics_stages").select("stage_code").eq("id", stage_id).execute()
-        stage_code = stage_row.data[0]["stage_code"] if stage_row.data else ""
-        logistics_category = STAGE_CATEGORY_MAP.get(stage_code, "logistics")
-        cat_row = supabase.table("plan_fact_categories").select("id").eq("code", logistics_category).execute()
-        cat_id = cat_row.data[0]["id"] if cat_row.data else None
-    except Exception:
-        cat_id = None
-
-    # Check if stage_allows_expenses (rejects gtd_upload)
-    result = add_expense_to_stage(
-        deal_id=deal_id,
-        stage_id=stage_id,
-        description=description,
-        amount=amount,
-        currency=currency,
-        expense_date=expense_date,
-        created_by=user_id,
-        category_id=cat_id,
-    )
-
     return RedirectResponse(f"/finance/{deal_id}", status_code=303)
 
 

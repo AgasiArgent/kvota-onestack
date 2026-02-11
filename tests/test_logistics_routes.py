@@ -221,14 +221,14 @@ class TestLogisticsTabContentRoute:
 class TestAddExpenseRoute:
     """POST /deals/{deal_id}/stages/{stage_id}/expenses must create expense."""
 
-    def test_add_expense_route_exists(self):
-        """POST /deals/{deal_id}/stages/{stage_id}/expenses route must exist."""
+    def test_expense_route_deprecated_to_redirect(self):
+        """POST /finance/{deal_id}/stages/{stage_id}/expenses route exists as deprecated redirect."""
         source = _read_main_source()
         has_route = (
-            '/deals/{deal_id}/stages/{stage_id}/expenses' in source
+            '/finance/{deal_id}/stages/{stage_id}/expenses' in source
         )
         assert has_route, (
-            'POST /deals/{deal_id}/stages/{stage_id}/expenses route must be defined'
+            'Deprecated expense route must still exist as redirect'
         )
 
     def test_add_expense_route_is_post(self):
@@ -726,12 +726,12 @@ class TestMainPyImportsLogisticsService:
             "main.py must import get_stages_for_deal from logistics_service"
         )
 
-    def test_main_imports_add_expense_to_stage(self):
-        """main.py must import add_expense_to_stage."""
+    def test_main_imports_logistics_service(self):
+        """main.py must import from logistics_service (stages, not expenses)."""
         source = _read_main_source()
-        has_import = 'add_expense_to_stage' in source
+        has_import = 'logistics_service' in source
         assert has_import, (
-            "main.py must import add_expense_to_stage from logistics_service"
+            "main.py must import from logistics_service"
         )
 
 
