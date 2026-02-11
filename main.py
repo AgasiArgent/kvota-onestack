@@ -24455,7 +24455,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         amount_str = f"{amount:,.2f} {currency}"
 
         # Format date
-        signed_at = deal.get("signed_at", "")[:10] if deal.get("signed_at") else "-"
+        signed_at = format_date_russian(deal.get("signed_at")) if deal.get("signed_at") else "-"
 
         return Tr(
             Td(A(deal.get("deal_number", "-"), href=f"/finance/{deal['id']}", style="color: var(--accent); font-weight: 500;")),
@@ -24582,7 +24582,7 @@ ERPS_COLUMN_GROUPS = {
             ('advance_percent', 'Аванс %', 'percent', None),
             ('payment_deferral_days', 'Отсрочка, дни', 'text', None),
             ('spec_sum_usd', 'Сумма спец. USD', 'money', 'text-align: right; font-weight: 500;'),
-            ('spec_profit_usd', 'Профит USD', 'money', 'text-align: right; color: #059669; font-weight: 500;'),
+            ('spec_profit_usd', 'Профит USD', 'money', 'text-align: right;'),
             ('delivery_deadline', 'Крайний срок поставки', 'date', None),
             ('advance_payment_deadline', 'Крайний срок оплаты аванса', 'date', None),
         ]
@@ -24631,7 +24631,7 @@ ERPS_COLUMN_GROUPS = {
         'color': '#fecdd3',
         'columns': [
             ('priority_tag', 'Тег приоритетности', 'priority', None),
-            ('actual_profit_usd', 'Фактический профит USD', 'money', 'text-align: right; color: #059669; font-weight: 500;'),
+            ('actual_profit_usd', 'Фактический профит USD', 'money', 'text-align: right;'),
         ]
     },
     'system': {
@@ -24729,14 +24729,14 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
 
     # Helper formatters
     def fmt_money(value):
-        if value is None:
-            return "-"
+        if value is None or value == 0:
+            return "—"
         return f"${value:,.2f}"
 
     def fmt_date(value):
         if not value:
             return "-"
-        return str(value)[:10] if isinstance(value, str) else str(value)
+        return format_date_russian(value)
 
     def fmt_percent(value):
         if value is None:
@@ -25098,6 +25098,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             Td(spec.get('idn', '-'), cls="sticky-idn"),
             Td(spec.get('client_name', '-'), cls="sticky-client"),
         ]
+        # Columns that represent profit and should use conditional coloring
+        profit_columns = {'spec_profit_usd', 'actual_profit_usd'}
         for col in columns:
             col_key = col['key']
             value = spec.get(col_key)
@@ -25108,6 +25110,9 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             else:
                 formatted = format_value(value, col['type'])
             cell_style = f"background: {col['color']};"
+            # Apply profit coloring for profit columns
+            if col_key in profit_columns:
+                cell_style += f" color: {profit_color(value)}; font-weight: 500;"
             cell_cls = type_to_class.get(col['type'], '')
             if col.get('is_last_in_group'):
                 cell_cls = f"{cell_cls} block-end" if cell_cls else "block-end"
@@ -25726,7 +25731,7 @@ def finance_calendar_tab(session, user, org_id):
     def fmt_date(value):
         if not value:
             return "-"
-        return str(value)[:10] if isinstance(value, str) else str(value)
+        return format_date_russian(value)
 
     # Helper to format money
     def fmt_money(value, currency="USD"):
@@ -25901,7 +25906,7 @@ def get(session, deal_id: str):
     spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
     deal_amount = float(deal.get("total_amount", 0) or 0)
     deal_currency = deal.get("currency", "RUB")
-    signed_at = deal.get("signed_at", "")[:10] if deal.get("signed_at") else "-"
+    signed_at = format_date_russian(deal.get("signed_at")) if deal.get("signed_at") else "-"
 
     # Status badge
     status_map = {
@@ -25979,8 +25984,8 @@ def get(session, deal_id: str):
             variance_color = "#6b7280"
 
         # Format dates
-        planned_date = item.get("planned_date", "")[:10] if item.get("planned_date") else "-"
-        actual_date = item.get("actual_date", "")[:10] if item.get("actual_date") else "-"
+        planned_date = format_date_russian(item.get("planned_date")) if item.get("planned_date") else "-"
+        actual_date = format_date_russian(item.get("actual_date")) if item.get("actual_date") else "-"
 
         # Payment status
         if actual_amount is not None:
@@ -26243,7 +26248,7 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
 
             actual_amount = float(item.get("actual_amount", 0) or 0)
             actual_currency = item.get("actual_currency", "RUB")
-            actual_date = item.get("actual_date", "")[:10] if item.get("actual_date") else "-"
+            actual_date = format_date_russian(item.get("actual_date")) if item.get("actual_date") else "-"
 
             planned_amount = float(item.get("planned_amount", 0) or 0)
             planned_currency = item.get("planned_currency", "RUB")
@@ -26865,7 +26870,7 @@ def get(session, deal_id: str):
                     style="padding: 10px 16px; background: #f8fafc; border-radius: 8px;"
                 ) for label, value in [
                     ("Сумма сделки", f"{deal_info.get('total_amount', 0):,.2f} {deal_info.get('currency', 'RUB')}"),
-                    ("Дата подписания", deal_info.get('signed_at', '-')),
+                    ("Дата подписания", format_date_russian(deal_info.get('signed_at')) if deal_info.get('signed_at') else '-'),
                     ("Закупка (из КП)", f"{totals.get('total_purchase', 0):,.2f}"),
                     ("Логистика (из КП)", f"{totals.get('total_logistics', 0):,.2f}"),
                     ("Таможня (из КП)", f"{totals.get('total_customs', 0):,.2f}"),
@@ -30009,9 +30014,14 @@ def get(session, q: str = "", country: str = "", status: str = ""):
         countries = []
         stats = {"total": 0, "active": 0, "inactive": 0}
 
-    # Build country options for filter
+    # Build country options for filter (deduplicate by display name)
+    seen_labels = {}
+    for c in countries:
+        label = COUNTRY_NAME_MAP.get(c, c)
+        if label not in seen_labels:
+            seen_labels[label] = c
     country_options = [Option("Все страны", value="")] + [
-        Option(COUNTRY_NAME_MAP.get(c, c), value=c, selected=(c == country)) for c in countries
+        Option(label, value=raw_val, selected=(raw_val == country)) for label, raw_val in sorted(seen_labels.items())
     ]
 
     # Status options
