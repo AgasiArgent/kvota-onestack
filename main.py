@@ -5279,7 +5279,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
                 q_items = items_by_quote.get(q["id"], [])
                 total_items = len(q_items)
                 completed_items = len([i for i in q_items if i.get("procurement_status") == "completed"])
-                brands_in_quote = list(set([i.get("brand", "") for i in q_items]))
+                brands_in_quote = list(set([(i.get("brand") or "") for i in q_items if i.get("brand")]))
 
                 quotes_with_details.append({
                     **q,
@@ -5329,7 +5329,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
 
         items_info = Span(progress_bar, f"{my_completed}/{my_total}", style="font-size: 0.875rem; color: #666;")
 
-        brands_display = ", ".join(brands_list[:3])
+        brands_display = ", ".join([b for b in brands_list[:3] if b])
         if len(brands_list) > 3:
             brands_display += f" +{len(brands_list) - 3}"
 
@@ -5389,7 +5389,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
         # My assigned brands (admin sees all)
         Div(
             H3("Мои бренды"),
-            P("Все бренды (администратор)" if is_admin else (", ".join(my_brands) if my_brands else "Нет назначенных брендов. Обратитесь к администратору.")),
+            P("Все бренды (администратор)" if is_admin else (", ".join([b for b in my_brands if b]) if my_brands else "Нет назначенных брендов. Обратитесь к администратору.")),
             cls="card"
         ),
 
@@ -39124,8 +39124,8 @@ def _deals_logistics_tab(deal_id, deal, session):
         if expenses:
             expense_rows = []
             for exp in expenses:
-                pa = float(exp.get('planned_amount', 0) or 0)
-                pc = exp.get('planned_currency', 'RUB')
+                pa = float(exp.get('actual_amount', 0) or exp.get('planned_amount', 0) or 0)
+                pc = exp.get('actual_currency') or exp.get('planned_currency', 'RUB')
                 expense_rows.append(
                     Div(
                         Span(exp.get('description', '-'), style="font-weight: 500; font-size: 13px;"),

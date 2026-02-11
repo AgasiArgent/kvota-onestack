@@ -318,9 +318,9 @@ def add_expense_to_stage(
         deal_id: UUID of the deal
         stage_id: UUID of the logistics stage
         description: Expense description
-        amount: Planned amount
+        amount: Actual amount spent
         currency: Currency code (RUB, USD, EUR, etc.)
-        expense_date: Planned date (YYYY-MM-DD)
+        expense_date: Actual date of expense (YYYY-MM-DD)
         created_by: UUID of the user
         category_id: Optional UUID of the plan_fact_category.
                      If not provided, looked up from STAGE_CATEGORY_MAP.
@@ -373,9 +373,9 @@ def add_expense_to_stage(
             'deal_id': deal_id,
             'category_id': resolved_category_id,
             'description': description,
-            'planned_amount': amount,
-            'planned_currency': currency,
-            'planned_date': expense_date,
+            'actual_amount': amount,
+            'actual_currency': currency,
+            'actual_date': expense_date,
             'logistics_stage_id': stage_id,
             'created_by': created_by,
         }
