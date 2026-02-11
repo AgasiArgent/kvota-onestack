@@ -5036,6 +5036,24 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
     Shows quotes with items having brands assigned to current user.
     Admin users see ALL items regardless of brand assignment.
     """
+    try:
+        return _dashboard_procurement_content_inner(user_id, org_id, supabase, status_filter, roles)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return [
+            Div(
+                H3("Ошибка загрузки данных закупок"),
+                P(f"Не удалось загрузить данные закупок. Попробуйте обновить страницу."),
+                P(f"Техническая информация: {str(e)}", style="font-size: 0.75rem; color: #9ca3af;"),
+                cls="card",
+                style="border-left: 4px solid #ef4444; padding: 1.5rem;"
+            )
+        ]
+
+
+def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
+    """Inner implementation of procurement content (extracted for error handling)."""
     # Check if user is admin - bypass brand filtering
     is_admin = roles and "admin" in roles
 
@@ -27464,10 +27482,16 @@ def get(session):
 
         tg_data = tg_result.data[0] if tg_result.data else None
 
-        # Try to get email from auth.users via profiles or organization_invites
-        # Since we can't directly query auth.users, use the invite email if available
-        # Or show user_id shortened
-        email_display = member_user_id[:8] + "..."  # Default fallback
+        # Query user_profiles for full_name to display in the FIO column
+        profile_result = supabase.table("user_profiles").select(
+            "full_name"
+        ).eq("user_id", member_user_id).limit(1).execute()
+
+        profile_data = profile_result.data[0] if profile_result.data else None
+        profile_full_name = profile_data.get("full_name") if profile_data else None
+
+        # Use full_name from user_profiles, fall back to truncated UUID only if no profile
+        email_display = profile_full_name if profile_full_name else (member_user_id[:8] + "...")
 
         users_data.append({
             "user_id": member_user_id,
