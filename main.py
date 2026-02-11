@@ -26091,17 +26091,16 @@ def finance_calendar_tab(session, user, org_id):
 # ============================================================================
 
 @rt("/finance/{deal_id}")
-def get(session, deal_id: str):
+def get(session, deal_id: str, tab: str = "main"):
     """
-    Finance deal detail page - shows deal info and plan-fact table.
+    Finance deal detail page with tabbed interface.
 
     Feature #79: Таблица план-факт по сделке
 
-    This page shows:
-    1. Deal information (number, customer, specification, dates)
-    2. Plan-fact table with all payment items
-    3. Summary of planned vs actual amounts
-    4. Variance tracking
+    Tabs:
+    - main: Deal info card + plan-fact summary card
+    - plan-fact: Plan-fact table with payment registration modal
+    - logistics: 7-stage accordion with per-stage expense buttons
     """
     redirect = require_login(session)
     if redirect:
@@ -26162,17 +26161,6 @@ def get(session, deal_id: str):
 
     # Fetch categories filtered by user role
     categories = get_categories_for_role(user_roles)
-
-    # Build logistics section (P2.7+P2.8) - 7-stage accordion via _deals_logistics_tab
-    logistics_section = Div(
-        Div(
-            icon("truck", size=14, color="#64748b"),
-            Span("ЛОГИСТИКА", style="margin-left: 6px;"),
-            style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-        ),
-        _deals_logistics_tab(deal_id, deal, session),
-        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
-    )
 
     # Extract deal info
     spec = deal.get("specifications", {}) or {}
@@ -26330,14 +26318,214 @@ def get(session, deal_id: str):
                     icon("plus", size=14),
                     " Добавить вручную",
                     hx_get=f"/finance/{deal_id}/payments/new",
-                    hx_target="#payment-form-container",
+                    hx_target="#deal-payment-modal-body",
                     hx_swap="innerHTML",
+                    onclick="document.getElementById('deal-payment-modal').style.display='flex';",
                     style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
                 ),  # Auth: HTMX target checks user_has_any_role for finance/admin
                 style="display: flex; gap: 8px; justify-content: center;"
             ),
             style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
         )
+
+    # Tab navigation
+    tabs_nav = tab_nav([
+        {'id': 'main', 'label': 'Основное', 'icon': 'file-text', 'url': f'/finance/{deal_id}?tab=main'},
+        {'id': 'plan-fact', 'label': 'План-факт платежей', 'icon': 'list', 'url': f'/finance/{deal_id}?tab=plan-fact'},
+        {'id': 'logistics', 'label': 'Логистика', 'icon': 'truck', 'url': f'/finance/{deal_id}?tab=logistics'},
+    ], active_tab=tab, target_id="tab-content")
+
+    # Build tab content based on selected tab
+    if tab == "plan-fact":
+        tab_content = Div(
+            # Plan-fact table section
+            Div(
+                # Section header
+                Div(
+                    Div(
+                        icon("list", size=14, color="#64748b"),
+                        Span("ПЛАН-ФАКТ ПЛАТЕЖЕЙ", style="margin-left: 6px;"),
+                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
+                    ),
+                    Div(
+                        Button(
+                            icon("plus", size=14),
+                            " Добавить платёж",
+                            hx_get=f"/finance/{deal_id}/payments/new",
+                            hx_target="#deal-payment-modal-body",
+                            hx_swap="innerHTML",
+                            onclick="document.getElementById('deal-payment-modal').style.display='flex';",
+                            style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+                        ),
+                        btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
+                        style="display: flex; gap: 8px;"
+                    ) if plan_fact_items else "",
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"
+                ),
+                # Table container
+                Div(
+                    plan_fact_table,
+                    style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+                ),
+                style="margin-bottom: 24px;"
+            ),
+        )
+
+    elif tab == "logistics":
+        tab_content = Div(
+            Div(
+                icon("truck", size=14, color="#64748b"),
+                Span("ЛОГИСТИКА", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+            ),
+            _deals_logistics_tab(deal_id, deal, session),
+            style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+        )
+
+    else:
+        # Default: "main" tab - Deal info + Plan-fact summary
+        tab_content = Div(
+            # Two-column grid for info cards
+            Div(
+                # Left column - Deal info card
+                Div(
+                    Div(
+                        icon("file-text", size=14, color="#64748b"),
+                        Span("ИНФОРМАЦИЯ О СДЕЛКЕ", style="margin-left: 6px;"),
+                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                    ),
+                    Div(
+                        *[Div(
+                            Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
+                            Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
+                            style="margin-bottom: 12px;"
+                        ) for label, value in [
+                            ("Номер сделки", deal_number),
+                            ("Спецификация", spec_number),
+                            ("Клиент", customer_name),
+                            ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
+                            ("Дата подписания", signed_at),
+                            ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),
+                            ("Наше юр. лицо", spec.get("our_legal_entity", "-") or "-"),
+                            ("Юр. лицо клиента", spec.get("client_legal_entity", "-") or "-"),
+                        ]],
+                    ),
+                    style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+                ),
+                # Right column - Plan-fact summary card
+                Div(
+                    Div(
+                        icon("bar-chart-2", size=14, color="#64748b"),
+                        Span("СВОДКА ПЛАН-ФАКТ", style="margin-left: 6px;"),
+                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                    ),
+                    # Summary stats grid
+                    Div(
+                        Div(
+                            Span("Плановые поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(f"{total_planned_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #10b981;"),
+                            style="padding: 12px; background: #f0fdf4; border-radius: 8px;"
+                        ),
+                        Div(
+                            Span("Факт. поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(f"{total_actual_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                            style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                        ),
+                        Div(
+                            Span("Плановые расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(f"{total_planned_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #6366f1;"),
+                            style="padding: 12px; background: #eef2ff; border-radius: 8px;"
+                        ),
+                        Div(
+                            Span("Факт. расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                            Span(f"{total_actual_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                            style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                        ),
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;"
+                    ),
+                    # Margin and variance
+                    Div(
+                        Div(
+                            Span("Плановая маржа", style="font-size: 12px; color: #64748b;"),
+                            Span(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
+                            style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;"
+                        ),
+                        Div(
+                            Span("Общее отклонение", style="font-size: 12px; color: #64748b;"),
+                            Span(
+                                f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
+                                style=f"font-size: 14px; font-weight: 600; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#64748b'};"
+                            ),
+                            style="display: flex; justify-content: space-between; padding: 8px 0;"
+                        ),
+                    ),
+                    # Payment status badges
+                    Div(
+                        Span(
+                            icon("check-circle", size=14, color="#10b981"),
+                            f" Оплачено: {paid_count}",
+                            style="display: inline-flex; align-items: center; padding: 4px 10px; background: #f0fdf4; border-radius: 12px; font-size: 12px; color: #10b981; font-weight: 500; margin-right: 8px;"
+                        ),
+                        Span(
+                            icon("clock", size=14, color="#f59e0b"),
+                            f" Ожидает: {unpaid_count}",
+                            style="display: inline-flex; align-items: center; padding: 4px 10px; background: #fef3c7; border-radius: 12px; font-size: 12px; color: #d97706; font-weight: 500;"
+                        ),
+                        style="margin-top: 12px;"
+                    ),
+                    style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;"
+            ),
+
+            # Transition history (Feature #88) - uses quote_id from the deal
+            workflow_transition_history(quote.get("id")) if quote.get("id") else None,
+        )
+
+    # Payment modal CSS
+    modal_css = """
+        #deal-payment-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #deal-payment-modal .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+    """
+
+    # Payment modal overlay (hidden by default, populated via HTMX)
+    payment_modal = Div(
+        Div(
+            Div(
+                Div(
+                    H3("Регистрация платежа", style="margin: 0; font-size: 16px; font-weight: 600; color: #1e293b;"),
+                    Button(
+                        icon("x", size=16),
+                        onclick="document.getElementById('deal-payment-modal').style.display='none';",
+                        style="background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+                ),
+                Div(id="deal-payment-modal-body"),
+                cls="modal-content"
+            ),
+            onclick="if(event.target===this) this.style.display='none';",
+            style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"
+        ),
+        id="deal-payment-modal",
+    )
 
     return page_layout(f"Сделка {deal_number}",
         # Modern gradient header card
@@ -26372,137 +26560,15 @@ def get(session, deal_id: str):
             style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
         ),
 
-        # Two-column grid for info cards
-        Div(
-            # Left column - Deal info card
-            Div(
-                Div(
-                    icon("file-text", size=14, color="#64748b"),
-                    Span("ИНФОРМАЦИЯ О СДЕЛКЕ", style="margin-left: 6px;"),
-                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-                ),
-                Div(
-                    *[Div(
-                        Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
-                        Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
-                        style="margin-bottom: 12px;"
-                    ) for label, value in [
-                        ("Номер сделки", deal_number),
-                        ("Спецификация", spec_number),
-                        ("Клиент", customer_name),
-                        ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
-                        ("Дата подписания", signed_at),
-                        ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),
-                        ("Наше юр. лицо", spec.get("our_legal_entity", "-") or "-"),
-                        ("Юр. лицо клиента", spec.get("client_legal_entity", "-") or "-"),
-                    ]],
-                ),
-                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-            ),
-            # Right column - Plan-fact summary card
-            Div(
-                Div(
-                    icon("bar-chart-2", size=14, color="#64748b"),
-                    Span("СВОДКА ПЛАН-ФАКТ", style="margin-left: 6px;"),
-                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-                ),
-                # Summary stats grid
-                Div(
-                    Div(
-                        Span("Плановые поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                        Span(f"{total_planned_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #10b981;"),
-                        style="padding: 12px; background: #f0fdf4; border-radius: 8px;"
-                    ),
-                    Div(
-                        Span("Факт. поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                        Span(f"{total_actual_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
-                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
-                    ),
-                    Div(
-                        Span("Плановые расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                        Span(f"{total_planned_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #6366f1;"),
-                        style="padding: 12px; background: #eef2ff; border-radius: 8px;"
-                    ),
-                    Div(
-                        Span("Факт. расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                        Span(f"{total_actual_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
-                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
-                    ),
-                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;"
-                ),
-                # Margin and variance
-                Div(
-                    Div(
-                        Span("Плановая маржа", style="font-size: 12px; color: #64748b;"),
-                        Span(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
-                        style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;"
-                    ),
-                    Div(
-                        Span("Общее отклонение", style="font-size: 12px; color: #64748b;"),
-                        Span(
-                            f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
-                            style=f"font-size: 14px; font-weight: 600; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#64748b'};"
-                        ),
-                        style="display: flex; justify-content: space-between; padding: 8px 0;"
-                    ),
-                ),
-                # Payment status badges
-                Div(
-                    Span(
-                        icon("check-circle", size=14, color="#10b981"),
-                        f" Оплачено: {paid_count}",
-                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #f0fdf4; border-radius: 12px; font-size: 12px; color: #10b981; font-weight: 500; margin-right: 8px;"
-                    ),
-                    Span(
-                        icon("clock", size=14, color="#f59e0b"),
-                        f" Ожидает: {unpaid_count}",
-                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #fef3c7; border-radius: 12px; font-size: 12px; color: #d97706; font-weight: 500;"
-                    ),
-                    style="margin-top: 12px;"
-                ),
-                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-            ),
-            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;"
-        ),
+        # Tab navigation
+        tabs_nav,
 
-        # Plan-fact table section
-        Div(
-            # Section header
-            Div(
-                Div(
-                    icon("list", size=14, color="#64748b"),
-                    Span("ПЛАН-ФАКТ ПЛАТЕЖЕЙ", style="margin-left: 6px;"),
-                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
-                ),
-                Div(
-                    Button(
-                        icon("plus", size=14),
-                        " Добавить платёж",
-                        hx_get=f"/finance/{deal_id}/payments/new",
-                        hx_target="#payment-form-container",
-                        hx_swap="innerHTML",
-                        style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
-                    ),
-                    btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
-                    style="display: flex; gap: 8px;"
-                ) if plan_fact_items else "",
-                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"
-            ),
-            # Table container
-            Div(
-                plan_fact_table,
-                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-            ),
-            # Payment form container (loaded via HTMX from /finance/{deal_id}/payments/new)
-            Div(id="payment-form-container", style="margin-top: 16px;"),
-            style="margin-bottom: 24px;"
-        ),
+        # Tab content
+        Div(tab_content, id="tab-content", style="margin-top: 20px;"),
 
-        # Logistics section (P2.7+P2.8) - 7-stage accordion
-        logistics_section,
-
-        # Transition history (Feature #88) - uses quote_id from the deal
-        workflow_transition_history(quote.get("id")) if quote.get("id") else None,
+        # Payment modal (available on all tabs)
+        Style(modal_css),
+        payment_modal,
 
         session=session
     )
@@ -26619,8 +26685,9 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
                 icon("plus", size=14),
                 " Зарегистрировать платёж",
                 hx_get=f"/finance/{deal_id}/payments/new",
-                hx_target="#payment-form-container",
+                hx_target="#deal-payment-modal-body",
                 hx_swap="innerHTML",
+                onclick="document.getElementById('deal-payment-modal').style.display='flex';",
                 style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
             ),
             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
@@ -26629,13 +26696,12 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
             payments_table,
             style="background: white; border-radius: 8px; overflow: hidden;"
         ),
-        Div(id="payment-form-container", style="margin-top: 16px;"),
         id="deal-payments-section",
         style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
     )
 
 
-def _payment_registration_form(deal_id, unpaid_items, categories, source: str = ""):
+def _payment_registration_form(deal_id, unpaid_items, categories, source: str = "", preselect_category_id: str = ""):
     """
     Render the payment registration form with two modes:
     - mode='plan': select an existing unpaid plan-fact item to register against
@@ -26646,10 +26712,14 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
         unpaid_items: List of unpaid plan-fact item dicts (actual_amount is NULL)
         categories: List of category dicts for ad-hoc mode
         source: If 'erps', redirects back to ERPS tab after save
+        preselect_category_id: If set, pre-selects category and defaults to 'new' mode
     """
     from datetime import date as date_type
 
     today = date_type.today().isoformat()
+
+    # If preselect_category_id is set, default to 'new' mode
+    default_mode = "new" if preselect_category_id else "plan"
 
     # Build unpaid items options for plan mode
     if unpaid_items and len(unpaid_items) > 0:
@@ -26679,13 +26749,15 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
 
     # Category options for new (ad-hoc) mode
     category_options = [
-        Option(cat.get("name", cat.get("code", "")), value=cat["id"])
+        Option(
+            cat.get("name", cat.get("code", "")),
+            value=cat["id"],
+            selected=(cat["id"] == preselect_category_id) if preselect_category_id else False,
+        )
         for cat in categories
     ]
 
     return Div(
-        H3("Регистрация платежа", style="font-size: 16px; font-weight: 600; color: #1e293b; margin: 0 0 16px 0;"),
-
         Form(
             # Hidden source field for redirect control
             Input(type="hidden", name="source", value=source),
@@ -26693,8 +26765,8 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
             Div(
                 Label("Режим", style="font-size: 13px; font-weight: 500; color: #374151; display: block; margin-bottom: 4px;"),
                 Select(
-                    Option("По плану (существующая позиция)", value="plan"),
-                    Option("Новый (внеплановый платёж)", value="new"),
+                    Option("По плану (существующая позиция)", value="plan", selected=(default_mode == "plan")),
+                    Option("Новый (внеплановый платёж)", value="new", selected=(default_mode == "new")),
                     name="mode",
                     id="payment_mode",
                     style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;",
@@ -26707,7 +26779,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
             Div(
                 plan_mode_section,
                 id="plan_mode_fields",
-                style="display: block;"
+                style=f"display: {'block' if default_mode == 'plan' else 'none'};"
             ),
 
             # New (ad-hoc) mode fields
@@ -26735,7 +26807,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
                     style="margin-bottom: 12px;"
                 ),
                 id="new_mode_fields",
-                style="display: none;"
+                style=f"display: {'block' if default_mode == 'new' else 'none'};"
             ),
 
             # Common fields for both modes
@@ -26807,7 +26879,7 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
                 Button(
                     "Отмена",
                     type="button",
-                    onclick="var modal=document.getElementById('erps-payment-modal'); if(modal) modal.style.display='none'; else this.closest('#payment-form-container').innerHTML='';" if source == "erps" else "this.closest('#payment-form-container').innerHTML = '';",
+                    onclick="var m=document.getElementById('deal-payment-modal'); if(m) m.style.display='none'; var e=document.getElementById('erps-payment-modal'); if(e) e.style.display='none'; var c=document.getElementById('payment-form-container'); if(c) c.innerHTML='';",
                     style="background: white; color: #64748b; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 20px; cursor: pointer; font-size: 14px;"
                 ),
                 style="display: flex; gap: 8px;"
@@ -26824,11 +26896,12 @@ def _payment_registration_form(deal_id, unpaid_items, categories, source: str = 
 # ============================================================================
 
 @rt("/finance/{deal_id}/payments/new")
-def get(session, deal_id: str, source: str = ""):
+def get(session, deal_id: str, source: str = "", stage_id: str = ""):
     """
     GET /finance/{deal_id}/payments/new - Returns the payment registration form.
     Supports two modes: plan (existing item) and new (ad-hoc).
     source param: if 'erps', form redirects back to ERPS tab after save.
+    stage_id param: if set, looks up the logistics stage category to pre-select.
     """
     redirect = require_login(session)
     if redirect:
@@ -26862,10 +26935,25 @@ def get(session, deal_id: str, source: str = ""):
     # Fetch categories filtered by user role
     categories = get_categories_for_role(user_roles)
 
+    # Resolve preselect_category_id from stage_id if provided
+    preselect_category_id = ""
+    if stage_id:
+        try:
+            stage_result = supabase.table("logistics_stages").select("stage_code").eq("id", stage_id).execute()
+            if stage_result.data:
+                stage_code = stage_result.data[0].get("stage_code", "")
+                cat_code = STAGE_CATEGORY_MAP.get(stage_code, "")
+                if cat_code:
+                    cat_result = supabase.table("plan_fact_categories").select("id").eq("code", cat_code).execute()
+                    if cat_result.data:
+                        preselect_category_id = cat_result.data[0]["id"]
+        except Exception as e:
+            print(f"Warning: could not resolve stage category: {e}")
+
     # Form fields rendered by _payment_registration_form:
     # actual_amount, actual_currency, actual_date, payment_document
     # Form method=POST action=/finance/{deal_id}/payments
-    return _payment_registration_form(deal_id, unpaid_items, categories, source=source)
+    return _payment_registration_form(deal_id, unpaid_items, categories, source=source, preselect_category_id=preselect_category_id)
 
 
 @rt("/finance/{deal_id}/payments")
@@ -26989,7 +27077,7 @@ def post(session, deal_id: str, mode: str = "plan", item_id: str = "",
     # Redirect based on source - if from ERPS tab, go back there
     if source == "erps":
         return RedirectResponse("/finance?tab=erps", status_code=303)
-    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
+    return RedirectResponse(f"/finance/{deal_id}?tab=plan-fact", status_code=303)
 
 
 @rt("/finance/{deal_id}/payments/{item_id}")
@@ -27025,8 +27113,8 @@ def delete(session, deal_id: str, item_id: str):
     # Clear actual payment fields
     clear_actual_payment(item_id)
 
-    # Redirect back to deal page to refresh all sections
-    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
+    # Redirect back to deal page plan-fact tab to refresh all sections
+    return RedirectResponse(f"/finance/{deal_id}?tab=plan-fact", status_code=303)
 
 
 # ============================================================================
@@ -39095,12 +39183,17 @@ def _deals_logistics_tab(deal_id, deal, session):
                 action=f"/finance/{deal_id}/stages/{stage.id}/status",
             )
 
-        # Help text pointing to plan-fact tab (replaces old inline expense forms)
-        add_expense_hint = ""
+        # Button to add expense via payment modal (replaces old inline expense forms)
+        add_expense_btn = ""
         if allows_exp:
-            add_expense_hint = Span(
-                "Добавить расход \u2192 вкладка План-факт",
-                style="color: #94a3b8; font-size: 11px; font-style: italic; display: block; margin-top: 6px;"
+            add_expense_btn = Button(
+                icon("plus", size=12),
+                " Добавить расход",
+                hx_get=f"/finance/{deal_id}/payments/new?stage_id={stage.id}",
+                hx_target="#deal-payment-modal-body",
+                hx_swap="innerHTML",
+                onclick="document.getElementById('deal-payment-modal').style.display='flex';",
+                style="padding: 4px 10px; font-size: 11px; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;"
             )
 
         # Expenses list
@@ -39129,10 +39222,12 @@ def _deals_logistics_tab(deal_id, deal, session):
             ),
             Div(
                 status_form,
-                style="margin-top: 8px;"
-            ) if status_form else "",
+                add_expense_btn if add_expense_btn else "",
+                style="display: flex; align-items: center; gap: 8px; margin-top: 8px;"
+            ) if status_form or add_expense_btn else (
+                Div(add_expense_btn, style="margin-top: 8px;") if add_expense_btn else ""
+            ),
             expenses_list if expenses_list else "",
-            add_expense_hint if add_expense_hint else "",
             style="padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: white;"
         )
         stage_cards.append(card)
@@ -39149,7 +39244,7 @@ def post(session, deal_id: str, stage_id: str,
     Inline expense forms have been removed. Expenses are now added via the
     unified plan-fact tab. This route redirects to the deal page.
     """
-    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
+    return RedirectResponse(f"/finance/{deal_id}?tab=logistics", status_code=303)
 
 
 @rt("/finance/{deal_id}/stages/{stage_id}/status")
@@ -39177,7 +39272,7 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
 
     result = update_stage_status(stage_id, status, deal_id=deal_id)
 
-    return RedirectResponse(f"/finance/{deal_id}", status_code=303)
+    return RedirectResponse(f"/finance/{deal_id}?tab=logistics", status_code=303)
 
 
 # ============================================================================

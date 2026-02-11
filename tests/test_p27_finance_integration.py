@@ -37,7 +37,7 @@ def _read_main_source():
         return f.read()
 
 
-def _find_function_body(source, func_name, max_chars=5000):
+def _find_function_body(source, func_name, max_chars=15000):
     """Find a function body in source code by name.
 
     Returns the function body text or None if not found.
@@ -49,7 +49,7 @@ def _find_function_body(source, func_name, max_chars=5000):
     return None
 
 
-def _find_route_handler_body(source, route_pattern, method="get", max_chars=5000):
+def _find_route_handler_body(source, route_pattern, method="get", max_chars=15000):
     """Find a route handler body by route pattern and HTTP method.
 
     Returns the handler body text or None.
