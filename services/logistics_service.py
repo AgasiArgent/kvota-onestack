@@ -352,9 +352,26 @@ def add_expense_to_stage(
         if not stage_allows_expenses(stage_code):
             return None
 
+        # Resolve category_id: use provided value or look up from STAGE_CATEGORY_MAP
+        resolved_category_id = category_id
+        if not resolved_category_id:
+            cat_code = STAGE_CATEGORY_MAP.get(stage_code)
+            if cat_code:
+                cat_result = supabase.table('plan_fact_categories') \
+                    .select('id') \
+                    .eq('code', cat_code) \
+                    .execute()
+                if cat_result.data:
+                    resolved_category_id = cat_result.data[0]['id']
+
+        if not resolved_category_id:
+            print(f"Error adding expense: no category found for stage_code={stage_code}")
+            return None
+
         # Build insert data
         item_data = {
             'deal_id': deal_id,
+            'category_id': resolved_category_id,
             'description': description,
             'planned_amount': amount,
             'planned_currency': currency,
@@ -362,10 +379,6 @@ def add_expense_to_stage(
             'logistics_stage_id': stage_id,
             'created_by': created_by,
         }
-
-        # Use provided category_id if available
-        if category_id:
-            item_data['category_id'] = category_id
 
         result = supabase.table('plan_fact_items').insert(item_data).execute()
 
