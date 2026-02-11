@@ -31,7 +31,7 @@ if sentry_dsn:
 from services.database import get_supabase, get_anon_client
 
 # Import export services
-from services.export_data_mapper import fetch_export_data
+from services.export_data_mapper import fetch_export_data, format_date_russian
 from services.specification_export import generate_specification_pdf, generate_spec_pdf_from_spec_id
 from services.invoice_export import generate_invoice_pdf
 from services.export_validation_service import create_validation_excel
@@ -3879,12 +3879,28 @@ def get_user_roles_from_session(session) -> list:
 
 
 def format_money(value, currency="RUB"):
-    """Format money value"""
-    if value is None:
+    """Format money value. Returns dash for None or zero."""
+    if value is None or value == 0:
         return "—"
     symbols = {"RUB": "₽", "USD": "$", "EUR": "€", "CNY": "¥"}
     symbol = symbols.get(currency, currency)
     return f"{symbol}{value:,.0f}"
+
+
+def profit_color(value):
+    """Return CSS color for profit value: green for positive, gray for zero/None, red for negative."""
+    v = float(value or 0)
+    if v > 0:
+        return "#059669"
+    elif v < 0:
+        return "#dc2626"
+    return "#9ca3af"
+
+
+def profit_cell(value, currency="USD"):
+    """Render a profit table cell with conditional coloring: green for positive, gray for zero, red for negative."""
+    return Td(format_money(value, currency), cls="col-money",
+              style=f"color: {profit_color(value)}; font-weight: 500;")
 
 
 def build_export_filename(doc_type: str, customer_name: str, quote_number: str, ext: str = "pdf") -> str:
@@ -4598,7 +4614,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                     Td(quote_idn),
                     Td(customer_name),
                     Td(format_money(quote_info.get('total_amount'))),
-                    Td(a.get('requested_at', '')[:10] if a.get('requested_at') else '—'),
+                    Td(format_date_russian(a.get('requested_at')) if a.get('requested_at') else '—'),
                     Td(
                         A("Согласовать", href=f"/quotes/{a.get('quote_id')}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;")
                     )
@@ -4641,7 +4657,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Оценить", href=f"/procurement", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in proc_quotes
             ]
@@ -4683,7 +4699,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Заполнить", href=f"/logistics", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in log_quotes
             ]
@@ -4725,7 +4741,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
-                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Заполнить", href=f"/customs", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in cust_quotes
             ]
@@ -4838,7 +4854,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                     Td(s.get("specification_number") or "—", style="font-weight: 500;"),
                     Td(sc.get("name", "—")),
                     Td(Span(status_label, style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: {'#f3f4f6' if spec_status == 'draft' else '#fef3c7'}; color: {'#6b7280' if spec_status == 'draft' else '#d97706'}; font-weight: 500;")),
-                    Td(s.get("created_at", "")[:10] if s.get("created_at") else "—"),
+                    Td(format_date_russian(s.get("created_at")) if s.get("created_at") else "—"),
                     Td(A("Открыть", href=f"/specifications/{s['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ))
             # Add rows for quotes pending spec control
@@ -4848,7 +4864,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                     Td(q.get("idn_quote") or "—", style="font-weight: 500;"),
                     Td(qc.get("name", "—")),
                     Td(Span("Ожидает спец.", style="display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; background: #ede9fe; color: #4338ca; font-weight: 500;")),
-                    Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                    Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Создать", href=f"/spec-control", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ))
 
@@ -5202,7 +5218,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
             Td(workflow_status_badge(workflow_status)),
             Td(items_info),
             Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
             Td(
                 btn_link("Открыть", href=f"/procurement/{q['id']}", variant="primary", size="sm")
                 if show_work_button and workflow_status == "pending_procurement" else
@@ -5429,7 +5445,7 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
             Td(workflow_status_badge(workflow_status)),
             Td(*stages_status),
             Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
             Td(
                 btn_link("Работать", href=f"/logistics/{q['id']}", variant="primary", size="sm")
                 if show_work_button and not logistics_done and workflow_status in ["pending_logistics", "pending_customs", "pending_logistics_and_customs"] else
@@ -5632,7 +5648,7 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
             Td(workflow_status_badge(workflow_status)),
             Td(*stages_status),
             Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
             Td(
                 btn_link("Работать", href=f"/customs/{q['id']}", variant="primary", size="sm")
                 if show_work_button and not customs_done and workflow_status in ["pending_customs", "pending_logistics", "pending_logistics_and_customs"] else
@@ -5828,7 +5844,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
             Td(customer_name),
             Td(workflow_status_badge(workflow_status)),
             Td(format_money(q.get("total_amount"))),
-            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
             Td(
                 btn_link("Проверить", href=f"/quote-control/{q['id']}", variant="primary", size="sm")
                 if show_work_button and q.get("needs_review") else
@@ -6177,8 +6193,9 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
             group_label = group_labels.get(current_status_group, current_status_group)
             table_rows.append(
                 Tr(
-                    Td(f"--- {group_label} ---", colspan="9",
-                       style="background: #f1f5f9; font-weight: 600; text-align: center; color: #475569; padding: 0.5rem;"),
+                    Td(Div(group_label, cls="group-separator-label",
+                       style="font-weight: 600; text-align: center; color: #475569;"), colspan="9",
+                       style="background: #f1f5f9; padding: 0.5rem;"),
                     cls="group-separator"
                 )
             )
@@ -7234,9 +7251,8 @@ def get(session):
                             Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
                                style="text-align: center;"),
                             Td(format_money(q.get("total_amount")), cls="col-money"),
-                            Td(format_money(q.get("total_profit_usd")), cls="col-money",
-                               style="color: #059669; font-weight: 500;"),
-                            Td(q.get("created_at", "")[:10] if q.get("created_at") else "—"),
+                            profit_cell(q.get("total_profit_usd")),
+                            Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                             Td(
                                 A(icon("eye", size=16), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
                                 A(icon("pencil", size=16), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
@@ -12569,6 +12585,7 @@ def get(quote_id: str, session):
             ),
             P("Визуализация документооборота по КП: от коммерческого предложения до таможенной декларации",
               style="color: #64748b; margin-top: 0.5rem; font-size: 0.875rem;"),
+            cls="card-elevated",
             style="margin-bottom: 1.5rem;"
         ),
 
@@ -13157,7 +13174,7 @@ def get(session):
                style="margin: 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
             P(f"Организация: {org.get('name', '—')}",
               style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;"),
-            style=header_style
+            cls="card-elevated"
         ),
 
         # Organization info
@@ -13573,7 +13590,7 @@ def _format_transition_timestamp(dt_str: str) -> str:
 def workflow_status_badge(status_str: str):
     """
     Create a styled badge for workflow status.
-    Uses workflow service colors and names.
+    Uses status-badge-v2 CSS classes for consistent styling.
     """
     try:
         status = WorkflowStatus(status_str) if status_str else None
@@ -13582,28 +13599,28 @@ def workflow_status_badge(status_str: str):
 
     if status:
         name = STATUS_NAMES_SHORT.get(status, status_str)
-        # Convert Tailwind classes to inline styles for non-Tailwind environment
-        color_map = {
-            WorkflowStatus.DRAFT: ("#f3f4f6", "#1f2937"),
-            WorkflowStatus.PENDING_PROCUREMENT: ("#fef3c7", "#92400e"),
-            WorkflowStatus.PENDING_LOGISTICS: ("#dbeafe", "#1e40af"),
-            WorkflowStatus.PENDING_CUSTOMS: ("#e9d5ff", "#6b21a8"),
-            WorkflowStatus.PENDING_SALES_REVIEW: ("#ffedd5", "#9a3412"),
-            WorkflowStatus.PENDING_QUOTE_CONTROL: ("#fce7f3", "#9d174d"),
-            WorkflowStatus.PENDING_APPROVAL: ("#fef3c7", "#b45309"),
-            WorkflowStatus.APPROVED: ("#dcfce7", "#166534"),
-            WorkflowStatus.SENT_TO_CLIENT: ("#cffafe", "#0e7490"),
-            WorkflowStatus.CLIENT_NEGOTIATION: ("#ccfbf1", "#115e59"),
-            WorkflowStatus.PENDING_SPEC_CONTROL: ("#e0e7ff", "#3730a3"),
-            WorkflowStatus.PENDING_SIGNATURE: ("#ede9fe", "#5b21b6"),
-            WorkflowStatus.DEAL: ("#d1fae5", "#065f46"),
-            WorkflowStatus.REJECTED: ("#fee2e2", "#991b1b"),
-            WorkflowStatus.CANCELLED: ("#f5f5f4", "#57534e"),
+        # Map workflow statuses to status-badge-v2 CSS variants
+        variant_map = {
+            WorkflowStatus.DRAFT: "neutral",
+            WorkflowStatus.PENDING_PROCUREMENT: "pending",
+            WorkflowStatus.PENDING_LOGISTICS: "info",
+            WorkflowStatus.PENDING_CUSTOMS: "purple",
+            WorkflowStatus.PENDING_SALES_REVIEW: "warning",
+            WorkflowStatus.PENDING_QUOTE_CONTROL: "warning",
+            WorkflowStatus.PENDING_APPROVAL: "pending",
+            WorkflowStatus.APPROVED: "success",
+            WorkflowStatus.SENT_TO_CLIENT: "info",
+            WorkflowStatus.CLIENT_NEGOTIATION: "info",
+            WorkflowStatus.PENDING_SPEC_CONTROL: "info",
+            WorkflowStatus.PENDING_SIGNATURE: "purple",
+            WorkflowStatus.DEAL: "success",
+            WorkflowStatus.REJECTED: "error",
+            WorkflowStatus.CANCELLED: "neutral",
         }
-        bg, text = color_map.get(status, ("#f3f4f6", "#1f2937"))
-        return Span(name, style=f"display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.875rem; background: {bg}; color: {text};")
+        variant = variant_map.get(status, "neutral")
+        return Span(name, cls=f"status-badge-v2 status-badge-v2--{variant}")
 
-    return Span(status_str or "—", cls="status-badge")
+    return Span(status_str or "—", cls="status-badge-v2 status-badge-v2--neutral")
 
 
 def workflow_progress_bar(status_str: str):
@@ -24508,8 +24525,6 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         )
 
     return Div(
-        H2("Финансовый менеджер", style="margin-bottom: 1.5rem;"),
-
         # Stats cards
         Div(
             Div(
@@ -25249,7 +25264,7 @@ def render_payments_grouped(items):
 
             rows.append(
                 Tr(
-                    Td(planned_date_str[:10] if planned_date_str else "—"),
+                    Td(format_date_russian(planned_date_str) if planned_date_str else "—"),
                     Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
                     Td(""),  # customer already shown in header
                     Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
@@ -25462,7 +25477,7 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
 
             table_rows.append(
                 Tr(
-                    Td(planned_date_str[:10] if planned_date_str else "—"),
+                    Td(format_date_russian(planned_date_str) if planned_date_str else "—"),
                     Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
                     Td(customer_name),
                     Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
@@ -27616,7 +27631,7 @@ def get(session):
             "roles": role_codes,
             "role_names": role_names,
             "telegram": tg_data,
-            "joined_at": member["created_at"][:10] if member.get("created_at") else "-"
+            "joined_at": format_date_russian(member["created_at"]) if member.get("created_at") else "-"
         })
 
     # Build users table rows
@@ -29945,6 +29960,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
         border-radius: 6px;
         background: #f8fafc;
         color: #1e293b;
+        max-width: 200px;
     """
 
     return page_layout("Поставщики",
