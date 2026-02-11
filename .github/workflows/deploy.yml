@@ -24,6 +24,7 @@ jobs:
             git pull origin main
             docker compose up -d --build
             docker image prune -f
+            bash scripts/apply-migrations.sh
 
       - name: Deployment status
         if: always()
