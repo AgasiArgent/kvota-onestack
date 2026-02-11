@@ -2661,9 +2661,37 @@ def sidebar(session, current_path: str = ""):
             id="sidebar"
         )
 
-    roles = user.get("roles", [])
-    is_admin = "admin" in roles
+    real_roles = user.get("roles", [])
+    is_real_admin = "admin" in real_roles
+
+    # Use impersonated role for menu visibility if active
+    impersonated_role = session.get("impersonated_role")
+    if impersonated_role:
+        roles = [impersonated_role]
+        is_admin = (impersonated_role == "admin")
+    else:
+        roles = real_roles
+        is_admin = is_real_admin
+
     user_id = user.get("id")
+
+    # Role impersonation dropdown (real admins only)
+    impersonation_select = None
+    if is_real_admin:
+        active_roles = ["sales", "procurement", "logistics", "customs", "finance",
+                        "quote_controller", "spec_controller", "top_manager",
+                        "head_of_sales", "head_of_procurement", "head_of_logistics"]
+        current_impersonation = session.get("impersonated_role", "")
+        options = [Option("Администратор (все права)", value="", selected=not current_impersonation)]
+        for r in active_roles:
+            options.append(Option(r, value=r, selected=(current_impersonation == r)))
+        impersonation_select = Div(
+            Select(*options,
+                   onchange="window.location.href='/admin/impersonate?role=' + encodeURIComponent(this.value)",
+                   style="font-size: 11px; padding: 4px 8px; border-radius: 6px; border: 1px solid #e2e8f0; width: 100%; background: #fef3c7;"),
+            style="padding: 4px 12px; margin-bottom: 4px;",
+            cls="sidebar-section"
+        )
 
     # Get pending approvals count for badge (top_manager/admin only)
     pending_approvals_count = 0
@@ -2822,6 +2850,8 @@ def sidebar(session, current_path: str = ""):
             ),
             cls="sidebar-header"
         ),
+        # Impersonation dropdown (admin only)
+        *([impersonation_select] if impersonation_select else []),
         # Navigation sections
         Nav(*nav_sections, cls="sidebar-nav"),
         # Footer with user info
@@ -3219,7 +3249,19 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
             """)
         )
     else:
+        # Impersonation warning banner
+        impersonation_banner = None
+        if session and session.get("impersonated_role"):
+            imp_role = session["impersonated_role"]
+            impersonation_banner = Div(
+                Span(f"Вы просматриваете как: {imp_role}"),
+                A("✕ Выйти", href="/admin/impersonate/exit",
+                  style="margin-left: 12px; color: #92400e; text-decoration: underline; font-weight: 600;"),
+                style="background: #fef3c7; color: #92400e; padding: 8px 16px; text-align: center; font-size: 13px; font-weight: 500; position: sticky; top: 0; z-index: 999; border-bottom: 1px solid #fcd34d;"
+            )
+
         body_content = Body(
+            *([impersonation_banner] if impersonation_banner else []),
             Div(
                 sidebar(session or {}, current_path),
                 Main(Div(*content, cls="container"), cls="main-content"),
@@ -3858,6 +3900,12 @@ def user_has_any_role(session, role_codes: list) -> bool:
     user = session.get("user")
     if not user:
         return False
+
+    # Check impersonation mode first (admin testing feature)
+    impersonated_role = session.get("impersonated_role")
+    if impersonated_role:
+        return impersonated_role in role_codes
+
     roles = user.get("roles", [])
     return any(code in roles for code in role_codes)
 
@@ -29016,6 +29064,40 @@ def post(assignment_id: str, session):
             btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
             session=session
         )
+
+
+# ============================================================================
+# ADMIN IMPERSONATION ROUTES
+# ============================================================================
+
+VALID_IMPERSONATION_ROLES = {
+    "admin", "sales", "procurement", "logistics", "customs",
+    "quote_controller", "spec_controller", "finance",
+    "top_manager", "head_of_sales", "head_of_procurement", "head_of_logistics",
+}
+
+@rt("/admin/impersonate")
+def get(session, role: str = ""):
+    """GET /admin/impersonate - Set or clear role impersonation (admin only)."""
+    user = session.get("user")
+    if not user or "admin" not in user.get("roles", []):
+        return RedirectResponse("/", status_code=303)
+
+    if role:
+        if role not in VALID_IMPERSONATION_ROLES:
+            return RedirectResponse("/", status_code=303)
+        session["impersonated_role"] = role
+    else:
+        session.pop("impersonated_role", None)
+
+    return RedirectResponse("/", status_code=303)
+
+
+@rt("/admin/impersonate/exit")
+def get(session):
+    """GET /admin/impersonate/exit - Clear role impersonation."""
+    session.pop("impersonated_role", None)
+    return RedirectResponse("/", status_code=303)
 
 
 # ============================================================================
