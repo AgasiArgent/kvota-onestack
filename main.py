@@ -3910,6 +3910,38 @@ def user_has_any_role(session, role_codes: list) -> bool:
     return any(code in roles for code in role_codes)
 
 
+def get_effective_roles(session) -> list:
+    """
+    Get the effective role list respecting admin impersonation.
+
+    If impersonated_role is set in session, returns [impersonated_role].
+    Otherwise returns the real roles from session cache.
+    Falls back to DB lookup via get_user_role_codes if session has no cached roles.
+
+    Use this for page content filtering (tasks, dashboard tabs, etc.).
+    Do NOT use for admin panel routes -- those must always use real roles.
+    """
+    impersonated_role = session.get("impersonated_role")
+    if impersonated_role:
+        return [impersonated_role]
+
+    user = session.get("user")
+    if not user:
+        return []
+
+    # Try session-cached roles first
+    roles = user.get("roles", [])
+    if roles:
+        return roles
+
+    # Fallback to DB lookup
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+    if user_id and org_id:
+        return get_user_role_codes(user_id, org_id)
+    return []
+
+
 def get_user_roles_from_session(session) -> list:
     """
     Get role codes for the logged-in user from session cache.
@@ -7004,8 +7036,8 @@ def get(session):
     org_id = user.get("org_id")
     supabase = get_supabase()
 
-    # Get user roles
-    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
+    # Get user roles (respects admin impersonation)
+    roles = get_effective_roles(session)
 
     # Count total tasks
     total_tasks = _count_user_tasks(user_id, org_id, roles, supabase)
@@ -7165,10 +7197,8 @@ def get(session, request, tab: str = None, status_filter: str = None, q: str = N
     org_id = user.get("org_id")
     supabase = get_supabase()
 
-    # Get user roles
-    roles = get_user_role_codes(user_id, org_id) if user_id and org_id else []
-    if not roles:
-        roles = []
+    # Get user roles (respects admin impersonation)
+    roles = get_effective_roles(session)
 
     # HTMX partial responses
     is_htmx = request.headers.get("hx-request") == "true"
