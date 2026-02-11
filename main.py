@@ -2719,7 +2719,6 @@ def sidebar(session, current_path: str = ""):
     # === FINANCE SECTION (for finance roles) ===
     if is_admin or any(r in roles for r in ["finance", "top_manager"]):
         finance_items = [
-            {"icon": "briefcase", "label": "Сделки", "href": "/deals", "roles": ["finance", "top_manager", "admin"]},
             {"icon": "file-text", "label": "Контроль платежей", "href": "/finance?tab=erps", "roles": ["finance", "top_manager", "admin"]},
             {"icon": "calendar", "label": "Календарь", "href": "/payments/calendar", "roles": ["finance", "top_manager", "admin"]},
         ]
@@ -7227,6 +7226,44 @@ def version_badge(quote_id, current_ver, total_count):
     )
 
 
+def _lookup_deal_for_quote(quote_id: str, org_id: str):
+    """
+    Look up the deal associated with a quote via the FK chain:
+    quote_id -> specifications.quote_id -> deals.specification_id
+
+    Returns the deal dict with nested specs/quotes if found, or None.
+    """
+    supabase = get_supabase()
+    try:
+        # First find the specification for this quote
+        spec_result = supabase.table("specifications") \
+            .select("id") \
+            .eq("quote_id", quote_id) \
+            .limit(1) \
+            .execute()
+        if not spec_result.data:
+            return None
+
+        spec_id = spec_result.data[0]["id"]
+
+        # Then find the deal for this specification
+        deal_result = supabase.table("deals").select(
+            # FK hints resolve ambiguity: !specifications(deals_specification_id_fkey), !quotes(deals_quote_id_fkey)
+            "id, deal_number, signed_at, total_amount, currency, status, created_at, "
+            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn, sign_date, validity_period, "
+            "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
+            "  our_legal_entity, client_legal_entity), "
+            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
+        ).eq("specification_id", spec_id).eq("organization_id", org_id).limit(1).execute()
+
+        if deal_result.data:
+            return deal_result.data[0]
+        return None
+    except Exception as e:
+        print(f"Error looking up deal for quote {quote_id}: {e}")
+        return None
+
+
 def _calculate_quotes_stage_stats(quotes: list) -> dict:
     """
     Group quotes by workflow_status stage and calculate count + total sum per stage.
@@ -7647,7 +7684,7 @@ def get(session):
 # ============================================================================
 
 @rt("/quotes/{quote_id}")
-def get(quote_id: str, session):
+def get(quote_id: str, session, tab: str = "overview"):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -7779,12 +7816,54 @@ def get(quote_id: str, session):
         except Exception:
             pass
 
+    # Look up deal for this quote (for finance tabs)
+    # Only do the lookup if the tab is a finance tab or we need to check if finance tabs should show
+    deal = _lookup_deal_for_quote(quote_id, user["org_id"])
+    deal_id = deal["id"] if deal else None
+
+    # If a finance tab is requested but no deal exists, fall back to overview
+    if tab in ("finance_main", "plan_fact", "logistics_stages") and not deal:
+        tab = "overview"
+
+    # Render finance tab content if requested
+    if tab in ("finance_main", "plan_fact", "logistics_stages") and deal:
+        user_roles = user.get("roles", [])
+        # Check role access for finance tabs
+        finance_roles = ["finance", "admin", "top_manager"]
+        if tab == "logistics_stages":
+            finance_roles.append("logistics")
+        if not any(r in user_roles for r in finance_roles):
+            return RedirectResponse("/unauthorized", status_code=303)
+
+        # Fetch full deal data for finance tabs
+        deal_full, plan_fact_items_deal, _ = _finance_fetch_deal_data(deal_id, user["org_id"], user_roles)
+        if not deal_full:
+            tab = "overview"
+        else:
+            # Build finance tab content
+            if tab == "finance_main":
+                finance_content = _finance_main_tab_content(deal_id, deal_full, plan_fact_items_deal)
+            elif tab == "plan_fact":
+                finance_content = _finance_plan_fact_tab_content(deal_id, plan_fact_items_deal)
+            elif tab == "logistics_stages":
+                finance_content = _finance_logistics_tab_content(deal_id, deal_full, session)
+
+            # Render the quote page with finance tab content
+            modal_elements = _finance_payment_modal(deal_id)
+            return page_layout(f"Quote {quote.get('idn_quote', '')}",
+                quote_header(quote, workflow_status, (customer or {}).get("name")),
+                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                Div(finance_content, id="tab-content", style="margin-top: 20px;"),
+                *modal_elements,
+                session=session
+            )
+
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Persistent header with IDN, status, client name
         quote_header(quote, workflow_status, (customer or {}).get("name")),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "overview", user.get("roles", [])),
+        quote_detail_tabs(quote_id, "overview", user.get("roles", []), deal=deal),
 
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
@@ -14141,7 +14220,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
 
 
 
-def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
+def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None):
     """
     Create role-based tab navigation for quote detail pages.
 
@@ -14151,11 +14230,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
     - logistics: logistics, head_of_logistics, admin
     - customs: customs, head_of_customs, admin
     - control: quote_controller, admin
+    - finance_main, plan_fact, logistics_stages: only when deal exists
 
     Args:
         quote_id: UUID of the quote
-        active_tab: Current active tab (overview, procurement, logistics, customs, control)
+        active_tab: Current active tab (overview, procurement, logistics, customs, control, finance_main, plan_fact, logistics_stages)
         user_roles: List of user roles
+        deal: Optional deal dict — finance tabs only appear when deal is not None
 
     Returns:
         Tab navigation component
@@ -14219,6 +14300,32 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list):
             "roles": None,  # All users with quote access
         },
     ]
+
+    # Finance tabs — only shown when a deal exists for this quote
+    if deal is not None:
+        tabs_config.extend([
+            {
+                "id": "finance_main",
+                "label": "Сделка",
+                "icon": "briefcase",
+                "href": f"/quotes/{quote_id}?tab=finance_main",
+                "roles": ["finance", "admin", "top_manager"],
+            },
+            {
+                "id": "plan_fact",
+                "label": "План-факт",
+                "icon": "clipboard",
+                "href": f"/quotes/{quote_id}?tab=plan_fact",
+                "roles": ["finance", "admin", "top_manager"],
+            },
+            {
+                "id": "logistics_stages",
+                "label": "Логистика (сделка)",
+                "icon": "package",
+                "href": f"/quotes/{quote_id}?tab=logistics_stages",
+                "roles": ["finance", "logistics", "admin", "top_manager"],
+            },
+        ])
 
     # Filter tabs based on user roles
     visible_tabs = []
@@ -24288,45 +24395,10 @@ def post(session, spec_id: str):
 
 @rt("/deals")
 def get(session, status_filter: str = None):
-    """Deals list page - shows all deals with filtering."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["finance", "admin", "top_manager"]):
-        return RedirectResponse("/unauthorized", status_code=303)
-
-    content = finance_workspace_tab(session, user, org_id, status_filter)
-
-    # Design system header
-    header_card_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 20px;
-    """
-
-    return page_layout("Сделки",
-        # Header card with gradient
-        Div(
-            Div(
-                icon("briefcase", size=24, color="#475569"),
-                Span(" Сделки", style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
-                style="display: flex; align-items: center;"
-            ),
-            P("Активные сделки и план-факт анализ",
-              style="margin: 6px 0 0 0; font-size: 13px; color: #64748b;"),
-            style=header_card_style
-        ),
-        content,
-        session=session,
-        current_path="/deals"
-    )
+    """Redirect /deals to /finance — deals list is now accessed via finance page."""
+    if status_filter:
+        return RedirectResponse(f"/finance?tab=workspace&status_filter={status_filter}", status_code=301)
+    return RedirectResponse("/finance", status_code=301)
 
 
 # ============================================================================
@@ -26091,11 +26163,15 @@ def finance_calendar_tab(session, user, org_id):
 # ============================================================================
 
 @rt("/finance/{deal_id}")
-def get(session, deal_id: str, tab: str = "main"):
+def get(session, deal_id: str, tab: str = "main", generated: str = "", payment_registered: str = ""):
     """
-    Finance deal detail page with tabbed interface.
+    Redirect /finance/{deal_id} to /quotes/{quote_id}?tab=finance_main.
 
-    Feature #79: Таблица план-факт по сделке
+    Preserves backward compatibility for bookmarks and ERPS links.
+    Maps old tab names to new quote detail tab names.
+
+    Original Feature #79: Таблица план-факт по сделке
+    Now consolidated into quote detail page.
 
     Tabs:
     - main: Deal info card + plan-fact summary card
@@ -26107,25 +26183,18 @@ def get(session, deal_id: str, tab: str = "main"):
         return redirect
 
     user = session["user"]
-    user_id = user["id"]
     org_id = user["org_id"]
 
     # Check if user has finance, admin, or logistics role
     if not user_has_any_role(session, ["finance", "admin", "logistics", "top_manager"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
-    user_roles = user.get("roles", [])
     supabase = get_supabase()
 
-    # Fetch deal with related data
+    # Look up quote_id via deal -> specification -> quote chain
     try:
         deal_result = supabase.table("deals").select(
-            # FK hints resolve ambiguity: !specifications(deals_specification_id_fkey), !quotes(deals_quote_id_fkey)
-            "id, deal_number, signed_at, total_amount, currency, status, created_at, "
-            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn, sign_date, validity_period, "
-            "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
-            "  our_legal_entity, client_legal_entity), "
-            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
+            "id, specifications!deals_specification_id_fkey(quote_id)"
         ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
 
         deal = deal_result.data
@@ -26133,586 +26202,33 @@ def get(session, deal_id: str, tab: str = "main"):
             return page_layout("Ошибка",
                 H1("Сделка не найдена"),
                 P(f"Сделка с ID {deal_id} не найдена или у вас нет доступа."),
-                btn_link("Назад к списку сделок", href="/finance", variant="secondary", icon_name="arrow-left"),
+                btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
+                session=session
+            )
+
+        spec = (deal.get("specifications") or {})
+        quote_id = spec.get("quote_id")
+        if not quote_id:
+            return page_layout("Ошибка",
+                H1("КП не найдено"),
+                P("Не удалось определить КП для этой сделки."),
+                btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
                 session=session
             )
     except Exception as e:
-        print(f"Error fetching deal: {e}")
+        print(f"Error looking up quote for deal {deal_id}: {e}")
         return page_layout("Ошибка",
             H1("Ошибка загрузки"),
             P(f"Не удалось загрузить сделку: {str(e)}"),
-            btn_link("Назад к списку сделок", href="/finance", variant="secondary", icon_name="arrow-left"),
+            btn_link("Назад к финансам", href="/finance", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
-    # Fetch plan_fact_items for this deal
-    try:
-        plan_fact_result = supabase.table("plan_fact_items").select(
-            "id, description, planned_amount, planned_currency, planned_date, "
-            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
-            "variance_amount, payment_document, notes, created_at, "
-            "plan_fact_categories(id, code, name, is_income, sort_order)"
-        ).eq("deal_id", deal_id).order("planned_date").execute()
+    # Map old finance tab names to new quote detail tab names
+    tab_map = {"main": "finance_main", "plan-fact": "plan_fact", "logistics": "logistics_stages"}
+    new_tab = tab_map.get(tab, "finance_main")
 
-        plan_fact_items = plan_fact_result.data or []
-    except Exception as e:
-        print(f"Error fetching plan_fact_items: {e}")
-        plan_fact_items = []
-
-    # Fetch categories filtered by user role
-    categories = get_categories_for_role(user_roles)
-
-    # Extract deal info
-    spec = deal.get("specifications", {}) or {}
-    quote = deal.get("quotes", {}) or {}
-    customer = quote.get("customers", {}) or {}
-    customer_name = customer.get("name", "Неизвестно")
-
-    deal_number = deal.get("deal_number", "-")
-    spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
-    deal_amount = float(deal.get("total_amount", 0) or 0)
-    deal_currency = deal.get("currency", "RUB")
-    signed_at = format_date_russian(deal.get("signed_at")) if deal.get("signed_at") else "-"
-
-    # Status badge
-    status_map = {
-        "active": ("В работе", "bg-green-200 text-green-800", "#10b981"),
-        "completed": ("Завершена", "bg-blue-200 text-blue-800", "#3b82f6"),
-        "cancelled": ("Отменена", "bg-red-200 text-red-800", "#ef4444"),
-    }
-    status = deal.get("status", "active")
-    status_label, status_class, status_color = status_map.get(status, (status, "bg-gray-200 text-gray-800", "#6b7280"))
-    status_badge = Span(status_label, cls=f"px-2 py-1 rounded text-sm {status_class}")
-
-    # Calculate plan-fact summary
-    total_planned_income = sum(
-        float(item.get("planned_amount", 0) or 0)
-        for item in plan_fact_items
-        if (item.get("plan_fact_categories") or {}).get("is_income", False)
-    )
-    total_planned_expense = sum(
-        float(item.get("planned_amount", 0) or 0)
-        for item in plan_fact_items
-        if not (item.get("plan_fact_categories") or {}).get("is_income", True)
-    )
-    total_actual_income = sum(
-        float(item.get("actual_amount", 0) or 0)
-        for item in plan_fact_items
-        if (item.get("plan_fact_categories") or {}).get("is_income", False) and item.get("actual_amount") is not None
-    )
-    total_actual_expense = sum(
-        float(item.get("actual_amount", 0) or 0)
-        for item in plan_fact_items
-        if not (item.get("plan_fact_categories") or {}).get("is_income", True) and item.get("actual_amount") is not None
-    )
-    total_variance = sum(
-        float(item.get("variance_amount", 0) or 0)
-        for item in plan_fact_items
-        if item.get("variance_amount") is not None
-    )
-
-    # Count paid vs unpaid items
-    paid_count = sum(1 for item in plan_fact_items if item.get("actual_amount") is not None)
-    unpaid_count = len(plan_fact_items) - paid_count
-
-    # Build plan-fact table row
-    def plan_fact_row(item):
-        category = item.get("plan_fact_categories", {}) or {}
-        is_income = category.get("is_income", False)
-        category_name = category.get("name", "Прочее")
-
-        # Format amounts
-        planned_amount = float(item.get("planned_amount", 0) or 0)
-        planned_currency = item.get("planned_currency", "RUB")
-        planned_str = f"{planned_amount:,.2f} {planned_currency}"
-
-        actual_amount = item.get("actual_amount")
-        actual_currency = item.get("actual_currency", "RUB")
-        if actual_amount is not None:
-            actual_str = f"{float(actual_amount):,.2f} {actual_currency}"
-        else:
-            actual_str = "—"
-
-        variance = item.get("variance_amount")
-        if variance is not None:
-            variance_val = float(variance)
-            if variance_val > 0:
-                variance_str = f"+{variance_val:,.2f}"
-                variance_color = "#ef4444" if not is_income else "#10b981"  # Red for overspend, green for extra income
-            elif variance_val < 0:
-                variance_str = f"{variance_val:,.2f}"
-                variance_color = "#10b981" if not is_income else "#ef4444"  # Green for underspend, red for less income
-            else:
-                variance_str = "0.00"
-                variance_color = "#6b7280"
-        else:
-            variance_str = "—"
-            variance_color = "#6b7280"
-
-        # Format dates
-        planned_date = format_date_russian(item.get("planned_date")) if item.get("planned_date") else "-"
-        actual_date = format_date_russian(item.get("actual_date")) if item.get("actual_date") else "-"
-
-        # Payment status
-        if actual_amount is not None:
-            payment_status = Span(icon("check", size=14), " Оплачено", style="color: #10b981; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;")
-        else:
-            payment_status = Span("○ Ожидает", style="color: #f59e0b;")
-
-        # Category badge color
-        category_color = "#10b981" if is_income else "#6366f1"
-
-        cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
-        return Tr(
-            Td(
-                Span(category_name, style=f"color: {category_color}; font-weight: 600; display: block;"),
-                Span(item.get("description", "-") or "-", style="color: #64748b; font-size: 12px;"),
-                style=cell_style
-            ),
-            Td(planned_date, style=cell_style),
-            Td(planned_str, style=f"{cell_style} text-align: right; font-weight: 500;"),
-            Td(actual_date if actual_amount is not None else "-", style=cell_style),
-            Td(actual_str, style=f"{cell_style} text-align: right;"),
-            Td(variance_str, style=f"{cell_style} text-align: right; color: {variance_color}; font-weight: 600;"),
-            Td(payment_status, style=cell_style),
-            Td(
-                btn_link("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", variant="primary", size="sm") if actual_amount is None else "",
-                style=cell_style
-            ),
-            style="transition: background-color 0.15s ease;",
-            onmouseover="this.style.backgroundColor='#f8fafc'",
-            onmouseout="this.style.backgroundColor='transparent'"
-        )
-
-    # Build plan-fact table with modern styling
-    table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
-    table_cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
-
-    if plan_fact_items:
-        plan_fact_table = Table(
-            Thead(
-                Tr(
-                    Th("Категория / Описание", style=table_header_style),
-                    Th("План. дата", style=table_header_style),
-                    Th("План. сумма", style=f"{table_header_style} text-align: right;"),
-                    Th("Факт. дата", style=table_header_style),
-                    Th("Факт. сумма", style=f"{table_header_style} text-align: right;"),
-                    Th("Отклонение", style=f"{table_header_style} text-align: right;"),
-                    Th("Статус", style=table_header_style),
-                    Th("", style=table_header_style),
-                )
-            ),
-            Tbody(*[plan_fact_row(item) for item in plan_fact_items]),
-            style="width: 100%; border-collapse: collapse;"
-        )
-    else:
-        plan_fact_table = Div(
-            Div(
-                icon("file-plus", size=40, color="#94a3b8"),
-                style="margin-bottom: 12px;"
-            ),
-            P("Плановые платежи ещё не созданы", style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;"),
-            Div(
-                btn_link("Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", variant="primary", icon_name="refresh-cw"),
-                Button(
-                    icon("plus", size=14),
-                    " Добавить вручную",
-                    hx_get=f"/finance/{deal_id}/payments/new",
-                    hx_target="#deal-payment-modal-body",
-                    hx_swap="innerHTML",
-                    onclick="document.getElementById('deal-payment-modal').style.display='flex';",
-                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
-                ),  # Auth: HTMX target checks user_has_any_role for finance/admin
-                style="display: flex; gap: 8px; justify-content: center;"
-            ),
-            style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
-        )
-
-    # Tab navigation — plain <a> links (no HTMX) to avoid page duplication
-    _finance_tabs = [
-        {'id': 'main', 'label': 'Основное', 'icon': 'file-text', 'url': f'/finance/{deal_id}?tab=main'},
-        {'id': 'plan-fact', 'label': 'План-факт платежей', 'icon': 'list', 'url': f'/finance/{deal_id}?tab=plan-fact'},
-        {'id': 'logistics', 'label': 'Логистика', 'icon': 'truck', 'url': f'/finance/{deal_id}?tab=logistics'},
-    ]
-    tabs_nav = Div(
-        *[
-            A(
-                icon(t["icon"], size=16, cls="tab-icon"),
-                Span(t["label"]),
-                href=t["url"],
-                cls=f"tab tab-lifted {'tab-active' if t['id'] == tab else ''}",
-                style="display: inline-flex; align-items: center; gap: 0.375rem;",
-            )
-            for t in _finance_tabs
-        ],
-        role="tablist",
-        cls="tabs tabs-lifted",
-    )
-
-    # Build tab content based on selected tab
-    if tab == "plan-fact":
-        tab_content = Div(
-            # Plan-fact table section
-            Div(
-                # Section header
-                Div(
-                    Div(
-                        icon("list", size=14, color="#64748b"),
-                        Span("ПЛАН-ФАКТ ПЛАТЕЖЕЙ", style="margin-left: 6px;"),
-                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
-                    ),
-                    Div(
-                        Button(
-                            icon("plus", size=14),
-                            " Добавить платёж",
-                            hx_get=f"/finance/{deal_id}/payments/new",
-                            hx_target="#deal-payment-modal-body",
-                            hx_swap="innerHTML",
-                            onclick="document.getElementById('deal-payment-modal').style.display='flex';",
-                            style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
-                        ),
-                        btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
-                        style="display: flex; gap: 8px;"
-                    ) if plan_fact_items else "",
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"
-                ),
-                # Table container
-                Div(
-                    plan_fact_table,
-                    style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-                ),
-                style="margin-bottom: 24px;"
-            ),
-        )
-
-    elif tab == "logistics":
-        tab_content = Div(
-            Div(
-                icon("truck", size=14, color="#64748b"),
-                Span("ЛОГИСТИКА", style="margin-left: 6px;"),
-                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-            ),
-            _deals_logistics_tab(deal_id, deal, session),
-            style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
-        )
-
-    else:
-        # Default: "main" tab - Deal info + Plan-fact summary
-        tab_content = Div(
-            # Two-column grid for info cards
-            Div(
-                # Left column - Deal info card
-                Div(
-                    Div(
-                        icon("file-text", size=14, color="#64748b"),
-                        Span("ИНФОРМАЦИЯ О СДЕЛКЕ", style="margin-left: 6px;"),
-                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-                    ),
-                    Div(
-                        *[Div(
-                            Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
-                            Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
-                            style="margin-bottom: 12px;"
-                        ) for label, value in [
-                            ("Номер сделки", deal_number),
-                            ("Спецификация", spec_number),
-                            ("Клиент", customer_name),
-                            ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
-                            ("Дата подписания", signed_at),
-                            ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),
-                            ("Наше юр. лицо", spec.get("our_legal_entity", "-") or "-"),
-                            ("Юр. лицо клиента", spec.get("client_legal_entity", "-") or "-"),
-                        ]],
-                    ),
-                    style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-                ),
-                # Right column - Plan-fact summary card
-                Div(
-                    Div(
-                        icon("bar-chart-2", size=14, color="#64748b"),
-                        Span("СВОДКА ПЛАН-ФАКТ", style="margin-left: 6px;"),
-                        style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
-                    ),
-                    # Summary stats grid
-                    Div(
-                        Div(
-                            Span("Плановые поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                            Span(f"{total_planned_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #10b981;"),
-                            style="padding: 12px; background: #f0fdf4; border-radius: 8px;"
-                        ),
-                        Div(
-                            Span("Факт. поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                            Span(f"{total_actual_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
-                            style="padding: 12px; background: #f8fafc; border-radius: 8px;"
-                        ),
-                        Div(
-                            Span("Плановые расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                            Span(f"{total_planned_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #6366f1;"),
-                            style="padding: 12px; background: #eef2ff; border-radius: 8px;"
-                        ),
-                        Div(
-                            Span("Факт. расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
-                            Span(f"{total_actual_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
-                            style="padding: 12px; background: #f8fafc; border-radius: 8px;"
-                        ),
-                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;"
-                    ),
-                    # Margin and variance
-                    Div(
-                        Div(
-                            Span("Плановая маржа", style="font-size: 12px; color: #64748b;"),
-                            Span(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
-                            style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;"
-                        ),
-                        Div(
-                            Span("Общее отклонение", style="font-size: 12px; color: #64748b;"),
-                            Span(
-                                f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
-                                style=f"font-size: 14px; font-weight: 600; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#64748b'};"
-                            ),
-                            style="display: flex; justify-content: space-between; padding: 8px 0;"
-                        ),
-                    ),
-                    # Payment status badges
-                    Div(
-                        Span(
-                            icon("check-circle", size=14, color="#10b981"),
-                            f" Оплачено: {paid_count}",
-                            style="display: inline-flex; align-items: center; padding: 4px 10px; background: #f0fdf4; border-radius: 12px; font-size: 12px; color: #10b981; font-weight: 500; margin-right: 8px;"
-                        ),
-                        Span(
-                            icon("clock", size=14, color="#f59e0b"),
-                            f" Ожидает: {unpaid_count}",
-                            style="display: inline-flex; align-items: center; padding: 4px 10px; background: #fef3c7; border-radius: 12px; font-size: 12px; color: #d97706; font-weight: 500;"
-                        ),
-                        style="margin-top: 12px;"
-                    ),
-                    style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
-                ),
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;"
-            ),
-
-            # Transition history (Feature #88) - uses quote_id from the deal
-            workflow_transition_history(quote.get("id")) if quote.get("id") else None,
-        )
-
-    # Payment modal CSS
-    modal_css = """
-        #deal-payment-modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-        #deal-payment-modal .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            max-width: 520px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-    """
-
-    # Payment modal overlay (hidden by default, populated via HTMX)
-    payment_modal = Div(
-        Div(
-            Div(
-                Div(
-                    H3("Регистрация платежа", style="margin: 0; font-size: 16px; font-weight: 600; color: #1e293b;"),
-                    Button(
-                        icon("x", size=16),
-                        onclick="document.getElementById('deal-payment-modal').style.display='none';",
-                        style="background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;"
-                    ),
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
-                ),
-                Div(id="deal-payment-modal-body"),
-                cls="modal-content"
-            ),
-            onclick="if(event.target===this) this.style.display='none';",
-            style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"
-        ),
-        id="deal-payment-modal",
-    )
-
-    return page_layout(f"Сделка {deal_number}",
-        # Modern gradient header card
-        Div(
-            # Back link
-            A(
-                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
-                "К списку сделок",
-                href="/finance",
-                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
-            ),
-            # Header content
-            Div(
-                Div(
-                    icon("briefcase", size=28, color="#6366f1"),
-                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
-                ),
-                Div(
-                    H1(f"Сделка {deal_number}", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
-                    Div(
-                        Span(customer_name, style="color: #64748b; font-size: 14px; margin-right: 12px;"),
-                        Span(
-                            status_label,
-                            style=f"display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; background: {status_color}20; color: {status_color};"
-                        ),
-                        style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;"
-                    ),
-                    style="flex: 1;"
-                ),
-                style="display: flex; align-items: center;"
-            ),
-            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
-        ),
-
-        # Tab navigation
-        tabs_nav,
-
-        # Tab content
-        Div(tab_content, id="tab-content", style="margin-top: 20px;"),
-
-        # Payment modal (available on all tabs)
-        Style(modal_css),
-        payment_modal,
-
-        session=session
-    )
-
-
-# ============================================================================
-# DEAL PAYMENTS SECTION (Feature 86af6ykhh)
-# ============================================================================
-
-def _deal_payments_section(deal_id, plan_fact_items, categories):
-    """
-    Render the PLATEZHI (payments) section showing registered payments
-    and a button to add new payments.
-
-    Args:
-        deal_id: UUID of the deal
-        plan_fact_items: List of plan-fact item dicts (with plan_fact_categories nested)
-        categories: List of category dicts
-    """
-    # Filter paid items (actual_amount is not null)
-    paid_items = [item for item in plan_fact_items if item.get("actual_amount") is not None]
-
-    # Build paid items table rows
-    cell_style = "padding: 10px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
-    th_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: white; letter-spacing: 0.05em; text-transform: uppercase; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-bottom: 2px solid #e2e8f0;"
-
-    if paid_items:
-        rows = []
-        for item in paid_items:
-            category = item.get("plan_fact_categories", {}) or {}
-            category_name = category.get("name", "Прочее")
-            is_income = category.get("is_income", False)
-            category_color = "#10b981" if is_income else "#6366f1"
-
-            actual_amount = float(item.get("actual_amount", 0) or 0)
-            actual_currency = item.get("actual_currency", "RUB")
-            actual_date = format_date_russian(item.get("actual_date")) if item.get("actual_date") else "-"
-
-            planned_amount = float(item.get("planned_amount", 0) or 0)
-            planned_currency = item.get("planned_currency", "RUB")
-
-            variance = item.get("variance_amount")
-            if variance is not None:
-                variance_val = float(variance)
-                if variance_val > 0:
-                    variance_str = f"+{variance_val:,.2f}"
-                    variance_color = "#ef4444" if not is_income else "#10b981"
-                elif variance_val < 0:
-                    variance_str = f"{variance_val:,.2f}"
-                    variance_color = "#10b981" if not is_income else "#ef4444"
-                else:
-                    variance_str = "0.00"
-                    variance_color = "#6b7280"
-            else:
-                variance_str = "-"
-                variance_color = "#6b7280"
-
-            rows.append(Tr(
-                Td(
-                    Span(category_name, style=f"color: {category_color}; font-weight: 600; display: block;"),
-                    Span(item.get("description", "-") or "-", style="color: #64748b; font-size: 12px;"),
-                    style=cell_style
-                ),
-                Td(actual_date, style=cell_style),
-                Td(f"{actual_amount:,.2f} {actual_currency}", style=f"{cell_style} text-align: right; font-weight: 500; color: #10b981;"),
-                Td(f"{planned_amount:,.2f} {planned_currency}", style=f"{cell_style} text-align: right;"),
-                Td(variance_str, style=f"{cell_style} text-align: right; color: {variance_color}; font-weight: 600;"),
-                Td(item.get("payment_document", "") or "-", style=f"{cell_style} font-family: monospace; font-size: 12px;"),
-                Td(
-                    Button(
-                        icon("x", size=14),
-                        hx_delete=f"/finance/{deal_id}/payments/{item['id']}",
-                        hx_target="#deal-payments-section",
-                        hx_swap="outerHTML",
-                        hx_confirm="Отменить регистрацию этого платежа?",
-                        style="background: none; border: 1px solid #fecaca; color: #ef4444; border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px;",
-                        title="Отменить платёж"
-                    ),
-                    style=cell_style
-                ),
-            ))
-
-        payments_table = Table(
-            Thead(Tr(
-                Th("Категория / Описание", style=th_style),
-                Th("Дата оплаты", style=th_style),
-                Th("Сумма факт", style=f"{th_style} text-align: right;"),
-                Th("Сумма план", style=f"{th_style} text-align: right;"),
-                Th("Отклонение", style=f"{th_style} text-align: right;"),
-                Th("Документ", style=th_style),
-                Th("", style=th_style),
-            )),
-            Tbody(*rows),
-            cls="table-enhanced",
-            style="width: 100%; border-collapse: collapse;"
-        )
-    else:
-        payments_table = Div(
-            icon("inbox", size=32, color="#cbd5e1"),
-            Div("Платежи ещё не зарегистрированы", style="font-size: 14px; color: #64748b; margin-top: 8px;"),
-            style="text-align: center; padding: 32px 20px; color: #94a3b8;"
-        )
-
-    return Div(
-        Div(
-            Div(
-                icon("credit-card", size=14, color="#64748b"),
-                Span("ПЛАТЕЖИ", style="margin-left: 6px;"),
-                Span(f"{len(paid_items)}", style="background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;") if paid_items else "",
-                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
-            ),
-            # Auth: payments/new route checks user_has_any_role for finance/admin
-            Button(
-                icon("plus", size=14),
-                " Зарегистрировать платёж",
-                hx_get=f"/finance/{deal_id}/payments/new",
-                hx_target="#deal-payment-modal-body",
-                hx_swap="innerHTML",
-                onclick="document.getElementById('deal-payment-modal').style.display='flex';",
-                style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
-            ),
-            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
-        ),
-        Div(
-            payments_table,
-            style="background: white; border-radius: 8px; overflow: hidden;"
-        ),
-        id="deal-payments-section",
-        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
-    )
+    return RedirectResponse(f"/quotes/{quote_id}?tab={new_tab}", status_code=301)
 
 
 def _payment_registration_form(deal_id, unpaid_items, categories, source: str = "", preselect_category_id: str = "", source_tab: str = ""):
@@ -39192,6 +38708,397 @@ async def get_dadata_lookup_inn(inn: str, session):
 def get(session, deal_id: str, tab: str = "info"):
     """Redirect to /finance/{deal_id} - logistics now lives on the finance page."""
     return RedirectResponse(f"/finance/{deal_id}", status_code=301)
+
+
+def _finance_fetch_deal_data(deal_id, org_id, user_roles):
+    """
+    Fetch deal and plan-fact data needed for finance tabs on quote detail page.
+
+    Returns (deal, plan_fact_items, categories) tuple.
+    deal contains nested specifications and quotes.
+    """
+    supabase = get_supabase()
+
+    # Fetch deal with related data
+    try:
+        deal_result = supabase.table("deals").select(
+            # FK hints resolve ambiguity: !specifications(deals_specification_id_fkey), !quotes(deals_quote_id_fkey)
+            "id, deal_number, signed_at, total_amount, currency, status, created_at, "
+            "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn, sign_date, validity_period, "
+            "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
+            "  our_legal_entity, client_legal_entity), "
+            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
+        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+    except Exception as e:
+        print(f"Error fetching deal {deal_id}: {e}")
+        return None, [], []
+
+    deal = deal_result.data
+    if not deal:
+        return None, [], []
+
+    # Fetch plan_fact_items
+    try:
+        plan_fact_result = supabase.table("plan_fact_items").select(
+            "id, description, planned_amount, planned_currency, planned_date, "
+            "actual_amount, actual_currency, actual_date, actual_exchange_rate, "
+            "variance_amount, payment_document, notes, created_at, "
+            "plan_fact_categories(id, code, name, is_income, sort_order)"
+        ).eq("deal_id", deal_id).order("planned_date").execute()
+        plan_fact_items = plan_fact_result.data or []
+    except Exception as e:
+        print(f"Error fetching plan_fact_items: {e}")
+        plan_fact_items = []
+
+    categories = get_categories_for_role(user_roles)
+    return deal, plan_fact_items, categories
+
+
+def _finance_main_tab_content(deal_id, deal, plan_fact_items):
+    """Render the 'Сделка' (main) finance tab content: deal info + plan-fact summary."""
+    spec = (deal.get("specifications") or {})
+    quote = (deal.get("quotes") or {})
+    customer = (quote.get("customers") or {})
+    customer_name = customer.get("name", "Неизвестно")
+
+    deal_number = deal.get("deal_number", "-")
+    spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
+    deal_amount = float(deal.get("total_amount", 0) or 0)
+    deal_currency = deal.get("currency", "RUB")
+    signed_at = format_date_russian(deal.get("signed_at")) if deal.get("signed_at") else "-"
+
+    # Calculate plan-fact summary
+    total_planned_income = sum(
+        float(item.get("planned_amount", 0) or 0)
+        for item in plan_fact_items
+        if (item.get("plan_fact_categories") or {}).get("is_income", False)
+    )
+    total_planned_expense = sum(
+        float(item.get("planned_amount", 0) or 0)
+        for item in plan_fact_items
+        if not (item.get("plan_fact_categories") or {}).get("is_income", True)
+    )
+    total_actual_income = sum(
+        float(item.get("actual_amount", 0) or 0)
+        for item in plan_fact_items
+        if (item.get("plan_fact_categories") or {}).get("is_income", False) and item.get("actual_amount") is not None
+    )
+    total_actual_expense = sum(
+        float(item.get("actual_amount", 0) or 0)
+        for item in plan_fact_items
+        if not (item.get("plan_fact_categories") or {}).get("is_income", True) and item.get("actual_amount") is not None
+    )
+    total_variance = sum(
+        float(item.get("variance_amount", 0) or 0)
+        for item in plan_fact_items
+        if item.get("variance_amount") is not None
+    )
+    paid_count = sum(1 for item in plan_fact_items if item.get("actual_amount") is not None)
+    unpaid_count = len(plan_fact_items) - paid_count
+
+    # Status badge
+    status_map = {
+        "active": ("В работе", "#10b981"),
+        "completed": ("Завершена", "#3b82f6"),
+        "cancelled": ("Отменена", "#ef4444"),
+    }
+    status = deal.get("status", "active")
+    status_label, _ = status_map.get(status, (status, "#6b7280"))
+
+    return Div(
+        # Two-column grid for info cards
+        Div(
+            # Left column - Deal info card
+            Div(
+                Div(
+                    icon("file-text", size=14, color="#64748b"),
+                    Span("ИНФОРМАЦИЯ О СДЕЛКЕ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    *[Div(
+                        Span(label, style="font-size: 12px; color: #64748b; display: block; margin-bottom: 2px;"),
+                        Span(value, style="font-size: 14px; color: #1e293b; font-weight: 500;"),
+                        style="margin-bottom: 12px;"
+                    ) for label, value in [
+                        ("Номер сделки", deal_number),
+                        ("Спецификация", spec_number),
+                        ("Клиент", customer_name),
+                        ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
+                        ("Дата подписания", signed_at),
+                        ("Статус", status_label),
+                        ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),
+                        ("Наше юр. лицо", spec.get("our_legal_entity", "-") or "-"),
+                        ("Юр. лицо клиента", spec.get("client_legal_entity", "-") or "-"),
+                    ]],
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            # Right column - Plan-fact summary card
+            Div(
+                Div(
+                    icon("bar-chart-2", size=14, color="#64748b"),
+                    Span("СВОДКА ПЛАН-ФАКТ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+                ),
+                Div(
+                    Div(
+                        Span("Плановые поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_planned_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #10b981;"),
+                        style="padding: 12px; background: #f0fdf4; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Факт. поступления", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_actual_income:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Плановые расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_planned_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #6366f1;"),
+                        style="padding: 12px; background: #eef2ff; border-radius: 8px;"
+                    ),
+                    Div(
+                        Span("Факт. расходы", style="font-size: 11px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Span(f"{total_actual_expense:,.2f} ₽", style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                        style="padding: 12px; background: #f8fafc; border-radius: 8px;"
+                    ),
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;"
+                ),
+                Div(
+                    Div(
+                        Span("Плановая маржа", style="font-size: 12px; color: #64748b;"),
+                        Span(f"{total_planned_income - total_planned_expense:,.2f} ₽", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
+                        style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0;"
+                    ),
+                    Div(
+                        Span("Общее отклонение", style="font-size: 12px; color: #64748b;"),
+                        Span(
+                            f"{total_variance:+,.2f} ₽" if total_variance != 0 else "0.00 ₽",
+                            style=f"font-size: 14px; font-weight: 600; color: {'#ef4444' if total_variance > 0 else '#10b981' if total_variance < 0 else '#64748b'};"
+                        ),
+                        style="display: flex; justify-content: space-between; padding: 8px 0;"
+                    ),
+                ),
+                Div(
+                    Span(
+                        icon("check-circle", size=14, color="#10b981"),
+                        f" Оплачено: {paid_count}",
+                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #f0fdf4; border-radius: 12px; font-size: 12px; color: #10b981; font-weight: 500; margin-right: 8px;"
+                    ),
+                    Span(
+                        icon("clock", size=14, color="#f59e0b"),
+                        f" Ожидает: {unpaid_count}",
+                        style="display: inline-flex; align-items: center; padding: 4px 10px; background: #fef3c7; border-radius: 12px; font-size: 12px; color: #d97706; font-weight: 500;"
+                    ),
+                    style="margin-top: 12px;"
+                ),
+                style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px;"
+        ),
+
+        # Transition history
+        workflow_transition_history(quote.get("id")) if quote.get("id") else None,
+    )
+
+
+def _finance_plan_fact_tab_content(deal_id, plan_fact_items):
+    """Render the 'План-факт' tab content: plan-fact payment table + action buttons."""
+
+    # Build plan-fact table row
+    def plan_fact_row(item):
+        category = item.get("plan_fact_categories", {}) or {}
+        is_income = category.get("is_income", False)
+        category_name = category.get("name", "Прочее")
+
+        planned_amount = float(item.get("planned_amount", 0) or 0)
+        planned_currency = item.get("planned_currency", "RUB")
+        planned_str = f"{planned_amount:,.2f} {planned_currency}"
+
+        actual_amount = item.get("actual_amount")
+        actual_currency = item.get("actual_currency", "RUB")
+        if actual_amount is not None:
+            actual_str = f"{float(actual_amount):,.2f} {actual_currency}"
+        else:
+            actual_str = "-"
+
+        variance = item.get("variance_amount")
+        if variance is not None:
+            variance_val = float(variance)
+            if variance_val > 0:
+                variance_str = f"+{variance_val:,.2f}"
+                variance_color = "#ef4444" if not is_income else "#10b981"
+            elif variance_val < 0:
+                variance_str = f"{variance_val:,.2f}"
+                variance_color = "#10b981" if not is_income else "#ef4444"
+            else:
+                variance_str = "0.00"
+                variance_color = "#6b7280"
+        else:
+            variance_str = "-"
+            variance_color = "#6b7280"
+
+        planned_date = format_date_russian(item.get("planned_date")) if item.get("planned_date") else "-"
+        actual_date = format_date_russian(item.get("actual_date")) if item.get("actual_date") else "-"
+
+        if actual_amount is not None:
+            payment_status = Span(icon("check", size=14), " Оплачено", style="color: #10b981; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;")
+        else:
+            payment_status = Span("○ Ожидает", style="color: #f59e0b;")
+
+        category_color = "#10b981" if is_income else "#6366f1"
+
+        cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+        return Tr(
+            Td(
+                Span(category_name, style=f"color: {category_color}; font-weight: 600; display: block;"),
+                Span(item.get("description", "-") or "-", style="color: #64748b; font-size: 12px;"),
+                style=cell_style
+            ),
+            Td(planned_date, style=cell_style),
+            Td(planned_str, style=f"{cell_style} text-align: right; font-weight: 500;"),
+            Td(actual_date if actual_amount is not None else "-", style=cell_style),
+            Td(actual_str, style=f"{cell_style} text-align: right;"),
+            Td(variance_str, style=f"{cell_style} text-align: right; color: {variance_color}; font-weight: 600;"),
+            Td(payment_status, style=cell_style),
+            Td(
+                btn_link("Редакт.", href=f"/finance/{deal_id}/plan-fact/{item['id']}", variant="primary", size="sm") if actual_amount is None else "",
+                style=cell_style
+            ),
+            style="transition: background-color 0.15s ease;",
+            onmouseover="this.style.backgroundColor='#f8fafc'",
+            onmouseout="this.style.backgroundColor='transparent'"
+        )
+
+    table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+
+    if plan_fact_items:
+        plan_fact_table = Table(
+            Thead(
+                Tr(
+                    Th("Категория / Описание", style=table_header_style),
+                    Th("План. дата", style=table_header_style),
+                    Th("План. сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Факт. дата", style=table_header_style),
+                    Th("Факт. сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Отклонение", style=f"{table_header_style} text-align: right;"),
+                    Th("Статус", style=table_header_style),
+                    Th("", style=table_header_style),
+                )
+            ),
+            Tbody(*[plan_fact_row(item) for item in plan_fact_items]),
+            style="width: 100%; border-collapse: collapse;"
+        )
+    else:
+        plan_fact_table = Div(
+            Div(icon("file-plus", size=40, color="#94a3b8"), style="margin-bottom: 12px;"),
+            P("Плановые платежи ещё не созданы", style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;"),
+            Div(
+                btn_link("Сгенерировать из КП", href=f"/finance/{deal_id}/generate-plan-fact", variant="primary", icon_name="refresh-cw"),
+                Button(
+                    icon("plus", size=14),
+                    " Добавить вручную",
+                    hx_get=f"/finance/{deal_id}/payments/new",
+                    hx_target="#deal-payment-modal-body",
+                    hx_swap="innerHTML",
+                    onclick="document.getElementById('deal-payment-modal').style.display='flex';",
+                    style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+                ),
+                style="display: flex; gap: 8px; justify-content: center;"
+            ),
+            style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 12px;"
+        )
+
+    return Div(
+        # Plan-fact table section
+        Div(
+            Div(
+                Div(
+                    icon("list", size=14, color="#64748b"),
+                    Span("ПЛАН-ФАКТ ПЛАТЕЖЕЙ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
+                ),
+                Div(
+                    Button(
+                        icon("plus", size=14),
+                        " Добавить платёж",
+                        hx_get=f"/finance/{deal_id}/payments/new",
+                        hx_target="#deal-payment-modal-body",
+                        hx_swap="innerHTML",
+                        onclick="document.getElementById('deal-payment-modal').style.display='flex';",
+                        style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); color: white; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;"
+                    ),
+                    btn_link("Перегенерировать", href=f"/finance/{deal_id}/generate-plan-fact", variant="secondary", size="sm", icon_name="refresh-cw"),
+                    style="display: flex; gap: 8px;"
+                ) if plan_fact_items else "",
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;"
+            ),
+            Div(
+                plan_fact_table,
+                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="margin-bottom: 24px;"
+        ),
+    )
+
+
+def _finance_logistics_tab_content(deal_id, deal, session):
+    """Render the 'Логистика (сделка)' tab content: logistics stages."""
+    return Div(
+        Div(
+            icon("truck", size=14, color="#64748b"),
+            Span("ЛОГИСТИКА", style="margin-left: 6px;"),
+            style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+        ),
+        _deals_logistics_tab(deal_id, deal, session),
+        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+    )
+
+
+def _finance_payment_modal(deal_id):
+    """Render the payment modal overlay (hidden by default, populated via HTMX)."""
+    modal_css = """
+        #deal-payment-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        #deal-payment-modal .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 520px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+    """
+    payment_modal = Div(
+        Div(
+            Div(
+                Div(
+                    H3("Регистрация платежа", style="margin: 0; font-size: 16px; font-weight: 600; color: #1e293b;"),
+                    Button(
+                        icon("x", size=16),
+                        onclick="document.getElementById('deal-payment-modal').style.display='none';",
+                        style="background: none; border: none; cursor: pointer; color: #64748b; padding: 4px;"
+                    ),
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;"
+                ),
+                Div(id="deal-payment-modal-body"),
+                cls="modal-content"
+            ),
+            onclick="if(event.target===this) this.style.display='none';",
+            style="display: flex; justify-content: center; align-items: center; width: 100%; height: 100%;"
+        ),
+        id="deal-payment-modal",
+    )
+    return Style(modal_css), payment_modal
 
 
 def _deals_logistics_tab(deal_id, deal, session):

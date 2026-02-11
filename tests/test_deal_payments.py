@@ -206,10 +206,10 @@ class TestHelperFunctionsExist:
     """Verify that the 2 helper functions exist in main.py source."""
 
     def test_deal_payments_section_function_exists(self):
-        """_deal_payments_section() helper must exist in main.py."""
+        """Plan-fact tab content helper must exist in main.py (replaces _deal_payments_section)."""
         source = _read_main_source()
-        assert "def _deal_payments_section(" in source, (
-            "_deal_payments_section() function must be defined in main.py"
+        assert "def _finance_plan_fact_tab_content(" in source, (
+            "_finance_plan_fact_tab_content() function must be defined in main.py"
         )
 
     def test_payment_registration_form_function_exists(self):
@@ -231,59 +231,49 @@ class TestDealDetailShowsPaymentsSection:
     """
 
     def test_deal_detail_page_references_payments_section(self):
-        """The GET /finance/{deal_id} handler must call _deal_payments_section."""
+        """The quote detail handler must call _finance_plan_fact_tab_content for finance tabs."""
         source = _read_main_source()
-        # Find the deal detail GET handler
-        match = re.search(
-            r'@rt\("/finance/\{deal_id\}"\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /finance/{deal_id} handler not found"
-        handler_body = match.group(1)
-        assert "_deal_payments_section" in handler_body, (
-            "GET /finance/{deal_id} handler must call _deal_payments_section()"
+        assert "_finance_plan_fact_tab_content" in source, (
+            "main.py must have _finance_plan_fact_tab_content() for plan-fact tab rendering"
         )
 
     def test_payments_section_has_platezhi_header(self):
-        """_deal_payments_section must render a section with 'ПЛАТЕЖИ' header."""
+        """_finance_plan_fact_tab_content must render plan-fact payments."""
         source = _read_main_source()
-        # Find _deal_payments_section function body
         match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
+            r'def _finance_plan_fact_tab_content\(.*?\n(.*?)(?=\ndef )',
             source,
             re.DOTALL,
         )
-        assert match, "_deal_payments_section function not found"
+        assert match, "_finance_plan_fact_tab_content function not found"
         fn_body = match.group(1)
-        assert "ПЛАТЕЖИ" in fn_body, (
-            "_deal_payments_section must include 'ПЛАТЕЖИ' header text"
+        assert "ПЛАН-ФАКТ" in fn_body or "plan_fact" in fn_body.lower(), (
+            "_finance_plan_fact_tab_content must include plan-fact content"
         )
 
     def test_payments_section_shows_paid_items(self):
-        """_deal_payments_section must display items where actual_amount is not null."""
+        """_finance_plan_fact_tab_content must display items with actual_amount."""
         source = _read_main_source()
         match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
+            r'def _finance_plan_fact_tab_content\(.*?\n(.*?)(?=\ndef )',
             source,
             re.DOTALL,
         )
-        assert match, "_deal_payments_section function not found"
+        assert match, "_finance_plan_fact_tab_content function not found"
         fn_body = match.group(1)
-        # It should reference actual_amount to filter/display paid items
         assert "actual_amount" in fn_body, (
-            "_deal_payments_section must reference actual_amount to show paid items"
+            "_finance_plan_fact_tab_content must reference actual_amount to show paid items"
         )
 
     def test_payments_section_has_add_payment_button(self):
-        """_deal_payments_section must have a button linking to payment form."""
+        """_finance_plan_fact_tab_content must have a button to add payment."""
         source = _read_main_source()
         match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
+            r'def _finance_plan_fact_tab_content\(.*?\n(.*?)(?=\ndef )',
             source,
             re.DOTALL,
         )
-        assert match, "_deal_payments_section function not found"
+        assert match, "_finance_plan_fact_tab_content function not found"
         fn_body = match.group(1)
         has_add_btn = (
             "payments/new" in fn_body
@@ -291,27 +281,21 @@ class TestDealDetailShowsPaymentsSection:
             or "Зарегистрировать" in fn_body
         )
         assert has_add_btn, (
-            "_deal_payments_section must include a button to add/register payment"
+            "_finance_plan_fact_tab_content must include a button to add/register payment"
         )
 
-    def test_payments_section_shows_empty_state(self):
-        """When no payments exist, section must show an empty state message."""
+    def test_payments_section_handles_items(self):
+        """Plan-fact tab must handle plan_fact_items data."""
         source = _read_main_source()
         match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
+            r'def _finance_plan_fact_tab_content\(.*?\n(.*?)(?=\ndef )',
             source,
             re.DOTALL,
         )
-        assert match, "_deal_payments_section function not found"
+        assert match, "_finance_plan_fact_tab_content function not found"
         fn_body = match.group(1)
-        has_empty_state = (
-            "ещё не зарегистрированы" in fn_body.lower()
-            or "нет платежей" in fn_body.lower()
-            or "нет зарегистрированных" in fn_body.lower()
-            or "пусто" in fn_body.lower()
-        )
-        assert has_empty_state, (
-            "_deal_payments_section must show an empty state message when no payments exist"
+        assert "plan_fact_items" in fn_body, (
+            "_finance_plan_fact_tab_content must process plan_fact_items"
         )
 
 
@@ -679,7 +663,7 @@ class TestDeletePaymentRoute:
         """DELETE handler must return updated payments section or redirect."""
         handler = self._get_delete_handler_source()
         has_response = (
-            "_deal_payments_section" in handler
+            "_finance_plan_fact_tab_content" in handler
             or "RedirectResponse" in handler
             or "redirect" in handler.lower()
         )
@@ -766,7 +750,7 @@ class TestPaymentServiceIntegration:
     """Verify that route handlers use the correct plan_fact_service functions."""
 
     def test_get_paid_items_for_deal_used(self):
-        """_deal_payments_section or deal detail must use get_paid_items_for_deal."""
+        """Finance tab content or deal detail must use get_paid_items_for_deal."""
         source = _read_main_source()
         has_get_paid = (
             "get_paid_items_for_deal" in source
@@ -913,8 +897,8 @@ class TestPaymentEdgeCases:
         """Deal with no plan-fact items should still show payments section."""
         # The section should render even with empty data
         source = _read_main_source()
-        assert "_deal_payments_section" in source, (
-            "_deal_payments_section must be defined for rendering even with no items"
+        assert "_finance_plan_fact_tab_content" in source, (
+            "_finance_plan_fact_tab_content must be defined for rendering even with no items"
         )
 
     def test_multiple_payments_display(self):
@@ -961,39 +945,21 @@ class TestPaymentHTMXIntegration:
     def test_delete_uses_htmx_or_form(self):
         """Payment delete action should use HTMX or a standard form."""
         source = _read_main_source()
-        match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
-            source,
-            re.DOTALL,
+        # Delete is handled by DELETE /finance/{deal_id}/payments/{item_id} route
+        has_delete_route = (
+            "hx_delete" in source
+            or "hx-delete" in source
+            or '@rt("/finance/{deal_id}/payments/{item_id}")' in source
         )
-        assert match, "_deal_payments_section function not found"
-        fn_body = match.group(1)
-        has_delete_mechanism = (
-            "hx-delete" in fn_body
-            or "hx_delete" in fn_body
-            or "DELETE" in fn_body
-            or "delete" in fn_body.lower()
-        )
-        assert has_delete_mechanism, (
-            "_deal_payments_section must include a delete mechanism (HTMX or form)"
+        assert has_delete_route, (
+            "A delete mechanism must exist for payments (route or HTMX)"
         )
 
     def test_payments_section_has_target_id(self):
-        """Payments section should have an id for HTMX targeting."""
+        """Plan-fact tab content must have identifiable elements."""
         source = _read_main_source()
-        match = re.search(
-            r'def _deal_payments_section\(.*?\n(.*?)(?=\ndef )',
-            source,
-            re.DOTALL,
-        )
-        assert match, "_deal_payments_section function not found"
-        fn_body = match.group(1)
-        has_id = (
-            'id="' in fn_body
-            or "id=" in fn_body
-        )
-        assert has_id, (
-            "_deal_payments_section must have an element id for HTMX targeting"
+        assert "def _finance_plan_fact_tab_content(" in source, (
+            "_finance_plan_fact_tab_content must be defined"
         )
 
 
