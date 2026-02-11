@@ -14420,19 +14420,44 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             )
         )
 
+    # Split tab elements into core and finance groups
+    FINANCE_TAB_IDS = {"finance_main", "plan_fact", "logistics_stages"}
+    core_tab_elements = []
+    finance_tab_elements = []
+    for tab, elem in zip(visible_tabs, tab_elements):
+        if tab["id"] in FINANCE_TAB_IDS:
+            finance_tab_elements.append(elem)
+        else:
+            core_tab_elements.append(elem)
+
+    row_style = "display: flex; gap: 0.25rem; border-bottom: 1px solid #e5e7eb;"
+
     # Return tabs container with hover style
-    return Div(
-        Style("""
-            .quote-detail-tab:hover:not(.active) {
-                background: #e5e7eb !important;
-                color: #1f2937 !important;
-            }
-        """),
-        Div(
-            *tab_elements,
-            style="display: flex; gap: 0.25rem; border-bottom: 1px solid #e5e7eb; margin-bottom: 1.5rem;"
+    if finance_tab_elements:
+        return Div(
+            Style("""
+                .quote-detail-tab:hover:not(.active) {
+                    background: #e5e7eb !important;
+                    color: #1f2937 !important;
+                }
+            """),
+            Div(*core_tab_elements, style=row_style),
+            Div(
+                Span("Финансы:", style="display: flex; align-items: center; padding: 0.5rem 0.75rem; color: #6b7280; font-size: 0.8rem; font-weight: 500;"),
+                *finance_tab_elements,
+                style=row_style + " margin-bottom: 1.5rem;"
+            ),
         )
-    )
+    else:
+        return Div(
+            Style("""
+                .quote-detail-tab:hover:not(.active) {
+                    background: #e5e7eb !important;
+                    color: #1f2937 !important;
+                }
+            """),
+            Div(*core_tab_elements, style=row_style + " margin-bottom: 1.5rem;")
+        )
 
 # ============================================================================
 # USER PROFILE PAGE
