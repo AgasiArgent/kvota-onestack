@@ -303,15 +303,20 @@ def get_all_roles(organization_id: Optional[str | UUID] = None) -> List[Role]:
             .order("slug") \
             .execute()
 
-    return [
-        Role(
-            id=UUID(item["id"]),
-            code=item["slug"],  # DB uses 'slug', we map to 'code'
-            name=item["name"],
-            description=item.get("description")
-        )
-        for item in response.data
-    ]
+    # Deduplicate by slug (DB may have duplicate role entries across organizations)
+    seen_slugs = set()
+    roles = []
+    for item in response.data:
+        slug = item["slug"]
+        if slug not in seen_slugs:
+            seen_slugs.add(slug)
+            roles.append(Role(
+                id=UUID(item["id"]),
+                code=slug,  # DB uses 'slug', we map to 'code'
+                name=item["name"],
+                description=item.get("description")
+            ))
+    return roles
 
 
 def get_role_by_code(code: str) -> Optional[Role]:

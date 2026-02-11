@@ -28022,6 +28022,14 @@ def post(user_id: str, session, roles: list = []):
     if isinstance(roles, str):
         roles = [roles]
 
+    # Safety: prevent empty roles (user must have at least 1 role)
+    if not roles:
+        return Div("Ошибка: нельзя убрать все роли. Выберите хотя бы одну.", style="color: #ef4444; padding: 8px; font-size: 0.875rem;")
+
+    # Safety: prevent admin from removing admin role from themselves
+    if user_id == admin_id and "admin" in current_roles and "admin" not in roles:
+        return Div("Ошибка: нельзя снять роль admin с самого себя.", style="color: #ef4444; padding: 8px; font-size: 0.875rem;")
+
     # Determine which roles to add/remove
     roles_to_add = [r for r in roles if r not in current_roles]
     roles_to_remove = [r for r in current_roles if r not in roles]
@@ -28145,9 +28153,9 @@ def get(user_id: str, session):
     supabase = get_supabase()
     org_id = admin_user["org_id"]
 
-    # Get all available roles
+    # Get all available roles (filter by org to avoid showing irrelevant roles)
     from services.role_service import get_all_roles, get_user_role_codes
-    all_roles = get_all_roles()
+    all_roles = get_all_roles(organization_id=org_id)
 
     # Get current user roles
     current_roles = get_user_role_codes(user_id, org_id)
@@ -28301,6 +28309,24 @@ def post(user_id: str, session, roles: list = None):
     # Get current user roles
     from services.role_service import get_user_role_codes, assign_role, remove_role
     current_roles = get_user_role_codes(user_id, org_id)
+
+    # Safety: prevent empty roles (user must have at least 1 role)
+    if not roles:
+        return page_layout("Ошибка",
+            H1("Ошибка обновления ролей"),
+            P("Нельзя убрать все роли у пользователя. Выберите хотя бы одну роль."),
+            btn_link("Назад", href=f"/admin/users/{user_id}/roles", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Safety: prevent admin from removing admin role from themselves
+    if user_id == admin_id and "admin" in current_roles and "admin" not in roles:
+        return page_layout("Ошибка",
+            H1("Ошибка обновления ролей"),
+            P("Нельзя снять роль admin с самого себя. Попросите другого администратора."),
+            btn_link("Назад", href=f"/admin/users/{user_id}/roles", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
 
     submitted_roles = set(roles)
     current_roles_set = set(current_roles)
