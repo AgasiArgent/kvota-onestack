@@ -4656,7 +4656,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             proc_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Оценить", href=f"/procurement", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in proc_quotes
@@ -4698,7 +4698,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             log_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Заполнить", href=f"/logistics", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in log_quotes
@@ -4740,7 +4740,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             cust_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Заполнить", href=f"/customs", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in cust_quotes
@@ -4782,7 +4782,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             qc_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_money(q.get("total_amount"))),
                     Td(A("Проверить", href=f"/quote-control/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in qc_quotes
@@ -4941,7 +4941,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             sales_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                    Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                    Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_money(q.get("total_amount"))),
                     Td(A("Продолжить", href=f"/quotes/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in sales_quotes
@@ -5071,7 +5071,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
                 Tbody(
                     *[Tr(
                         Td(q.get("idn_quote", f"#{q['id'][:8]}")),
-                        Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                        Td((q.get("customers") or {}).get("name", "—")),
                         Td(workflow_status_badge(q.get("workflow_status") or q.get("status", "draft"))),
                         Td(format_money(q.get("total_amount"))),
                         Td(A("Открыть", href=f"/quotes/{q['id']}"))
@@ -6087,7 +6087,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
 
     # Add pending quotes with type marker
     for pq in pending_quotes:
-        customer_name = pq.get("customers", {}).get("name", "Unknown") if pq.get("customers") else "Unknown"
+        customer_name = (pq.get("customers") or {}).get("name", "Unknown")
         combined_items.append({
             "type": "quote",
             "id": pq.get("id"),
@@ -7246,7 +7246,7 @@ def get(session):
                     Tbody(
                         *[Tr(
                             Td(A(q.get("idn_quote", f"#{q['id'][:8]}"), href=f"/quotes/{q['id']}")),
-                            Td(q.get("customers", {}).get("name", "—") if q.get("customers") else "—"),
+                            Td((q.get("customers") or {}).get("name", "—")),
                             Td(status_badge_v2(q.get("workflow_status", "draft"))),
                             Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
                                style="text-align: center;"),
@@ -8911,7 +8911,7 @@ def get(quote_id: str, session):
     workflow_status = quote.get("workflow_status", "draft")
     revision_comment = quote.get("revision_comment", "")
     idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     if workflow_status != "pending_sales_review":
         return page_layout("Возврат невозможен",
@@ -9164,7 +9164,7 @@ def get(session, quote_id: str):
         )
 
     idn_quote = quote.get("idn_quote", "")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     return page_layout(f"Обоснование - {idn_quote}",
         # Header
@@ -9267,7 +9267,7 @@ def post(session, quote_id: str, justification: str = ""):
     workflow_status = quote.get("workflow_status", "draft")
     needs_justification = quote.get("needs_justification", False)
     idn_quote = quote.get("idn_quote", "")
-    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+    customer_name = (quote.get("customers") or {}).get("name", "")
     total_amount = quote.get("total_amount")
 
     # Verify quote is in correct status
@@ -9461,7 +9461,7 @@ def get(session, quote_id: str):
         )
 
     idn_quote = quote.get("idn_quote", "")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     return page_layout(f"Возврат на доработку - {idn_quote}",
         # Header
@@ -14525,7 +14525,7 @@ def get(quote_id: str, session):
     assigned_items = len([i for i in my_items if i.get("invoice_id")])
     completed_items = len([i for i in my_items if i.get("procurement_status") == "completed"])
 
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
     workflow_status = quote.get("workflow_status", "draft")
     quote_idn = quote.get("idn_quote", f"#{quote_id[:8]}")
 
@@ -16661,7 +16661,7 @@ def get(quote_id: str, session):
     workflow_status = quote.get("workflow_status", "draft")
     revision_comment = quote.get("revision_comment", "")
     idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     # Can only return from pending_procurement status
     if workflow_status != "pending_procurement":
@@ -16898,7 +16898,7 @@ def get(quote_id: str, session):
     if not quote:
         return RedirectResponse("/procurement", status_code=303)
 
-    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+    customer_name = (quote.get("customers") or {}).get("name", "")
 
     # Check if user is admin - bypass brand filtering
     is_admin = user_has_any_role(session, ["admin"])
@@ -17012,7 +17012,7 @@ def get(session, quote_id: str):
 
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
-    customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
+    customer_name = (quote.get("customers") or {}).get("name", "Unknown")
     currency = quote.get("currency", "RUB")
 
     # Check for revision status (returned from quote control)
@@ -17179,16 +17179,16 @@ def get(session, quote_id: str):
 
         # Get origin location text
         origin_city = (
-            invoice.get("pickup_location", {}).get("city", "")
-            if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("city")
+            (invoice.get("pickup_location") or {}).get("city", "")
+            if invoice.get("pickup_location") and (invoice.get("pickup_location") or {}).get("city")
             else ""
         )
         # Origin country: pickup_location > supplier > invoice.pickup_country
         raw_origin_country = (
-            invoice.get("pickup_location", {}).get("country", "")
-            if invoice.get("pickup_location") and invoice.get("pickup_location", {}).get("country")
-            else (invoice.get("supplier", {}).get("country", ""))
-            if invoice.get("supplier") and invoice.get("supplier", {}).get("country")
+            (invoice.get("pickup_location") or {}).get("country", "")
+            if invoice.get("pickup_location") and (invoice.get("pickup_location") or {}).get("country")
+            else ((invoice.get("supplier") or {}).get("country", ""))
+            if invoice.get("supplier") and (invoice.get("supplier") or {}).get("country")
             else invoice.get("pickup_country", "")
         )
         # Convert country code to name if needed
@@ -17772,7 +17772,7 @@ def get(quote_id: str, session):
     workflow_status = quote.get("workflow_status", "draft")
     revision_comment = quote.get("revision_comment", "")
     idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     if workflow_status != "pending_logistics":
         return page_layout("Возврат невозможен",
@@ -18033,7 +18033,7 @@ def get(session, quote_id: str):
 
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
-    customer_name = quote.get("customers", {}).get("name", "Unknown") if quote.get("customers") else "Unknown"
+    customer_name = (quote.get("customers") or {}).get("name", "Unknown")
     currency = quote.get("currency", "RUB")
 
     # Check for revision status (returned from quote control)
@@ -19286,7 +19286,7 @@ def get(quote_id: str, session):
     workflow_status = quote.get("workflow_status", "draft")
     revision_comment = quote.get("revision_comment", "")
     idn_quote = quote.get("idn_quote", f"#{quote_id[:8]}")
-    customer_name = quote.get("customers", {}).get("name", "—") if quote.get("customers") else "—"
+    customer_name = (quote.get("customers") or {}).get("name", "—") if quote.get("customers") else "—"
 
     if workflow_status != "pending_customs":
         return page_layout("Возврат невозможен",
@@ -19561,7 +19561,7 @@ def get_user_calc_columns(user_id: str, supabase) -> list:
             .eq("setting_key", "quote_control_columns") \
             .execute()
         if result.data:
-            return result.data[0].get("setting_value", {}).get("columns", CALC_PRESET_BASIC)
+            return (result.data[0].get("setting_value") or {}).get("columns", CALC_PRESET_BASIC)
     except Exception:
         pass
     return CALC_PRESET_BASIC
@@ -20491,11 +20491,11 @@ def get(session, quote_id: str, preset: str = None):
     # Calculate leg breakdown from phase_results (T16 = first leg, U16 = last leg)
     # Note: V16 = T16 + U16 (total logistics per item)
     logistics_first_leg = sum(
-        float(item.get("phase_results", {}).get("T16", 0) or 0)
+        float((item.get("phase_results") or {}).get("T16", 0) or 0)
         for item in calc_items_data
     )
     logistics_last_leg = sum(
-        float(item.get("phase_results", {}).get("U16", 0) or 0)
+        float((item.get("phase_results") or {}).get("U16", 0) or 0)
         for item in calc_items_data
     )
     # For display: first leg = supplier to hub + hub to customs, last leg = customs to client
@@ -20607,7 +20607,7 @@ def get(session, quote_id: str, preset: str = None):
     invoicing_summary = get_quote_invoicing_summary(quote_id)
 
     # Summary info
-    customer_name = quote.get("customers", {}).get("name", "—")
+    customer_name = (quote.get("customers") or {}).get("name", "—")
     quote_total = float(quote.get("total_amount", 0) or 0)
 
     # Status banner
@@ -20958,7 +20958,7 @@ def get(session, quote_id: str):
             .eq("setting_key", "quote_control_columns") \
             .execute()
         if result.data:
-            current_columns = result.data[0].get("setting_value", {}).get("columns", CALC_PRESET_BASIC)
+            current_columns = (result.data[0].get("setting_value") or {}).get("columns", CALC_PRESET_BASIC)
     except Exception:
         pass
 
@@ -21318,7 +21318,7 @@ def get(session, quote_id: str):
             session=session
         )
 
-    customer_name = quote.get("customers", {}).get("name", "—")
+    customer_name = (quote.get("customers") or {}).get("name", "—")
     idn_quote = quote.get("idn_quote", "")
 
     # Department options for return
@@ -21656,7 +21656,7 @@ def get(session, quote_id: str):
     if lpr_reward > 0:
         approval_reasons.append(f"Есть вознаграждение ЛПРа ({lpr_reward})")
 
-    customer_name = quote.get("customers", {}).get("name", "—")
+    customer_name = (quote.get("customers") or {}).get("name", "—")
     idn_quote = quote.get("idn_quote", "")
 
     # Pre-fill the reason with detected triggers
@@ -21775,7 +21775,7 @@ def post(session, quote_id: str, comment: str = ""):
 
     quote = quote_result.data[0]
     idn_quote = quote.get("idn_quote", "")
-    customer_name = quote.get("customers", {}).get("name", "") if quote.get("customers") else ""
+    customer_name = (quote.get("customers") or {}).get("name", "")
 
     # Feature: Justification workflow (Variant B)
     # Instead of sending directly to pending_approval, we:
@@ -21922,7 +21922,7 @@ def get(session, quote_id: str):
             session=session
         )
 
-    customer_name = quote.get("customers", {}).get("name", "—")
+    customer_name = (quote.get("customers") or {}).get("name", "—")
     idn_quote = quote.get("idn_quote", "")
     total_amount = float(quote.get("total_amount", 0) or 0)
     quote_currency = quote.get("currency", "USD")
@@ -22160,7 +22160,7 @@ async def telegram_webhook(request):
                     logger.info(f"Approve callback result: success={approve_result.success}, quote={approve_result.quote_idn}")
 
                     # Get message_id from the original update to edit the message
-                    message_id = json_data.get("callback_query", {}).get("message", {}).get("message_id")
+                    message_id = ((json_data.get("callback_query") or {}).get("message") or {}).get("message_id")
                     if message_id and result.telegram_id:
                         await send_callback_response(result.telegram_id, message_id, approve_result)
 
@@ -22173,7 +22173,7 @@ async def telegram_webhook(request):
                     logger.info(f"Reject callback result: success={reject_result.success}, quote={reject_result.quote_idn}")
 
                     # Get message_id from the original update to edit the message
-                    message_id = json_data.get("callback_query", {}).get("message", {}).get("message_id")
+                    message_id = ((json_data.get("callback_query") or {}).get("message") or {}).get("message_id")
                     if message_id and result.telegram_id:
                         await send_callback_response(result.telegram_id, message_id, reject_result)
 
@@ -25921,22 +25921,22 @@ def get(session, deal_id: str):
     total_planned_income = sum(
         float(item.get("planned_amount", 0) or 0)
         for item in plan_fact_items
-        if item.get("plan_fact_categories", {}).get("is_income", False)
+        if (item.get("plan_fact_categories") or {}).get("is_income", False)
     )
     total_planned_expense = sum(
         float(item.get("planned_amount", 0) or 0)
         for item in plan_fact_items
-        if not item.get("plan_fact_categories", {}).get("is_income", True)
+        if not (item.get("plan_fact_categories") or {}).get("is_income", True)
     )
     total_actual_income = sum(
         float(item.get("actual_amount", 0) or 0)
         for item in plan_fact_items
-        if item.get("plan_fact_categories", {}).get("is_income", False) and item.get("actual_amount") is not None
+        if (item.get("plan_fact_categories") or {}).get("is_income", False) and item.get("actual_amount") is not None
     )
     total_actual_expense = sum(
         float(item.get("actual_amount", 0) or 0)
         for item in plan_fact_items
-        if not item.get("plan_fact_categories", {}).get("is_income", True) and item.get("actual_amount") is not None
+        if not (item.get("plan_fact_categories") or {}).get("is_income", True) and item.get("actual_amount") is not None
     )
     total_variance = sum(
         float(item.get("variance_amount", 0) or 0)
@@ -27755,8 +27755,8 @@ def get(session):
         ).eq("user_id", member_user_id).eq("organization_id", org_id).execute()
 
         member_roles = user_roles_result.data if user_roles_result.data else []
-        role_codes = [r.get("roles", {}).get("slug", "") for r in member_roles if r.get("roles")]
-        role_names = [r.get("roles", {}).get("name", "") for r in member_roles if r.get("roles")]
+        role_codes = [(r.get("roles") or {}).get("slug", "") for r in member_roles if r.get("roles")]
+        role_names = [(r.get("roles") or {}).get("name", "") for r in member_roles if r.get("roles")]
 
         # Get Telegram status
         tg_result = supabase.table("telegram_users").select(
