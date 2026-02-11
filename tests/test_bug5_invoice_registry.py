@@ -1,42 +1,21 @@
 """
-Tests for BUG-5: Supplier Invoices Not Appearing in Registry
+Tests for Invoice Architecture: Two-Table Design
 
-BUG: Procurement creates invoices in the `invoices` table (migration 123),
-but the registry page at /supplier-invoices reads from `supplier_invoices`
-table (migration 106) via supplier_invoice_service.py.
+Architecture (see BUSINESS_LOGIC.md):
+  - `invoices` = procurement workflow groupings (quote-scoped)
+  - `supplier_invoices` = finance payment registry (org-scoped)
 
-These are TWO DIFFERENT TABLES with incompatible schemas:
-
-  invoices (procurement writes here):
-    - quote_id, supplier_id, buyer_company_id, pickup_location_id
-    - pickup_country, currency, total_weight_kg, total_volume_m3
-    - status values: pending_procurement, pending_logistics, etc.
-
-  supplier_invoices (registry reads here):
-    - organization_id, supplier_id, invoice_number, invoice_date, due_date
-    - total_amount, currency, status, notes, invoice_file_url, created_by
-    - status values: pending, partially_paid, paid, overdue, cancelled
-
-FIX REQUIRED: Procurement invoice creation (main.py:15586) must write to
-`supplier_invoices` table, and the invoice data schema must be adapted
-to match the `supplier_invoices` columns.
-
-These tests are EXPECTED TO FAIL until the bug is fixed.
+These are SEPARATE tables serving DIFFERENT business purposes.
+Procurement CRUD uses `invoices`. Finance tracking uses `supplier_invoices`.
 """
 
 import pytest
 import os
 import re
-import ast
 
-# Project root for reliable file access
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAIN_PY = os.path.join(PROJECT_ROOT, "main.py")
 
-
-# ============================================================================
-# HELPER: Extract function body from main.py by function name
-# ============================================================================
 
 def get_function_body(func_name, max_chars=5000):
     """Extract a function body from main.py for inspection."""
@@ -50,376 +29,167 @@ def get_function_body(func_name, max_chars=5000):
 
 
 # ============================================================================
-# TEST CLASS: Invoice creation uses correct table
+# TEST CLASS: Procurement uses invoices table (workflow)
 # ============================================================================
 
-class TestProcurementInvoiceUsesCorrectTable:
+class TestProcurementUsesInvoicesTable:
     """
-    Verify that procurement invoice creation writes to supplier_invoices,
-    NOT to the invoices table.
-
-    Currently FAILS because main.py:15586 uses supabase.table("invoices").
+    Procurement CRUD must use the `invoices` table (workflow groupings),
+    NOT `supplier_invoices` (finance registry).
     """
 
-    def test_invoice_creation_uses_supplier_invoices_table(self):
-        """
-        The api_create_invoice function must insert into 'supplier_invoices'
-        table so that the registry at /supplier-invoices can find them.
-
-        EXPECTED TO FAIL: Currently inserts into 'invoices' table.
-        """
+    def test_invoice_creation_uses_invoices_table(self):
+        """api_create_invoice must insert into 'invoices' table."""
         func_body = get_function_body("api_create_invoice")
         assert func_body is not None, "api_create_invoice function not found in main.py"
 
-        # Find the insert statement within the function
-        # The fix should change: supabase.table("invoices").insert(...)
-        # to: supabase.table("supplier_invoices").insert(...)
-        insert_pattern = r'\.table\("invoices"\)\.insert\('
-        supplier_insert_pattern = r'\.table\("supplier_invoices"\)\.insert\('
+        has_invoices = re.search(r'\.table\("invoices"\)\.insert\(', func_body)
+        has_supplier_invoices = re.search(r'\.table\("supplier_invoices"\)\.insert\(', func_body)
 
-        has_wrong_table = re.search(insert_pattern, func_body)
-        has_correct_table = re.search(supplier_insert_pattern, func_body)
-
-        assert has_correct_table is not None, (
-            "api_create_invoice must insert into 'supplier_invoices' table, "
-            "not 'invoices' table. The registry reads from supplier_invoices."
+        assert has_invoices is not None, (
+            "api_create_invoice must insert into 'invoices' table (procurement workflow)."
         )
-        assert has_wrong_table is None, (
-            "api_create_invoice still inserts into 'invoices' table. "
-            "This causes invoices to not appear in the registry."
+        assert has_supplier_invoices is None, (
+            "api_create_invoice must NOT insert into 'supplier_invoices' table. "
+            "That table is for finance payment tracking, not procurement workflow."
         )
 
-    def test_invoice_count_query_uses_supplier_invoices_table(self):
-        """
-        The invoice count query (for generating invoice numbers) must also
-        query from 'supplier_invoices' table for consistency.
-
-        EXPECTED TO FAIL: Currently queries from 'invoices' table.
-        """
+    def test_invoice_data_includes_quote_id(self):
+        """invoices table requires quote_id (NOT NULL, FK to quotes)."""
         func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found in main.py"
+        assert func_body is not None
 
-        # The count query for invoice numbering should also use supplier_invoices
-        count_pattern = r'\.table\("invoices"\)\.select\("id",\s*count="exact"\)'
-        correct_count_pattern = r'\.table\("supplier_invoices"\)\.select\("id",\s*count="exact"\)'
+        data_start = func_body.find("invoice_data = {")
+        assert data_start != -1, "invoice_data dict not found"
+        data_section = func_body[data_start:data_start + 800]
 
-        has_wrong_count = re.search(count_pattern, func_body)
-        has_correct_count = re.search(correct_count_pattern, func_body)
-
-        assert has_correct_count is not None, (
-            "Invoice count query must use 'supplier_invoices' table "
-            "to correctly count existing invoices in the registry."
+        assert '"quote_id"' in data_section or "'quote_id'" in data_section, (
+            "invoice_data must include 'quote_id'. "
+            "The invoices table is quote-scoped (required FK)."
         )
-        assert has_wrong_count is None, (
-            "Invoice count query still uses 'invoices' table. "
-            "This counts from the wrong table."
+
+    def test_invoice_data_does_not_include_organization_id(self):
+        """invoices table has no organization_id column (that's supplier_invoices)."""
+        func_body = get_function_body("api_create_invoice")
+        assert func_body is not None
+
+        data_start = func_body.find("invoice_data = {")
+        assert data_start != -1
+        data_section = func_body[data_start:data_start + 800]
+
+        assert '"organization_id"' not in data_section, (
+            "invoice_data must NOT include 'organization_id'. "
+            "That column belongs to supplier_invoices, not invoices."
+        )
+
+    def test_invoice_data_does_not_include_total_amount(self):
+        """invoices table has no total_amount column (amounts are on quote_items)."""
+        func_body = get_function_body("api_create_invoice")
+        assert func_body is not None
+
+        data_start = func_body.find("invoice_data = {")
+        assert data_start != -1
+        data_section = func_body[data_start:data_start + 800]
+
+        assert '"total_amount"' not in data_section, (
+            "invoice_data must NOT include 'total_amount'. "
+            "The invoices table calculates totals from quote_items."
+        )
+
+    def test_invoice_status_uses_workflow_values(self):
+        """invoices use workflow statuses (pending_procurement), not payment statuses (pending)."""
+        func_body = get_function_body("api_create_invoice")
+        assert func_body is not None
+
+        data_start = func_body.find("invoice_data = {")
+        assert data_start != -1
+        data_section = func_body[data_start:data_start + 800]
+
+        assert '"pending_procurement"' in data_section or "'pending_procurement'" in data_section, (
+            "invoice_data status must be 'pending_procurement' (workflow status), "
+            "not 'pending' (payment status)."
         )
 
 
 # ============================================================================
-# TEST CLASS: Invoice data schema matches supplier_invoices table
+# TEST CLASS: Invoice completion uses workflow statuses
 # ============================================================================
 
-class TestInvoiceDataMatchesSupplierInvoicesSchema:
-    """
-    Verify that the invoice_data dict constructed in api_create_invoice
-    matches the supplier_invoices table schema (migration 106).
+class TestInvoiceCompletionWorkflow:
+    """Verify invoice completion sets workflow status, not payment status."""
 
-    supplier_invoices required columns:
-      - organization_id (UUID, NOT NULL)
-      - supplier_id (UUID, NOT NULL)
-      - invoice_number (VARCHAR, NOT NULL)
-      - invoice_date (DATE, NOT NULL)
-      - total_amount (DECIMAL, NOT NULL)
+    def test_complete_invoice_sets_workflow_status(self):
+        """Completing an invoice should set pending_logistics, not partially_paid."""
+        func_body = get_function_body("api_complete_invoice")
+        assert func_body is not None, "api_complete_invoice not found"
 
-    supplier_invoices optional columns:
-      - due_date, currency, status, notes, invoice_file_url, created_by
-
-    Currently FAILS because the invoice_data dict uses the invoices table
-    schema (quote_id, buyer_company_id, pickup_location_id, etc.).
-    """
-
-    def test_invoice_data_includes_organization_id(self):
-        """
-        supplier_invoices requires organization_id (NOT NULL).
-        The invoices table does NOT have this column.
-
-        EXPECTED TO FAIL: Current invoice_data has no organization_id.
-        """
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        # Look for organization_id in the invoice_data dict construction
-        # It should be between invoice_data = { and the closing }
-        data_start = func_body.find("invoice_data = {")
-        assert data_start != -1, "invoice_data dict not found in api_create_invoice"
-
-        # Get the dict portion
-        data_section = func_body[data_start:data_start + 800]
-
-        assert '"organization_id"' in data_section or "'organization_id'" in data_section, (
-            "invoice_data must include 'organization_id' field. "
-            "The supplier_invoices table requires it (NOT NULL). "
-            "Current code writes to invoices table which doesn't have this column."
+        # Should NOT set payment status
+        assert '"partially_paid"' not in func_body, (
+            "Invoice completion must NOT set status to 'partially_paid'. "
+            "That's a payment status for supplier_invoices. "
+            "Use workflow status like 'pending_logistics'."
         )
 
-    def test_invoice_data_includes_invoice_date(self):
-        """
-        supplier_invoices requires invoice_date (DATE, NOT NULL).
-        The invoices table does NOT have this column.
+    def test_complete_invoice_sets_procurement_completed_fields(self):
+        """Completing should set procurement_completed_at and procurement_completed_by."""
+        func_body = get_function_body("api_complete_invoice")
+        assert func_body is not None
 
-        EXPECTED TO FAIL: Current invoice_data has no invoice_date.
-        """
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        data_start = func_body.find("invoice_data = {")
-        assert data_start != -1, "invoice_data dict not found"
-
-        data_section = func_body[data_start:data_start + 800]
-
-        assert '"invoice_date"' in data_section or "'invoice_date'" in data_section, (
-            "invoice_data must include 'invoice_date' field. "
-            "The supplier_invoices table requires it (NOT NULL)."
+        assert "procurement_completed_at" in func_body, (
+            "Invoice completion must set procurement_completed_at timestamp."
         )
-
-    def test_invoice_data_includes_total_amount(self):
-        """
-        supplier_invoices requires total_amount (DECIMAL, NOT NULL, > 0).
-        The invoices table does NOT have this column (it tracks weight/volume instead).
-
-        EXPECTED TO FAIL: Current invoice_data has no total_amount.
-        """
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        data_start = func_body.find("invoice_data = {")
-        assert data_start != -1, "invoice_data dict not found"
-
-        data_section = func_body[data_start:data_start + 800]
-
-        assert '"total_amount"' in data_section or "'total_amount'" in data_section, (
-            "invoice_data must include 'total_amount' field. "
-            "The supplier_invoices table requires it (NOT NULL, must be > 0)."
-        )
-
-    def test_invoice_data_includes_created_by(self):
-        """
-        supplier_invoices has created_by column to track who created the invoice.
-        This is important for audit trail.
-
-        EXPECTED TO FAIL: Current invoice_data has no created_by.
-        """
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        data_start = func_body.find("invoice_data = {")
-        assert data_start != -1, "invoice_data dict not found"
-
-        data_section = func_body[data_start:data_start + 800]
-
-        assert '"created_by"' in data_section or "'created_by'" in data_section, (
-            "invoice_data must include 'created_by' field with the user ID. "
-            "The supplier_invoices table has this column for audit purposes."
-        )
-
-    def test_invoice_data_does_not_include_invoices_only_columns(self):
-        """
-        After migration 167, supplier_invoices now has pickup/weight/volume columns.
-        Only quote_id and buyer_company_id remain invoices-only columns.
-        """
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        data_start = func_body.find("invoice_data = {")
-        assert data_start != -1, "invoice_data dict not found"
-
-        data_section = func_body[data_start:data_start + 800]
-
-        # After migration 167, only these remain invoices-only
-        invoices_only_columns = [
-            "buyer_company_id",
-        ]
-
-        found_wrong_columns = []
-        for col in invoices_only_columns:
-            if f'"{col}"' in data_section or f"'{col}'" in data_section:
-                found_wrong_columns.append(col)
-
-        assert len(found_wrong_columns) == 0, (
-            f"invoice_data contains columns that don't exist in supplier_invoices table: "
-            f"{found_wrong_columns}."
+        assert "procurement_completed_by" in func_body, (
+            "Invoice completion must set procurement_completed_by user ID."
         )
 
 
 # ============================================================================
-# TEST CLASS: Registry visibility after procurement creates invoice
+# TEST CLASS: Finance registry uses supplier_invoices table
 # ============================================================================
 
-class TestInvoiceRegistryVisibility:
+class TestFinanceRegistryUsesSupplierInvoices:
     """
-    End-to-end test: after procurement creates an invoice, it must be
-    visible in the supplier invoices registry.
-
-    The registry page calls supplier_invoice_service.get_all_invoices()
-    which queries the supplier_invoices table. If procurement writes to
-    the invoices table instead, the registry will show zero results.
+    The supplier_invoice_service correctly reads from supplier_invoices.
+    This is the finance side — separate from procurement.
     """
 
-    def test_registry_reads_from_supplier_invoices_table(self):
-        """
-        Verify the supplier_invoice_service reads from supplier_invoices table.
-        This is the read side of the bug -- it's already correct.
-        """
+    def test_service_reads_from_supplier_invoices(self):
+        """supplier_invoice_service must read from supplier_invoices table."""
         service_path = os.path.join(PROJECT_ROOT, "services", "supplier_invoice_service.py")
         with open(service_path, "r") as f:
             content = f.read()
 
-        # The service correctly queries supplier_invoices
         assert 'table("supplier_invoices")' in content, (
             "supplier_invoice_service must read from 'supplier_invoices' table"
         )
 
-    def test_procurement_and_registry_use_same_table(self):
-        """
-        The table that procurement writes to must be the same table
-        that the registry reads from. Otherwise invoices disappear.
-
-        EXPECTED TO FAIL: procurement writes to 'invoices',
-        registry reads from 'supplier_invoices'.
-        """
-        # Check what table procurement writes to
-        func_body = get_function_body("api_create_invoice")
-        assert func_body is not None, "api_create_invoice function not found"
-
-        # Extract the table name from the insert statement
-        insert_match = re.search(r'\.table\("(\w+)"\)\.insert\(', func_body)
-        assert insert_match is not None, "No insert statement found in api_create_invoice"
-        write_table = insert_match.group(1)
-
-        # Check what table the registry reads from
+    def test_service_does_not_read_from_invoices(self):
+        """supplier_invoice_service must NOT read from invoices table."""
         service_path = os.path.join(PROJECT_ROOT, "services", "supplier_invoice_service.py")
         with open(service_path, "r") as f:
-            service_content = f.read()
+            content = f.read()
 
-        # The get_all_invoices function reads from supplier_invoices
-        assert 'table("supplier_invoices")' in service_content, (
-            "Registry service must read from supplier_invoices"
-        )
-
-        # The write table and read table MUST match
-        assert write_table == "supplier_invoices", (
-            f"TABLE MISMATCH: Procurement writes to '{write_table}' but "
-            f"registry reads from 'supplier_invoices'. "
-            f"Invoices created in procurement will never appear in the registry. "
-            f"Fix: Change api_create_invoice to write to 'supplier_invoices'."
+        assert '.table("invoices")' not in content, (
+            "supplier_invoice_service must NOT read from 'invoices' table. "
+            "It should only use 'supplier_invoices'."
         )
 
 
 # ============================================================================
-# TEST CLASS: Invoice update handler uses correct table
+# TEST CLASS: Finance invoices tab reads from invoices table
 # ============================================================================
 
-class TestInvoiceUpdateUsesCorrectTable:
+class TestFinanceInvoicesTab:
     """
-    Verify that invoice update (PATCH) also uses supplier_invoices table.
+    The /finance?tab=invoices page should read from the invoices table
+    (showing procurement workflow invoices in the registry view).
     """
 
-    def test_invoice_update_uses_supplier_invoices_table(self):
-        """
-        The api_update_invoice function must update in 'supplier_invoices'
-        table, not 'invoices' table.
+    def test_finance_invoices_tab_exists(self):
+        """The finance page must have an invoices tab."""
+        with open(MAIN_PY, "r") as f:
+            content = f.read()
 
-        EXPECTED TO FAIL: Currently updates 'invoices' table.
-        """
-        func_body = get_function_body("api_update_invoice")
-        assert func_body is not None, "api_update_invoice function not found in main.py"
-
-        # Look for the update statement
-        wrong_update = re.search(r'\.table\("invoices"\)\.update\(', func_body)
-        correct_update = re.search(r'\.table\("supplier_invoices"\)\.update\(', func_body)
-
-        assert correct_update is not None, (
-            "api_update_invoice must update 'supplier_invoices' table. "
-            "Currently updates 'invoices' which the registry never reads."
+        assert "tab=invoices" in content or 'tab == "invoices"' in content, (
+            "Finance page must have an invoices tab"
         )
-        assert wrong_update is None, (
-            "api_update_invoice still updates 'invoices' table."
-        )
-
-
-# ============================================================================
-# TEST CLASS: Invoice delete handler uses correct table
-# ============================================================================
-
-class TestInvoiceDeleteUsesCorrectTable:
-    """
-    Verify that invoice delete also uses supplier_invoices table.
-    """
-
-    def test_invoice_delete_uses_supplier_invoices_table(self):
-        """
-        The api_delete_invoice function must delete from 'supplier_invoices'
-        table, not 'invoices' table.
-
-        EXPECTED TO FAIL: Currently deletes from 'invoices' table.
-        """
-        func_body = get_function_body("api_delete_invoice")
-        if func_body is None:
-            pytest.skip("api_delete_invoice function not found")
-
-        # Look for delete and related query patterns
-        wrong_table_refs = re.findall(r'\.table\("invoices"\)', func_body)
-        correct_table_refs = re.findall(r'\.table\("supplier_invoices"\)', func_body)
-
-        assert len(correct_table_refs) > 0, (
-            "api_delete_invoice must reference 'supplier_invoices' table. "
-            "Currently references 'invoices' which is the wrong table."
-        )
-        assert len(wrong_table_refs) == 0, (
-            f"api_delete_invoice still has {len(wrong_table_refs)} references to 'invoices' table."
-        )
-
-
-# ============================================================================
-# TEST CLASS: Complete procurement handler uses correct table
-# ============================================================================
-
-class TestCompleteProcurementUsesCorrectTable:
-    """
-    Verify that complete procurement also uses supplier_invoices table.
-    """
-
-    def test_complete_procurement_queries_supplier_invoices(self):
-        """
-        The api_complete_procurement function queries invoices for the quote.
-        It must query from 'supplier_invoices' table.
-
-        EXPECTED TO FAIL: Currently queries 'invoices' table.
-        """
-        func_body = get_function_body("api_complete_procurement")
-        if func_body is None:
-            pytest.skip("api_complete_procurement function not found")
-
-        # Look for table references
-        wrong_refs = re.findall(r'\.table\("invoices"\)', func_body)
-        correct_refs = re.findall(r'\.table\("supplier_invoices"\)', func_body)
-
-        assert len(correct_refs) > 0, (
-            "api_complete_procurement must reference 'supplier_invoices' table."
-        )
-        # Allow that some refs may be to other tables like quote_items
-        # But the direct invoices queries should use supplier_invoices
-        if wrong_refs:
-            assert len(wrong_refs) == 0, (
-                f"api_complete_procurement still has {len(wrong_refs)} references "
-                f"to 'invoices' table. Should use 'supplier_invoices'."
-            )
-
-
-# ============================================================================
-# RUN
-# ============================================================================
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

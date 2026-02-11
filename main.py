@@ -7687,8 +7687,36 @@ def get(quote_id: str, session):
                         hx_target="#cities-datalist",
                         hx_vals='js:{"q": document.getElementById("delivery-city-input").value}',
                         hx_swap="innerHTML",
+                        onblur="if(typeof saveDeliveryCity==='function') saveDeliveryCity(this.value)",
+                        onchange="if(typeof saveDeliveryCity==='function'){saveDeliveryCity(this.value); syncCountryFromCity(this);}",
                     ),
                     Datalist(id="cities-datalist"),
+                    # Always-rendered save function for delivery city (not conditional on workflow status)
+                    Script(f"""
+                        function saveDeliveryCity(value) {{
+                            fetch('/quotes/{quote_id}/inline', {{
+                                method: 'PATCH',
+                                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                body: 'field=delivery_city&value=' + encodeURIComponent(value)
+                            }});
+                        }}
+                        function syncCountryFromCity(cityInput) {{
+                            var datalist = document.getElementById('cities-datalist');
+                            var countryInput = document.getElementById('delivery-country-input');
+                            if (!datalist || !countryInput) return;
+                            var options = datalist.querySelectorAll('option');
+                            for (var i = 0; i < options.length; i++) {{
+                                if (options[i].value === cityInput.value) {{
+                                    var country = options[i].getAttribute('data-country');
+                                    if (country) {{
+                                        countryInput.value = country;
+                                        countryInput.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                    }}
+                                    break;
+                                }}
+                            }}
+                        }}
+                    """),
                     style="flex: 1 1 120px; min-width: 120px;"
                 ),
                 # Delivery Country
@@ -8473,35 +8501,8 @@ def get(quote_id: str, session):
                 return true;
             }}
 
-            // Save delivery_city via fetch PATCH (separate from hx-get autocomplete)
-            function saveDeliveryCity(value) {{
-                fetch('/quotes/{quote_id}/inline', {{
-                    method: 'PATCH',
-                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-                    body: 'field=delivery_city&value=' + encodeURIComponent(value)
-                }});
-            }}
-
-            // Auto-fill delivery_country from datalist option data-country attribute
-            function syncCountryFromCity(cityInput) {{
-                var datalist = document.getElementById('cities-datalist');
-                var countryInput = document.getElementById('delivery-country-input');
-                if (!datalist || !countryInput) return;
-
-                var options = datalist.querySelectorAll('option');
-                for (var i = 0; i < options.length; i++) {{
-                    if (options[i].value === cityInput.value) {{
-                        var country = options[i].getAttribute('data-country');
-                        if (country) {{
-                            countryInput.value = country;
-                            // Trigger change event to save country via HTMX
-                            countryInput.dispatchEvent(new Event('change', {{bubbles: true}}));
-                            if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
-                        }}
-                        break;
-                    }}
-                }}
-            }}
+            // saveDeliveryCity and syncCountryFromCity are defined globally
+            // in the delivery city input Script block (always rendered).
 
             // Run validation on page load and on changes
             document.addEventListener('DOMContentLoaded', function() {{
@@ -8511,16 +8512,6 @@ def get(quote_id: str, session):
                 document.querySelectorAll('input, select').forEach(function(el) {{
                     el.addEventListener('change', updateSubmitButtonState);
                 }});
-
-                // Delivery city: save on change + auto-fill country
-                var cityInput = document.getElementById('delivery-city-input');
-                if (cityInput) {{
-                    cityInput.addEventListener('change', function() {{
-                        saveDeliveryCity(this.value);
-                        syncCountryFromCity(this);
-                        if (typeof updateSubmitButtonState === 'function') updateSubmitButtonState();
-                    }});
-                }}
             }});
 
             // Also update after Handsontable changes
@@ -15780,44 +15771,27 @@ async def api_create_invoice(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "No items selected"}, status_code=400)
 
     # Generate invoice number
-    count_result = supabase.table("supplier_invoices").select("id", count="exact").eq("organization_id", org_id).eq("supplier_id", supplier_id).execute()
+    count_result = supabase.table("invoices").select("id", count="exact").eq("quote_id", quote_id).eq("supplier_id", supplier_id).execute()
     idx = (count_result.count or 0) + 1
     invoice_number = f"INV-{idx:02d}-{quote.get('idn_quote', quote_id[:8])}"
 
-    # Calculate total amount from selected items
-    items_for_total = supabase.table("quote_items") \
-        .select("purchase_price_original, quantity") \
-        .in_("id", item_ids) \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    total_amount = sum(
-        (float(item.get("purchase_price_original", 0) or 0)) * (float(item.get("quantity", 1) or 1))
-        for item in (items_for_total.data or [])
-    )
-    if total_amount <= 0:
-        total_amount = 0.01  # supplier_invoices requires total_amount > 0
-
     try:
-        # Create invoice in supplier_invoices table (visible in registry)
+        # Create invoice in invoices table (procurement workflow)
         invoice_data = {
-            "organization_id": org_id,
+            "quote_id": quote_id,
             "supplier_id": supplier_id,
+            "buyer_company_id": buyer_company_id,
             "invoice_number": invoice_number,
-            "invoice_date": datetime.utcnow().strftime("%Y-%m-%d"),
-            "total_amount": total_amount,
             "currency": currency,
-            "status": "pending",
-            "created_by": user["id"],
-            "notes": f"Quote: {quote.get('idn_quote', quote_id[:8])}",
             "pickup_country": pickup_country or None,
             "total_weight_kg": float(total_weight_kg) if total_weight_kg else None,
             "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
+            "status": "pending_procurement",
         }
         if pickup_location_id:
             invoice_data["pickup_location_id"] = pickup_location_id
 
-        result = supabase.table("supplier_invoices").insert(invoice_data).execute()
+        result = supabase.table("invoices").insert(invoice_data).execute()
 
         if not result.data:
             return JSONResponse({"success": False, "error": "Failed to create invoice"}, status_code=500)
@@ -15881,7 +15855,7 @@ async def api_update_invoice(quote_id: str, session, request):
 
     supabase = get_supabase()
 
-    # Build update data for supplier_invoices table
+    # Build update data for invoices table (procurement workflow)
     update_data = {}
 
     invoice_number = form.get("invoice_number")
@@ -15891,14 +15865,6 @@ async def api_update_invoice(quote_id: str, session, request):
     currency = form.get("currency")
     if currency:
         update_data["currency"] = currency
-
-    total_amount = form.get("total_amount")
-    if total_amount:
-        update_data["total_amount"] = float(total_amount)
-
-    notes = form.get("notes")
-    if notes is not None:
-        update_data["notes"] = notes.strip()
 
     # Pickup/weight/volume fields
     pickup_location_id = form.get("pickup_location_id")
@@ -15926,7 +15892,7 @@ async def api_update_invoice(quote_id: str, session, request):
 
     try:
         if update_data:
-            supabase.table("supplier_invoices").update(update_data).eq("id", invoice_id).execute()
+            supabase.table("invoices").update(update_data).eq("id", invoice_id).eq("quote_id", quote_id).execute()
 
             # Also update currency on linked items
             if currency:
@@ -15998,11 +15964,11 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
             .eq("quote_id", quote_id) \
             .execute()
 
-        # Delete invoice from supplier_invoices (scoped to organization for safety)
-        supabase.table("supplier_invoices") \
+        # Delete invoice from invoices (scoped to quote_id for safety)
+        supabase.table("invoices") \
             .delete() \
             .eq("id", invoice_id) \
-            .eq("organization_id", org_id) \
+            .eq("quote_id", quote_id) \
             .execute()
 
         return JSONResponse({"success": True})
@@ -16038,11 +16004,11 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
     if not quote_result.data:
         return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
 
-    # Get invoice from supplier_invoices
-    invoice_result = supabase.table("supplier_invoices") \
+    # Get invoice from invoices (procurement workflow)
+    invoice_result = supabase.table("invoices") \
         .select("*") \
         .eq("id", invoice_id) \
-        .eq("organization_id", org_id) \
+        .eq("quote_id", quote_id) \
         .single() \
         .execute()
 
@@ -16051,8 +16017,8 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
 
     invoice = invoice_result.data
 
-    # Check invoice is in pending status
-    if invoice.get("status") != "pending":
+    # Check invoice is in pending_procurement status
+    if invoice.get("status") != "pending_procurement":
         return JSONResponse({"success": False, "error": "Invoice is not in procurement stage"}, status_code=400)
 
     # Get items in this invoice
@@ -16087,13 +16053,15 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         }, status_code=400)
 
     try:
-        # Update invoice status in supplier_invoices
-        supabase.table("supplier_invoices") \
+        # Update invoice status in invoices (procurement workflow)
+        supabase.table("invoices") \
             .update({
-                "status": "partially_paid",
-                "notes": (invoice.get("notes") or "") + " | Procurement completed"
+                "status": "pending_logistics",
+                "procurement_completed_at": datetime.utcnow().isoformat(),
+                "procurement_completed_by": user_id,
             }) \
             .eq("id", invoice_id) \
+            .eq("quote_id", quote_id) \
             .execute()
 
         # Mark all items in this invoice as procurement completed
@@ -16418,7 +16386,7 @@ async def api_complete_procurement(quote_id: str, session):
             .in_("id", my_item_ids) \
             .execute()
 
-    # Get supplier_invoices linked to this quote's items for status tracking
+    # Get invoices linked to this quote's items for status tracking
     invoice_ids_result = supabase.table("quote_items") \
         .select("invoice_id") \
         .eq("quote_id", quote_id) \
@@ -16431,11 +16399,15 @@ async def api_complete_procurement(quote_id: str, session):
     ))
 
     if linked_invoice_ids:
-        # Update supplier_invoices status to reflect procurement completion
-        supabase.table("supplier_invoices") \
-            .update({"status": "pending"}) \
+        # Update invoices status to reflect procurement completion
+        supabase.table("invoices") \
+            .update({
+                "status": "pending_logistics",
+                "procurement_completed_at": datetime.utcnow().isoformat(),
+                "procurement_completed_by": user_id,
+            }) \
             .in_("id", linked_invoice_ids) \
-            .eq("organization_id", org_id) \
+            .eq("quote_id", quote_id) \
             .execute()
 
     # Check if ALL items are complete and trigger workflow transition
@@ -16513,14 +16485,14 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
 
     all_items = items_result.data or []
 
-    # Get invoices from supplier_invoices via linked item invoice_ids
+    # Get invoices from invoices table via linked item invoice_ids
     linked_inv_ids = list(set(
         item["invoice_id"] for item in all_items
         if item.get("invoice_id")
     ))
 
     if linked_inv_ids:
-        invoices_result = supabase.table("supplier_invoices") \
+        invoices_result = supabase.table("invoices") \
             .select("*") \
             .in_("id", linked_inv_ids) \
             .order("created_at") \
@@ -25572,68 +25544,92 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
 
 
 def finance_invoices_tab(session, user, org_id):
-    """Invoices tab - Supplier invoices registry for the finance section."""
+    """Invoices tab - Procurement invoices registry for the finance section."""
     supabase = get_supabase()
 
-    # Query supplier_invoices with supplier name join
+    # Query invoices table, filtering by org through quotes
     try:
-        result = supabase.table("supplier_invoices") \
-            .select("id, invoice_number, invoice_date, due_date, total_amount, currency, status, notes, created_at, "
-                    "suppliers!supplier_invoices_supplier_id_fkey(id, name)") \
+        # Get quote IDs for this organization
+        quotes_result = supabase.table("quotes") \
+            .select("id") \
             .eq("organization_id", org_id) \
-            .order("created_at", desc=True) \
-            .limit(200) \
             .execute()
-        invoices = result.data or []
+        org_quote_ids = [q["id"] for q in (quotes_result.data or [])]
+
+        if org_quote_ids:
+            result = supabase.table("invoices") \
+                .select("id, quote_id, invoice_number, supplier_id, currency, status, created_at") \
+                .in_("quote_id", org_quote_ids) \
+                .order("created_at", desc=True) \
+                .limit(200) \
+                .execute()
+            invoices = result.data or []
+        else:
+            invoices = []
+
+        # Get supplier names
+        supplier_ids = list(set(inv.get("supplier_id") for inv in invoices if inv.get("supplier_id")))
+        suppliers_map = {}
+        if supplier_ids:
+            suppliers_result = supabase.table("suppliers").select("id, name").in_("id", supplier_ids).execute()
+            suppliers_map = {s["id"]: s["name"] for s in (suppliers_result.data or [])}
+
+        # Calculate totals from quote_items for each invoice
+        invoice_ids = [inv["id"] for inv in invoices]
+        invoice_totals = {}
+        if invoice_ids:
+            items_result = supabase.table("quote_items") \
+                .select("invoice_id, purchase_price_original, quantity") \
+                .in_("invoice_id", invoice_ids) \
+                .execute()
+            for item in (items_result.data or []):
+                inv_id = item.get("invoice_id")
+                if inv_id:
+                    price = float(item.get("purchase_price_original", 0) or 0)
+                    qty = float(item.get("quantity", 1) or 1)
+                    invoice_totals[inv_id] = invoice_totals.get(inv_id, 0.0) + (price * qty)
+
     except Exception as e:
-        print(f"Error fetching supplier invoices for finance tab: {e}")
+        print(f"Error fetching invoices for finance tab: {e}")
         invoices = []
+        suppliers_map = {}
+        invoice_totals = {}
 
     # Status label and style helper
     def invoice_status_display(status):
         status_map = {
-            "pending": ("Ожидает", "background: #fef3c7; color: #92400e;"),
-            "partially_paid": ("Частично", "background: #dbeafe; color: #1e40af;"),
-            "paid": ("Оплачен", "background: #dcfce7; color: #166534;"),
-            "overdue": ("Просрочен", "background: #fee2e2; color: #991b1b;"),
-            "cancelled": ("Отменён", "background: #f1f5f9; color: #64748b;"),
+            "pending_procurement": ("Закупка", "background: #fef3c7; color: #92400e;"),
+            "pending_logistics": ("Логистика", "background: #dbeafe; color: #1e40af;"),
+            "pending_customs": ("Таможня", "background: #e0e7ff; color: #3730a3;"),
+            "completed": ("Завершён", "background: #dcfce7; color: #166534;"),
         }
         label, style = status_map.get(status, (status or "—", "background: #f1f5f9; color: #64748b;"))
         return Span(label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; {style}")
 
     # Calculate summary totals by currency
     totals_by_currency = {}
-    count_by_status = {"pending": 0, "partially_paid": 0, "paid": 0, "overdue": 0, "cancelled": 0}
+    count_by_status = {}
     for inv in invoices:
         cur = inv.get("currency", "USD")
-        amt = float(inv.get("total_amount", 0) or 0)
+        amt = invoice_totals.get(inv["id"], 0.0)
         if cur not in totals_by_currency:
             totals_by_currency[cur] = 0.0
         totals_by_currency[cur] += amt
-        st = inv.get("status", "pending")
-        if st in count_by_status:
-            count_by_status[st] += 1
+        st = inv.get("status", "pending_procurement")
+        count_by_status[st] = count_by_status.get(st, 0) + 1
 
     # Build table rows
     table_rows = []
     for idx, inv in enumerate(invoices, 1):
-        supplier_data = inv.get("suppliers") or {}
-        supplier_name = supplier_data.get("name", "—") if isinstance(supplier_data, dict) else "—"
+        supplier_name = suppliers_map.get(inv.get("supplier_id"), "—")
         invoice_number = inv.get("invoice_number", "—")
-        invoice_date = inv.get("invoice_date", "")
-        due_date = inv.get("due_date", "")
-        total_amount = float(inv.get("total_amount", 0) or 0)
+        total_amount = invoice_totals.get(inv["id"], 0.0)
         currency = inv.get("currency", "USD")
-        status = inv.get("status", "pending")
+        status = inv.get("status", "pending_procurement")
+        created_at = inv.get("created_at", "")
 
         # Format date
-        date_display = format_date_russian(invoice_date) if invoice_date else "—"
-        due_date_display = format_date_russian(due_date) if due_date else "—"
-
-        # Row highlight for overdue
-        row_style = "cursor: default;"
-        if status == "overdue":
-            row_style += " background: #fefce8;"
+        date_display = format_date_russian(created_at[:10]) if created_at else "—"
 
         table_rows.append(
             Tr(
@@ -25641,10 +25637,9 @@ def finance_invoices_tab(session, user, org_id):
                 Td(invoice_number, style="font-weight: 500;"),
                 Td(supplier_name),
                 Td(date_display),
-                Td(due_date_display),
                 Td(f"{total_amount:,.2f} {currency}", style="text-align: right; font-weight: 500;"),
                 Td(invoice_status_display(status)),
-                style=row_style,
+                style="cursor: default;",
             )
         )
 
@@ -25656,13 +25651,12 @@ def finance_invoices_tab(session, user, org_id):
                 Th("НОМЕР ИНВОЙСА"),
                 Th("ПОСТАВЩИК"),
                 Th("ДАТА"),
-                Th("СРОК ОПЛАТЫ"),
                 Th("СУММА", style="text-align: right;"),
                 Th("СТАТУС"),
             )
         ),
         Tbody(*table_rows) if table_rows else Tbody(
-            Tr(Td("Нет инвойсов от поставщиков", colspan="7", style="text-align: center; padding: 2rem; color: #666;"))
+            Tr(Td("Нет инвойсов от поставщиков", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
         ),
         cls="unified-table"
     )
@@ -25680,7 +25674,12 @@ def finance_invoices_tab(session, user, org_id):
 
     # Status counts
     status_parts = []
-    status_labels = {"pending": "Ожидает", "partially_paid": "Частично", "paid": "Оплачен", "overdue": "Просрочен"}
+    status_labels = {
+        "pending_procurement": "Закупка",
+        "pending_logistics": "Логистика",
+        "pending_customs": "Таможня",
+        "completed": "Завершён",
+    }
     for st, label in status_labels.items():
         cnt = count_by_status.get(st, 0)
         if cnt > 0:

@@ -39,3 +39,63 @@ Each item tracks: planned vs actual amount/date/currency, variance, status (plan
 ### Rule
 
 Never create separate payment/data systems for specs and deals. They share `plan_fact_items` through the deal.
+
+---
+
+## Invoice Architecture: Two-Table Design
+
+Two invoice tables coexist — different business purposes, do NOT merge.
+
+### `kvota.invoices` — Procurement Workflow Groupings
+
+**Purpose:** Group quote items by supplier/buyer/pickup for the procurement→logistics→customs workflow.
+
+**Lifecycle:** `pending_procurement → pending_logistics → pending_customs → completed`
+
+**Key columns:** `quote_id` (required), `supplier_id`, `buyer_company_id`, `pickup_location_id`, `invoice_number`, `currency`, `total_weight_kg`, `total_volume_m3`, logistics cost columns (3-segment model: `logistics_supplier_to_hub/hub_to_customs/customs_to_customer` + currency variants), workflow status + completion timestamps.
+
+**Used by:** Procurement workspace, Logistics workspace, Customs workspace, Calculation engine (`build_calculation_inputs()`), Finance "Инвойсы" tab.
+
+**Children:** `quote_items.invoice_id` → `invoices.id`
+
+### `kvota.supplier_invoices` — Finance Payment Registry
+
+**Purpose:** Track actual supplier invoices for payment obligations. Used by finance/accounts payable.
+
+**Lifecycle:** `pending → partially_paid → paid → overdue (auto) → cancelled`
+
+**Key columns:** `organization_id` (required), `supplier_id`, `invoice_number`, `invoice_date`, `due_date`, `total_amount`, `currency`, `status`, `created_by`.
+
+**Used by:** `supplier_invoice_service.py`, finance payment tracking, overdue detection trigger.
+
+**Children:** `supplier_invoice_items`, `supplier_invoice_payments`
+
+### Rules
+
+1. **Procurement CRUD** always uses `invoices` table
+2. **Finance payment tracking** always uses `supplier_invoices` table
+3. **Logistics cost entry** writes to `invoices.logistics_*` columns
+4. **Calculation engine** reads from `invoices` (never `supplier_invoices`)
+5. Never mix the two — they serve different lifecycle stages
+
+---
+
+## Logistics: Two Models
+
+### 3-Segment Cost Model (Quote-Level)
+
+On `invoices` table: `logistics_supplier_to_hub`, `logistics_hub_to_customs`, `logistics_customs_to_customer` + currency variants.
+
+**Purpose:** Cost estimation during quote calculation. Feeds into 13-phase calculation engine.
+**Used by:** `/logistics/{quote_id}` workspace, `build_calculation_inputs()`.
+
+### 7-Stage Tracking Model (Deal-Level)
+
+Tables: `logistics_stages` + `plan_fact_items` (with `logistics_stage_id` FK).
+
+**Stages:** first_mile → hub → hub_hub → transit → post_transit → gtd_upload → last_mile
+
+**Purpose:** Track actual logistics progress and real expenses after deal is signed.
+**Used by:** `/finance/{deal_id}` logistics section.
+
+These are complementary, not replacements. Quote-level estimates vs deal-level actuals.
