@@ -8135,11 +8135,11 @@ def get(quote_id: str, session):
 
         # Totals
         Div(
-            H3("Totals"),
+            H3("Итого"),
             Table(
-                Tr(Td("Products Subtotal:"), Td(format_money(quote.get("subtotal"), quote.get("currency", "RUB")))),
-                Tr(Td("Logistics:"), Td(format_money(quote.get("logistics_total"), quote.get("currency", "RUB")))),
-                Tr(Td(Strong("Total:")), Td(Strong(format_money(quote.get("total_amount"), quote.get("currency", "RUB"))))),
+                Tr(Td("Товары (подитог):"), Td(format_money(quote.get("subtotal"), quote.get("currency", "RUB")))),
+                Tr(Td("Логистика:"), Td(format_money(quote.get("logistics_total"), quote.get("currency", "RUB")))),
+                Tr(Td(Strong("Итого:")), Td(Strong(format_money(quote.get("total_amount"), quote.get("currency", "RUB"))))),
             ),
             cls="card"
         ) if quote.get("total_amount") else None,
@@ -8665,17 +8665,17 @@ def get(quote_id: str, session):
 
         # Actions section (only for non-draft quotes - after calculation)
         Div(
-            H3("Actions"),
+            H3("Действия"),
             Div(
-                btn_link("Calculate", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                btn_link("Version History", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+                btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
                 style="display: flex; gap: 0.5rem;"
             ),
-            H4("Export", style="margin-top: 1rem;"),
+            H4("Экспорт", style="margin-top: 1rem;"),
             Div(
-                btn_link("Specification PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
-                btn_link("Invoice PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
-                btn_link("Validation Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
+                btn_link("Спецификация PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
+                btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
+                btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
                 style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
             ),
             cls="card"
@@ -15657,7 +15657,12 @@ async def api_create_invoice(quote_id: str, session, request):
             "status": "pending",
             "created_by": user["id"],
             "notes": f"Quote: {quote.get('idn_quote', quote_id[:8])}",
+            "pickup_country": pickup_country or None,
+            "total_weight_kg": float(total_weight_kg) if total_weight_kg else None,
+            "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
         }
+        if pickup_location_id:
+            invoice_data["pickup_location_id"] = pickup_location_id
 
         result = supabase.table("supplier_invoices").insert(invoice_data).execute()
 
@@ -15741,6 +15746,23 @@ async def api_update_invoice(quote_id: str, session, request):
     notes = form.get("notes")
     if notes is not None:
         update_data["notes"] = notes.strip()
+
+    # Pickup/weight/volume fields
+    pickup_location_id = form.get("pickup_location_id")
+    if pickup_location_id is not None:
+        update_data["pickup_location_id"] = pickup_location_id or None
+
+    pickup_country = form.get("pickup_country")
+    if pickup_country is not None:
+        update_data["pickup_country"] = pickup_country.strip() or None
+
+    total_weight_kg = form.get("total_weight_kg")
+    if total_weight_kg is not None:
+        update_data["total_weight_kg"] = float(total_weight_kg) if total_weight_kg else None
+
+    total_volume_m3 = form.get("total_volume_m3")
+    if total_volume_m3 is not None:
+        update_data["total_volume_m3"] = float(total_volume_m3) if total_volume_m3 else None
 
     # Handle file upload if provided
     invoice_file = form.get("invoice_file")
@@ -17053,8 +17075,8 @@ def get(session, quote_id: str):
         delivery_method_text = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мульти"}.get(
             quote.get("delivery_method", ""), "—"
         )
-        delivery_method_icon = {"air": "✈", "auto": "🚛", "sea": "🚢", "multimodal": "📦"}.get(
-            quote.get("delivery_method", ""), "📦"
+        delivery_method_icon = {"air": icon("plane", size=14), "auto": icon("truck", size=14), "sea": icon("ship", size=14), "multimodal": icon("package", size=14)}.get(
+            quote.get("delivery_method", ""), icon("package", size=14)
         )
 
         # Styles
@@ -17178,8 +17200,8 @@ def get(session, quote_id: str):
                     ),
                     # Delivery method badge
                     Div(
-                        Span(f"{delivery_method_icon} {delivery_method_text}",
-                             style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-block;"),
+                        Span(delivery_method_icon, f" {delivery_method_text}",
+                             style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); color: #92400e; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"),
                         style="margin-top: auto; padding-top: 8px; border-top: 1px solid #f1f5f9;"
                     ),
                     # Weight & items
@@ -25912,7 +25934,7 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
 
     # Build paid items table rows
     cell_style = "padding: 10px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
-    th_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    th_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: white; letter-spacing: 0.05em; text-transform: uppercase; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-bottom: 2px solid #e2e8f0;"
 
     if paid_items:
         rows = []
@@ -25981,6 +26003,7 @@ def _deal_payments_section(deal_id, plan_fact_items, categories):
                 Th("", style=th_style),
             )),
             Tbody(*rows),
+            cls="table-enhanced",
             style="width: 100%; border-collapse: collapse;"
         )
     else:
@@ -32530,7 +32553,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
             if contact.is_lpr:
                 badges.append(Span("ЛПР", title="Лицо, принимающее решения", style="margin-left: 0.25rem; background: #dbeafe; color: #1d4ed8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;"))
             if contact.is_signatory:
-                badges.append(Span("✏️", title="Подписант", style="margin-left: 0.25rem;"))
+                badges.append(Span(icon("pen-line", size=14), title="Подписант", style="margin-left: 0.25rem;"))
             if contact.is_primary:
                 badges.append(Span("★", title="Основной", style="margin-left: 0.25rem; color: #f59e0b;"))
             contacts_preview_items.append(

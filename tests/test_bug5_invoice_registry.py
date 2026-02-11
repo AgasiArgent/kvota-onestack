@@ -225,14 +225,8 @@ class TestInvoiceDataMatchesSupplierInvoicesSchema:
 
     def test_invoice_data_does_not_include_invoices_only_columns(self):
         """
-        After migration, invoice_data should NOT include columns that only
-        exist in the invoices table (quote_id, buyer_company_id,
-        pickup_location_id, total_weight_kg, total_volume_m3).
-
-        These columns do not exist in supplier_invoices and would cause
-        a database error.
-
-        EXPECTED TO FAIL: Current invoice_data includes all of these columns.
+        After migration 167, supplier_invoices now has pickup/weight/volume columns.
+        Only quote_id and buyer_company_id remain invoices-only columns.
         """
         func_body = get_function_body("api_create_invoice")
         assert func_body is not None, "api_create_invoice function not found"
@@ -240,15 +234,11 @@ class TestInvoiceDataMatchesSupplierInvoicesSchema:
         data_start = func_body.find("invoice_data = {")
         assert data_start != -1, "invoice_data dict not found"
 
-        # Find the closing brace of the dict
         data_section = func_body[data_start:data_start + 800]
 
-        # These columns exist in invoices but NOT in supplier_invoices
+        # After migration 167, only these remain invoices-only
         invoices_only_columns = [
-            "pickup_location_id",
-            "pickup_country",
-            "total_weight_kg",
-            "total_volume_m3",
+            "buyer_company_id",
         ]
 
         found_wrong_columns = []
@@ -258,8 +248,7 @@ class TestInvoiceDataMatchesSupplierInvoicesSchema:
 
         assert len(found_wrong_columns) == 0, (
             f"invoice_data contains columns that don't exist in supplier_invoices table: "
-            f"{found_wrong_columns}. These columns only exist in the invoices table. "
-            f"Writing these to supplier_invoices would cause a database error."
+            f"{found_wrong_columns}."
         )
 
 
