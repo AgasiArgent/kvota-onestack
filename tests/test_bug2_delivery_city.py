@@ -168,31 +168,17 @@ class TestSaveDeliveryCityFunction:
         assert "/inline" in func_body, \
             "saveDeliveryCity does not call the /inline endpoint"
 
-    def test_saveDeliveryCity_only_fires_on_blur_not_save(self):
-        """Currently saveDeliveryCity only fires on input change/blur events,
-        NOT when the Save button is clicked. This documents the bug.
-
-        The event listener wires saveDeliveryCity to the 'change' event on
-        delivery-city-input, but showSaveConfirmation does NOT call it.
+    def test_saveDeliveryCity_fires_on_save(self):
+        """BUG-2 FIX: saveDeliveryCity is now called from showSaveConfirmation,
+        so city is saved when the Save button is clicked (not just on blur).
         """
         source = _read_main_source()
 
-        # Verify the change event listener exists (this is the ONLY trigger currently)
-        assert "cityInput.addEventListener('change'" in source or \
-               'cityInput.addEventListener("change"' in source, \
-            "delivery-city-input change event listener not found"
-
-        # Verify showSaveConfirmation does NOT call saveDeliveryCity (the bug)
         func_body = _extract_js_function(source, "showSaveConfirmation")
         assert func_body is not None
 
-        # This assertion documents the current buggy state.
-        # When the fix is applied, this test should be REMOVED or INVERTED.
-        has_call = "saveDeliveryCity" in func_body
-        assert not has_call, \
-            ("This test expected saveDeliveryCity to be MISSING from "
-             "showSaveConfirmation (documenting the bug). If this fails, "
-             "the bug has been fixed -- update or remove this test.")
+        assert "saveDeliveryCity" in func_body, \
+            "showSaveConfirmation must call saveDeliveryCity (BUG-2 fix)"
 
 
 # ============================================================================
