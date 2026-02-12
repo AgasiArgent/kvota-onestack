@@ -21926,7 +21926,7 @@ def get(session, quote_id: str):
     invoice_ids = [inv["id"] for inv in invoices]
     try:
         docs_resp = supabase.table("documents") \
-            .select("id, entity_id, file_path, file_name") \
+            .select("id, entity_id, storage_path, original_filename") \
             .eq("entity_type", "supplier_invoice") \
             .in_("entity_id", invoice_ids) \
             .execute()
@@ -22031,7 +22031,7 @@ def get(session, quote_id: str, invoice_id: str):
     signed_url = None
     try:
         docs_resp = supabase.table("documents") \
-            .select("id, file_path, file_name, mime_type") \
+            .select("id, storage_path, original_filename, mime_type") \
             .eq("entity_type", "supplier_invoice") \
             .eq("entity_id", invoice_id) \
             .limit(1) \
