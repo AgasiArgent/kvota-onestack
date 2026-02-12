@@ -5203,13 +5203,17 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     # Role badges
     role_names = {
         'sales': ('Продажи', '#f97316'),
+        'sales_manager': ('Менеджер продаж', '#ea580c'),
         'procurement': ('Закупки', '#fbbf24'),
         'logistics': ('Логистика', '#3b82f6'),
         'customs': ('Таможня', '#8b5cf6'),
         'quote_controller': ('Контроль КП', '#ec4899'),
-        'spec_controller': ('Спецификации', '#6366f1'),
+        'spec_controller': ('Контроль спецификаций', '#6366f1'),
         'finance': ('Финансы', '#10b981'),
         'top_manager': ('Топ-менеджер', '#f59e0b'),
+        'head_of_sales': ('Начальник отдела продаж', '#d97706'),
+        'head_of_procurement': ('Начальник отдела закупок', '#ca8a04'),
+        'head_of_logistics': ('Начальник отдела логистики', '#2563eb'),
         'admin': ('Админ', '#ef4444'),
     }
 
@@ -7093,12 +7097,14 @@ def get(session):
         'sales_manager': ('Менеджер продаж', '#ea580c'),
         'procurement': ('Закупки', '#eab308'),
         'logistics': ('Логистика', '#3b82f6'),
-        'head_of_logistics': ('Рук. логистики', '#2563eb'),
         'customs': ('Таможня', '#8b5cf6'),
         'quote_controller': ('Контроль КП', '#ec4899'),
-        'spec_controller': ('Спецификации', '#6366f1'),
+        'spec_controller': ('Контроль спецификаций', '#6366f1'),
         'finance': ('Финансы', '#10b981'),
         'top_manager': ('Топ-менеджер', '#f59e0b'),
+        'head_of_sales': ('Начальник отдела продаж', '#d97706'),
+        'head_of_procurement': ('Начальник отдела закупок', '#ca8a04'),
+        'head_of_logistics': ('Начальник отдела логистики', '#2563eb'),
         'admin': ('Админ', '#ef4444'),
     }
 
@@ -14118,8 +14124,10 @@ def post(action: str, session):
 ROLE_LABELS_RU = {
     "sales": "Продажи", "sales_manager": "Менеджер", "procurement": "Закупки",
     "logistics": "Логистика", "customs": "Таможня", "admin": "Админ",
-    "quote_controller": "Контроль КП", "spec_controller": "Контроль спец.",
+    "quote_controller": "Контроль КП", "spec_controller": "Контроль спецификаций",
     "top_manager": "Руководитель", "finance": "Финансы", "system": "Система",
+    "head_of_sales": "Нач. продаж", "head_of_procurement": "Нач. закупок",
+    "head_of_logistics": "Нач. логистики",
 }
 
 
@@ -28139,7 +28147,10 @@ def get(session):
                 "quote_controller": "status-new",
                 "spec_controller": "status-info",
                 "finance": "status-success",
-                "top_manager": "status-warning"
+                "top_manager": "status-warning",
+                "head_of_sales": "status-info",
+                "head_of_procurement": "status-success",
+                "head_of_logistics": "status-warning",
             }.get(code, "status-neutral")
             role_badges.append(
                 Span(name, cls=f"status-badge {badge_class}", style="margin-right: 4px;")
@@ -28291,7 +28302,10 @@ def get(user_id: str, session):
             "quote_controller": "#ec4899",
             "spec_controller": "#06b6d4",
             "finance": "#84cc16",
-            "top_manager": "#f97316"
+            "top_manager": "#f97316",
+            "head_of_sales": "#d97706",
+            "head_of_procurement": "#ca8a04",
+            "head_of_logistics": "#2563eb",
         }.get(role.code, "#6b7280")
 
         is_checked = role.code in current_role_codes
@@ -28399,7 +28413,10 @@ def post(user_id: str, session, roles: list = None):
             "quote_controller": "#ec4899",
             "spec_controller": "#06b6d4",
             "finance": "#84cc16",
-            "top_manager": "#f97316"
+            "top_manager": "#f97316",
+            "head_of_sales": "#d97706",
+            "head_of_procurement": "#ca8a04",
+            "head_of_logistics": "#2563eb",
         }.get(code, "#6b7280")
 
         role_badges.append(
@@ -28448,7 +28465,10 @@ def get(user_id: str, session):
             "quote_controller": "#ec4899",
             "spec_controller": "#06b6d4",
             "finance": "#84cc16",
-            "top_manager": "#f97316"
+            "top_manager": "#f97316",
+            "head_of_sales": "#d97706",
+            "head_of_procurement": "#ca8a04",
+            "head_of_logistics": "#2563eb",
         }.get(code, "#6b7280")
 
         role_badges.append(
@@ -28512,7 +28532,10 @@ def get(user_id: str, session):
             "quote_controller": "#ec4899",
             "spec_controller": "#06b6d4",
             "finance": "#84cc16",
-            "top_manager": "#f97316"
+            "top_manager": "#f97316",
+            "head_of_sales": "#d97706",
+            "head_of_procurement": "#ca8a04",
+            "head_of_logistics": "#2563eb",
         }.get(r.code, "#6b7280")
 
         card_bg = f"{color}10" if checked else "#f8fafc"
