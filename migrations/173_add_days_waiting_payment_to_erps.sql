@@ -119,7 +119,6 @@ SELECT
       AND pfc.is_income = true
       AND pfi.actual_amount IS NULL
       AND pfi.planned_date < CURRENT_DATE
-      AND pfi.status != 'cancelled'
   ) AS days_waiting_payment,
 
   -- Block "Finance" - Finance info (from plan_fact_items via deal)
