@@ -7767,8 +7767,232 @@ def get(session):
 # QUOTE DETAIL
 # ============================================================================
 
+
+def _render_summary_tab(quote, customer, seller_companies, contacts, items, creator_name,
+                        created_at_display, expiry_display):
+    """Render read-only summary tab with white cards (same design as customer detail page)."""
+
+    # Lookup seller company object
+    seller_company = None
+    if quote.get("seller_company_id"):
+        seller_company = next(
+            (sc for sc in seller_companies if str(sc.id) == str(quote.get("seller_company_id", ""))),
+            None
+        )
+
+    # Lookup contact person
+    contact_person = None
+    if quote.get("contact_person_id") and contacts:
+        contact_person = next(
+            (c for c in contacts if c.get("id") == quote.get("contact_person_id")),
+            None
+        )
+
+    # Delivery method label
+    delivery_method_map = {"air": "Авиа", "auto": "Авто", "sea": "Море", "multimodal": "Мультимодально"}
+    delivery_method_label = delivery_method_map.get(quote.get("delivery_method") or "", "—")
+
+    # Currency info
+    currency = quote.get("currency") or "RUB"
+    currency_symbols = {"RUB": "₽", "USD": "$", "EUR": "€", "CNY": "¥", "TRY": "₺"}
+    currency_symbol = currency_symbols.get(currency, currency)
+
+    # Totals (prefer quote-currency columns, fallback to total_amount)
+    total_amount = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
+    total_profit = float(quote.get("profit_quote_currency") or 0)
+
+    # Payment terms
+    payment_terms = quote.get("payment_terms") or "—"
+    advance_percent = quote.get("advance_percent") or 0
+
+    # Exchange rate
+    exchange_rate_to_usd = quote.get("exchange_rate_to_usd")
+
+    # Common styles
+    label_style = "color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"
+    value_style = "color: #374151; margin-top: 0.25rem; font-size: 0.875rem;"
+    card_style = "background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; flex: 1;"
+    header_style = "display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
+    header_text_style = "font-size: 0.75rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"
+    grid_2col = "display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;"
+
+    def _field(label_text, value_text, full_width=False):
+        """Helper to render a single read-only field."""
+        extra_style = "grid-column: 1 / -1;" if full_width else ""
+        return Div(
+            Div(label_text, style=label_style),
+            Div(str(value_text) if value_text else "—", style=value_style),
+            style=extra_style
+        )
+
+    def _card_header(icon_name, title):
+        """Helper to render a card header with icon."""
+        return Div(
+            icon(icon_name, size=14, color="#6b7280"),
+            Span(f" {title}", style=header_text_style),
+            style=header_style
+        )
+
+    # --- Action buttons row ---
+    action_buttons = Div(
+        btn("Отправить на проверку", variant="primary", icon_name="send",
+            onclick=f"location.href='/quote-control/{quote.get('id')}'"),
+        btn("Скачать", variant="secondary", icon_name="download",
+            onclick=f"location.href='/quotes/{quote.get('id')}/export/specification'"),
+        style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem;"
+    )
+
+    # --- Card 1: Основная информация ---
+    customer_name = (customer or {}).get("name", "—") or "—"
+    customer_inn = (customer or {}).get("inn", "—") or "—"
+    seller_name = seller_company.name if seller_company else "—"
+    seller_inn = getattr(seller_company, "inn", None) or "—" if seller_company else "—"
+    contact_name = (contact_person or {}).get("name", "—") if contact_person else "—"
+
+    # Customer name as clickable link if customer exists
+    customer_display = A(
+        customer_name,
+        href=f"/customers/{quote.get('customer_id')}",
+        style="color: #3b82f6; text-decoration: none; font-weight: 500;"
+    ) if quote.get("customer_id") and customer_name != "—" else Span("—", style="color: #9ca3af;")
+
+    card_1 = Div(
+        _card_header("info", "ОСНОВНАЯ ИНФОРМАЦИЯ"),
+        Div(
+            Div(
+                Div("Клиент", style=label_style),
+                Div(customer_display, style="margin-top: 0.25rem;"),
+            ),
+            _field("ИНН клиента", customer_inn),
+            _field("Организация продавец", seller_name),
+            _field("ИНН продавца", seller_inn),
+            _field("Контактное лицо", contact_name, full_width=True),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Card 2: Доставка ---
+    card_2 = Div(
+        _card_header("truck", "ДОСТАВКА"),
+        Div(
+            _field("Тип сделки", delivery_method_label),
+            _field("Базис поставки", quote.get("delivery_terms") or "—"),
+            _field("Страна поставки", quote.get("delivery_country") or "—"),
+            _field("Город доставки", quote.get("delivery_city") or "—"),
+            _field("Адрес поставки", quote.get("delivery_address") or "—", full_width=True),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Card 3: Дополнительная информация ---
+    # Parse sales_checklist for tender info
+    sales_checklist = quote.get("sales_checklist")
+    is_tender = False
+    if sales_checklist:
+        if isinstance(sales_checklist, str):
+            try:
+                sales_checklist = json.loads(sales_checklist)
+            except (json.JSONDecodeError, TypeError):
+                sales_checklist = {}
+        is_tender = sales_checklist.get("is_tender", False) if isinstance(sales_checklist, dict) else False
+    tender_display = "Да" if is_tender else "Нет"
+
+    card_3 = Div(
+        _card_header("file-text", "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"),
+        Div(
+            _field("Тендер ФЗ", tender_display),
+            _field("Создатель", creator_name or "—"),
+            _field("Дата создания", created_at_display),
+            _field("Номер КП", quote.get("idn_quote") or "—"),
+            _field("Дополнительно", quote.get("notes") or "—", full_width=True),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Card 4: Порядок расчетов ---
+    has_advance = advance_percent and float(advance_percent) > 0
+    advance_display = f"{advance_percent}%" if has_advance else "—"
+
+    exchange_rate_display = "—"
+    if exchange_rate_to_usd and float(exchange_rate_to_usd) > 0:
+        exchange_rate_display = f"{float(exchange_rate_to_usd):.4f}"
+
+    card_4 = Div(
+        _card_header("credit-card", "ПОРЯДОК РАСЧЕТОВ"),
+        Div(
+            _field("Условия расчетов", payment_terms),
+            _field("Частичная предоплата", "Да" if has_advance else "Нет"),
+            _field("Размер аванса", advance_display),
+            _field("Валюта КП", currency),
+            _field("Курс к USD", exchange_rate_display),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Card 5: Итого ---
+    total_amount_display = f"{total_amount:,.2f} {currency_symbol}" if total_amount is not None else "—"
+    total_profit_display = f"{total_profit:,.2f} {currency_symbol}" if total_profit is not None else "—"
+    items_count = len(items)
+
+    card_5 = Div(
+        _card_header("dollar-sign", "ИТОГО"),
+        Div(
+            Div(
+                Div("Общая сумма", style=label_style),
+                Div(total_amount_display, style="color: #374151; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            Div(
+                Div(f"Общий профит ({currency})", style=label_style),
+                Div(total_profit_display,
+                    style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            Div(
+                Div("Количество позиций", style=label_style),
+                Div(f"{items_count} шт", style=value_style),
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;"
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Card 6: Информация для печати ---
+    card_6 = Div(
+        _card_header("printer", "ИНФОРМАЦИЯ ДЛЯ ПЕЧАТИ"),
+        Div(
+            _field("Дата выставления КП", created_at_display),
+            _field("Срок действия КП", expiry_display),
+            _field("Срок действия (дней)", str(quote.get("validity_days") or 30)),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Layout: 2-column rows ---
+    return Div(
+        action_buttons,
+        # Row 1
+        Div(card_1, card_2, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        # Row 2
+        Div(card_3, card_4, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        # Row 3
+        Div(card_5, card_6, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        id="tab-content",
+        style="margin-top: 20px;"
+    )
+
+
 @rt("/quotes/{quote_id}")
-def get(quote_id: str, session, tab: str = "overview"):
+def get(quote_id: str, session, tab: str = "summary"):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -7905,9 +8129,9 @@ def get(quote_id: str, session, tab: str = "overview"):
     deal = _lookup_deal_for_quote(quote_id, user["org_id"])
     deal_id = deal["id"] if deal else None
 
-    # If a finance tab is requested but no deal exists, fall back to overview
+    # If a finance tab is requested but no deal exists, fall back to summary
     if tab in ("finance_main", "plan_fact", "logistics_stages") and not deal:
-        tab = "overview"
+        tab = "summary"
 
     # Render finance tab content if requested
     if tab in ("finance_main", "plan_fact", "logistics_stages") and deal:
@@ -7922,7 +8146,7 @@ def get(quote_id: str, session, tab: str = "overview"):
         # Fetch full deal data for finance tabs
         deal_full, plan_fact_items_deal, _ = _finance_fetch_deal_data(deal_id, user["org_id"], user_roles)
         if not deal_full:
-            tab = "overview"
+            tab = "summary"
         else:
             # Build finance tab content
             if tab == "finance_main":
@@ -7941,6 +8165,19 @@ def get(quote_id: str, session, tab: str = "overview"):
                 *modal_elements,
                 session=session
             )
+
+    # Render summary tab (read-only overview)
+    if tab == "summary":
+        summary_content = _render_summary_tab(
+            quote, customer, seller_companies, contacts, items, creator_name,
+            created_at_display, expiry_display
+        )
+        return page_layout(f"Quote {quote.get('idn_quote', '')}",
+            quote_header(quote, workflow_status, (customer or {}).get("name")),
+            quote_detail_tabs(quote_id, "summary", user.get("roles", []), deal=deal),
+            summary_content,
+            session=session
+        )
 
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Persistent header with IDN, status, client name
@@ -12448,6 +12685,9 @@ def post(
             "subtotal": float(total_purchase),
             "total_amount": float(total_with_vat),
             "total_profit_usd": float(total_profit_usd),
+            # Quote-currency totals (for display on summary tab)
+            "total_quote_currency": float(total_with_vat),
+            "profit_quote_currency": float(total_profit),
             # USD analytics columns
             "exchange_rate_to_usd": float(exchange_rate_to_usd),
             "subtotal_usd": float(subtotal_usd),
@@ -14512,7 +14752,8 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
     Create role-based tab navigation for quote detail pages.
 
     Shows tabs based on user roles:
-    - overview: all users with access to quote
+    - summary: all users with access to quote (read-only overview)
+    - overview: all users with access to quote (editable sales workspace)
     - procurement: procurement, admin
     - logistics: logistics, head_of_logistics, admin
     - customs: customs, head_of_customs, admin
@@ -14521,7 +14762,7 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
 
     Args:
         quote_id: UUID of the quote
-        active_tab: Current active tab (overview, procurement, logistics, customs, control, finance_main, plan_fact, logistics_stages)
+        active_tab: Current active tab (summary, overview, procurement, logistics, customs, control, finance_main, plan_fact, logistics_stages)
         user_roles: List of user roles
         deal: Optional deal dict — finance tabs only appear when deal is not None
 
@@ -14531,10 +14772,17 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
     # Define tabs with role requirements
     tabs_config = [
         {
+            "id": "summary",
+            "label": "Сводка",
+            "icon": "file-text",
+            "href": f"/quotes/{quote_id}?tab=summary",
+            "roles": None,  # All users with quote access
+        },
+        {
             "id": "overview",
             "label": "Продажи",
             "icon": "shopping-bag",
-            "href": f"/quotes/{quote_id}",
+            "href": f"/quotes/{quote_id}?tab=overview",
             "roles": None,  # All users with quote access
         },
         {
