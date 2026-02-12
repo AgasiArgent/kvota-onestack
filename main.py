@@ -8232,7 +8232,7 @@ def get(quote_id: str, session, tab: str = "overview"):
                     Input(type="file", id="file-import", accept=".xlsx,.xls,.csv", style="display: none;"),
                     # Draft workflow buttons (only for draft status)
                     (A(icon("save", size=16), " Сохранить", id="btn-save-draft", role="button", cls="secondary", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; margin-right: 0.5rem; text-decoration: none; font-size: 0.8125rem;", onclick="showSaveConfirmation()") if workflow_status == 'draft' else None),
-                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", cls="btn-submit-disabled", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; text-decoration: none; border-radius: 6px; font-size: 0.8125rem;", onclick="submitToProcurement()") if workflow_status == 'draft' else None),
+                    (A(icon("send", size=16), " Передать в закупки", id="btn-submit-procurement", role="button", cls="btn-submit-disabled", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; text-decoration: none; border-radius: 6px; font-size: 0.8125rem;", onclick="showChecklistModal()") if workflow_status == 'draft' else None),
                     style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
                 ),
                 style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0;"
@@ -8889,6 +8889,175 @@ def get(quote_id: str, session, tab: str = "overview"):
             window.updateSubmitButtonState = updateSubmitButtonState;
         """) if workflow_status == "draft" else None,
 
+        # Sales checklist modal (gate for draft -> pending_procurement transition)
+        Div(
+            Div(
+                # Modal header
+                Div(
+                    icon("clipboard-check", size=20),
+                    Span("Контрольный список", style="font-size: 16px; font-weight: 600; margin-left: 8px;"),
+                    style="display: flex; align-items: center; margin-bottom: 16px;"
+                ),
+                P("Заполните информацию перед передачей в закупки:", style="color: #64748b; margin-bottom: 16px; font-size: 0.875rem;"),
+                # Checkboxes
+                Div(
+                    Label(
+                        Input(type="checkbox", id="chk_is_estimate", style="margin-right: 8px; accent-color: #3b82f6;"),
+                        "Это проценка?",
+                        style="display: flex; align-items: center; cursor: pointer; padding: 8px 0;"
+                    ),
+                    Label(
+                        Input(type="checkbox", id="chk_is_tender", style="margin-right: 8px; accent-color: #3b82f6;"),
+                        "Это тендер?",
+                        style="display: flex; align-items: center; cursor: pointer; padding: 8px 0;"
+                    ),
+                    Label(
+                        Input(type="checkbox", id="chk_direct_request", style="margin-right: 8px; accent-color: #3b82f6;"),
+                        "Запрашивал ли клиент напрямую?",
+                        style="display: flex; align-items: center; cursor: pointer; padding: 8px 0;"
+                    ),
+                    Label(
+                        Input(type="checkbox", id="chk_trading_org", style="margin-right: 8px; accent-color: #3b82f6;"),
+                        "Запрашивал ли клиент через торгующих организаций?",
+                        style="display: flex; align-items: center; cursor: pointer; padding: 8px 0;"
+                    ),
+                    style="margin-bottom: 16px;"
+                ),
+                # Textarea (required)
+                Div(
+                    Label(
+                        "Что это за оборудование и для чего оно необходимо? ",
+                        Span("*", style="color: #ef4444;"),
+                        fr="checklist_equipment",
+                        style="font-size: 0.875rem; font-weight: 500; display: block; margin-bottom: 6px;"
+                    ),
+                    Textarea(
+                        id="checklist_equipment",
+                        placeholder="Опишите оборудование и его назначение...",
+                        style="width: 100%; min-height: 80px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; font-family: inherit; resize: vertical;"
+                    ),
+                    Span("", id="checklist_error", style="color: #ef4444; font-size: 0.75rem; display: none; margin-top: 4px;"),
+                    style="margin-bottom: 20px;"
+                ),
+                # Dialog buttons
+                Div(
+                    Button("Отмена", type="button", id="checklist_cancel",
+                           style="padding: 10px 24px; background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 14px;"),
+                    Button(
+                        icon("send", size=14),
+                        " Передать в закупки",
+                        type="button", id="checklist_submit",
+                        style="padding: 10px 24px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; margin-left: 8px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"
+                    ),
+                    style="display: flex; justify-content: flex-end;"
+                ),
+                style="background: white; padding: 24px; border-radius: 12px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);"
+            ),
+            id="checklist_modal",
+            style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center;"
+        ) if workflow_status == "draft" else None,
+
+        # JavaScript for sales checklist modal
+        Script(f"""
+            function showChecklistModal() {{
+                var errors = validateForProcurement();
+                if (errors.length > 0) {{
+                    alert('Заполните обязательные поля:\\n- ' + errors.join('\\n- '));
+                    return;
+                }}
+                document.getElementById('checklist_modal').style.display = 'flex';
+            }}
+
+            (function() {{
+                var modal = document.getElementById('checklist_modal');
+                if (!modal) return;
+
+                var cancelBtn = document.getElementById('checklist_cancel');
+                var submitBtn = document.getElementById('checklist_submit');
+                var errorEl = document.getElementById('checklist_error');
+
+                function closeModal() {{
+                    modal.style.display = 'none';
+                }}
+
+                cancelBtn.addEventListener('click', closeModal);
+
+                // Close on backdrop click
+                modal.addEventListener('click', function(e) {{
+                    if (e.target === modal) closeModal();
+                }});
+
+                // Close on Escape key
+                document.addEventListener('keydown', function(e) {{
+                    if (e.key === 'Escape' && modal.style.display === 'flex') closeModal();
+                }});
+
+                submitBtn.addEventListener('click', function() {{
+                    var desc = document.getElementById('checklist_equipment').value.trim();
+                    if (!desc) {{
+                        errorEl.textContent = 'Это поле обязательно для заполнения';
+                        errorEl.style.display = 'block';
+                        document.getElementById('checklist_equipment').style.borderColor = '#ef4444';
+                        return;
+                    }}
+                    errorEl.style.display = 'none';
+                    document.getElementById('checklist_equipment').style.borderColor = '#e2e8f0';
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Отправка...';
+
+                    var checklist = {{
+                        is_estimate: document.getElementById('chk_is_estimate').checked,
+                        is_tender: document.getElementById('chk_is_tender').checked,
+                        direct_request: document.getElementById('chk_direct_request').checked,
+                        trading_org_request: document.getElementById('chk_trading_org').checked,
+                        equipment_description: desc
+                    }};
+
+                    // Save delivery city first
+                    var cityInput = document.getElementById('delivery-city-input');
+                    if (cityInput) saveDeliveryCity(cityInput.value);
+
+                    // Save all items first, then save checklist + submit
+                    var savePromise = (typeof window.saveAllItems === 'function')
+                        ? window.saveAllItems()
+                        : Promise.resolve(true);
+
+                    savePromise.then(function(saved) {{
+                        if (!saved) {{
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Передать в закупки';
+                            return;
+                        }}
+
+                        fetch('/quotes/{quote_id}/submit-procurement', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/json'}},
+                            body: JSON.stringify({{checklist: checklist}})
+                        }}).then(function(res) {{
+                            if (res.redirected) {{
+                                window.location.href = res.url;
+                            }} else {{
+                                return res.json();
+                            }}
+                        }}).then(function(data) {{
+                            if (data && data.redirect) {{
+                                window.location.href = data.redirect;
+                            }} else if (data && data.error) {{
+                                alert('Ошибка: ' + data.error);
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Передать в закупки';
+                            }}
+                        }}).catch(function(err) {{
+                            alert('Ошибка при отправке: ' + err.message);
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Передать в закупки';
+                        }});
+                    }});
+                }});
+            }})();
+        """) if workflow_status == "draft" else None,
+
         # Revision banner for sales (Feature: multi-department return)
         Div(
             Div(
@@ -9186,15 +9355,51 @@ def get(quote_id: str, session, tab: str = "overview"):
 # SUBMIT QUOTE FOR PROCUREMENT
 # ============================================================================
 
-@rt("/quotes/{quote_id}/submit-procurement")
-def post(quote_id: str, session):
-    """Submit a draft quote for procurement evaluation."""
+@rt("/quotes/{quote_id}/submit-procurement", methods=["POST"])
+async def post(quote_id: str, session, request):
+    """Submit a draft quote for procurement evaluation with sales checklist."""
     redirect = require_login(session)
     if redirect:
-        return redirect
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     user = session["user"]
     user_roles = user.get("roles", [])
+    org_id = user["org_id"]
+
+    # Parse checklist from JSON body
+    checklist_data = None
+    try:
+        body = await request.body()
+        if body:
+            data = json.loads(body)
+            checklist_data = data.get("checklist")
+    except (json.JSONDecodeError, Exception):
+        pass
+
+    # Validate checklist is present and has required field
+    if not checklist_data or not checklist_data.get("equipment_description", "").strip():
+        return JSONResponse({"error": "Заполните контрольный список перед передачей в закупки"}, status_code=400)
+
+    # Save checklist to quotes table
+    checklist_to_save = {
+        "is_estimate": bool(checklist_data.get("is_estimate", False)),
+        "is_tender": bool(checklist_data.get("is_tender", False)),
+        "direct_request": bool(checklist_data.get("direct_request", False)),
+        "trading_org_request": bool(checklist_data.get("trading_org_request", False)),
+        "equipment_description": checklist_data["equipment_description"].strip(),
+        "completed_at": datetime.utcnow().isoformat(),
+        "completed_by": user["id"]
+    }
+
+    supabase = get_supabase()
+    try:
+        supabase.table("quotes") \
+            .update({"sales_checklist": json.dumps(checklist_to_save)}) \
+            .eq("id", quote_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+    except Exception as e:
+        return JSONResponse({"error": f"Ошибка сохранения чеклиста: {str(e)}"}, status_code=500)
 
     # Use the workflow service to transition to pending_procurement
     result = transition_to_pending_procurement(
@@ -9205,13 +9410,9 @@ def post(quote_id: str, session):
     )
 
     if result.success:
-        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
+        return JSONResponse({"redirect": f"/quotes/{quote_id}"})
     else:
-        return page_layout("Error",
-            Div(f"Error submitting quote: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
-            session=session
-        )
+        return JSONResponse({"error": f"Ошибка перехода: {result.error_message}"}, status_code=400)
 
 
 # ============================================================================
@@ -14847,6 +15048,69 @@ def get(session, status_filter: str = None):
 
 
 # ============================================================================
+# SALES CHECKLIST DISPLAY HELPER
+# ============================================================================
+
+def _build_sales_checklist_card(sales_checklist):
+    """Build a yellow info card displaying sales checklist answers for procurement."""
+    if not sales_checklist:
+        return None
+
+    # Handle both dict and string (JSONB comes as dict from Supabase)
+    if isinstance(sales_checklist, str):
+        try:
+            sales_checklist = json.loads(sales_checklist)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def _yes_no(val):
+        return "Да" if val else "Нет"
+
+    def _check_icon(val):
+        if val:
+            return icon("check-circle", size=14, color="#059669")
+        return icon("circle", size=14, color="#94a3b8")
+
+    return Div(
+        Div(
+            icon("clipboard-list", size=18, color="#92400e"),
+            Span(" Информация от отдела продаж", style="font-weight: 600; font-size: 1rem; margin-left: 6px; color: #92400e;"),
+            style="display: flex; align-items: center; margin-bottom: 12px;"
+        ),
+        Div(
+            Div(
+                _check_icon(sales_checklist.get("is_estimate")),
+                Span(f" Проценка: {_yes_no(sales_checklist.get('is_estimate'))}", style="margin-left: 4px;"),
+                style="display: flex; align-items: center; padding: 4px 0;"
+            ),
+            Div(
+                _check_icon(sales_checklist.get("is_tender")),
+                Span(f" Тендер: {_yes_no(sales_checklist.get('is_tender'))}", style="margin-left: 4px;"),
+                style="display: flex; align-items: center; padding: 4px 0;"
+            ),
+            Div(
+                _check_icon(sales_checklist.get("direct_request")),
+                Span(f" Прямой запрос от клиента: {_yes_no(sales_checklist.get('direct_request'))}", style="margin-left: 4px;"),
+                style="display: flex; align-items: center; padding: 4px 0;"
+            ),
+            Div(
+                _check_icon(sales_checklist.get("trading_org_request")),
+                Span(f" Запрос через торгующую организацию: {_yes_no(sales_checklist.get('trading_org_request'))}", style="margin-left: 4px;"),
+                style="display: flex; align-items: center; padding: 4px 0;"
+            ),
+            style="margin-bottom: 12px; font-size: 0.875rem; color: #374151;"
+        ),
+        Div(
+            Span("Описание оборудования:", style="font-weight: 600; font-size: 0.875rem; color: #92400e; display: block; margin-bottom: 4px;"),
+            P(sales_checklist.get("equipment_description", "---"),
+              style="margin: 0; padding: 8px 12px; background: rgba(255,255,255,0.5); border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.5;"),
+        ),
+        cls="card",
+        style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-left: 4px solid #f59e0b; margin-bottom: 1rem; padding: 1rem; border-radius: 10px;"
+    )
+
+
+# ============================================================================
 # PROCUREMENT DETAIL PAGE v2.0 - Single-Page Invoice-First Design
 # ============================================================================
 # Redesigned procurement workspace with:
@@ -15247,6 +15511,9 @@ def get(quote_id: str, session):
             cls="card",
             style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 2px solid #f59e0b; margin-bottom: 1rem; border-radius: 10px;"
         ) if is_revision else None,
+
+        # Sales checklist info card (shows answers from sales team)
+        _build_sales_checklist_card(quote.get("sales_checklist")),
 
         # Progress bar with gradient card
         Div(
