@@ -14425,25 +14425,36 @@ def workflow_status_badge(status_str: str):
 def quote_header(quote: dict, workflow_status: str, customer_name: str = None):
     """
     Persistent header shown on all quote detail tabs.
-    Shows IDN, status badge, and customer name in a clean card layout.
+    Shows IDN, status badge, customer name, and total sum in a compact single-line card.
     """
     idn = quote.get("idn_quote", "")
     client = customer_name or "—"
+    total_amount = quote.get("total_amount")
+    currency = quote.get("currency", "RUB")
+
+    # Format total sum
+    sum_display = None
+    if total_amount and float(total_amount or 0) > 0:
+        sum_display = format_money(total_amount, currency)
 
     return Div(
-        # Top row: IDN + Status badge
+        # Single row: IDN + Status badge + Client + Sum
         Div(
-            H1(f"КП {idn}" if idn else "Коммерческое предложение",
-               style="margin: 0; font-size: 1.5rem; font-weight: 700; color: #1e293b;"),
+            # IDN
+            Span(f"КП {idn}" if idn else "КП",
+                 style="font-size: 1.25rem; font-weight: 700; color: #1e293b; white-space: nowrap;"),
+            # Status badge
             workflow_status_badge(workflow_status),
-            style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;"
+            # Separator
+            Span("|", style="color: #d1d5db; font-size: 1.125rem; margin: 0 0.25rem;"),
+            # Client name
+            Span(client, style="font-size: 1rem; color: #475569; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 300px;"),
+            # Sum (if available)
+            Span("|", style="color: #d1d5db; font-size: 1.125rem; margin: 0 0.25rem;") if sum_display else None,
+            Span(sum_display, style="font-size: 1rem; font-weight: 600; color: #059669; white-space: nowrap;") if sum_display else None,
+            style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;"
         ),
-        # Client name row
-        Div(
-            Span(client, style="font-size: 1.125rem; color: #475569; font-weight: 500;"),
-            style="margin-top: 0.375rem;"
-        ),
-        style="background: white; padding: 1.25rem 1.5rem; border-radius: 0.75rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);"
+        style="background: white; padding: 0.875rem 1.5rem; border-radius: 0.75rem; margin-bottom: 1rem; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.04);"
     )
 
 
@@ -20618,7 +20629,7 @@ def get_cost_analysis(session, quote_id: str):
 
     # Fetch quote with org isolation check (organization_id must match)
     quote_result = supabase.table("quotes") \
-        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status, customers(name)") \
+        .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status, total_amount, customers(name)") \
         .eq("id", quote_id) \
         .execute()
 
@@ -25440,6 +25451,7 @@ ERPS_COLUMN_GROUPS = {
             ('total_paid_usd', 'Всего оплачено USD', 'money', 'text-align: right;'),
             ('remaining_payment_usd', 'Остаток к оплате USD', 'money', 'text-align: right; color: #dc2626;'),
             ('remaining_payment_percent', 'Остаток %', 'percent', 'text-align: right;'),
+            ('days_waiting_payment', 'Дней ожидания оплаты', 'days_waiting', 'text-align: right;'),
             ('delivery_period_calendar_days', 'Срок поставки, к.д.', 'number', 'text-align: right;'),
             ('delivery_period_working_days', 'Срок поставки, р.д.', 'number', 'text-align: right;'),
         ]
@@ -25498,7 +25510,7 @@ ERPS_VIEWS = {
 }
 
 # Compact view shows only these specific columns from spec group
-ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'days_until_next_payment', 'priority_tag']
+ERPS_COMPACT_COLUMNS = ['sign_date', 'spec_sum_usd', 'spec_profit_usd', 'total_paid_usd', 'remaining_payment_usd', 'days_waiting_payment', 'days_until_next_payment', 'priority_tag']
 
 
 def fmt_days_until_payment(days):
@@ -25557,6 +25569,48 @@ def fmt_remaining_payment_with_percent(remaining_usd, total_usd):
     else:
         color = "#059669"
     return Span(text, style=f"color: {color}; font-weight: 500; font-size: 0.7rem;")
+
+
+def fmt_days_waiting_payment(days, remaining_usd):
+    """Color-coded badge for days waiting for payment.
+
+    Shows how many days since an expected payment was not received.
+    - days is None and remaining <= 0: "Оплачено" green badge
+    - days is None and remaining > 0: "-" (no overdue items yet)
+    - days < 30: green badge (recently overdue)
+    - 30 <= days < 60: yellow/amber badge (moderately overdue)
+    - days >= 60: red badge (critically overdue)
+    """
+    # If fully paid (no remaining balance), show "Оплачено"
+    remaining_val = float(remaining_usd) if remaining_usd is not None else 0
+    if remaining_val <= 0:
+        return Span(
+            "Оплачено",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #d1fae5; color: #059669; font-weight: 600; font-size: 0.65rem;"
+        )
+    # No overdue payments yet (but still has remaining balance)
+    if days is None:
+        return Span("—", style="color: #9ca3af;")
+    days_int = int(days)
+    if days_int < 30:
+        return Span(
+            f"{days_int} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #d1fae5; color: #059669; font-weight: 600; font-size: 0.7rem;"
+        )
+    elif days_int < 60:
+        return Span(
+            f"{days_int} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #fef3c7; color: #d97706; font-weight: 600; font-size: 0.7rem;"
+        )
+    else:
+        return Span(
+            f"{days_int} дн.",
+            style="display: inline-block; padding: 2px 8px; border-radius: 12px; "
+                  "background: #fee2e2; color: #dc2626; font-weight: 600; font-size: 0.7rem;"
+        )
 
 
 def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: str = None):
@@ -25990,6 +26044,8 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
                 formatted = fmt_days_until_payment(value)
             elif col_key == 'days_until_next_payment':
                 formatted = fmt_days_until_payment(value)
+            elif col_key == 'days_waiting_payment':
+                formatted = fmt_days_waiting_payment(value, spec.get('remaining_payment_usd'))
             elif col_key == 'remaining_payment_usd':
                 formatted = fmt_remaining_payment_with_percent(value, spec.get('spec_sum_usd'))
             else:
