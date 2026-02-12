@@ -21532,13 +21532,24 @@ def get(session, quote_id: str, preset: str = None):
     # Render checklist items as cards
     checklist_items = []
     for idx, cl_item in enumerate(janna_checklist_data):
-        checklist_items.append(checklist_item(
+        card = checklist_item(
             f"{idx + 1}. {cl_item['name']}",
             cl_item.get('details', '') or '',
             cl_item.get('value', '—'),
             cl_item.get('status', 'info'),
             cl_item.get('details'),
-        ))
+        )
+        # Card #2 (idx=1): "Цены КП ↔ инвойс закупки" — make clickable with hx-get for invoice comparison
+        if idx == 1:
+            card = Div(
+                card,
+                hx_get=f"/quote-control/{quote_id}/invoice-comparison",
+                hx_target="#invoice-comparison-details",
+                hx_swap="innerHTML",
+                onclick="toggleInvoiceComparisonCard(this)",
+                style="cursor: pointer;",
+            )
+        checklist_items.append(card)
 
     # Load invoicing summary for detail section (using supplier_invoice_items for per-item breakdown)
     # This is separate from criterion 11 which checks internal invoices
@@ -21648,6 +21659,25 @@ def get(session, quote_id: str, preset: str = None):
             cls="card",
             style="padding: 1.25rem; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
+
+        # Invoice comparison expansion target (populated via HTMX from checklist card #2)
+        Div(id="invoice-comparison-details"),
+
+        # JavaScript toggle function for invoice comparison card expand/collapse
+        Script("""
+        function toggleInvoiceComparisonCard(el) {
+            var details = document.getElementById('invoice-comparison-details');
+            if (details && details.innerHTML.trim() !== '') {
+                // Already expanded — collapse
+                details.innerHTML = '';
+                // Cancel the HTMX request since we are collapsing
+                if (typeof htmx !== 'undefined') { htmx.trigger(el, 'htmx:abort'); }
+                return false;
+            }
+            // Let HTMX handle the expansion
+            return true;
+        }
+        """),
 
         # Detailed Calculation Results Table with Preset Selector
         Div(
@@ -21851,6 +21881,230 @@ def get(session, quote_id: str, preset: str = None):
         workflow_transition_history(quote_id),
 
         session=session
+    )
+
+
+# ============================================================================
+# QUOTE CONTROL - INVOICE COMPARISON (HTMX endpoints)
+# ============================================================================
+
+@rt("/quote-control/{quote_id}/invoice-comparison")
+def get(session, quote_id: str):
+    """
+    HTMX endpoint: returns the list of invoices for inline expansion
+    under checklist card #2 (Цены КП ↔ инвойс закупки).
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return Div("Нет доступа", style="color: #ef4444; padding: 1rem;")
+
+    supabase = get_supabase()
+
+    # Fetch invoices for this quote with supplier names
+    try:
+        invoices_resp = supabase.table("invoices") \
+            .select("id, invoice_number, currency, supplier_id, suppliers!supplier_id(name)") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        invoices = invoices_resp.data or []
+    except Exception:
+        invoices = []
+
+    if not invoices:
+        return Div(
+            P("Нет инвойсов поставщиков", style="color: #64748b; text-align: center; padding: 1rem;"),
+            style="margin-top: 0.75rem; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e2e8f0;"
+        )
+
+    # Fetch documents (scans) for these invoices
+    invoice_ids = [inv["id"] for inv in invoices]
+    try:
+        docs_resp = supabase.table("documents") \
+            .select("id, entity_id, file_path, file_name") \
+            .eq("entity_type", "supplier_invoice") \
+            .in_("entity_id", invoice_ids) \
+            .execute()
+        docs = docs_resp.data or []
+    except Exception:
+        docs = []
+
+    # Map invoice_id -> document existence
+    docs_by_invoice = {}
+    for doc in docs:
+        docs_by_invoice[doc["entity_id"]] = doc
+
+    # Count items per invoice
+    try:
+        items_resp = supabase.table("quote_items") \
+            .select("id, invoice_id, purchase_price_original, quantity") \
+            .eq("quote_id", quote_id) \
+            .in_("invoice_id", invoice_ids) \
+            .execute()
+        items_data = items_resp.data or []
+    except Exception:
+        items_data = []
+
+    items_by_invoice = {}
+    for item in items_data:
+        inv_id = item.get("invoice_id")
+        if inv_id:
+            items_by_invoice.setdefault(inv_id, []).append(item)
+
+    # Render invoice rows
+    rows = []
+    for inv in invoices:
+        inv_id = inv["id"]
+        inv_number = inv.get("invoice_number", "—")
+        supplier_name = (inv.get("suppliers") or {}).get("name", "—")
+        currency = inv.get("currency", "USD")
+        inv_items = items_by_invoice.get(inv_id, [])
+        items_count = len(inv_items)
+        total_amount = sum(
+            float(it.get("purchase_price_original") or 0) * float(it.get("quantity") or 0)
+            for it in inv_items
+        )
+        has_scan = inv_id in docs_by_invoice
+        scan_label = "Скан загружен" if has_scan else "Нет скана"
+        scan_color = "#22c55e" if has_scan else "#ef4444"
+
+        rows.append(
+            Div(
+                Div(
+                    Span(f"{inv_number}", style="font-weight: 600; color: #1e40af;"),
+                    Span(f" | {supplier_name}", style="color: #64748b; font-size: 0.8125rem;"),
+                    Span(f" | {items_count} поз.", style="color: #64748b; font-size: 0.8125rem;"),
+                    Span(f" | {total_amount:,.2f} {currency}", style="color: #374151; font-size: 0.8125rem; font-weight: 500;"),
+                    Span(f" | ", style="color: #d1d5db;"),
+                    Span(scan_label, style=f"color: {scan_color}; font-size: 0.75rem; font-weight: 500;"),
+                    style="display: flex; align-items: center; gap: 0.25rem; flex-wrap: wrap;"
+                ),
+                # Detail expansion target for this invoice
+                Div(id=f"invoice-detail-{inv_id}"),
+                hx_get=f"/quote-control/{quote_id}/invoice/{inv_id}/detail",
+                hx_target=f"#invoice-detail-{inv_id}",
+                hx_swap="innerHTML",
+                style="padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 0.5rem; cursor: pointer; background: white; transition: background 0.15s;",
+            )
+        )
+
+    return Div(
+        *rows,
+        style="margin-top: 0.75rem;"
+    )
+
+
+@rt("/quote-control/{quote_id}/invoice/{invoice_id}/detail")
+def get(session, quote_id: str, invoice_id: str):
+    """
+    HTMX endpoint: returns the split-screen detail view for a specific invoice.
+    Left (40%): items table with product_name, quantity, purchase_price_original
+    Right (60%): iframe with the scan PDF via signed URL, or placeholder if no scan.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if not user_has_any_role(session, ["quote_controller", "admin"]):
+        return Div("Нет доступа", style="color: #ef4444; padding: 1rem;")
+
+    supabase = get_supabase()
+
+    # Fetch invoice items
+    try:
+        items_resp = supabase.table("quote_items") \
+            .select("id, product_name, quantity, purchase_price_original, purchase_currency") \
+            .eq("quote_id", quote_id) \
+            .eq("invoice_id", invoice_id) \
+            .execute()
+        items = items_resp.data or []
+    except Exception:
+        items = []
+
+    # Fetch scan document for this invoice
+    signed_url = None
+    try:
+        docs_resp = supabase.table("documents") \
+            .select("id, file_path, file_name, mime_type") \
+            .eq("entity_type", "supplier_invoice") \
+            .eq("entity_id", invoice_id) \
+            .limit(1) \
+            .execute()
+        document = (docs_resp.data or [None])[0] if docs_resp.data else None
+    except Exception:
+        document = None
+
+    if document:
+        signed_url = get_download_url(document["id"])
+
+    # Build items table (left side, 40%)
+    item_rows = []
+    for item in items:
+        price = float(item.get("purchase_price_original") or 0)
+        qty = float(item.get("quantity") or 0)
+        currency = item.get("purchase_currency", "USD")
+        item_rows.append(
+            Tr(
+                Td(item.get("product_name", "—"), style="padding: 0.5rem; border-bottom: 1px solid #e2e8f0;"),
+                Td(f"{qty:g}", style="padding: 0.5rem; text-align: right; border-bottom: 1px solid #e2e8f0;"),
+                Td(f"{price:,.2f} {currency}", style="padding: 0.5rem; text-align: right; border-bottom: 1px solid #e2e8f0;"),
+            )
+        )
+
+    if not item_rows:
+        item_rows.append(
+            Tr(Td("Нет позиций", colspan="3", style="text-align: center; color: #64748b; padding: 1rem;"))
+        )
+
+    items_table = Table(
+        Thead(
+            Tr(
+                Th("Товар", style="text-align: left; padding: 0.5rem; border-bottom: 2px solid #e2e8f0;"),
+                Th("Кол-во", style="text-align: right; padding: 0.5rem; border-bottom: 2px solid #e2e8f0;"),
+                Th("Цена закупки", style="text-align: right; padding: 0.5rem; border-bottom: 2px solid #e2e8f0;"),
+            )
+        ),
+        Tbody(*item_rows),
+        style="width: 100%; border-collapse: collapse; font-size: 0.8125rem;"
+    )
+
+    left_panel = Div(
+        H4("Позиции инвойса", style="margin: 0 0 0.75rem 0; font-size: 0.875rem; color: #374151;"),
+        items_table,
+        style="width: 40%; padding-right: 1rem; overflow-y: auto; max-height: 500px;"
+    )
+
+    # Build scan viewer (right side, 60%)
+    if signed_url:
+        right_panel = Div(
+            Iframe(
+                src=signed_url,
+                style="width: 100%; height: 500px; border: 1px solid #e2e8f0; border-radius: 4px;",
+            ),
+            style="width: 60%;"
+        )
+    else:
+        right_panel = Div(
+            Div(
+                icon("file-x", size=48, color="#cbd5e1") if 'icon' in dir() else "",
+                P("Скан не загружен", style="color: #94a3b8; font-size: 1rem; margin-top: 0.75rem;"),
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; background: #f9fafb; border: 2px dashed #e2e8f0; border-radius: 8px;"
+            ),
+            style="width: 60%;"
+        )
+
+    return Div(
+        Div(
+            left_panel,
+            right_panel,
+            style="display: flex; gap: 1rem; margin-top: 0.75rem; padding: 1rem; background: #fafbfc; border-radius: 8px; border: 1px solid #e2e8f0;"
+        ),
     )
 
 
