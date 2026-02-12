@@ -104,6 +104,19 @@ from services.document_service import (
 )
 
 # ============================================================================
+# SHARED ROLE LABELS (used by impersonation banner, sidebar, activity log)
+# ============================================================================
+
+ROLE_LABELS_RU = {
+    "sales": "Продажи", "sales_manager": "Менеджер", "procurement": "Закупки",
+    "logistics": "Логистика", "customs": "Таможня", "admin": "Админ",
+    "quote_controller": "Контроль КП", "spec_controller": "Контроль спецификаций",
+    "top_manager": "Руководитель", "finance": "Финансы", "system": "Система",
+    "head_of_sales": "Нач. продаж", "head_of_procurement": "Нач. закупок",
+    "head_of_logistics": "Нач. логистики",
+}
+
+# ============================================================================
 # APP SETUP
 # ============================================================================
 
@@ -2684,7 +2697,7 @@ def sidebar(session, current_path: str = ""):
         current_impersonation = session.get("impersonated_role", "")
         options = [Option("Администратор (все права)", value="", selected=not current_impersonation)]
         for r in active_roles:
-            options.append(Option(r, value=r, selected=(current_impersonation == r)))
+            options.append(Option(ROLE_LABELS_RU.get(r, r), value=r, selected=(current_impersonation == r)))
         impersonation_select = Div(
             Select(*options,
                    onchange="window.location.href='/admin/impersonate?role=' + encodeURIComponent(this.value)",
@@ -3254,7 +3267,7 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
         if session and session.get("impersonated_role"):
             imp_role = session["impersonated_role"]
             impersonation_banner = Div(
-                Span(f"Вы просматриваете как: {imp_role}"),
+                Span(f"Вы просматриваете как: {ROLE_LABELS_RU.get(imp_role, imp_role)}"),
                 A("✕ Выйти", href="/admin/impersonate/exit",
                   style="margin-left: 12px; color: #92400e; text-decoration: underline; font-weight: 600;"),
                 style="background: #fef3c7; color: #92400e; padding: 8px 16px; text-align: center; font-size: 13px; font-weight: 500; position: sticky; top: 0; z-index: 999; border-bottom: 1px solid #fcd34d;"
@@ -14355,20 +14368,6 @@ def post(action: str, session):
 
     # Unknown action - redirect back
     return RedirectResponse("/settings/telegram", status_code=303)
-
-
-# ============================================================================
-# SHARED ROLE LABELS (used by activity log across all pages)
-# ============================================================================
-
-ROLE_LABELS_RU = {
-    "sales": "Продажи", "sales_manager": "Менеджер", "procurement": "Закупки",
-    "logistics": "Логистика", "customs": "Таможня", "admin": "Админ",
-    "quote_controller": "Контроль КП", "spec_controller": "Контроль спецификаций",
-    "top_manager": "Руководитель", "finance": "Финансы", "system": "Система",
-    "head_of_sales": "Нач. продаж", "head_of_procurement": "Нач. закупок",
-    "head_of_logistics": "Нач. логистики",
-}
 
 
 def _format_transition_timestamp(dt_str: str) -> str:
@@ -27415,6 +27414,9 @@ def get(session, deal_id: str):
     planned_items = preview.get('planned_items', [])
     totals = preview.get('totals', {})
     existing_items = preview.get('existing_items', 0)
+    _currency_symbols = {"RUB": "₽", "USD": "$", "EUR": "€", "CNY": "¥", "TRY": "₺"}
+    deal_info_currency = deal_info.get('currency', 'RUB')
+    deal_info_currency_sym = _currency_symbols.get(deal_info_currency, deal_info_currency)
 
     # Build preview table
     preview_rows = []
@@ -27505,7 +27507,7 @@ def get(session, deal_id: str):
                     Span(str(value), style="font-size: 14px; color: #1e293b; font-weight: 500;"),
                     style="padding: 10px 16px; background: #f8fafc; border-radius: 8px;"
                 ) for label, value in [
-                    ("Сумма сделки", f"{deal_info.get('total_amount', 0):,.2f} {deal_info.get('currency', 'RUB')}"),
+                    ("Сумма сделки", f"{deal_info.get('total_amount', 0):,.2f} {deal_info_currency_sym}"),
                     ("Дата подписания", format_date_russian(deal_info.get('signed_at')) if deal_info.get('signed_at') else '-'),
                     ("Закупка (из КП)", f"{totals.get('total_purchase', 0):,.2f}"),
                     ("Логистика (из КП)", f"{totals.get('total_logistics', 0):,.2f}"),
@@ -34011,12 +34013,34 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 "terminated": "status-rejected"
             }.get(status, "")
 
+            # Contract type badge
+            c_type = contract.get("contract_type", "")
+            c_type_names = {"one_time": "Единоразовый", "renewable": "Пролонгируемый"}
+            c_type_colors = {"one_time": "#3b82f6", "renewable": "#10b981"}
+            type_badge = Span(
+                c_type_names.get(c_type, ""),
+                style=f"display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; color: white; background: {c_type_colors.get(c_type, '#94a3b8')};"
+            ) if c_type else Span("—", style="color: #94a3b8;")
+
+            # End date
+            c_end_date = contract.get("end_date", "")
+            if c_end_date:
+                try:
+                    from datetime import datetime as dt_cls
+                    ed = dt_cls.fromisoformat(c_end_date.replace("Z", "+00:00")) if isinstance(c_end_date, str) else c_end_date
+                    c_end_date_str = ed.strftime("%d.%m.%Y") if hasattr(ed, 'strftime') else str(c_end_date)
+                except Exception:
+                    c_end_date_str = str(c_end_date)
+            else:
+                c_end_date_str = "—"
+
             contracts_rows.append(
                 Tr(
                     Td(Strong(contract.get("contract_number", "—"))),
                     Td(contract_date or "—"),
+                    Td(type_badge),
+                    Td(c_end_date_str),
                     Td(Span(status_text, cls=f"status-badge {status_class}")),
-                    Td((contract.get("notes") or "—")[:100]),
                     Td(
                         A(icon("file-text", size=16), href=f"/customer-contracts/{contract['id']}", title="Просмотр") if contract.get("id") else "—"
                     )
@@ -34036,12 +34060,13 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Thead(Tr(
                             Th("НОМЕР"),
                             Th("ДАТА"),
+                            Th("ТИП"),
+                            Th("ОКОНЧАНИЕ"),
                             Th("СТАТУС"),
-                            Th("ПРИМЕЧАНИЯ"),
                             Th(add_btn, style="text-align: right;", cls="col-actions")
                         )),
                         Tbody(*contracts_rows) if contracts_rows else Tbody(
-                            Tr(Td("Договоры не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
+                            Tr(Td("Договоры не найдены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
                         cls="unified-table"
                     ),
@@ -36033,6 +36058,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         ))
 
     # Build contract rows
+    from services.customer_contract_service import CONTRACT_TYPE_NAMES, CONTRACT_TYPE_COLORS
     contract_rows = []
     for c in contracts:
         status_class = {
@@ -36042,6 +36068,12 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
         }.get(c.status, "")
         status_text = CONTRACT_STATUS_NAMES.get(c.status, c.status)
 
+        # Type badge
+        type_badge = Span(
+            CONTRACT_TYPE_NAMES.get(c.contract_type, ""),
+            style=f"display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; color: white; background: {CONTRACT_TYPE_COLORS.get(c.contract_type, '#94a3b8')};"
+        ) if c.contract_type else Span("—", style="color: #94a3b8;")
+
         contract_rows.append(
             Tr(
                 Td(
@@ -36050,6 +36082,8 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 ),
                 Td(c.customer_name or "—"),
                 Td(c.contract_date.strftime("%d.%m.%Y") if c.contract_date else "—"),
+                Td(type_badge),
+                Td(c.end_date.strftime("%d.%m.%Y") if c.end_date else "—"),
                 Td(str(c.next_specification_number - 1 if c.next_specification_number > 1 else 0)),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
                 Td(
@@ -36193,6 +36227,8 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                         Th("Номер договора"),
                         Th("Клиент"),
                         Th("Дата"),
+                        Th("Тип"),
+                        Th("Окончание"),
                         Th("Спецификаций"),
                         Th("Статус"),
                         Th("Действия"),
@@ -36200,7 +36236,7 @@ def get(session, q: str = "", status: str = "", customer_id: str = ""):
                 ),
                 Tbody(*contract_rows) if contract_rows else Tbody(
                     Tr(Td("Договоры не найдены. ", A("Добавить первый договор", href="/customer-contracts/new"),
-                          colspan="6", style="text-align: center; padding: 2rem; color: #64748b;"))
+                          colspan="8", style="text-align: center; padding: 2rem; color: #64748b;"))
                 )
             ),
             style=table_card_style
@@ -36320,6 +36356,33 @@ def get(session, customer_id: str = ""):
                     cls="form-group"
                 ),
 
+                # Contract type
+                Div(
+                    Label("Тип договора", For="contract_type"),
+                    Select(
+                        Option("-- Не указан --", value=""),
+                        Option("Единоразовый", value="one_time"),
+                        Option("Пролонгируемый", value="renewable"),
+                        name="contract_type",
+                        id="contract_type",
+                        cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+
+                # End date
+                Div(
+                    Label("Дата окончания", For="end_date"),
+                    Input(
+                        name="end_date",
+                        id="end_date",
+                        type="date",
+                        cls="form-input"
+                    ),
+                    Small("Необязательно", style="color: #94a3b8; font-size: 12px; margin-top: 4px; display: block;"),
+                    cls="form-group"
+                ),
+
                 # Notes
                 Div(
                     Label("Примечания", For="notes"),
@@ -36351,7 +36414,7 @@ def get(session, customer_id: str = ""):
 
 
 @rt("/customer-contracts/new")
-def post(session, customer_id: str, contract_number: str, contract_date: str, status: str = "active", notes: str = ""):
+def post(session, customer_id: str, contract_number: str, contract_date: str, status: str = "active", contract_type: str = "", end_date: str = "", notes: str = ""):
     """Handle new contract creation."""
     redirect = require_login(session)
     if redirect:
@@ -36371,8 +36434,9 @@ def post(session, customer_id: str, contract_number: str, contract_date: str, st
     from datetime import date
 
     try:
-        # Parse date
+        # Parse dates
         contract_date_obj = date.fromisoformat(contract_date) if contract_date else date.today()
+        end_date_obj = date.fromisoformat(end_date) if end_date and end_date.strip() else None
 
         # Create contract
         contract = create_contract(
@@ -36381,6 +36445,8 @@ def post(session, customer_id: str, contract_number: str, contract_date: str, st
             contract_number=contract_number.strip(),
             contract_date=contract_date_obj,
             status=status,
+            contract_type=contract_type if contract_type else None,
+            end_date=end_date_obj,
             notes=notes.strip() if notes else None
         )
 
@@ -36424,7 +36490,8 @@ def get(contract_id: str, session):
         )
 
     from services.customer_contract_service import (
-        get_contract_with_customer, CONTRACT_STATUS_NAMES, CONTRACT_STATUS_COLORS
+        get_contract_with_customer, CONTRACT_STATUS_NAMES, CONTRACT_STATUS_COLORS,
+        CONTRACT_TYPE_NAMES, CONTRACT_TYPE_COLORS
     )
 
     contract = get_contract_with_customer(contract_id)
@@ -36445,6 +36512,13 @@ def get(contract_id: str, session):
 
     specs_count = contract.next_specification_number - 1 if contract.next_specification_number > 1 else 0
 
+    # Contract type badge for header
+    type_badge_el = ""
+    if contract.contract_type:
+        type_name = CONTRACT_TYPE_NAMES.get(contract.contract_type, contract.contract_type)
+        type_color = CONTRACT_TYPE_COLORS.get(contract.contract_type, "#94a3b8")
+        type_badge_el = Span(type_name, style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: white; background: {type_color}; margin-left: 8px;")
+
     return page_layout(f"Договор: {contract.contract_number}",
         # Header card with gradient
         Div(
@@ -36458,6 +36532,7 @@ def get(contract_id: str, session):
                     Div(
                         icon("file-text", size=24, color="#0ea5e9"),
                         H1(f"Договор {contract.contract_number}", style="margin: 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        type_badge_el,
                         style="display: flex; align-items: center; gap: 12px;"
                     ),
                     Div(
@@ -36494,10 +36569,21 @@ def get(contract_id: str, session):
                     Div(contract.contract_date.strftime("%d.%m.%Y") if contract.contract_date else "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
                 ),
                 Div(
+                    Span("Дата окончания", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(contract.end_date.strftime("%d.%m.%Y") if contract.end_date else "—", style="font-weight: 500; color: #1e293b; font-size: 14px;"),
+                ),
+                Div(
+                    Span("Тип договора", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
+                    Div(
+                        Span(CONTRACT_TYPE_NAMES.get(contract.contract_type, ""), style=f"display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; color: white; background: {CONTRACT_TYPE_COLORS.get(contract.contract_type, '#94a3b8')};") if contract.contract_type else Span("Не указан", style="color: #94a3b8;"),
+                        style="margin-top: 2px;"
+                    ),
+                ),
+                Div(
                     Span("Спецификаций создано", style="font-size: 11px; color: #64748b; text-transform: uppercase;"),
                     Div(str(specs_count), style="font-weight: 600; color: #1e293b; font-size: 16px;"),
                 ),
-                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;"
+                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;"
             ),
             style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
@@ -39458,7 +39544,7 @@ def _finance_fetch_deal_data(deal_id, org_id, user_roles):
             "specifications!deals_specification_id_fkey(id, specification_number, proposal_idn, sign_date, validity_period, "
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
-            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
+            "quotes!deals_quote_id_fkey(id, idn_quote, currency, customers(name))"
         ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
     except Exception as e:
         print(f"Error fetching deal {deal_id}: {e}")
@@ -39495,7 +39581,10 @@ def _finance_main_tab_content(deal_id, deal, plan_fact_items):
     deal_number = deal.get("deal_number", "-")
     spec_number = spec.get("specification_number", "-") or spec.get("proposal_idn", "-")
     deal_amount = float(deal.get("total_amount", 0) or 0)
-    deal_currency = deal.get("currency", "RUB")
+    # Currency priority: quote.currency > spec.specification_currency > deal.currency
+    deal_currency = quote.get("currency") or spec.get("specification_currency") or deal.get("currency") or "RUB"
+    currency_symbols = {"RUB": "₽", "USD": "$", "EUR": "€", "CNY": "¥", "TRY": "₺"}
+    deal_currency_display = currency_symbols.get(deal_currency, deal_currency)
     signed_at = format_date_russian(deal.get("signed_at")) if deal.get("signed_at") else "-"
 
     # Calculate plan-fact summary
@@ -39555,7 +39644,7 @@ def _finance_main_tab_content(deal_id, deal, plan_fact_items):
                         ("Номер сделки", deal_number),
                         ("Спецификация", spec_number),
                         ("Клиент", customer_name),
-                        ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency}"),
+                        ("Сумма сделки", f"{deal_amount:,.2f} {deal_currency_display}"),
                         ("Дата подписания", signed_at),
                         ("Статус", status_label),
                         ("Условия оплаты", spec.get("client_payment_terms", "-") or "-"),

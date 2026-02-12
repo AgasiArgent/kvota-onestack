@@ -57,6 +57,21 @@ CONTRACT_STATUS_COLORS = {
     "terminated": "red",
 }
 
+# Valid contract types
+CONTRACT_TYPES = ["one_time", "renewable"]
+
+# Contract type display names in Russian
+CONTRACT_TYPE_NAMES = {
+    "one_time": "Единоразовый",
+    "renewable": "Пролонгируемый",
+}
+
+# Contract type badge colors for UI (hex)
+CONTRACT_TYPE_COLORS = {
+    "one_time": "#3b82f6",      # blue
+    "renewable": "#10b981",     # green
+}
+
 
 # =============================================================================
 # DATA CLASS
@@ -77,6 +92,12 @@ class CustomerContract:
 
     # Contract status
     status: str = "active"
+
+    # Contract type: one_time or renewable
+    contract_type: Optional[str] = None
+
+    # Contract end date
+    end_date: Optional[date] = None
 
     # Specification numbering counter
     next_specification_number: int = 1
@@ -101,6 +122,13 @@ def _parse_contract(data: dict) -> CustomerContract:
     elif not isinstance(contract_date, date):
         contract_date = date.today()
 
+    # Parse end_date
+    end_date = data.get("end_date")
+    if isinstance(end_date, str):
+        end_date = date.fromisoformat(end_date)
+    elif not isinstance(end_date, date):
+        end_date = None
+
     return CustomerContract(
         id=data["id"],
         organization_id=data["organization_id"],
@@ -108,6 +136,8 @@ def _parse_contract(data: dict) -> CustomerContract:
         contract_number=data["contract_number"],
         contract_date=contract_date,
         status=data.get("status", "active"),
+        contract_type=data.get("contract_type"),
+        end_date=end_date,
         next_specification_number=data.get("next_specification_number", 1),
         notes=data.get("notes"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
@@ -182,6 +212,32 @@ def get_contract_status_color(status: str) -> str:
     return CONTRACT_STATUS_COLORS.get(status, "gray")
 
 
+def get_contract_type_name(contract_type: str) -> str:
+    """
+    Get human-readable contract type name in Russian.
+
+    Args:
+        contract_type: Type code ('one_time' or 'renewable')
+
+    Returns:
+        Russian name for the type
+    """
+    return CONTRACT_TYPE_NAMES.get(contract_type, contract_type or "")
+
+
+def get_contract_type_color(contract_type: str) -> str:
+    """
+    Get hex color for contract type badge.
+
+    Args:
+        contract_type: Type code
+
+    Returns:
+        Hex color string for UI
+    """
+    return CONTRACT_TYPE_COLORS.get(contract_type, "#94a3b8")
+
+
 def is_contract_active(contract: CustomerContract) -> bool:
     """
     Check if contract is active.
@@ -206,6 +262,8 @@ def create_contract(
     contract_date: date,
     *,
     status: str = "active",
+    contract_type: Optional[str] = None,
+    end_date: Optional[date] = None,
     notes: Optional[str] = None,
 ) -> Optional[CustomerContract]:
     """
@@ -217,6 +275,8 @@ def create_contract(
         contract_number: Contract number (unique within organization)
         contract_date: Date when contract was signed
         status: Contract status (default: active)
+        contract_type: Contract type ('one_time' or 'renewable', optional)
+        end_date: Contract end date (optional)
         notes: Optional notes
 
     Returns:
@@ -231,6 +291,8 @@ def create_contract(
             customer_id="customer-uuid",
             contract_number="ДП-001/2025",
             contract_date=date(2025, 1, 15),
+            contract_type="renewable",
+            end_date=date(2026, 1, 15),
         )
     """
     # Validate fields
@@ -238,6 +300,8 @@ def create_contract(
         raise ValueError(f"Invalid contract number format: {contract_number}")
     if not validate_contract_status(status):
         raise ValueError(f"Invalid contract status: {status}. Must be one of: {CONTRACT_STATUSES}")
+    if contract_type is not None and contract_type not in CONTRACT_TYPES:
+        raise ValueError(f"Invalid contract type: {contract_type}. Must be one of: {CONTRACT_TYPES}")
 
     try:
         supabase = _get_supabase()
@@ -245,14 +309,20 @@ def create_contract(
         # Convert date to string for JSON
         contract_date_str = contract_date.isoformat() if isinstance(contract_date, date) else contract_date
 
-        result = supabase.table("customer_contracts").insert({
+        insert_data = {
             "organization_id": organization_id,
             "customer_id": customer_id,
             "contract_number": contract_number,
             "contract_date": contract_date_str,
             "status": status,
             "notes": notes,
-        }).execute()
+        }
+        if contract_type:
+            insert_data["contract_type"] = contract_type
+        if end_date:
+            insert_data["end_date"] = end_date.isoformat() if isinstance(end_date, date) else end_date
+
+        result = supabase.table("customer_contracts").insert(insert_data).execute()
 
         if result.data and len(result.data) > 0:
             return _parse_contract(result.data[0])
@@ -611,6 +681,8 @@ def update_contract(
     contract_number: Optional[str] = None,
     contract_date: Optional[date] = None,
     status: Optional[str] = None,
+    contract_type: Optional[str] = None,
+    end_date: Optional[date] = None,
     notes: Optional[str] = None,
 ) -> Optional[CustomerContract]:
     """
@@ -621,6 +693,8 @@ def update_contract(
         contract_number: New contract number
         contract_date: New contract date
         status: New status
+        contract_type: New contract type ('one_time' or 'renewable')
+        end_date: New end date
         notes: New notes
 
     Returns:
@@ -634,6 +708,8 @@ def update_contract(
         raise ValueError(f"Invalid contract number format: {contract_number}")
     if status is not None and not validate_contract_status(status):
         raise ValueError(f"Invalid contract status: {status}. Must be one of: {CONTRACT_STATUSES}")
+    if contract_type is not None and contract_type != "" and contract_type not in CONTRACT_TYPES:
+        raise ValueError(f"Invalid contract type: {contract_type}. Must be one of: {CONTRACT_TYPES}")
 
     try:
         supabase = _get_supabase()
@@ -646,6 +722,10 @@ def update_contract(
             update_data["contract_date"] = contract_date.isoformat() if isinstance(contract_date, date) else contract_date
         if status is not None:
             update_data["status"] = status
+        if contract_type is not None:
+            update_data["contract_type"] = contract_type if contract_type else None
+        if end_date is not None:
+            update_data["end_date"] = end_date.isoformat() if isinstance(end_date, date) else end_date
         if notes is not None:
             update_data["notes"] = notes
 

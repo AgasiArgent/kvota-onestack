@@ -965,7 +965,7 @@ def create_specification_from_quote(
         # Currency and payment
         prefilled_fields['specification_currency'] = (
             version_data.get('currency_of_quote') if version_data
-            else quote.get('currency', 'USD')
+            else quote.get('currency', 'RUB')
         )
 
         # Extract exchange rate if available

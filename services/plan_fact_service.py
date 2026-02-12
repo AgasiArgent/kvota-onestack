@@ -1514,10 +1514,17 @@ def get_plan_fact_generation_preview(deal_id: str) -> Dict[str, Any]:
         quote = spec.get('quotes', {}) or {}
         quote_id = spec.get('quote_id') or quote.get('id')
 
+        # Currency priority: quote.currency > spec.specification_currency > deal.currency
+        resolved_currency = (
+            quote.get('currency')
+            or spec.get('specification_currency')
+            or deal.get('currency')
+            or 'RUB'
+        )
         preview['deal_info'] = {
             'deal_number': deal.get('deal_number'),
             'total_amount': deal.get('total_amount'),
-            'currency': deal.get('currency'),
+            'currency': resolved_currency,
             'signed_at': deal.get('signed_at'),
             'status': deal.get('status'),
         }
