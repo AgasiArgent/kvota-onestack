@@ -21041,80 +21041,89 @@ def check_vat_sensitive_countries(items):
 
 def compare_quote_vs_invoice_prices(quote_id, items, supabase):
     """
-    Compare purchase prices from quote items vs supplier invoice prices.
-
-    Flags mismatches > 5%.
-    Returns dict with: status, value, details, mismatches.
+    Check invoice coverage for a quote: count invoices, scan attachments, and item pricing.
+    Returns dict with: status, value, details, invoice_count, scans_ok, pricing_ok.
     """
     if not items:
         return {
             'status': 'info',
             'value': 'Нет позиций для сверки',
-            'details': [],
+            'details': '',
             'mismatches': [],
         }
 
-    item_ids = [item['id'] for item in items]
-
     try:
-        invoice_result = supabase.table("supplier_invoice_items") \
-            .select("*") \
-            .in_("quote_item_id", item_ids) \
+        # 1. Count procurement invoices for this quote
+        invoices_resp = supabase.table("invoices") \
+            .select("id") \
+            .eq("quote_id", quote_id) \
             .execute()
-        invoice_items = invoice_result.data or []
+        invoice_list = invoices_resp.data or []
+        invoice_count = len(invoice_list)
     except Exception:
-        invoice_items = []
+        invoice_list = []
+        invoice_count = 0
 
-    if not invoice_items:
+    if invoice_count == 0:
         return {
             'status': 'warning',
             'value': 'Нет инвойсов поставщиков',
-            'details': [],
+            'details': '',
             'mismatches': [],
             'no_invoices': True,
         }
 
-    # Build lookup: quote_item_id -> invoice unit_price
-    invoice_prices = {}
-    for inv_item in invoice_items:
-        qid = inv_item.get('quote_item_id')
-        if qid:
-            invoice_prices[qid] = float(inv_item.get('unit_price', 0) or 0)
+    # 2. Check which invoices have scan attachments via documents table
+    invoice_ids = [inv['id'] for inv in invoice_list]
+    invoices_with_scans = 0
+    try:
+        if invoice_ids:
+            docs_resp = supabase.table("documents") \
+                .select("entity_id") \
+                .eq("entity_type", "supplier_invoice") \
+                .in_("entity_id", invoice_ids) \
+                .execute()
+            invoices_with_scans = len(set(d['entity_id'] for d in (docs_resp.data or [])))
+    except Exception:
+        invoices_with_scans = 0
 
-    mismatches = []
-    for item in items:
-        item_id = item['id']
-        if item_id not in invoice_prices:
-            continue
+    invoices_without_scans = invoice_count - invoices_with_scans
 
-        quote_price = float(item.get('purchase_price_original', 0) or 0)
-        invoice_price = invoice_prices[item_id]
+    # 3. Check item pricing completeness (items linked to invoices)
+    try:
+        items_resp = supabase.table("quote_items") \
+            .select("id, purchase_price_original, invoice_id") \
+            .eq("quote_id", quote_id) \
+            .not_.is_("invoice_id", "null") \
+            .execute()
+        invoiced_items = items_resp.data or []
+    except Exception:
+        invoiced_items = []
 
-        if quote_price == 0:
-            continue
+    total_invoiced_items = len(invoiced_items)
+    unpriced_items = sum(1 for i in invoiced_items if not float(i.get('purchase_price_original') or 0) > 0)
 
-        diff_pct = abs(invoice_price - quote_price) / quote_price * 100
+    # Build status and display text
+    parts = [f"{invoice_count} инвойс" + ("а" if 2 <= invoice_count <= 4 else "ов" if invoice_count >= 5 else "")]
 
-        if diff_pct > 5:
-            mismatches.append({
-                'product_name': item.get('product_name', '—'),
-                'quote_price': quote_price,
-                'invoice_price': invoice_price,
-                'diff_percent': round(diff_pct, 1),
-            })
-
-    if mismatches:
-        return {
-            'status': 'warning',
-            'value': f"{len(mismatches)} расхождений > 5%",
-            'details': mismatches,
-            'mismatches': mismatches,
-        }
+    if invoices_without_scans > 0:
+        parts.append(f"{invoices_without_scans} без скана")
+        status = 'warning'
+    elif unpriced_items > 0:
+        parts.append("все со сканами")
+        parts.append(f"{unpriced_items}/{total_invoiced_items} без цены")
+        status = 'warning'
+    else:
+        if invoices_with_scans == invoice_count:
+            parts.append("все со сканами")
+        if total_invoiced_items > 0:
+            parts.append("все цены заполнены")
+        status = 'ok'
 
     return {
-        'status': 'ok',
-        'value': 'Цены совпадают',
-        'details': [],
+        'status': status,
+        'value': ', '.join(parts),
+        'details': '',
         'mismatches': [],
     }
 
@@ -21137,7 +21146,7 @@ def build_janna_checklist(quote, calc_vars, calc_summary, items, supabase=None):
     deal_type = quote.get('deal_type') or calc_vars.get('offer_sale_type', 'supply')
     markup = float(calc_vars.get('markup', 0) or 0)
     payment_terms_code = calc_vars.get('payment_terms_code')
-    prepayment_percent = calc_vars.get('client_prepayment_percent')
+    prepayment_percent = calc_vars.get('advance_from_client')
     if prepayment_percent is not None:
         prepayment_percent = float(prepayment_percent)
     lpr_reward = float(calc_vars.get('lpr_reward', 0) or 0)
@@ -21412,7 +21421,7 @@ def get(session, quote_id: str, preset: str = None):
 
     # Payment terms
     payment_terms = calc_vars.get("client_payment_terms", "")
-    prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
+    prepayment = float(calc_vars.get("advance_from_client", 100) or 100)
 
     # Logistics costs - get from calculation results, not input variables
     # calc_summary has the aggregated total, phase_results has per-item breakdown
@@ -22554,7 +22563,7 @@ def get(session, quote_id: str):
     deal_type = quote.get("deal_type") or calc_vars.get("offer_sale_type", "")
     currency = quote.get("currency", "USD")
     markup = float(calc_vars.get("markup", 0) or 0)
-    prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
+    prepayment = float(calc_vars.get("advance_from_client", 100) or 100)
     lpr_reward = float(calc_vars.get("lpr_reward", 0) or calc_vars.get("decision_maker_reward", 0) or 0)
 
     min_markup_supply = 12
@@ -22808,7 +22817,7 @@ def get(session, quote_id: str):
     deal_type = quote.get("deal_type") or calc_vars.get("offer_sale_type", "")
     currency = quote.get("currency", "USD")
     markup = float(calc_vars.get("markup", 0) or 0)
-    prepayment = float(calc_vars.get("client_prepayment_percent", 100) or 100)
+    prepayment = float(calc_vars.get("advance_from_client", 100) or 100)
     lpr_reward = float(calc_vars.get("lpr_reward", 0) or calc_vars.get("decision_maker_reward", 0) or 0)
 
     min_markup_supply = 12
@@ -37561,12 +37570,12 @@ def get(session):
 @rt("/supplier-invoices")
 def get(session, q: str = "", supplier_id: str = "", status: str = ""):
     """
-    Supplier invoices registry page with filters.
+    Supplier invoices registry page - queries the invoices table directly.
 
     Query Parameters:
         q: Search query (matches invoice number)
         supplier_id: Filter by supplier
-        status: Filter by status (pending, partially_paid, paid, overdue, cancelled)
+        status: Filter - "" for all, "deals_only" for invoices linked to deals
     """
     redirect = require_login(session)
     if redirect:
@@ -37588,106 +37597,137 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
     user = session["user"]
     org_id = user.get("org_id")
 
-    # Import invoice service
-    from services.supplier_invoice_service import (
-        get_all_invoices, search_invoices, get_invoice_summary,
-        get_invoice_status_name, get_invoice_status_color,
-        INVOICE_STATUSES, INVOICE_STATUS_NAMES
-    )
-    from services.supplier_service import get_all_suppliers
+    # Query invoices table directly via Supabase client
+    from services.database import get_supabase
+    supabase = get_supabase()
 
-    # Get invoices based on filters
     try:
+        # Get invoices with supplier info
+        query = supabase.table("invoices") \
+            .select("id, invoice_number, currency, total_weight_kg, total_volume_m3, created_at, quote_id, supplier_id, suppliers!invoices_supplier_id_fkey(name, supplier_code), quotes!invoices_quote_id_fkey(idn_quote, customer_id, customers!quotes_customer_id_fkey(name))")
+
+        if supplier_id:
+            query = query.eq("supplier_id", supplier_id)
         if q and q.strip():
-            # Use search if query provided
-            invoices = search_invoices(
-                organization_id=org_id,
-                query_text=q.strip(),
-                limit=100
-            )
-        else:
-            # Get all with filters
-            invoices = get_all_invoices(
-                organization_id=org_id,
-                status=status if status else None,
-                supplier_id=supplier_id if supplier_id else None,
-                limit=100
-            )
+            query = query.ilike("invoice_number", f"%{q.strip()}%")
+
+        # Filter: deals_only
+        if status == "deals_only":
+            # Get quote_ids that have deals
+            deals_resp = supabase.table("deals") \
+                .select("specifications!inner(quote_id)") \
+                .execute()
+            deal_quote_ids = list(set(
+                (d.get("specifications") or {}).get("quote_id")
+                for d in (deals_resp.data or [])
+                if (d.get("specifications") or {}).get("quote_id")
+            ))
+            if deal_quote_ids:
+                query = query.in_("quote_id", deal_quote_ids)
+            else:
+                query = query.eq("quote_id", "00000000-0000-0000-0000-000000000000")  # no results
+
+        invoices_resp = query.order("created_at", desc=True).limit(200).execute()
+        invoices = invoices_resp.data or []
+
+        # Get item counts and totals per invoice
+        invoice_ids = [inv['id'] for inv in invoices]
+        items_by_invoice = {}
+        if invoice_ids:
+            items_resp = supabase.table("quote_items") \
+                .select("invoice_id, purchase_price_original") \
+                .in_("invoice_id", invoice_ids) \
+                .execute()
+            for item in (items_resp.data or []):
+                iid = item.get('invoice_id')
+                if iid:
+                    if iid not in items_by_invoice:
+                        items_by_invoice[iid] = {'count': 0, 'total': 0}
+                    items_by_invoice[iid]['count'] += 1
+                    items_by_invoice[iid]['total'] += float(item.get('purchase_price_original') or 0)
+
+        # Check document attachments — batch version of count_documents_for_entity
+        doc_count_by_invoice = {}
+        if invoice_ids:
+            docs_resp = supabase.table("documents") \
+                .select("entity_id") \
+                .eq("entity_type", "supplier_invoice") \
+                .in_("entity_id", invoice_ids) \
+                .execute()
+            for d in (docs_resp.data or []):
+                eid = d.get('entity_id')
+                if eid:
+                    doc_count_by_invoice[eid] = doc_count_by_invoice.get(eid, 0) + 1
 
         # Get suppliers for filter dropdown
-        suppliers = get_all_suppliers(organization_id=org_id, is_active=True, limit=200)
-
-        # Get summary stats
-        summary = get_invoice_summary(organization_id=org_id)
+        suppliers_resp = supabase.table("suppliers") \
+            .select("id, name, supplier_code") \
+            .order("name") \
+            .limit(200) \
+            .execute()
+        suppliers_list = suppliers_resp.data or []
 
     except Exception as e:
-        print(f"Error loading supplier invoices: {e}")
+        print(f"Error loading invoices registry: {e}")
+        import traceback
+        traceback.print_exc()
         invoices = []
-        suppliers = []
-        from services.supplier_invoice_service import InvoiceSummary
-        summary = InvoiceSummary()
+        items_by_invoice = {}
+        doc_count_by_invoice = {}
+        suppliers_list = []
 
-    # Build supplier options for filter
+    # Build supplier filter options
     supplier_options = [Option("Все поставщики", value="")] + [
-        Option(f"{s.supplier_code} - {s.name}", value=str(s.id), selected=(str(s.id) == supplier_id))
-        for s in suppliers
+        Option(f"{s.get('supplier_code', '')} - {s.get('name', '')}", value=str(s['id']), selected=(str(s['id']) == supplier_id))
+        for s in suppliers_list
     ]
 
-    # Status options
+    # Status filter: All / Deals only
     status_options = [
-        Option("Все статусы", value="", selected=(status == "")),
-    ] + [
-        Option(INVOICE_STATUS_NAMES.get(s, s), value=s, selected=(status == s))
-        for s in INVOICE_STATUSES
+        Option("Все инвойсы", value="", selected=(status == "")),
+        Option("Только сделки", value="deals_only", selected=(status == "deals_only")),
     ]
 
-    # Status color mapping for CSS classes
-    status_color_classes = {
-        "pending": "status-pending",
-        "partially_paid": "status-in-progress",
-        "paid": "status-approved",
-        "overdue": "status-rejected",
-        "cancelled": "status-cancelled",
-    }
+    # Calculate summary totals
+    total_amount_sum = sum(inv_data['total'] for inv_data in items_by_invoice.values())
 
     # Build invoice rows
     invoice_rows = []
     for inv in invoices:
-        status_cls = status_color_classes.get(inv.status, "status-pending")
-        status_text = get_invoice_status_name(inv.status)
+        supplier = (inv.get('suppliers') or {})
+        quote = (inv.get('quotes') or {})
+        customer = ((quote.get('customers') or {}).get('name', '—'))
+        idn = quote.get('idn_quote', '—')
 
-        # Format amounts
-        total_formatted = f"{inv.total_amount:,.2f}" if inv.total_amount else "0.00"
-        paid_formatted = f"{inv.paid_amount:,.2f}" if inv.paid_amount else "0.00"
-        remaining = (inv.total_amount or 0) - (inv.paid_amount or 0)
-        remaining_formatted = f"{remaining:,.2f}"
+        inv_items = items_by_invoice.get(inv['id'], {'count': 0, 'total': 0})
+        doc_count = doc_count_by_invoice.get(inv['id'], 0)
 
-        # Format dates
-        invoice_date_str = inv.invoice_date.strftime("%d.%m.%Y") if inv.invoice_date else "—"
-        due_date_str = inv.due_date.strftime("%d.%m.%Y") if inv.due_date else "—"
+        created_str = ""
+        if inv.get('created_at'):
+            try:
+                from datetime import datetime as _dt
+                dt = _dt.fromisoformat(inv['created_at'].replace('Z', '+00:00'))
+                created_str = dt.strftime("%d.%m.%Y")
+            except Exception:
+                created_str = str(inv['created_at'])[:10]
 
-        # Overdue indicator
-        overdue_badge = Span(icon("alert-triangle", size=14), title="Просрочено!", style="color: #dc3545; margin-left: 0.25rem;") if inv.is_overdue else ""
+        doc_badge = Span(
+            icon("paperclip", size=14, color="#64748b"),
+            f" {doc_count}",
+            style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #64748b;"
+        ) if doc_count > 0 else Span("—", style="color: #cbd5e1;")
 
         invoice_rows.append(
             Tr(
-                Td(
-                    A(
-                        Strong(inv.invoice_number),
-                        href=f"/supplier-invoices/{inv.id}",
-                        style="font-family: monospace; color: #4a4aff; text-decoration: none;"
-                    )
-                ),
-                Td(f"{inv.supplier_code or ''} - {inv.supplier_name or '—'}" if inv.supplier_name else "—"),
-                Td(invoice_date_str),
-                Td(due_date_str, overdue_badge),
-                Td(f"{total_formatted} {inv.currency}", style="text-align: right;"),
-                Td(f"{paid_formatted} {inv.currency}", style="text-align: right; color: #28a745;"),
-                Td(f"{remaining_formatted} {inv.currency}", style="text-align: right; color: #dc3545;" if remaining > 0 else "text-align: right;"),
-                Td(Span(status_text, cls=f"status-badge {status_cls}")),
-                Td(
-                    A(icon("eye", size=14), href=f"/supplier-invoices/{inv.id}", title="Просмотр"),
-                )
+                Td(Strong(inv.get('invoice_number', '—')), style="font-family: monospace;"),
+                Td(f"{supplier.get('supplier_code', '')} {supplier.get('name', '—')}".strip()),
+                Td(A(idn, href=f"/quotes/{inv.get('quote_id', '')}", style="color: #4a4aff; text-decoration: none;") if inv.get('quote_id') else Span("—", style="color: #cbd5e1;")),
+                Td(customer),
+                Td(str(inv_items['count']), style="text-align: center;"),
+                Td(f"{inv_items['total']:,.2f} {inv.get('currency', 'USD')}", style="text-align: right;"),
+                Td(f"{float(inv.get('total_weight_kg') or 0):,.1f} кг", style="text-align: right;"),
+                Td(doc_badge, style="text-align: center;"),
+                Td(created_str),
             )
         )
 
@@ -37712,82 +37752,29 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
             style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         ),
 
-        # Stats cards grid
+        # Stats cards
         Div(
-            # Total
+            # Total invoices
             Div(
                 Div(
                     icon("file-text", size=20, color="#64748b"),
                     style="margin-bottom: 8px;"
                 ),
-                Div(str(summary.total), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
+                Div(str(len(invoices)), style="font-size: 28px; font-weight: 700; color: #1e293b;"),
                 Div("Всего инвойсов", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
                 style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            # Pending
+            # Total amount
             Div(
                 Div(
-                    icon("clock", size=20, color="#f59e0b"),
+                    icon("wallet", size=20, color="#22c55e"),
                     style="margin-bottom: 8px;"
                 ),
-                Div(str(summary.pending), style="font-size: 28px; font-weight: 700; color: #f59e0b;"),
-                Div("Ожидает оплаты", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
+                Div(f"{total_amount_sum:,.0f}", style="font-size: 28px; font-weight: 700; color: #22c55e;"),
+                Div("Сумма позиций", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
                 style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
             ),
-            # Partially paid
-            Div(
-                Div(
-                    icon("pie-chart", size=20, color="#0ea5e9"),
-                    style="margin-bottom: 8px;"
-                ),
-                Div(str(summary.partially_paid), style="font-size: 28px; font-weight: 700; color: #0ea5e9;"),
-                Div("Частично оплачено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
-            ),
-            # Paid
-            Div(
-                Div(
-                    icon("check-circle", size=20, color="#22c55e"),
-                    style="margin-bottom: 8px;"
-                ),
-                Div(str(summary.paid), style="font-size: 28px; font-weight: 700; color: #22c55e;"),
-                Div("Оплачено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
-            ),
-            # Overdue
-            Div(
-                Div(
-                    icon("alert-triangle", size=20, color="#ef4444"),
-                    style="margin-bottom: 8px;"
-                ),
-                Div(str(summary.overdue), style="font-size: 28px; font-weight: 700; color: #ef4444;"),
-                Div("Просрочено", style="font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"),
-                style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
-            ),
-            style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px;"
-        ),
-
-        # Summary amounts card
-        Div(
-            Div(
-                Div(
-                    icon("wallet", size=16, color="#64748b"),
-                    Span("СВОДКА ПО СУММАМ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 8px;"),
-                    style="display: flex; align-items: center; margin-bottom: 12px;"
-                ),
-                Div(
-                    Span("К оплате: ", style="color: #64748b;"),
-                    Span(f"{summary.pending_amount:,.2f} ₽", style="color: #ef4444; font-weight: 600;"),
-                    Span(" • ", style="color: #cbd5e1; margin: 0 12px;"),
-                    Span("Оплачено: ", style="color: #64748b;"),
-                    Span(f"{summary.paid_amount:,.2f} ₽", style="color: #22c55e; font-weight: 600;"),
-                    Span(" • ", style="color: #cbd5e1; margin: 0 12px;"),
-                    Span("Всего: ", style="color: #64748b;"),
-                    Span(f"{summary.total_amount:,.2f} ₽", style="color: #1e293b; font-weight: 600;"),
-                    style="font-size: 15px;"
-                ),
-            ),
-            style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
+            style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px;"
         ),
 
         # Filters card
@@ -37820,64 +37807,23 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
                         Tr(
                             Th("№ Инвойса", style=th_style),
                             Th("Поставщик", style=th_style),
-                            Th("Дата", style=th_style),
-                            Th("Срок оплаты", style=th_style),
+                            Th("КП", style=th_style),
+                            Th("Клиент", style=th_style),
+                            Th("Позиций", style=f"{th_style} text-align: center;"),
                             Th("Сумма", style=f"{th_style} text-align: right;"),
-                            Th("Оплачено", style=f"{th_style} text-align: right;"),
-                            Th("Остаток", style=f"{th_style} text-align: right;"),
-                            Th("Статус", style=th_style),
+                            Th("Вес", style=f"{th_style} text-align: right;"),
                             Th("Документы", style=f"{th_style} text-align: center;"),
-                            Th("", style=th_style)
+                            Th("Дата", style=th_style),
                         )
                     ),
-                    Tbody(*[
-                        Tr(
-                            Td(
-                                A(
-                                    Strong(inv.invoice_number),
-                                    href=f"/supplier-invoices/{inv.id}",
-                                    style="font-family: monospace; color: #6366f1; text-decoration: none; font-weight: 600;"
-                                ),
-                                style=td_style
-                            ),
-                            Td(f"{inv.supplier_code or ''} - {inv.supplier_name or '—'}" if inv.supplier_name else "—", style=td_style),
-                            Td(inv.invoice_date.strftime("%d.%m.%Y") if inv.invoice_date else "—", style=td_style),
-                            Td(
-                                inv.due_date.strftime("%d.%m.%Y") if inv.due_date else "—",
-                                Span(icon("alert-triangle", size=14), title="Просрочено!", style="color: #ef4444; margin-left: 6px;") if inv.is_overdue else "",
-                                style=td_style
-                            ),
-                            Td(f"{inv.total_amount:,.2f}" if inv.total_amount else "0.00", Span(f" {inv.currency}", style="color: #94a3b8;"), style=f"{td_style} text-align: right; font-weight: 500;"),
-                            Td(f"{inv.paid_amount:,.2f}" if inv.paid_amount else "0.00", Span(f" {inv.currency}", style="color: #94a3b8;"), style=f"{td_style} text-align: right; color: #22c55e; font-weight: 500;"),
-                            Td(
-                                f"{(inv.total_amount or 0) - (inv.paid_amount or 0):,.2f}",
-                                Span(f" {inv.currency}", style="color: #94a3b8;"),
-                                style=f"{td_style} text-align: right; color: {'#ef4444' if (inv.total_amount or 0) - (inv.paid_amount or 0) > 0 else '#64748b'}; font-weight: 500;"
-                            ),
-                            Td(status_badge(inv.status), style=td_style),
-                            Td(
-                                Span(
-                                    icon("paperclip", size=14, color="#64748b"),
-                                    f" {doc_cnt}",
-                                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #64748b;"
-                                ) if (doc_cnt := count_documents_for_entity("supplier_invoice", str(inv.id))) > 0 else
-                                Span("—", style="color: #cbd5e1;"),
-                                style=f"{td_style} text-align: center;"
-                            ),
-                            Td(
-                                A(icon("eye", size=16, color="#64748b"), href=f"/supplier-invoices/{inv.id}", title="Просмотр"),
-                                style=f"{td_style} text-align: right;"
-                            )
-                        )
-                        for inv in invoices
-                    ]) if invoice_rows else Tbody(
+                    Tbody(*invoice_rows) if invoice_rows else Tbody(
                         Tr(Td(
                             Div(
                                 icon("inbox", size=40, color="#cbd5e1"),
                                 Div("Инвойсы не найдены", style="font-size: 16px; font-weight: 500; color: #64748b; margin-top: 12px;"),
                                 style="text-align: center; padding: 40px 20px;"
                             ),
-                            colspan="10"
+                            colspan="9"
                         ))
                     ),
                     style="width: 100%; border-collapse: collapse;"

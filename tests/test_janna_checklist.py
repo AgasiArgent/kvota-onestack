@@ -98,7 +98,7 @@ def make_calc_vars(
 ):
     base = {
         "markup": markup,
-        "client_prepayment_percent": prepayment_percent,
+        "advance_from_client": prepayment_percent,
         "payment_terms_code": payment_terms_code,
         "forex_risk_percent": forex_risk_percent,
         "lpr_reward": lpr_reward,
@@ -174,6 +174,13 @@ class MockQueryBuilder:
         return self
 
     def in_(self, col, vals):
+        return self
+
+    def is_(self, col, val):
+        return self
+
+    @property
+    def not_(self):
         return self
 
     def execute(self):
@@ -552,10 +559,11 @@ class TestCompareQuoteVsInvoicePrices:
     """
 
     def test_all_prices_match(self):
-        """When all invoice prices match quote prices, status is ok."""
+        """When all invoices have scans and all items are priced, status is ok."""
         compare_quote_vs_invoice_prices = _import_from_main("compare_quote_vs_invoice_prices")
 
         quote_id = make_uuid()
+        invoice_id = make_uuid()
         item_id_1 = make_uuid()
         item_id_2 = make_uuid()
 
@@ -565,98 +573,129 @@ class TestCompareQuoteVsInvoicePrices:
         ]
 
         mock_sb = MockSupabase()
-        # Simulate supplier_invoice_items matching quote prices
-        mock_sb.set_table_data("supplier_invoice_items", [
-            {"quote_item_id": item_id_1, "unit_price": 100},
-            {"quote_item_id": item_id_2, "unit_price": 200},
+        # 1 invoice exists for this quote
+        mock_sb.set_table_data("invoices", [
+            {"id": invoice_id},
+        ])
+        # Invoice has a scan attachment
+        mock_sb.set_table_data("documents", [
+            {"entity_id": invoice_id},
+        ])
+        # All items linked to invoice with prices filled
+        mock_sb.set_table_data("quote_items", [
+            {"id": item_id_1, "purchase_price_original": 100, "invoice_id": invoice_id},
+            {"id": item_id_2, "purchase_price_original": 200, "invoice_id": invoice_id},
         ])
 
         result = compare_quote_vs_invoice_prices(quote_id, items, mock_sb)
 
         assert isinstance(result, dict)
-        assert result.get("status") in ("ok", "info"), (
-            f"All matching prices should be ok, got {result.get('status')}"
+        assert result.get("status") == "ok", (
+            f"All invoices with scans and priced items should be ok, got {result}"
         )
-        assert len(result.get("mismatches", [])) == 0
 
-    def test_one_price_mismatch_above_threshold(self):
-        """When one invoice price differs by >5%, status is warning."""
+    def test_invoices_missing_scans(self):
+        """When some invoices are missing scan attachments, status is warning."""
         compare_quote_vs_invoice_prices = _import_from_main("compare_quote_vs_invoice_prices")
 
         quote_id = make_uuid()
-        item_id_1 = make_uuid()
+        invoice_id_1 = make_uuid()
+        invoice_id_2 = make_uuid()
 
-        items = [
-            make_item(
-                item_id=item_id_1,
-                quote_id=quote_id,
-                purchase_price_original=100,
-                product_name="Bearing SKF 6205",
-            ),
-        ]
+        items = [make_item(quote_id=quote_id)]
 
         mock_sb = MockSupabase()
-        # Invoice price differs by 10% (>5% threshold)
-        mock_sb.set_table_data("supplier_invoice_items", [
-            {"quote_item_id": item_id_1, "unit_price": 110},
+        # 2 invoices exist
+        mock_sb.set_table_data("invoices", [
+            {"id": invoice_id_1},
+            {"id": invoice_id_2},
         ])
+        # Only 1 has a scan
+        mock_sb.set_table_data("documents", [
+            {"entity_id": invoice_id_1},
+        ])
+        mock_sb.set_table_data("quote_items", [])
 
         result = compare_quote_vs_invoice_prices(quote_id, items, mock_sb)
 
         assert result.get("status") == "warning"
-        mismatches = result.get("mismatches", [])
-        assert len(mismatches) == 1
-        # Mismatch should include the product name
-        assert "Bearing" in str(mismatches[0]) or "product_name" in mismatches[0]
+        assert "без скана" in result.get("value", ""), (
+            f"Should mention missing scans, got value={result.get('value')}"
+        )
 
-    def test_price_mismatch_within_threshold(self):
-        """Price difference within 5% should not be flagged."""
+    def test_invoices_all_scans_unpriced_items(self):
+        """When all scans present but some items lack price, status is warning."""
         compare_quote_vs_invoice_prices = _import_from_main("compare_quote_vs_invoice_prices")
 
         quote_id = make_uuid()
+        invoice_id = make_uuid()
         item_id_1 = make_uuid()
+        item_id_2 = make_uuid()
 
         items = [
             make_item(item_id=item_id_1, quote_id=quote_id, purchase_price_original=100),
+            make_item(item_id=item_id_2, quote_id=quote_id, purchase_price_original=None),
         ]
 
         mock_sb = MockSupabase()
-        # 4% difference - within threshold
-        mock_sb.set_table_data("supplier_invoice_items", [
-            {"quote_item_id": item_id_1, "unit_price": 104},
+        # 1 invoice with scan
+        mock_sb.set_table_data("invoices", [
+            {"id": invoice_id},
         ])
-
-        result = compare_quote_vs_invoice_prices(quote_id, items, mock_sb)
-
-        assert result.get("status") in ("ok", "info")
-        assert len(result.get("mismatches", [])) == 0
-
-    def test_multiple_mismatches(self):
-        """Multiple price mismatches are all reported."""
-        compare_quote_vs_invoice_prices = _import_from_main("compare_quote_vs_invoice_prices")
-
-        quote_id = make_uuid()
-        id_1, id_2, id_3 = make_uuid(), make_uuid(), make_uuid()
-
-        items = [
-            make_item(item_id=id_1, quote_id=quote_id, purchase_price_original=100, product_name="Item A"),
-            make_item(item_id=id_2, quote_id=quote_id, purchase_price_original=200, product_name="Item B"),
-            make_item(item_id=id_3, quote_id=quote_id, purchase_price_original=300, product_name="Item C"),
-        ]
-
-        mock_sb = MockSupabase()
-        mock_sb.set_table_data("supplier_invoice_items", [
-            {"quote_item_id": id_1, "unit_price": 120},  # +20% mismatch
-            {"quote_item_id": id_2, "unit_price": 202},  # +1% ok
-            {"quote_item_id": id_3, "unit_price": 350},  # +16.7% mismatch
+        mock_sb.set_table_data("documents", [
+            {"entity_id": invoice_id},
+        ])
+        # 2 items linked to invoice, 1 without price
+        mock_sb.set_table_data("quote_items", [
+            {"id": item_id_1, "purchase_price_original": 100, "invoice_id": invoice_id},
+            {"id": item_id_2, "purchase_price_original": None, "invoice_id": invoice_id},
         ])
 
         result = compare_quote_vs_invoice_prices(quote_id, items, mock_sb)
 
         assert result.get("status") == "warning"
-        mismatches = result.get("mismatches", [])
-        assert len(mismatches) == 2, (
-            f"Expected 2 mismatches (Item A +20%, Item C +16.7%), got {len(mismatches)}"
+        assert "без цены" in result.get("value", ""), (
+            f"Should mention unpriced items, got value={result.get('value')}"
+        )
+
+    def test_all_invoices_complete(self):
+        """When multiple invoices all have scans and all items priced, status is ok."""
+        compare_quote_vs_invoice_prices = _import_from_main("compare_quote_vs_invoice_prices")
+
+        quote_id = make_uuid()
+        invoice_id_1 = make_uuid()
+        invoice_id_2 = make_uuid()
+        item_id_1 = make_uuid()
+        item_id_2 = make_uuid()
+        item_id_3 = make_uuid()
+
+        items = [
+            make_item(item_id=item_id_1, quote_id=quote_id, purchase_price_original=100),
+            make_item(item_id=item_id_2, quote_id=quote_id, purchase_price_original=200),
+            make_item(item_id=item_id_3, quote_id=quote_id, purchase_price_original=300),
+        ]
+
+        mock_sb = MockSupabase()
+        # 2 invoices both with scans
+        mock_sb.set_table_data("invoices", [
+            {"id": invoice_id_1},
+            {"id": invoice_id_2},
+        ])
+        mock_sb.set_table_data("documents", [
+            {"entity_id": invoice_id_1},
+            {"entity_id": invoice_id_2},
+        ])
+        # All items priced
+        mock_sb.set_table_data("quote_items", [
+            {"id": item_id_1, "purchase_price_original": 100, "invoice_id": invoice_id_1},
+            {"id": item_id_2, "purchase_price_original": 200, "invoice_id": invoice_id_1},
+            {"id": item_id_3, "purchase_price_original": 300, "invoice_id": invoice_id_2},
+        ])
+
+        result = compare_quote_vs_invoice_prices(quote_id, items, mock_sb)
+
+        assert result.get("status") == "ok", (
+            f"All complete invoices should be ok, got {result}"
         )
 
     def test_no_invoices_found(self):
