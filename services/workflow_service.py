@@ -2612,3 +2612,63 @@ def complete_procurement(
         to_status=WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
         transition_id=transition_id
     )
+
+
+# =============================================================================
+# DOWNLOAD BUTTON VISIBILITY FUNCTIONS
+# =============================================================================
+
+# Preparation statuses: draft through pending_quote_control
+_PREPARATION_STATUSES: Set[str] = {
+    WorkflowStatus.DRAFT.value,
+    WorkflowStatus.PENDING_PROCUREMENT.value,
+    WorkflowStatus.PENDING_LOGISTICS.value,
+    WorkflowStatus.PENDING_CUSTOMS.value,
+    WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
+    WorkflowStatus.PENDING_SALES_REVIEW.value,
+    WorkflowStatus.PENDING_QUOTE_CONTROL.value,
+}
+
+# Statuses where KP PDF is visible: from approved onward (after approval step)
+_KP_PDF_STATUSES: Set[str] = {
+    WorkflowStatus.APPROVED.value,
+    WorkflowStatus.SENT_TO_CLIENT.value,
+    WorkflowStatus.PENDING_SPEC_CONTROL.value,
+    WorkflowStatus.PENDING_SIGNATURE.value,
+    WorkflowStatus.DEAL.value,
+}
+
+# Statuses where invoice PDF and specification DOC are visible
+_DEAL_STATUSES: Set[str] = {
+    WorkflowStatus.DEAL.value,
+}
+
+
+def show_validation_excel(status) -> bool:
+    """Return True if Validation Excel (MOP) button should be visible.
+
+    Visible during preparation stages: draft through pending_quote_control.
+    Accepts both WorkflowStatus enum and raw string values.
+    """
+    status_str = status.value if isinstance(status, WorkflowStatus) else str(status)
+    return status_str in _PREPARATION_STATUSES
+
+
+def show_quote_pdf(status) -> bool:
+    """Return True if KP PDF button should be visible.
+
+    Visible from approved onward: approved, sent_to_client, pending_spec_control, pending_signature, deal.
+    Accepts both WorkflowStatus enum and raw string values.
+    """
+    status_str = status.value if isinstance(status, WorkflowStatus) else str(status)
+    return status_str in _KP_PDF_STATUSES
+
+
+def show_invoice_and_spec(status) -> bool:
+    """Return True if Invoice PDF and Specification DOC buttons should be visible.
+
+    Visible only after Spec Control passed: deal stage.
+    Accepts both WorkflowStatus enum and raw string values.
+    """
+    status_str = status.value if isinstance(status, WorkflowStatus) else str(status)
+    return status_str in _DEAL_STATUSES

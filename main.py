@@ -53,7 +53,8 @@ from services.brand_service import get_assigned_brands
 from services.workflow_service import (
     WorkflowStatus, STATUS_NAMES, STATUS_NAMES_SHORT, STATUS_COLORS,
     check_all_procurement_complete, complete_procurement, complete_logistics, complete_customs,
-    transition_quote_status, get_quote_transition_history, transition_to_pending_procurement
+    transition_quote_status, get_quote_transition_history, transition_to_pending_procurement,
+    show_validation_excel, show_quote_pdf, show_invoice_and_spec
 )
 
 # Import approval service (Feature #65, #86)
@@ -8079,6 +8080,38 @@ def get(quote_id: str, session, tab: str = "summary"):
 
     items = items_result.data or []
 
+    # Calculate logistics_total from invoices (logistics cost segments)
+    # The quotes table does NOT have a logistics_total column — it must be computed
+    # by summing logistics_supplier_to_hub + logistics_hub_to_customs + logistics_customs_to_customer
+    # from the invoices table, converting each segment to the quote currency.
+    logistics_total = 0.0
+    try:
+        from services.currency_service import convert_amount
+        from decimal import Decimal as _Decimal
+        _logistics_inv_result = supabase.table("invoices") \
+            .select("logistics_supplier_to_hub, logistics_hub_to_customs, logistics_customs_to_customer, logistics_supplier_to_hub_currency, logistics_hub_to_customs_currency, logistics_customs_to_customer_currency") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        _logistics_invoices = _logistics_inv_result.data or []
+        _quote_currency = quote.get("currency") or "RUB"
+        _logistics_total_dec = _Decimal(0)
+        for _linv in _logistics_invoices:
+            _s2h = _Decimal(str(_linv.get("logistics_supplier_to_hub") or 0))
+            _s2h_cur = _linv.get("logistics_supplier_to_hub_currency") or "USD"
+            _h2c = _Decimal(str(_linv.get("logistics_hub_to_customs") or 0))
+            _h2c_cur = _linv.get("logistics_hub_to_customs_currency") or "USD"
+            _c2c = _Decimal(str(_linv.get("logistics_customs_to_customer") or 0))
+            _c2c_cur = _linv.get("logistics_customs_to_customer_currency") or "USD"
+            if _s2h > 0:
+                _logistics_total_dec += convert_amount(_s2h, _s2h_cur, _quote_currency)
+            if _h2c > 0:
+                _logistics_total_dec += convert_amount(_h2c, _h2c_cur, _quote_currency)
+            if _c2c > 0:
+                _logistics_total_dec += convert_amount(_c2c, _c2c_cur, _quote_currency)
+        logistics_total = float(_logistics_total_dec)
+    except Exception:
+        logistics_total = 0.0
+
     # Prepare items data for Handsontable (JSON)
     items_for_handsontable = [
         {
@@ -8871,7 +8904,7 @@ def get(quote_id: str, session, tab: str = "summary"):
             H3("Итого"),
             Table(
                 Tr(Td("Товары (подитог):"), Td(format_money(quote.get("subtotal"), quote.get("currency", "RUB")))),
-                Tr(Td("Логистика:"), Td(format_money(quote.get("logistics_total"), quote.get("currency", "RUB")))),
+                Tr(Td("Логистика:"), Td(format_money(logistics_total, quote.get("currency", "RUB")))),
                 Tr(Td(Strong("Итого:")), Td(Strong(format_money(quote.get("total_amount"), quote.get("currency", "RUB"))))),
             ),
             cls="card"
@@ -9537,11 +9570,11 @@ def get(quote_id: str, session, tab: str = "summary"):
                     btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
                     style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
                 ),
-                # Right: export/download
+                # Right: export/download (conditional per button based on workflow status)
                 Div(
-                    btn_link("Спецификация PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text"),
-                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text"),
-                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table"),
+                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
+                    btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
+                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
                     style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
                 ),
                 style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;"
@@ -15625,7 +15658,7 @@ def get(quote_id: str, session):
         # Build invoice_items_table rows for the details section
         invoice_items_table = []
         for item in invoice_items_list:
-            item_name = item.get("name") or item.get("product_name") or "—"
+            item_name = item.get("product_name") or "—"
             item_qty = item.get("quantity", 0) or 0
             item_price = item.get("purchase_price_original", 0) or 0
             invoice_items_table.append(
@@ -17434,7 +17467,7 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
 
     # Get items first to find linked invoice IDs
     items_result = supabase.table("quote_items") \
-        .select("id, name, brand, invoice_id, purchase_price_original, quantity") \
+        .select("id, product_name, brand, invoice_id, purchase_price_original, quantity") \
         .eq("quote_id", quote_id) \
         .execute()
 
@@ -17495,7 +17528,7 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
         invoice_items_list = [item for item in my_items if item.get("invoice_id") == inv["id"]]
         invoice_items_table = []
         for item in invoice_items_list:
-            item_name = item.get("name") or item.get("product_name") or "—"
+            item_name = item.get("product_name") or "—"
             item_qty = item.get("quantity", 0) or 0
             item_price = item.get("purchase_price_original", 0) or 0
             invoice_items_table.append(
