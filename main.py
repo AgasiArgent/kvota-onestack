@@ -13269,6 +13269,9 @@ def get(quote_id: str, session):
             can_delete=can_delete
         ),
 
+        # Document chain section (grouped by stage)
+        _render_document_chain_section(quote_id),
+
         # Back button
         Div(
             A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
@@ -13330,40 +13333,11 @@ def _build_document_chain(quote_id):
     return chain
 
 
-@rt("/quotes/{quote_id}/document-chain")
-def get(quote_id: str, session):
-    """Document chain visualization for a quote - shows all documents grouped by stage."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    org_id = user["org_id"]
-    user_roles = get_session_user_roles(session)
-
-    supabase = get_supabase()
-
-    # Get quote details
-    quote_result = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, status, workflow_status, customers(name)") \
-        .eq("id", quote_id) \
-        .eq("organization_id", org_id) \
-        .execute()
-
-    if not quote_result.data:
-        return page_layout("КП не найдено",
-            H1("КП не найдено"),
-            Div("Запрошенное КП не существует или у вас нет доступа.", cls="card"),
-            A("← К списку КП", href="/quotes"),
-            session=session
-        )
-
-    quote = quote_result.data[0]
-    quote_number = quote.get("idn_quote") or quote_id[:8]
-    workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
-    customer_name = (quote.get("customers") or {}).get("name", "—")
-
-    # Build document chain
+def _render_document_chain_section(quote_id: str):
+    """
+    Render the document chain section showing documents grouped by stage.
+    Used as a sub-section within the merged Documents tab.
+    """
     chain = _build_document_chain(quote_id)
 
     # Define chain stages with Russian labels and icons
@@ -13423,29 +13397,22 @@ def get(quote_id: str, session):
             )
         )
 
-    return page_layout(
-        f"Цепочка документов КП {quote_number}",
+    return Div(
+        # Divider
+        Hr(style="margin: 2rem 0; border: none; border-top: 1px solid #e2e8f0;"),
 
-        # Persistent header with IDN, status, client name
-        quote_header(quote, workflow_status, customer_name),
+        # Section header
+        H3(
+            icon("link", size=20),
+            " Цепочка документов по стадиям",
+            style="display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; font-size: 1.1rem; color: #1e293b;"
+        ),
 
-        # Role-based tabs
-        quote_detail_tabs(quote_id, "document_chain", user_roles),
-
-        # Chain timeline
+        # Chain timeline grid
         Div(
             *stage_cards,
-            style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 2rem;"
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;"
         ),
-
-        # Back button
-        Div(
-            A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
-              style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none;"),
-            style="margin-top: 2rem;"
-        ),
-
-        session=session
     )
 
 
@@ -14836,18 +14803,18 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             "roles": ["procurement", "admin"],
         },
         {
-            "id": "logistics",
-            "label": "Логистика",
-            "icon": "truck",
-            "href": f"/logistics/{quote_id}",
-            "roles": ["logistics", "head_of_logistics", "admin"],
-        },
-        {
             "id": "customs",
             "label": "Таможня",
             "icon": "shield-check",
             "href": f"/customs/{quote_id}",
             "roles": ["customs", "head_of_customs", "admin"],
+        },
+        {
+            "id": "logistics",
+            "label": "Логистика",
+            "icon": "truck",
+            "href": f"/logistics/{quote_id}",
+            "roles": ["logistics", "head_of_logistics", "admin"],
         },
         {
             "id": "control",
@@ -14868,13 +14835,6 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             "label": "Документы",
             "icon": "folder",
             "href": f"/quotes/{quote_id}/documents",
-            "roles": None,  # All users with quote access
-        },
-        {
-            "id": "document_chain",
-            "label": "Цепочка документов",
-            "icon": "link",
-            "href": f"/quotes/{quote_id}/document-chain",
             "roles": None,  # All users with quote access
         },
     ]
@@ -23014,12 +22974,15 @@ def post(session, quote_id: str, comment: str = ""):
                 session=session
             )
 
-        # Save approval_reason and needs_justification flag
+        # Save approval_reason, needs_justification flag, and quote controller tracking
+        from datetime import timezone
         supabase.table("quotes").update({
             "approval_reason": comment.strip(),
             "needs_justification": True,
-            "approval_justification": None  # Clear any previous justification
-        }).eq("id", quote_id).execute()
+            "approval_justification": None,  # Clear any previous justification
+            "quote_controller_id": user_id,
+            "quote_control_completed_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", quote_id).eq("organization_id", org_id).execute()
 
         return page_layout("Успешно",
             H1(icon("check", size=28), " Отправлено менеджеру продаж", cls="page-header"),
@@ -23262,6 +23225,16 @@ def post(session, quote_id: str, comment: str = ""):
     )
 
     if result.success:
+        # Record quote controller tracking data
+        try:
+            from datetime import timezone
+            supabase.table("quotes").update({
+                "quote_controller_id": user_id,
+                "quote_control_completed_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", quote_id).eq("organization_id", org_id).execute()
+        except Exception as e:
+            print(f"Warning: Could not update quote control tracking: {e}")
+
         # Success - redirect to quote control list
         return page_layout("Успешно",
             H1(icon("check-circle", size=28), " КП одобрено", cls="page-header"),
@@ -24744,6 +24717,19 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
         .update(update_data) \
         .eq("id", spec_id) \
         .execute()
+
+    # Record spec controller tracking data when approving
+    if resolved_status == "approved" and current_status == "draft":
+        try:
+            from datetime import timezone
+            quote_id_for_tracking = spec.get("quote_id")
+            if quote_id_for_tracking:
+                supabase.table("quotes").update({
+                    "spec_controller_id": user_id,
+                    "spec_control_completed_at": datetime.now(timezone.utc).isoformat()
+                }).eq("id", quote_id_for_tracking).eq("organization_id", org_id).execute()
+        except Exception as e:
+            print(f"Warning: Could not update spec control tracking: {e}")
 
     return RedirectResponse(f"/spec-control/{spec_id}", status_code=303)
 

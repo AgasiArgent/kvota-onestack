@@ -391,75 +391,41 @@ class TestBuildDocumentChain:
 
 class TestDocumentChainRoute:
     """
-    The /quotes/{quote_id}/document-chain route must exist and render
-    the document chain visualization page.
+    Document chain content is now merged into the Documents tab.
+    These tests verify the merged behavior.
     """
 
-    def test_document_chain_route_exists(self):
+    def test_document_chain_rendered_in_documents_route(self):
         """
-        Route /quotes/{quote_id}/document-chain must be defined in main.py.
-        """
-        source = _read_main_source()
-
-        assert "/document-chain" in source, (
-            "Route /quotes/{quote_id}/document-chain must exist in main.py"
-        )
-
-        # More specific check for the route decorator
-        has_route = (
-            '@rt("/quotes/{quote_id}/document-chain")' in source
-            or "document-chain" in source
-        )
-        assert has_route, (
-            "Route decorator @rt('/quotes/{quote_id}/document-chain') must be in main.py"
-        )
-
-    def test_document_chain_route_calls_build_document_chain(self):
-        """
-        The document-chain route handler must call _build_document_chain().
+        The documents route must include document chain rendering.
         """
         source = _read_main_source()
 
-        # Find the route handler
-        match = re.search(
-            r'@rt\("/quotes/\{quote_id\}/document-chain"\)\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL
-        )
-        assert match is not None, (
-            "Could not find GET /quotes/{quote_id}/document-chain route handler"
+        assert "_render_document_chain_section" in source or "_build_document_chain" in source, (
+            "Documents route must render document chain content"
         )
 
-        handler_source = match.group(0)
-        assert "_build_document_chain" in handler_source, (
-            "Document chain route must call _build_document_chain(quote_id)"
-        )
-
-    def test_document_chain_route_renders_chain_stages(self):
+    def test_document_chain_stages_exist_in_codebase(self):
         """
-        The document chain route must render all 5 chain stages in the UI:
-        КП, Спецификация, Инвойс, УПД, ГТД
+        The document chain must render all 5 chain stages: КП, Спецификация, Инвойс, УПД, ГТД
         """
         source = _read_main_source()
 
-        # Find the route handler
-        match = re.search(
-            r'@rt\("/quotes/\{quote_id\}/document-chain"\)\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL
-        )
-        assert match is not None, (
-            "Could not find GET /quotes/{quote_id}/document-chain route handler"
-        )
-
-        handler_source = match.group(0)
-
-        # Must render all chain stage labels
         stage_labels = ["КП", "Спецификация", "Инвойс", "УПД", "ГТД"]
         for label in stage_labels:
-            assert label in handler_source, (
-                f"Document chain page must display stage label '{label}'"
+            assert label in source, (
+                f"Document chain must display stage label '{label}'"
             )
+
+    def test_no_separate_document_chain_route(self):
+        """
+        The standalone /document-chain route should NOT exist (merged into documents tab).
+        """
+        source = _read_main_source()
+
+        assert '@rt("/quotes/{quote_id}/document-chain")' not in source, (
+            "Standalone /document-chain route should be removed (merged into documents tab)"
+        )
 
 
 # ==============================================================================
@@ -468,8 +434,8 @@ class TestDocumentChainRoute:
 
 class TestQuoteDetailDocumentChainTab:
     """
-    The quote detail tabs must include a "Цепочка документов" tab
-    linking to /quotes/{quote_id}/document-chain.
+    Document chain is now merged into the Documents tab (no separate tab).
+    Verify the merged behavior.
     """
 
     def _get_quote_detail_tabs_source(self):
@@ -480,44 +446,34 @@ class TestQuoteDetailDocumentChainTab:
             pytest.fail("Could not find quote_detail_tabs function in main.py")
         return func_source
 
-    def test_quote_detail_tabs_has_document_chain_tab(self):
+    def test_quote_detail_tabs_has_documents_tab(self):
         """
-        The tabs_config list in quote_detail_tabs must include a tab
-        with id 'document_chain' or 'document-chain'.
-        """
-        source = self._get_quote_detail_tabs_source()
-
-        has_chain_tab = (
-            '"document_chain"' in source
-            or '"document-chain"' in source
-            or '"chain"' in source
-        )
-        assert has_chain_tab, (
-            "quote_detail_tabs must include a 'document_chain' tab in tabs_config"
-        )
-
-    def test_quote_detail_tabs_chain_label_is_russian(self):
-        """
-        The document chain tab must have label "Цепочка документов" or "Цепочка".
+        The tabs_config must include a 'documents' tab (merged with chain).
         """
         source = self._get_quote_detail_tabs_source()
 
-        has_russian_label = (
-            "Цепочка документов" in source
-            or "Цепочка" in source
-        )
-        assert has_russian_label, (
-            'Document chain tab must have label "Цепочка документов" or "Цепочка"'
+        assert '"documents"' in source, (
+            "quote_detail_tabs must include a 'documents' tab in tabs_config"
         )
 
-    def test_quote_detail_tabs_chain_links_to_correct_url(self):
+    def test_quote_detail_tabs_no_separate_chain_tab(self):
         """
-        The document chain tab must link to /quotes/{quote_id}/document-chain.
+        No separate document_chain tab should exist (merged into documents).
         """
         source = self._get_quote_detail_tabs_source()
 
-        assert "/document-chain" in source, (
-            "Document chain tab must link to /quotes/{quote_id}/document-chain URL"
+        assert '"document_chain"' not in source, (
+            "Separate document_chain tab should be removed (merged into documents)"
+        )
+
+    def test_quote_detail_tabs_documents_label(self):
+        """
+        The documents tab should have label "Документы".
+        """
+        source = self._get_quote_detail_tabs_source()
+
+        assert "Документы" in source, (
+            'Documents tab must have label "Документы"'
         )
 
 

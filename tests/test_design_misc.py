@@ -203,27 +203,22 @@ class TestM6SpecControlSeparators:
 # ==============================================================================
 
 class TestM8DocumentChainHeader:
-    """The document chain page header should use card-elevated class
-    with gradient styling, matching other page headers."""
+    """The document chain section is now merged into the Documents tab.
+    Verify it exists as a helper function called from the documents route."""
 
-    def test_document_chain_header_has_card_elevated(self):
-        """Document chain page should wrap its title in a card-elevated
-        or gradient header card, not a plain Div."""
+    def test_document_chain_merged_into_documents(self):
+        """Document chain should be a helper section within the documents route,
+        not a standalone page (route was removed in tab consolidation)."""
         source = _read_main_source()
-        # Find the document-chain route handler
-        route_start = source.find('@rt("/quotes/{quote_id}/document-chain")')
-        assert route_start != -1, "Document chain route not found"
-
-        # Extract the handler (up to next @rt)
-        handler_end = source.find('\n@rt(', route_start + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler_source = source[route_start:handler_end]
-
-        assert 'card-elevated' in handler_source, (
-            "Document chain page header uses a plain Div with inline styles "
-            "instead of the card-elevated class. Other page headers use "
-            'cls="card-elevated" for consistent gradient card styling.'
+        # The standalone route should NOT exist
+        assert '@rt("/quotes/{quote_id}/document-chain")' not in source, (
+            "Standalone document-chain route should have been removed — "
+            "document chain is now merged into the Documents tab."
+        )
+        # The helper function should exist
+        assert '_render_document_chain_section' in source, (
+            "Expected _render_document_chain_section helper for the merged "
+            "document chain section within the Documents tab."
         )
 
 
