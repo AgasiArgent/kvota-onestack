@@ -7783,8 +7783,15 @@ def get(session):
 
 
 def _render_summary_tab(quote, customer, seller_companies, contacts, items, creator_name,
-                        created_at_display, expiry_display):
-    """Render read-only summary tab with white cards (same design as customer detail page)."""
+                        created_at_display, expiry_display,
+                        quote_controller_name=None, spec_controller_name=None,
+                        customs_user_name=None, logistics_user_name=None):
+    """Render read-only summary tab with 6-block layout (3 rows x 2 columns).
+
+    LEFT column:  Block I (Основная), Block II (Дополнительная), Block III (Печать)
+    RIGHT column: Block IV (Расчеты), Block V (Доставка), Block VI (Итого)
+    Row pairing: [I+IV], [II+V], [III+VI]
+    """
 
     # Lookup seller company object
     seller_company = None
@@ -7815,12 +7822,12 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     total_amount = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
     total_profit = float(quote.get("profit_quote_currency") or 0)
 
+    # Margin percentage calculation
+    margin_pct = (total_profit / total_amount) * 100 if total_amount > 0 else 0
+
     # Payment terms
     payment_terms = quote.get("payment_terms") or "—"
     advance_percent = quote.get("advance_percent") or 0
-
-    # Exchange rate
-    exchange_rate_to_usd = quote.get("exchange_rate_to_usd")
 
     # Common styles
     label_style = "color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"
@@ -7856,12 +7863,13 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
         style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem;"
     )
 
-    # --- Card 1: Основная информация ---
+    # --- Block I: Main info (customer/seller + contact phone) ---
     customer_name = (customer or {}).get("name", "—") or "—"
     customer_inn = (customer or {}).get("inn", "—") or "—"
     seller_name = seller_company.name if seller_company else "—"
     seller_inn = getattr(seller_company, "inn", None) or "—" if seller_company else "—"
     contact_name = (contact_person or {}).get("name", "—") if contact_person else "—"
+    contact_phone = (contact_person or {}).get("phone", "—") if contact_person else "—"
 
     # Customer name as clickable link if customer exists
     customer_display = A(
@@ -7880,15 +7888,71 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
             _field("ИНН клиента", customer_inn),
             _field("Организация продавец", seller_name),
             _field("ИНН продавца", seller_inn),
-            _field("Контактное лицо", contact_name, full_width=True),
+            _field("Контактное лицо", contact_name),
+            _field("Телефон", contact_phone),
             style=grid_2col
         ),
         cls="card",
         style=card_style
     )
 
-    # --- Card 2: Доставка ---
+    # --- Block IV: ПОРЯДОК РАСЧЕТОВ (exchange rates + payment terms) ---
+    has_advance = advance_percent and float(advance_percent) > 0
+    advance_display = f"{advance_percent}%" if has_advance else "—"
+
+    card_4 = Div(
+        _card_header("credit-card", "ПОРЯДОК РАСЧЕТОВ"),
+        Div(
+            _field("Условия расчетов", payment_terms),
+            _field("Частичная предоплата", "Да" if has_advance else "Нет"),
+            _field("Размер аванса", advance_display),
+            _field("Валюта КП", currency),
+            _field("Курс USD/RUB на дату КП", "—"),
+            _field("Курс USD/RUB на дату СП", "—"),
+            _field("Курс USD/RUB на дату УПД", "—"),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Block II: ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ (5 workflow actors + dates) ---
+    # Format completion dates
+    def _format_date(date_str):
+        if not date_str:
+            return "—"
+        try:
+            dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
+            return dt.strftime("%d.%m.%Y")
+        except Exception:
+            return "—"
+
+    quote_control_date = _format_date(quote.get("quote_control_completed_at"))
+    spec_control_date = _format_date(quote.get("spec_control_completed_at"))
+    customs_date = _format_date(quote.get("customs_completed_at"))
+    logistics_date = _format_date(quote.get("logistics_completed_at"))
+
     card_2 = Div(
+        _card_header("users", "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"),
+        Div(
+            _field("Создатель", creator_name or "—"),
+            _field("Дата создания", created_at_display),
+            _field("Контролер КП", quote_controller_name or "—"),
+            _field("Дата проверки КП", quote_control_date),
+            _field("Контролер СП", spec_controller_name or "—"),
+            _field("Дата проверки СП", spec_control_date),
+            _field("Таможенный менеджер", customs_user_name or "—"),
+            _field("Дата таможни", customs_date),
+            _field("Логистический менеджер", logistics_user_name or "—"),
+            _field("Дата логистики", logistics_date),
+            style=grid_2col
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Block V: ДОСТАВКА ---
+    card_5 = Div(
         _card_header("truck", "ДОСТАВКА"),
         Div(
             _field("Тип сделки", delivery_method_label),
@@ -7902,84 +7966,8 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
         style=card_style
     )
 
-    # --- Card 3: Дополнительная информация ---
-    # Parse sales_checklist for tender info
-    sales_checklist = quote.get("sales_checklist")
-    is_tender = False
-    if sales_checklist:
-        if isinstance(sales_checklist, str):
-            try:
-                sales_checklist = json.loads(sales_checklist)
-            except (json.JSONDecodeError, TypeError):
-                sales_checklist = {}
-        is_tender = sales_checklist.get("is_tender", False) if isinstance(sales_checklist, dict) else False
-    tender_display = "Да" if is_tender else "Нет"
-
+    # --- Block III: ИНФОРМАЦИЯ ДЛЯ ПЕЧАТИ ---
     card_3 = Div(
-        _card_header("file-text", "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"),
-        Div(
-            _field("Тендер ФЗ", tender_display),
-            _field("Создатель", creator_name or "—"),
-            _field("Дата создания", created_at_display),
-            _field("Номер КП", quote.get("idn_quote") or "—"),
-            _field("Дополнительно", quote.get("notes") or "—", full_width=True),
-            style=grid_2col
-        ),
-        cls="card",
-        style=card_style
-    )
-
-    # --- Card 4: Порядок расчетов ---
-    has_advance = advance_percent and float(advance_percent) > 0
-    advance_display = f"{advance_percent}%" if has_advance else "—"
-
-    exchange_rate_display = "—"
-    if exchange_rate_to_usd and float(exchange_rate_to_usd) > 0:
-        exchange_rate_display = f"{float(exchange_rate_to_usd):.4f}"
-
-    card_4 = Div(
-        _card_header("credit-card", "ПОРЯДОК РАСЧЕТОВ"),
-        Div(
-            _field("Условия расчетов", payment_terms),
-            _field("Частичная предоплата", "Да" if has_advance else "Нет"),
-            _field("Размер аванса", advance_display),
-            _field("Валюта КП", currency),
-            _field("Курс к USD", exchange_rate_display),
-            style=grid_2col
-        ),
-        cls="card",
-        style=card_style
-    )
-
-    # --- Card 5: Итого ---
-    total_amount_display = f"{total_amount:,.2f} {currency_symbol}" if total_amount is not None else "—"
-    total_profit_display = f"{total_profit:,.2f} {currency_symbol}" if total_profit is not None else "—"
-    items_count = len(items)
-
-    card_5 = Div(
-        _card_header("dollar-sign", "ИТОГО"),
-        Div(
-            Div(
-                Div("Общая сумма", style=label_style),
-                Div(total_amount_display, style="color: #374151; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
-            ),
-            Div(
-                Div(f"Общий профит ({currency})", style=label_style),
-                Div(total_profit_display,
-                    style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
-            ),
-            Div(
-                Div("Количество позиций", style=label_style),
-                Div(f"{items_count} шт", style=value_style),
-            ),
-            style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;"
-        ),
-        cls="card",
-        style=card_style
-    )
-
-    # --- Card 6: Информация для печати ---
-    card_6 = Div(
         _card_header("printer", "ИНФОРМАЦИЯ ДЛЯ ПЕЧАТИ"),
         Div(
             _field("Дата выставления КП", created_at_display),
@@ -7991,15 +7979,51 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
         style=card_style
     )
 
-    # --- Layout: 2-column rows ---
+    # --- Block VI: ИТОГО (2-column grid: total, profit, count, margin) ---
+    total_amount_display = f"{total_amount:,.2f} {currency_symbol}" if total_amount is not None else "—"
+    total_profit_display = f"{total_profit:,.2f} {currency_symbol}" if total_profit is not None else "—"
+    items_count = len(items)
+    margin_display = f"{margin_pct:.1f}%"
+
+    card_6 = Div(
+        _card_header("dollar-sign", "ИТОГО"),
+        Div(
+            Div(
+                Div("Общая сумма", style=label_style),
+                Div(total_amount_display, style="color: #374151; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            Div(
+                Div("Количество позиций", style=label_style),
+                Div(f"{items_count} шт", style=value_style),
+            ),
+            Div(
+                Div(f"Общий профит ({currency})", style=label_style),
+                Div(total_profit_display,
+                    style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            Div(
+                Div("Маржа %", style=label_style),
+                Div(margin_display,
+                    style=f"color: {'#10b981' if margin_pct > 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;"
+        ),
+        cls="card",
+        style=card_style
+    )
+
+    # --- Layout: 3 rows x 2 columns ---
+    # Row 1: Block I (Основная) + Block IV (Расчеты)
+    # Row 2: Block II (Дополнительная) + Block V (Доставка)
+    # Row 3: Block III (Печать) + Block VI (Итого)
     return Div(
         action_buttons,
-        # Row 1
-        Div(card_1, card_2, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
-        # Row 2
-        Div(card_3, card_4, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
-        # Row 3
-        Div(card_5, card_6, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        # Row 1: Block I + Block IV
+        Div(card_1, card_4, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        # Row 2: Block II + Block V
+        Div(card_2, card_5, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        # Row 3: Block III + Block VI
+        Div(card_3, card_6, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
         id="tab-content",
         style="margin-top: 20px;"
     )
@@ -8068,6 +8092,59 @@ def get(quote_id: str, session, tab: str = "summary"):
                 .execute()
             if creator_result.data and creator_result.data[0].get("full_name"):
                 creator_name = creator_result.data[0]["full_name"]
+        except Exception:
+            pass
+
+    # Look up workflow actor names from user_profiles (quote_controller, spec_controller, customs, logistics)
+    quote_controller_name = None
+    if quote.get("quote_controller_id"):
+        try:
+            qc_result = supabase.table("user_profiles") \
+                .select("full_name") \
+                .eq("user_id", quote["quote_controller_id"]) \
+                .limit(1) \
+                .execute()
+            if qc_result.data and qc_result.data[0].get("full_name"):
+                quote_controller_name = qc_result.data[0]["full_name"]
+        except Exception:
+            pass
+
+    spec_controller_name = None
+    if quote.get("spec_controller_id"):
+        try:
+            sc_result = supabase.table("user_profiles") \
+                .select("full_name") \
+                .eq("user_id", quote["spec_controller_id"]) \
+                .limit(1) \
+                .execute()
+            if sc_result.data and sc_result.data[0].get("full_name"):
+                spec_controller_name = sc_result.data[0]["full_name"]
+        except Exception:
+            pass
+
+    customs_user_name = None
+    if quote.get("assigned_customs_user"):
+        try:
+            cu_result = supabase.table("user_profiles") \
+                .select("full_name") \
+                .eq("user_id", quote["assigned_customs_user"]) \
+                .limit(1) \
+                .execute()
+            if cu_result.data and cu_result.data[0].get("full_name"):
+                customs_user_name = cu_result.data[0]["full_name"]
+        except Exception:
+            pass
+
+    logistics_user_name = None
+    if quote.get("assigned_logistics_user"):
+        try:
+            lu_result = supabase.table("user_profiles") \
+                .select("full_name") \
+                .eq("user_id", quote["assigned_logistics_user"]) \
+                .limit(1) \
+                .execute()
+            if lu_result.data and lu_result.data[0].get("full_name"):
+                logistics_user_name = lu_result.data[0]["full_name"]
         except Exception:
             pass
 
@@ -8216,7 +8293,11 @@ def get(quote_id: str, session, tab: str = "summary"):
     if tab == "summary":
         summary_content = _render_summary_tab(
             quote, customer, seller_companies, contacts, items, creator_name,
-            created_at_display, expiry_display
+            created_at_display, expiry_display,
+            quote_controller_name=quote_controller_name,
+            spec_controller_name=spec_controller_name,
+            customs_user_name=customs_user_name,
+            logistics_user_name=logistics_user_name,
         )
         return page_layout(f"Quote {quote.get('idn_quote', '')}",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
