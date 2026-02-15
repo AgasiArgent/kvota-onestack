@@ -8306,6 +8306,18 @@ def get(quote_id: str, session, tab: str = "summary"):
             session=session
         )
 
+    # Precompute ИТОГО block values
+    _itogo_total = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
+    _itogo_profit = float(quote.get("profit_quote_currency") or 0)
+    _itogo_currency = quote.get("currency", "RUB")
+    _itogo_items_count = len(items)
+    _itogo_margin = (_itogo_profit / _itogo_total * 100) if _itogo_total > 0 else 0
+    _itogo_total_display = format_money(_itogo_total, _itogo_currency) if _itogo_total > 0 else "—"
+    _itogo_profit_display = format_money(_itogo_profit, _itogo_currency) if _itogo_profit != 0 else "—"
+    _itogo_profit_color = "#16a34a" if _itogo_profit > 0 else "#dc2626" if _itogo_profit < 0 else "#64748b"
+    _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_total > 0 else "—"
+    _itogo_margin_color = "#16a34a" if _itogo_profit > 0 else "#64748b"
+
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Persistent header with IDN, status, client name
         quote_header(quote, workflow_status, (customer or {}).get("name")),
@@ -8316,16 +8328,40 @@ def get(quote_id: str, session, tab: str = "summary"):
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
 
-        # Card 1: Основная информация
+        # Block I: ОСНОВНАЯ ИНФОРМАЦИЯ (2-column grid)
         Div(
             Div(
                 icon("file-text", size=16, color="#64748b"),
                 Span(" ОСНОВНАЯ ИНФОРМАЦИЯ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
                 style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
-            # 2-column grid: Customer + Seller
+            # 2-column grid layout (col 1: dropdowns, col 2: info + additional_info)
             Div(
-                # Customer dropdown
+                # Col 1, Row 1: Seller Company dropdown
+                Div(
+                    Div("ПРОДАВЕЦ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Select(
+                        Option("—", value=""),
+                        *[Option(
+                            f"{sc.supplier_code} - {sc.name}" if sc.supplier_code else sc.name,
+                            value=str(sc.id),
+                            selected=(str(sc.id) == str(quote.get("seller_company_id") or ""))
+                        ) for sc in seller_companies],
+                        name="seller_company_id",
+                        id="inline-seller",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "seller_company_id", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                ),
+                # Col 2, Row 1: Creator
+                Div(
+                    Div("СОЗДАЛ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Div(creator_name or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                ),
+                # Col 1, Row 2: Customer dropdown
                 Div(
                     Div("КЛИЕНТ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Select(
@@ -8349,51 +8385,76 @@ def get(quote_id: str, session, tab: str = "summary"):
                         });
                     """),
                 ),
-                # Seller Company dropdown
+                # Col 2, Row 2: Created at
                 Div(
-                    Div("ПРОДАВЕЦ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Div("ДАТА СОЗДАНИЯ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Div(created_at_display, style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                ),
+                # Col 1, Row 3: Contact Person
+                Div(
+                    Div("КОНТАКТНОЕ ЛИЦО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
                     Select(
-                        Option("—", value=""),
+                        Option("— Не выбрано —", value=""),
                         *[Option(
-                            f"{sc.supplier_code} - {sc.name}" if sc.supplier_code else sc.name,
-                            value=str(sc.id),
-                            selected=(str(sc.id) == str(quote.get("seller_company_id") or ""))
-                        ) for sc in seller_companies],
-                        name="seller_company_id",
-                        id="inline-seller",
+                            f"{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
+                            value=c["id"],
+                            selected=(c["id"] == quote.get("contact_person_id"))
+                        ) for c in contacts],
+                        name="contact_person_id",
+                        id="inline-contact-person",
                         style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "seller_company_id", value: event.target.value}',
+                        hx_vals='js:{field: "contact_person_id", value: event.target.value}',
                         hx_swap="none"
                     ),
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-            ),
-            # Contact Person (full width)
-            Div(
-                Div("КОНТАКТНОЕ ЛИЦО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
-                Select(
-                    Option("— Не выбрано —", value=""),
-                    *[Option(
-                        f"{c['name']}" + (f" ({c.get('position', '')})" if c.get('position') else ""),
-                        value=c["id"],
-                        selected=(c["id"] == quote.get("contact_person_id"))
-                    ) for c in contacts],
-                    name="contact_person_id",
-                    id="inline-contact-person",
-                    style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; max-width: 400px;",
-                    hx_patch=f"/quotes/{quote_id}/inline",
-                    hx_trigger="change",
-                    hx_vals='js:{field: "contact_person_id", value: event.target.value}',
-                    hx_swap="none"
+                # Col 2, Row 3: Additional info (NEW textarea field)
+                Div(
+                    Div("ДОП. ИНФОРМАЦИЯ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Textarea(
+                        quote.get("additional_info") or "",
+                        name="additional_info",
+                        id="inline-additional-info",
+                        placeholder="Заметки, комментарии...",
+                        rows="3",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box; font-family: inherit; resize: vertical;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "additional_info", value: event.target.value}',
+                        hx_swap="none"
+                    ),
                 ),
+                # Col 1, Row 4: Validity days (inline-editable)
+                Div(
+                    Div("СРОК ДЕЙСТВИЯ (ДНЕЙ)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Input(
+                        type="number",
+                        value=str(quote.get("validity_days") or 30),
+                        min="1",
+                        name="validity_days",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box; max-width: 120px;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "validity_days", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                ),
+                # Col 2, Row 4: Expiry date (calculated, with red/green indicator)
+                Div(
+                    Div("ДЕЙСТВИТЕЛЕН ДО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Span(
+                        expiry_display,
+                        style=f"font-size: 14px; padding: 6px 10px; border-radius: 6px; display: inline-block; font-weight: 500; {'background: #fef2f2; color: #dc2626;' if is_expired else 'background: #f0fdf4; color: #16a34a;'}" if expiry_display != "\u2014" else "font-size: 14px; color: #334155; padding: 8px 0; display: block;"
+                    ),
+                ),
+                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1.5rem;"
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ),
 
-        # Card 2: Доставка
+        # Block II: ДОСТАВКА (clean row with address dropdown)
         Div(
             Div(
                 icon("truck", size=16, color="#64748b"),
@@ -8401,8 +8462,25 @@ def get(quote_id: str, session, tab: str = "summary"):
                 style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
 
-            # Row 2: Delivery City, Country, Method, Terms (flexbox)
+            # Row: Страна, Город, Адрес поставки, Способ, Условия
             Div(
+                # Delivery Country
+                Div(
+                    Label("СТРАНА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Input(
+                        type="text",
+                        value=quote.get("delivery_country") or "",
+                        placeholder="Введите страну",
+                        name="delivery_country",
+                        id="delivery-country-input",
+                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                        hx_patch=f"/quotes/{quote_id}/inline",
+                        hx_trigger="change",
+                        hx_vals='js:{field: "delivery_country", value: event.target.value}',
+                        hx_swap="none"
+                    ),
+                    style="flex: 1 1 120px; min-width: 120px;"
+                ),
                 # Delivery City
                 Div(
                     Label("ГОРОД", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
@@ -8451,22 +8529,22 @@ def get(quote_id: str, session, tab: str = "summary"):
                     """),
                     style="flex: 1 1 120px; min-width: 120px;"
                 ),
-                # Delivery Country
+                # АДРЕС поставки (delivery_address)
                 Div(
-                    Label("СТРАНА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                    Label("АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
                     Input(
                         type="text",
-                        value=quote.get("delivery_country") or "",
-                        placeholder="Введите страну",
-                        name="delivery_country",
-                        id="delivery-country-input",
+                        value=quote.get("delivery_address") or "",
+                        placeholder="Адрес поставки",
+                        name="delivery_address",
+                        id="delivery-address-input",
                         style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
-                        hx_vals='js:{field: "delivery_country", value: event.target.value}',
+                        hx_vals='js:{field: "delivery_address", value: event.target.value}',
                         hx_swap="none"
                     ),
-                    style="flex: 1 1 120px; min-width: 120px;"
+                    style="flex: 2 1 200px; min-width: 200px;"
                 ),
                 # Delivery Method
                 Div(
@@ -8479,21 +8557,6 @@ def get(quote_id: str, session, tab: str = "summary"):
                         hx_patch=f"/quotes/{quote_id}/inline",
                         hx_trigger="change",
                         hx_vals='js:{field: "delivery_method", value: event.target.value}',
-                        hx_swap="none"
-                    ),
-                    style="flex: 1 1 160px; min-width: 160px;"
-                ),
-                # Delivery Priority
-                Div(
-                    Label("ПРИОРИТЕТ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Select(
-                        Option("—", value=""),
-                        *[Option(label, value=val, selected=(val == quote.get("delivery_priority"))) for val, label in delivery_priority_options],
-                        name="delivery_priority",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_priority", value: event.target.value}',
                         hx_swap="none"
                     ),
                     style="flex: 1 1 160px; min-width: 160px;"
@@ -8518,66 +8581,62 @@ def get(quote_id: str, session, tab: str = "summary"):
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ),
 
-        # Card 3: Дополнительная информация
+        # Block III: ИТОГО (summary metrics)
         Div(
             Div(
-                icon("clock", size=16, color="#64748b"),
-                Span(" ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                icon("bar-chart-2", size=16, color="#64748b"),
+                Span(" ИТОГО", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
                 style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
             ),
-            # 2-column grid
             Div(
-                # Created at
                 Div(
-                    Div("ДАТА СОЗДАНИЯ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
-                    Div(created_at_display, style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                    Div("Общая сумма", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                    Div(_itogo_total_display, style="font-size: 1.1rem; font-weight: 600; color: #1e40af;"),
+                    style="text-align: center; padding: 0.5rem;"
                 ),
-                # Creator
                 Div(
-                    Div("СОЗДАЛ", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
-                    Div(creator_name or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                    Div("Общий профит", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                    Div(_itogo_profit_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_profit_color};"),
+                    style="text-align: center; padding: 0.5rem;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+                Div(
+                    Div("Количество позиций", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                    Div(str(_itogo_items_count), style="font-size: 1.1rem; font-weight: 600; color: #374151;"),
+                    style="text-align: center; padding: 0.5rem;"
+                ),
+                Div(
+                    Div("Маржа", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                    Div(_itogo_margin_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_margin_color};"),
+                    style="text-align: center; padding: 0.5rem;"
+                ),
+                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ),
 
-        # Card 4: Информация для печати
+        # Action buttons bar ABOVE items table: Рассчитать (left), Отправить на контроль (right)
         Div(
             Div(
-                icon("printer", size=16, color="#64748b"),
-                Span(" ИНФОРМАЦИЯ ДЛЯ ПЕЧАТИ", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
-            ),
-            Div(
-                # Validity days (inline-editable)
+                # Left: Рассчитать
                 Div(
-                    Div("СРОК ДЕЙСТВИЯ (ДНЕЙ)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
-                    Input(
-                        type="number",
-                        value=str(quote.get("validity_days") or 30),
-                        min="1",
-                        name="validity_days",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box; max-width: 120px;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "validity_days", value: event.target.value}',
-                        hx_swap="none"
-                    ),
+                    btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                    style="display: flex; gap: 0.5rem;"
                 ),
-                # Expiry date (calculated, with red/green indicator)
+                # Right: Отправить на контроль (for pending_sales_review status)
                 Div(
-                    Div("ДЕЙСТВИТЕЛЕН ДО", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
-                    Span(
-                        expiry_display,
-                        style=f"font-size: 14px; padding: 6px 10px; border-radius: 6px; display: inline-block; font-weight: 500; {'background: #fef2f2; color: #dc2626;' if is_expired else 'background: #f0fdf4; color: #16a34a;'}" if expiry_display != "\u2014" else "font-size: 14px; color: #334155; padding: 8px 0; display: block;"
-                    ),
+                    (Form(
+                        btn("Отправить на контроль", variant="secondary", icon_name="file-text", type="submit"),
+                        method="post",
+                        action=f"/quotes/{quote_id}/submit-quote-control",
+                        style="display: inline;"
+                    ) if workflow_status == "pending_sales_review" and not is_revision and not is_justification_needed else None),
+                    style="display: flex; gap: 0.5rem;"
                 ),
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"
             ),
             cls="card",
-            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+            style="background: white; border-radius: 0.75rem; padding: 0.75rem 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ),
 
         # Products (Handsontable spreadsheet) with gradient styling
@@ -10986,8 +11045,9 @@ async def inline_update_quote(quote_id: str, session, request):
     editable_fields = [
         'customer_id', 'seller_company_id', 'contact_person_id',
         'delivery_city', 'delivery_country', 'delivery_method',
-        'delivery_priority', 'delivery_terms', 'currency',
-        'payment_terms', 'notes', 'validity_days'
+        'delivery_priority', 'delivery_terms', 'delivery_address',
+        'currency', 'payment_terms', 'notes', 'validity_days',
+        'additional_info'
     ]
 
     if field not in editable_fields:
