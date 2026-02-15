@@ -8503,176 +8503,183 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         ) if subtab == "info" else None,
 
-        # Block II: ДОСТАВКА (clean row with address dropdown)
+        # Block II+III: ДОСТАВКА (left) + summary metrics (right) side-by-side
         Div(
+            # Left column: ДОСТАВКА card
             Div(
-                icon("truck", size=16, color="#64748b"),
-                Span(" ДОСТАВКА", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
-            ),
-
-            # Row: Страна, Город, Адрес поставки, Способ, Условия
-            Div(
-                # Delivery Country
                 Div(
-                    Label("СТРАНА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Input(
-                        type="text",
-                        value=quote.get("delivery_country") or "",
-                        placeholder="Введите страну",
-                        name="delivery_country",
-                        id="delivery-country-input",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_country", value: event.target.value}',
-                        hx_swap="none"
-                    ),
-                    style="flex: 1 1 120px; min-width: 120px;"
+                    icon("truck", size=16, color="#64748b"),
+                    Span(" ДОСТАВКА", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
                 ),
-                # Delivery City
+
+                # Row: Страна, Город, Адрес поставки, Способ, Условия
                 Div(
-                    Label("ГОРОД", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Input(
-                        type="text",
-                        value=quote.get("delivery_city") or "",
-                        placeholder="Введите город",
-                        name="delivery_city",
-                        id="delivery-city-input",
-                        list="cities-datalist",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_get="/api/cities/search",
-                        hx_trigger="input changed delay:300ms",
-                        hx_target="#cities-datalist",
-                        hx_vals='js:{"q": document.getElementById("delivery-city-input").value}',
-                        hx_swap="innerHTML",
-                        onblur="if(typeof saveDeliveryCity==='function') saveDeliveryCity(this.value)",
-                        onchange="if(typeof saveDeliveryCity==='function'){saveDeliveryCity(this.value); syncCountryFromCity(this);}",
+                    # Delivery Country
+                    Div(
+                        Label("СТРАНА", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                        Input(
+                            type="text",
+                            value=quote.get("delivery_country") or "",
+                            placeholder="Введите страну",
+                            name="delivery_country",
+                            id="delivery-country-input",
+                            style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                            hx_patch=f"/quotes/{quote_id}/inline",
+                            hx_trigger="change",
+                            hx_vals='js:{field: "delivery_country", value: event.target.value}',
+                            hx_swap="none"
+                        ),
+                        style="flex: 1 1 120px; min-width: 120px;"
                     ),
-                    Datalist(id="cities-datalist"),
-                    # Always-rendered save function for delivery city (not conditional on workflow status)
-                    Script(f"""
-                        function saveDeliveryCity(value) {{
-                            fetch('/quotes/{quote_id}/inline', {{
-                                method: 'PATCH',
-                                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-                                body: 'field=delivery_city&value=' + encodeURIComponent(value)
-                            }});
-                        }}
-                        function syncCountryFromCity(cityInput) {{
-                            var datalist = document.getElementById('cities-datalist');
-                            var countryInput = document.getElementById('delivery-country-input');
-                            if (!datalist || !countryInput) return;
-                            var options = datalist.querySelectorAll('option');
-                            for (var i = 0; i < options.length; i++) {{
-                                if (options[i].value === cityInput.value) {{
-                                    var country = options[i].getAttribute('data-country');
-                                    if (country) {{
-                                        countryInput.value = country;
-                                        countryInput.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    # Delivery City
+                    Div(
+                        Label("ГОРОД", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                        Input(
+                            type="text",
+                            value=quote.get("delivery_city") or "",
+                            placeholder="Введите город",
+                            name="delivery_city",
+                            id="delivery-city-input",
+                            list="cities-datalist",
+                            style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                            hx_get="/api/cities/search",
+                            hx_trigger="input changed delay:300ms",
+                            hx_target="#cities-datalist",
+                            hx_vals='js:{"q": document.getElementById("delivery-city-input").value}',
+                            hx_swap="innerHTML",
+                            onblur="if(typeof saveDeliveryCity==='function') saveDeliveryCity(this.value)",
+                            onchange="if(typeof saveDeliveryCity==='function'){saveDeliveryCity(this.value); syncCountryFromCity(this);}",
+                        ),
+                        Datalist(id="cities-datalist"),
+                        # Always-rendered save function for delivery city (not conditional on workflow status)
+                        Script(f"""
+                            function saveDeliveryCity(value) {{
+                                fetch('/quotes/{quote_id}/inline', {{
+                                    method: 'PATCH',
+                                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                    body: 'field=delivery_city&value=' + encodeURIComponent(value)
+                                }});
+                            }}
+                            function syncCountryFromCity(cityInput) {{
+                                var datalist = document.getElementById('cities-datalist');
+                                var countryInput = document.getElementById('delivery-country-input');
+                                if (!datalist || !countryInput) return;
+                                var options = datalist.querySelectorAll('option');
+                                for (var i = 0; i < options.length; i++) {{
+                                    if (options[i].value === cityInput.value) {{
+                                        var country = options[i].getAttribute('data-country');
+                                        if (country) {{
+                                            countryInput.value = country;
+                                            countryInput.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                        }}
+                                        break;
                                     }}
-                                    break;
                                 }}
                             }}
-                        }}
-                    """),
-                    style="flex: 1 1 120px; min-width: 120px;"
-                ),
-                # АДРЕС поставки (delivery_address)
-                Div(
-                    Label("АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Input(
-                        type="text",
-                        value=quote.get("delivery_address") or "",
-                        placeholder="Адрес поставки",
-                        name="delivery_address",
-                        id="delivery-address-input",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_address", value: event.target.value}',
-                        hx_swap="none"
+                        """),
+                        style="flex: 1 1 120px; min-width: 120px;"
                     ),
-                    style="flex: 2 1 200px; min-width: 200px;"
-                ),
-                # Delivery Method
-                Div(
-                    Label("СПОСОБ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Select(
-                        Option("—", value=""),
-                        *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
-                        name="delivery_method",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_method", value: event.target.value}',
-                        hx_swap="none"
+                    # АДРЕС поставки (delivery_address)
+                    Div(
+                        Label("АДРЕС", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                        Input(
+                            type="text",
+                            value=quote.get("delivery_address") or "",
+                            placeholder="Адрес поставки",
+                            name="delivery_address",
+                            id="delivery-address-input",
+                            style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                            hx_patch=f"/quotes/{quote_id}/inline",
+                            hx_trigger="change",
+                            hx_vals='js:{field: "delivery_address", value: event.target.value}',
+                            hx_swap="none"
+                        ),
+                        style="flex: 2 1 200px; min-width: 200px;"
                     ),
-                    style="flex: 1 1 160px; min-width: 160px;"
-                ),
-                # Delivery Terms
-                Div(
-                    Label("УСЛОВИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
-                    Select(
-                        *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
-                        name="delivery_terms",
-                        style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
-                        hx_patch=f"/quotes/{quote_id}/inline",
-                        hx_trigger="change",
-                        hx_vals='js:{field: "delivery_terms", value: event.target.value}',
-                        hx_swap="none"
+                    # Delivery Method
+                    Div(
+                        Label("СПОСОБ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                        Select(
+                            Option("—", value=""),
+                            *[Option(label, value=val, selected=(val == quote.get("delivery_method"))) for val, label in delivery_method_options],
+                            name="delivery_method",
+                            style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                            hx_patch=f"/quotes/{quote_id}/inline",
+                            hx_trigger="change",
+                            hx_vals='js:{field: "delivery_method", value: event.target.value}',
+                            hx_swap="none"
+                        ),
+                        style="flex: 1 1 160px; min-width: 160px;"
                     ),
-                    style="flex: 1 1 100px; min-width: 100px;"
+                    # Delivery Terms
+                    Div(
+                        Label("УСЛОВИЯ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.375rem; display: block;"),
+                        Select(
+                            *[Option(term, value=term, selected=(term == quote.get("delivery_terms"))) for term in delivery_terms_options],
+                            name="delivery_terms",
+                            style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; box-sizing: border-box;",
+                            hx_patch=f"/quotes/{quote_id}/inline",
+                            hx_trigger="change",
+                            hx_vals='js:{field: "delivery_terms", value: event.target.value}',
+                            hx_swap="none"
+                        ),
+                        style="flex: 1 1 100px; min-width: 100px;"
+                    ),
+                    style="display: flex; flex-wrap: wrap; gap: 1rem;"
                 ),
-                style="display: flex; flex-wrap: wrap; gap: 1rem;"
+                cls="card",
+                style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
             ),
-            cls="card",
-            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+            # Right column: ИТОГО card
+            Div(
+                Div(
+                    icon("bar-chart-2", size=16, color="#64748b"),
+                    Span(" ИТОГО", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
+                ),
+                Div(
+                    Div(
+                        Div("Общая сумма", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div(_itogo_total_display, style="font-size: 1.1rem; font-weight: 600; color: #1e40af;"),
+                        style="text-align: center; padding: 0.5rem;"
+                    ),
+                    Div(
+                        Div("Общий профит", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div(_itogo_profit_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_profit_color};"),
+                        style="text-align: center; padding: 0.5rem;"
+                    ),
+                    Div(
+                        Div("Количество позиций", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div(str(_itogo_items_count), style="font-size: 1.1rem; font-weight: 600; color: #374151;"),
+                        style="text-align: center; padding: 0.5rem;"
+                    ),
+                    Div(
+                        Div("Маржа", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div(_itogo_margin_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_margin_color};"),
+                        style="text-align: center; padding: 0.5rem;"
+                    ),
+                    style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                ),
+                cls="card",
+                style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
         ) if subtab == "info" else None,
 
-        # Block III: ИТОГО (summary metrics)
+        # Unified action card ABOVE items table (all buttons in one card)
         Div(
             Div(
-                icon("bar-chart-2", size=16, color="#64748b"),
-                Span(" ИТОГО", style="font-size: 0.7rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
-            ),
-            Div(
+                # Left: Рассчитать, История версий, Валидация Excel, КП PDF, Счёт PDF
                 Div(
-                    Div("Общая сумма", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
-                    Div(_itogo_total_display, style="font-size: 1.1rem; font-weight: 600; color: #1e40af;"),
-                    style="text-align: center; padding: 0.5rem;"
+                    btn_link(_calc_btn_label, href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                    btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
+                    btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
+                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
+                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
                 ),
-                Div(
-                    Div("Общий профит", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
-                    Div(_itogo_profit_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_profit_color};"),
-                    style="text-align: center; padding: 0.5rem;"
-                ),
-                Div(
-                    Div("Количество позиций", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
-                    Div(str(_itogo_items_count), style="font-size: 1.1rem; font-weight: 600; color: #374151;"),
-                    style="text-align: center; padding: 0.5rem;"
-                ),
-                Div(
-                    Div("Маржа", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
-                    Div(_itogo_margin_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_margin_color};"),
-                    style="text-align: center; padding: 0.5rem;"
-                ),
-                style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem;"
-            ),
-            cls="card",
-            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ) if subtab == "info" else None,
-
-        # Action buttons bar ABOVE items table (left), Отправить на контроль (right)
-        Div(
-            Div(
-                # Left: Рассчитать
-                Div(
-                    btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                    style="display: flex; gap: 0.5rem;"
-                ),
-                # Right: Отправить на контроль (for pending_sales_review status)
+                # Right: Отправить на контроль + Удалить КП
                 Div(
                     (Form(
                         btn("Отправить на контроль", variant="secondary", icon_name="file-text", type="submit"),
@@ -8680,7 +8687,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                         action=f"/quotes/{quote_id}/submit-quote-control",
                         style="display: inline;"
                     ) if workflow_status == "pending_sales_review" and not is_revision and not is_justification_needed else None),
-                    style="display: flex; gap: 0.5rem;"
+                    btn("Удалить КП", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()"),
+                    style="display: flex; gap: 0.5rem; align-items: center;"
                 ),
                 style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"
             ),
@@ -9750,40 +9758,11 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             cls="card", style="border-left: 4px solid #dc2626;"
         ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Actions section (only for non-draft quotes - after calculation, products subtab only)
-        (Div(
-            Div(
-                # Left: primary actions
-                Div(
-                    btn_link(_calc_btn_label, href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                    btn_link("\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u0435\u0440\u0441\u0438\u0439", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
-                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
-                ),
-                # Right: export/download (conditional per button based on workflow status)
-                Div(
-                    btn_link("\u0412\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
-                    btn_link("\u041a\u041f PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
-                    btn_link("\u0421\u0447\u0451\u0442 PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
-                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
-                ),
-                style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;"
-            ),
-            cls="card",
-            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
-        ) if workflow_status != "draft" else None) if subtab == "products" else None,
-
         # Activity log (workflow transitions history, products subtab only)
         workflow_transition_history(quote_id, limit=50, collapsed=True) if subtab == "products" else None,
 
-        # Delete quote button (soft delete, products subtab only)
-        (Div(
-            Div(
-                btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
-                btn("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u041a\u041f", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()", cls="ml-auto"),
-                style="display: flex; align-items: center; gap: 1rem;"
-            ),
-            style="margin-top: 1rem;"
-        )) if subtab == "products" else Div(
+        # Back button (both subtabs)
+        Div(
             Div(
                 btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; align-items: center; gap: 1rem;"
