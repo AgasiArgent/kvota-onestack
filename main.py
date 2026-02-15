@@ -16018,96 +16018,92 @@ def get(quote_id: str, session):
             cls="card", style="background: #fffbeb; margin-bottom: 1rem;"
         ) if not can_edit else None,
 
-        # Two-column layout
+        # Invoices section (full-width above items)
         Div(
-            # Left panel - Invoices
+            # Section header with icon
             Div(
-                # Section header with icon
-                Div(
-                    icon("file-text", size=16, color="#64748b"),
-                    Span(" ИНВОЙСЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                    A(icon("plus", size=14), " Новый",
-                      href="#", onclick="openCreateInvoiceModal(); return false;",
-                      style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem; margin-left: auto;"
-                    ) if can_edit else None,
-                    style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
-                ),
-
-                # Invoice cards (always has id for HTMX target)
-                Div(
-                    *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
-                    id="invoices-list",
-                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;"
-                ) if invoices else Div(
-                    icon("inbox", size=24, color="#94a3b8"),
-                    P("Нет инвойсов", style="color: #64748b; text-align: center; margin: 0.5rem 0 0;"),
-                    P("Создайте инвойс, чтобы начать", style="color: #94a3b8; text-align: center; font-size: 0.875rem; margin: 0.25rem 0 0;"),
-                    style="padding: 2rem 0; text-align: center;",
-                    id="invoices-list"
-                ),
-
-                # Unassigned items count with icon
-                Div(
-                    Div(
-                        icon("alert-triangle", size=14, color="#92400e"),
-                        Span(f" Без инвойса: {unassigned_count}", style="font-weight: 500; color: #92400e; margin-left: 4px;"),
-                        style="padding: 0.5rem 0.75rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 6px; text-align: center; display: flex; align-items: center; justify-content: center;"
-                    ),
-                    style="margin-top: 1rem;"
-                ) if unassigned_count > 0 else None,
-
-                style="width: 280px; flex-shrink: 0; padding-right: 1.5rem; border-right: 1px solid #e2e8f0;",
-                id="invoices-panel"
-            ),
-
-            # Right panel - Items table
-            Div(
-                # Section header with icon
-                Div(
-                    Div(
-                        icon("package", size=16, color="#64748b"),
-                        Span(f" ПОЗИЦИИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
-                        Span(f" ({total_items})", style="font-size: 11px; color: #94a3b8;"),
-                        style="display: flex; align-items: center;"
-                    ),
-                    Div(
-                        Span(id="selection-count", style="margin-right: 1rem; color: #64748b;"),
-                        A(icon("download", size=14), " Excel",
-                          href=f"/procurement/{quote_id}/export",
-                          style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
-                        ),
-                        style="display: flex; align-items: center;"
-                    ),
-                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
-                ),
-
-                # Copy-paste hint with better styling
-                Div(
-                    icon("clipboard", size=14, color="#64748b"),
-                    Span(" Ctrl+V для вставки цен из Excel", style="margin-left: 0.5rem;"),
-                    style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem; display: flex; align-items: center;"
+                icon("file-text", size=16, color="#64748b"),
+                Span(" ИНВОЙСЫ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                A(icon("plus", size=14), " Новый",
+                  href="#", onclick="openCreateInvoiceModal(); return false;",
+                  style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem; margin-left: auto;"
                 ) if can_edit else None,
-
-                # Handsontable container with enhanced styling
-                Div(
-                    Div(id="items-spreadsheet", style="width: 100%; height: 500px; overflow: hidden;"),
-                    cls="handsontable-container"
-                ),
-
-                # Footer with actions
-                Div(
-                    btn("Сохранить", variant="secondary", icon_name="save", id="btn-save", onclick="saveAllChanges()") if can_edit else None,
-                    btn("Завершить закупку", variant="success", icon_name="check", id="btn-complete", onclick="completeProcurement()") if can_edit else None,
-                    btn_link("Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control", variant="primary", icon_name="arrow-up") if is_revision else None,
-                    style="display: flex; gap: 0.75rem; margin-top: 1rem;"
-                ),
-
-                style="flex: 1; padding-left: 1.5rem;",
-                id="items-panel"
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
             ),
 
-            style="display: flex; gap: 0; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 1.25rem;",
-            cls="card"
+            # Invoice cards grid (always has id for HTMX target)
+            Div(
+                *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
+                id="invoices-list",
+                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;"
+            ) if invoices else Div(
+                icon("inbox", size=24, color="#94a3b8"),
+                P("Нет инвойсов", style="color: #64748b; text-align: center; margin: 0.5rem 0 0;"),
+                P("Создайте инвойс, чтобы начать", style="color: #94a3b8; text-align: center; font-size: 0.875rem; margin: 0.25rem 0 0;"),
+                style="padding: 2rem 0; text-align: center;",
+                id="invoices-list"
+            ),
+
+            # Unassigned items count with icon
+            Div(
+                Div(
+                    icon("alert-triangle", size=14, color="#92400e"),
+                    Span(f" Без инвойса: {unassigned_count}", style="font-weight: 500; color: #92400e; margin-left: 4px;"),
+                    style="padding: 0.5rem 0.75rem; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 6px; text-align: center; display: flex; align-items: center; justify-content: center;"
+                ),
+                style="margin-top: 1rem;"
+            ) if unassigned_count > 0 else None,
+
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 1.25rem; margin-bottom: 1rem;",
+            cls="card",
+            id="invoices-panel"
+        ),
+
+        # Items table section (full-width below invoices)
+        Div(
+            # Section header with icon
+            Div(
+                Div(
+                    icon("package", size=16, color="#64748b"),
+                    Span(f" ПОЗИЦИИ", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    Span(f" ({total_items})", style="font-size: 11px; color: #94a3b8;"),
+                    style="display: flex; align-items: center;"
+                ),
+                Div(
+                    Span(id="selection-count", style="margin-right: 1rem; color: #64748b;"),
+                    A(icon("download", size=14), " Excel",
+                      href=f"/procurement/{quote_id}/export",
+                      style="font-size: 0.75rem; color: #3b82f6; display: flex; align-items: center; gap: 0.25rem;"
+                    ),
+                    style="display: flex; align-items: center;"
+                ),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;"
+            ),
+
+            # Copy-paste hint with better styling
+            Div(
+                icon("clipboard", size=14, color="#64748b"),
+                Span(" Ctrl+V для вставки цен из Excel", style="margin-left: 0.5rem;"),
+                style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem; display: flex; align-items: center;"
+            ) if can_edit else None,
+
+            # Handsontable container with enhanced styling
+            Div(
+                Div(id="items-spreadsheet", style="width: 100%; height: 500px; overflow: hidden;"),
+                cls="handsontable-container"
+            ),
+
+            # Footer with actions
+            Div(
+                btn("Сохранить", variant="secondary", icon_name="save", id="btn-save", onclick="saveAllChanges()") if can_edit else None,
+                btn("Завершить закупку", variant="success", icon_name="check", id="btn-complete", onclick="completeProcurement()") if can_edit else None,
+                btn_link("Вернуть на проверку", href=f"/procurement/{quote_id}/return-to-control", variant="primary", icon_name="arrow-up") if is_revision else None,
+                style="display: flex; gap: 0.75rem; margin-top: 1rem;"
+            ),
+
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 1.25rem;",
+            cls="card",
+            id="items-panel"
         ),
 
         # Create Invoice Modal (with all fields including pickup_country, weight, volume)
