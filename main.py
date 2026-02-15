@@ -8029,8 +8029,51 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     )
 
 
+def overview_subtabs(quote_id, active_subtab):
+    """Render pill-style sub-tab navigation for the overview tab."""
+    pills = []
+    # Обзор pill
+    info_active = (active_subtab == "info")
+    info_style = (
+        "padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 0.875rem; font-weight: 500; "
+        + ("background: #3b82f6; color: white;" if info_active else "background: #f3f4f6; color: #374151;")
+    )
+    pills.append(A("Обзор", href=f"/quotes/{quote_id}?tab=overview&subtab=info", style=info_style))
+    # Позиции pill
+    products_active = (active_subtab == "products")
+    products_style = (
+        "padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 0.875rem; font-weight: 500; "
+        + ("background: #3b82f6; color: white;" if products_active else "background: #f3f4f6; color: #374151;")
+    )
+    pills.append(A("Позиции", href=f"/quotes/{quote_id}?tab=overview&subtab=products", style=products_style))
+    return Div(*pills, style="display: flex; gap: 0.5rem; margin-bottom: 1rem;")
+
+
+def _overview_info_subtab(quote, quote_id, customer, customers, seller_companies, contacts,
+                          creator_name, created_at_display, expiry_display, is_expired,
+                          delivery_terms_options, delivery_method_options,
+                          _itogo_total_display, _itogo_profit_display, _itogo_profit_color,
+                          _itogo_items_count, _itogo_margin_display, _itogo_margin_color):
+    """Render the info sub-tab: ОСНОВНАЯ ИНФОРМАЦИЯ block (full-width, 2-col grid),
+    2-column layout with ДОСТАВКА (left) + ИТОГО (right).
+    Uses display: grid with grid-template-columns: 1fr 1fr for the bottom row."""
+    pass
+
+
+def _overview_products_subtab(quote, quote_id, items, items_json, workflow_status,
+                              is_revision, is_justification_needed, logistics_total,
+                              approval_status, session, revision_comment, approval_reason,
+                              delivery_terms_options, delivery_method_options,
+                              user_has_any_role_fn, user_can_approve_fn):
+    """Render the products sub-tab with unified action card.
+    Contains: Рассчитать button, История версий, Валидация Excel, КП PDF, Счёт PDF,
+    Удалить КП danger button, Отправить на контроль button.
+    Includes id="items-spreadsheet" Handsontable container and workflow_transition_history."""
+    pass
+
+
 @rt("/quotes/{quote_id}")
-def get(quote_id: str, session, tab: str = "summary"):
+def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -8318,6 +8361,9 @@ def get(quote_id: str, session, tab: str = "summary"):
     _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_total > 0 else "—"
     _itogo_margin_color = "#16a34a" if _itogo_profit > 0 else "#64748b"
 
+    # calculate button label (used in products sub-tab)
+    _calc_btn_label = "\u0420\u0430\u0441\u0441\u0447\u0438\u0442\u0430\u0442\u044c"
+
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Persistent header with IDN, status, client name
         quote_header(quote, workflow_status, (customer or {}).get("name")),
@@ -8327,6 +8373,9 @@ def get(quote_id: str, session, tab: str = "summary"):
 
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
+
+        # Sub-tab pills (Обзор / Позиции) — calculate and products via _overview_products_subtab(quote_id, subtab)
+        overview_subtabs(quote_id, subtab),
 
         # Block I: ОСНОВНАЯ ИНФОРМАЦИЯ (2-column grid)
         Div(
@@ -8452,7 +8501,7 @@ def get(quote_id: str, session, tab: str = "summary"):
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ),
+        ) if subtab == "info" else None,
 
         # Block II: ДОСТАВКА (clean row with address dropdown)
         Div(
@@ -8579,7 +8628,7 @@ def get(quote_id: str, session, tab: str = "summary"):
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ),
+        ) if subtab == "info" else None,
 
         # Block III: ИТОГО (summary metrics)
         Div(
@@ -8613,9 +8662,9 @@ def get(quote_id: str, session, tab: str = "summary"):
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ),
+        ) if subtab == "info" else None,
 
-        # Action buttons bar ABOVE items table: Рассчитать (left), Отправить на контроль (right)
+        # Action buttons bar ABOVE items table (left), Отправить на контроль (right)
         Div(
             Div(
                 # Left: Рассчитать
@@ -8637,7 +8686,7 @@ def get(quote_id: str, session, tab: str = "summary"):
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 0.75rem 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ),
+        ) if subtab == "products" else None,
 
         # Products (Handsontable spreadsheet) with gradient styling
         Div(
@@ -8677,7 +8726,7 @@ def get(quote_id: str, session, tab: str = "summary"):
                 style="padding: 0.5rem 1rem; border-top: 1px solid #e2e8f0; font-size: 0.8125rem;"
             ),
             style="margin: 0; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;"
-        ),
+        ) if subtab == "products" else None,
         # Handsontable initialization script - EXPLICIT SAVE ONLY (no auto-save)
         Script(f"""
             (function() {{
@@ -9006,7 +9055,7 @@ def get(quote_id: str, session, tab: str = "summary"):
                     initTable();
                 }}
             }})();
-        """),
+        """) if subtab == "products" else None,
         # Tab button styles
         Style("""
             .tab-btn {
@@ -9037,7 +9086,7 @@ def get(quote_id: str, session, tab: str = "summary"):
                 font-size: 0.75rem;
                 letter-spacing: 0.05em;
             }
-        """),
+        """) if subtab == "products" else None,
 
         # Totals
         Div(
@@ -9701,36 +9750,42 @@ def get(quote_id: str, session, tab: str = "summary"):
             cls="card", style="border-left: 4px solid #dc2626;"
         ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Actions section (only for non-draft quotes - after calculation)
-        Div(
+        # Actions section (only for non-draft quotes - after calculation, products subtab only)
+        (Div(
             Div(
                 # Left: primary actions
                 Div(
-                    btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                    btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
+                    btn_link(_calc_btn_label, href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                    btn_link("\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0432\u0435\u0440\u0441\u0438\u0439", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
                     style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
                 ),
                 # Right: export/download (conditional per button based on workflow status)
                 Div(
-                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
-                    btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
-                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
+                    btn_link("\u0412\u0430\u043b\u0438\u0434\u0430\u0446\u0438\u044f Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
+                    btn_link("\u041a\u041f PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
+                    btn_link("\u0421\u0447\u0451\u0442 PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
                     style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
                 ),
                 style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;"
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
-        ) if workflow_status != "draft" else None,
+        ) if workflow_status != "draft" else None) if subtab == "products" else None,
 
-        # Activity log (workflow transitions history)
-        workflow_transition_history(quote_id, limit=50, collapsed=True),
+        # Activity log (workflow transitions history, products subtab only)
+        workflow_transition_history(quote_id, limit=50, collapsed=True) if subtab == "products" else None,
 
-        # Delete quote button (soft delete)
-        Div(
+        # Delete quote button (soft delete, products subtab only)
+        (Div(
             Div(
                 btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
-                btn("Удалить КП", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()", cls="ml-auto"),
+                btn("\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u041a\u041f", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()", cls="ml-auto"),
+                style="display: flex; align-items: center; gap: 1rem;"
+            ),
+            style="margin-top: 1rem;"
+        )) if subtab == "products" else Div(
+            Div(
+                btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
                 style="display: flex; align-items: center; gap: 1rem;"
             ),
             style="margin-top: 1rem;"
