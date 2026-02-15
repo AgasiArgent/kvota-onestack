@@ -93,6 +93,9 @@ from calculation_models import (
 # Import currency service for multi-currency logistics
 from services.currency_service import convert_to_usd
 
+# Import CBR rates service for exchange rates on Svodka tab
+from services.cbr_rates_service import get_usd_rub_rate
+
 # Import document service for file uploads
 from services.document_service import (
     upload_document, get_document, get_documents_for_entity,
@@ -7785,7 +7788,8 @@ def get(session):
 def _render_summary_tab(quote, customer, seller_companies, contacts, items, creator_name,
                         created_at_display, expiry_display,
                         quote_controller_name=None, spec_controller_name=None,
-                        customs_user_name=None, logistics_user_name=None):
+                        customs_user_name=None, logistics_user_name=None,
+                        rate_on_quote_date=None, rate_on_spec_date=None):
     """Render read-only summary tab with 6-block layout (3 rows x 2 columns).
 
     LEFT column:  Block I (Основная), Block II (Дополнительная), Block III (Печать)
@@ -7900,6 +7904,15 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     has_advance = advance_percent and float(advance_percent) > 0
     advance_display = f"{advance_percent}%" if has_advance else "—"
 
+    # Format exchange rates for display
+    def _format_rate(rate):
+        if rate is None:
+            return "—"
+        return f"{rate:.4f} \u20bd"
+
+    rate_kp_display = _format_rate(rate_on_quote_date)
+    rate_sp_display = _format_rate(rate_on_spec_date)
+
     card_4 = Div(
         _card_header("credit-card", "ПОРЯДОК РАСЧЕТОВ"),
         Div(
@@ -7907,8 +7920,8 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
             _field("Частичная предоплата", "Да" if has_advance else "Нет"),
             _field("Размер аванса", advance_display),
             _field("Валюта КП", currency),
-            _field("Курс USD/RUB на дату КП", "—"),
-            _field("Курс USD/RUB на дату СП", "—"),
+            _field("Курс USD/RUB на дату КП", rate_kp_display),
+            _field("Курс USD/RUB на дату СП", rate_sp_display),
             _field("Курс USD/RUB на дату УПД", "—"),
             style=grid_2col
         ),
@@ -8334,6 +8347,36 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
     # Render summary tab (read-only overview)
     if tab == "summary":
+        # Fetch CBR USD/RUB exchange rates for quote and spec dates
+        def _fetch_rate_for_date(date_value):
+            """Parse a date string/object and fetch CBR USD/RUB rate for that date."""
+            if not date_value:
+                return None
+            try:
+                if isinstance(date_value, str):
+                    parsed = datetime.fromisoformat(date_value.replace("Z", "+00:00"))
+                else:
+                    parsed = date_value
+                return get_usd_rub_rate(parsed.date() if hasattr(parsed, 'date') else parsed)
+            except Exception:
+                return None
+
+        rate_on_quote_date = _fetch_rate_for_date(quote.get("created_at"))
+
+        # Fetch spec created_at for rate on spec date
+        rate_on_spec_date = None
+        try:
+            spec_result = supabase.table("specifications") \
+                .select("created_at") \
+                .eq("quote_id", quote_id) \
+                .limit(1) \
+                .execute()
+            if spec_result.data:
+                spec_created_at = spec_result.data[0].get("created_at")
+                rate_on_spec_date = _fetch_rate_for_date(spec_created_at)
+        except Exception:
+            pass
+
         summary_content = _render_summary_tab(
             quote, customer, seller_companies, contacts, items, creator_name,
             created_at_display, expiry_display,
@@ -8341,6 +8384,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             spec_controller_name=spec_controller_name,
             customs_user_name=customs_user_name,
             logistics_user_name=logistics_user_name,
+            rate_on_quote_date=rate_on_quote_date,
+            rate_on_spec_date=rate_on_spec_date,
         )
         return page_layout(f"Quote {quote.get('idn_quote', '')}",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
@@ -15991,7 +16036,8 @@ def get(quote_id: str, session):
                 # Invoice cards (always has id for HTMX target)
                 Div(
                     *[invoice_card(inv, idx) for idx, inv in enumerate(invoices, 1)],
-                    id="invoices-list"
+                    id="invoices-list",
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem;"
                 ) if invoices else Div(
                     icon("inbox", size=24, color="#94a3b8"),
                     P("Нет инвойсов", style="color: #64748b; text-align: center; margin: 0.5rem 0 0;"),
