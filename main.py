@@ -9299,28 +9299,44 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 }}
             }}
 
+            // Server-side quote values (for validation when fields are on another sub-tab)
+            var _quoteData = {{
+                customer_id: {json.dumps(str(quote.get("customer_id") or ""))},
+                seller_company_id: {json.dumps(str(quote.get("seller_company_id") or ""))},
+                delivery_city: {json.dumps(quote.get("delivery_city") or "")},
+                delivery_country: {json.dumps(quote.get("delivery_country") or "")},
+                delivery_method: {json.dumps(quote.get("delivery_method") or "")},
+                delivery_terms: {json.dumps(quote.get("delivery_terms") or "")}
+            }};
+
             // Validation for submit to procurement
             function validateForProcurement() {{
                 var errors = [];
 
-                // Check header fields
-                var customer = document.getElementById('inline-customer');
-                if (!customer || !customer.value) errors.push('Клиент');
+                // Check header fields — use DOM if available (info subtab), else server-side data
+                var customerEl = document.getElementById('inline-customer');
+                var customerVal = customerEl ? customerEl.value : _quoteData.customer_id;
+                if (!customerVal) errors.push('Клиент');
 
-                var seller = document.getElementById('inline-seller');
-                if (!seller || !seller.value) errors.push('Продавец');
+                var sellerEl = document.getElementById('inline-seller');
+                var sellerVal = sellerEl ? sellerEl.value : _quoteData.seller_company_id;
+                if (!sellerVal) errors.push('Продавец');
 
-                var city = document.querySelector('input[name="delivery_city"]');
-                if (!city || !city.value.trim()) errors.push('Город доставки');
+                var cityEl = document.querySelector('input[name="delivery_city"]');
+                var cityVal = cityEl ? cityEl.value.trim() : _quoteData.delivery_city.trim();
+                if (!cityVal) errors.push('Город доставки');
 
-                var country = document.querySelector('input[name="delivery_country"]');
-                if (!country || !country.value.trim()) errors.push('Страна');
+                var countryEl = document.querySelector('input[name="delivery_country"]');
+                var countryVal = countryEl ? countryEl.value.trim() : _quoteData.delivery_country.trim();
+                if (!countryVal) errors.push('Страна');
 
-                var method = document.querySelector('select[name="delivery_method"]');
-                if (!method || !method.value) errors.push('Способ доставки');
+                var methodEl = document.querySelector('select[name="delivery_method"]');
+                var methodVal = methodEl ? methodEl.value : _quoteData.delivery_method;
+                if (!methodVal) errors.push('Способ доставки');
 
-                var terms = document.querySelector('select[name="delivery_terms"]');
-                if (!terms || !terms.value) errors.push('Условия поставки');
+                var termsEl = document.querySelector('select[name="delivery_terms"]');
+                var termsVal = termsEl ? termsEl.value : _quoteData.delivery_terms;
+                if (!termsVal) errors.push('Условия поставки');
 
                 // Check items in Handsontable
                 if (typeof hot !== 'undefined' && hot) {{
