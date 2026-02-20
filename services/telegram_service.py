@@ -3431,11 +3431,9 @@ async def send_admin_bug_report(
     page_url: str,
     feedback_type: str,
     description: str,
-    debug_context: dict = None,
-    screenshot_data: str = None,
-    clickup_task_id: str = None
+    debug_context: dict = None
 ) -> bool:
-    """Send bug report to admin via Telegram with debug context and optional screenshot.
+    """Send bug report to admin via Telegram with debug context.
 
     Args:
         short_id: Short feedback ID (e.g., FB-2401301435)
@@ -3446,8 +3444,6 @@ async def send_admin_bug_report(
         feedback_type: Type of feedback (bug, suggestion, question)
         description: User's description of the issue
         debug_context: Dict with console errors, requests, form state, etc.
-        screenshot_data: Base64-encoded PNG screenshot (data:image/png;base64,...)
-        clickup_task_id: ClickUp task ID if created
 
     Returns:
         True if message was sent successfully, False otherwise
@@ -3477,13 +3473,6 @@ async def send_admin_bug_report(
 
 💬 {description}
     """.strip()
-
-    # Add ClickUp link if available
-    if clickup_task_id:
-        text += f"\n\n📋 ClickUp: https://app.clickup.com/t/{clickup_task_id}"
-
-    # Add admin link
-    text += f"\n🔗 Админка: https://kvotaflow.ru/admin/feedback?id={short_id}"
 
     # Add debug context if available
     if debug_context:
@@ -3530,31 +3519,9 @@ async def send_admin_bug_report(
         text += "\n".join(context_lines)
 
     try:
-        import base64
-        import io
         chat_id = int(ADMIN_TELEGRAM_CHAT_ID)
-
-        if screenshot_data and screenshot_data.startswith("data:image"):
-            # Send screenshot as photo with caption
-            # Extract base64 data after the header
-            b64_data = screenshot_data.split(",", 1)[1] if "," in screenshot_data else screenshot_data
-            photo_bytes = base64.b64decode(b64_data)
-            photo_file = io.BytesIO(photo_bytes)
-            photo_file.name = f"screenshot_{short_id}.png"
-
-            # Telegram caption limit is 1024 characters
-            await bot.send_photo(
-                chat_id=chat_id,
-                photo=photo_file,
-                caption=text[:1024]
-            )
-            # If text is longer, send remainder as separate message
-            if len(text) > 1024:
-                await bot.send_message(chat_id=chat_id, text=text[:4096])
-        else:
-            # Text-only message
-            await bot.send_message(chat_id=chat_id, text=text[:4096])
-
+        # Telegram message limit is 4096 characters
+        await bot.send_message(chat_id=chat_id, text=text[:4096])
         logger.info(f"Bug report {short_id} sent to admin chat {chat_id}")
         return True
     except Exception as e:

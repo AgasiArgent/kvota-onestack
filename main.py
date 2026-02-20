@@ -2598,7 +2598,6 @@ def nav_bar(session):
         # Admin-only navigation
         if "admin" in roles:
             nav_items.append(Li(A("Админ", href="/admin")))
-            nav_items.append(Li(A("Обращения", href="/admin/feedback")))
             nav_items.append(Li(A("Settings", href="/settings")))
 
         # Add profile and logout at the end
@@ -3155,293 +3154,6 @@ function closeFeedbackModal() {
     if (form) form.reset();
     const result = document.getElementById('feedback-result');
     if (result) result.innerHTML = '';
-    // Clear screenshot
-    window._feedbackScreenshot = null;
-    const preview = document.getElementById('feedback-screenshot-preview');
-    if (preview) preview.style.display = 'none';
-    const thumbImg = document.getElementById('feedback-screenshot-thumb');
-    if (thumbImg) thumbImg.src = '';
-    const hiddenInput = document.getElementById('feedback-screenshot-data');
-    if (hiddenInput) hiddenInput.value = '';
-}
-
-// ========================================
-// SCREENSHOT CAPTURE & ANNOTATION EDITOR
-// ========================================
-
-window._feedbackScreenshot = null;
-window._annotationHistory = [];
-window._annotationTool = 'brush';
-window._annotationDrawing = false;
-window._annotationStartX = 0;
-window._annotationStartY = 0;
-
-async function captureScreenshot() {
-    // Hide modal temporarily
-    document.getElementById('feedback-backdrop').style.display = 'none';
-    document.getElementById('feedback-modal-box').style.display = 'none';
-
-    try {
-        // Small delay for modal to hide
-        await new Promise(r => setTimeout(r, 200));
-
-        const canvas = await html2canvas(document.body, {
-            useCORS: true,
-            allowTaint: true,
-            scale: window.devicePixelRatio > 1 ? 1.5 : 1,
-            logging: false
-        });
-
-        openAnnotationEditor(canvas.toDataURL('image/png'));
-    } catch(e) {
-        console.error('Screenshot failed:', e);
-        // Re-show modal
-        document.getElementById('feedback-backdrop').style.display = 'block';
-        document.getElementById('feedback-modal-box').style.display = 'block';
-        alert('Не удалось сделать скриншот');
-    }
-}
-
-function openAnnotationEditor(imgDataUrl) {
-    window._annotationHistory = [];
-    window._annotationTool = 'brush';
-    window._annotationDrawing = false;
-
-    // Create fullscreen overlay
-    const overlay = document.createElement('div');
-    overlay.id = 'annotation-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:#1a1a2e;display:flex;flex-direction:column;';
-
-    // Toolbar
-    overlay.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;background:#16213e;color:white;flex-shrink:0;">
-            <button onclick="setAnnotationTool('brush')" id="tool-brush" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#e94560;color:white;" title="Кисть">✏️ Кисть</button>
-            <button onclick="setAnnotationTool('arrow')" id="tool-arrow" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#334155;color:white;" title="Стрелка">➜ Стрелка</button>
-            <button onclick="setAnnotationTool('text')" id="tool-text" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#334155;color:white;" title="Текст">Т Текст</button>
-            <div style="width:1px;height:24px;background:#475569;margin:0 4px;"></div>
-            <button onclick="annotationUndo()" style="padding:6px 14px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#334155;color:white;" title="Отменить">↩ Отменить</button>
-            <div style="flex:1;"></div>
-            <button onclick="annotationDone()" style="padding:8px 20px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#0f3460;color:white;font-weight:600;">✓ Готово</button>
-            <button onclick="annotationCancel()" style="padding:8px 14px;border-radius:6px;border:none;cursor:pointer;font-size:14px;background:#334155;color:#94a3b8;" title="Отмена">✕</button>
-        </div>
-        <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;position:relative;" id="annotation-canvas-container">
-            <canvas id="annotation-canvas" style="cursor:crosshair;max-width:100%;max-height:100%;box-shadow:0 4px 24px rgba(0,0,0,0.5);"></canvas>
-        </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    // Setup canvas
-    const canvas = document.getElementById('annotation-canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = function() {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        // Save initial state
-        window._annotationHistory = [canvas.toDataURL()];
-    };
-    img.src = imgDataUrl;
-
-    // Canvas events
-    canvas.addEventListener('mousedown', annotationMouseDown);
-    canvas.addEventListener('mousemove', annotationMouseMove);
-    canvas.addEventListener('mouseup', annotationMouseUp);
-    canvas.addEventListener('mouseleave', annotationMouseUp);
-    // Touch support
-    canvas.addEventListener('touchstart', function(e) { e.preventDefault(); annotationMouseDown(touchToMouse(e)); }, {passive:false});
-    canvas.addEventListener('touchmove', function(e) { e.preventDefault(); annotationMouseMove(touchToMouse(e)); }, {passive:false});
-    canvas.addEventListener('touchend', function(e) { e.preventDefault(); annotationMouseUp(touchToMouse(e)); }, {passive:false});
-}
-
-function touchToMouse(e) {
-    const touch = e.touches[0] || e.changedTouches[0];
-    return { offsetX: touch.clientX - e.target.getBoundingClientRect().left, offsetY: touch.clientY - e.target.getBoundingClientRect().top, preventDefault: function(){} };
-}
-
-function getCanvasCoords(e) {
-    const canvas = document.getElementById('annotation-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    return { x: e.offsetX * scaleX, y: e.offsetY * scaleY };
-}
-
-function setAnnotationTool(tool) {
-    window._annotationTool = tool;
-    ['brush','arrow','text'].forEach(t => {
-        const btn = document.getElementById('tool-' + t);
-        if (btn) btn.style.background = (t === tool) ? '#e94560' : '#334155';
-    });
-    const canvas = document.getElementById('annotation-canvas');
-    if (canvas) canvas.style.cursor = (tool === 'text') ? 'text' : 'crosshair';
-}
-
-function annotationMouseDown(e) {
-    const coords = getCanvasCoords(e);
-    if (window._annotationTool === 'text') {
-        showTextInput(coords.x, coords.y);
-        return;
-    }
-    window._annotationDrawing = true;
-    window._annotationStartX = coords.x;
-    window._annotationStartY = coords.y;
-
-    if (window._annotationTool === 'brush') {
-        const canvas = document.getElementById('annotation-canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.beginPath();
-        ctx.moveTo(coords.x, coords.y);
-        ctx.strokeStyle = '#e94560';
-        ctx.lineWidth = 3 * (canvas.width / canvas.getBoundingClientRect().width);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-    }
-}
-
-function annotationMouseMove(e) {
-    if (!window._annotationDrawing) return;
-    if (window._annotationTool !== 'brush') return;
-
-    const coords = getCanvasCoords(e);
-    const canvas = document.getElementById('annotation-canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.lineTo(coords.x, coords.y);
-    ctx.stroke();
-}
-
-function annotationMouseUp(e) {
-    if (!window._annotationDrawing) return;
-    window._annotationDrawing = false;
-
-    const canvas = document.getElementById('annotation-canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (window._annotationTool === 'arrow') {
-        const coords = getCanvasCoords(e);
-        drawArrow(ctx, window._annotationStartX, window._annotationStartY, coords.x, coords.y);
-    }
-
-    // Save state for undo
-    window._annotationHistory.push(canvas.toDataURL());
-}
-
-function drawArrow(ctx, fromX, fromY, toX, toY) {
-    const canvas = document.getElementById('annotation-canvas');
-    const scale = canvas.width / canvas.getBoundingClientRect().width;
-    const headLen = 16 * scale;
-    const dx = toX - fromX;
-    const dy = toY - fromY;
-    const angle = Math.atan2(dy, dx);
-
-    ctx.strokeStyle = '#e94560';
-    ctx.lineWidth = 3 * scale;
-    ctx.lineCap = 'round';
-
-    // Line
-    ctx.beginPath();
-    ctx.moveTo(fromX, fromY);
-    ctx.lineTo(toX, toY);
-    ctx.stroke();
-
-    // Arrowhead
-    ctx.beginPath();
-    ctx.moveTo(toX, toY);
-    ctx.lineTo(toX - headLen * Math.cos(angle - Math.PI / 6), toY - headLen * Math.sin(angle - Math.PI / 6));
-    ctx.moveTo(toX, toY);
-    ctx.lineTo(toX - headLen * Math.cos(angle + Math.PI / 6), toY - headLen * Math.sin(angle + Math.PI / 6));
-    ctx.stroke();
-}
-
-function showTextInput(x, y) {
-    const canvas = document.getElementById('annotation-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = rect.width / canvas.width;
-    const scaleY = rect.height / canvas.height;
-
-    const container = document.getElementById('annotation-canvas-container');
-    const canvasRect = canvas.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
-
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Введите текст...';
-    input.style.cssText = `position:absolute;left:${canvasRect.left - containerRect.left + x*scaleX}px;top:${canvasRect.top - containerRect.top + y*scaleY}px;z-index:10;font-size:${Math.max(16, 14 * scaleX)}px;font-family:sans-serif;color:#e94560;background:rgba(255,255,255,0.9);border:2px solid #e94560;border-radius:4px;padding:4px 8px;outline:none;min-width:120px;`;
-    container.appendChild(input);
-    input.focus();
-
-    function commitText() {
-        const text = input.value.trim();
-        if (text) {
-            const ctx = canvas.getContext('2d');
-            const scale = canvas.width / rect.width;
-            const fontSize = Math.max(20, 18 * scale);
-            ctx.font = `bold ${fontSize}px sans-serif`;
-            ctx.fillStyle = '#e94560';
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = 3;
-            ctx.strokeText(text, x, y + fontSize);
-            ctx.fillText(text, x, y + fontSize);
-            window._annotationHistory.push(canvas.toDataURL());
-        }
-        input.remove();
-    }
-
-    input.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') commitText();
-        if (e.key === 'Escape') input.remove();
-    });
-    input.addEventListener('blur', commitText);
-}
-
-function annotationUndo() {
-    if (window._annotationHistory.length <= 1) return;
-    window._annotationHistory.pop();
-    const last = window._annotationHistory[window._annotationHistory.length - 1];
-    const canvas = document.getElementById('annotation-canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = function() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-    };
-    img.src = last;
-}
-
-function annotationDone() {
-    const canvas = document.getElementById('annotation-canvas');
-    window._feedbackScreenshot = canvas.toDataURL('image/png');
-
-    // Remove overlay
-    const overlay = document.getElementById('annotation-overlay');
-    if (overlay) overlay.remove();
-
-    // Show modal back with screenshot preview
-    document.getElementById('feedback-backdrop').style.display = 'block';
-    document.getElementById('feedback-modal-box').style.display = 'block';
-
-    // Show thumbnail
-    const preview = document.getElementById('feedback-screenshot-preview');
-    preview.style.display = 'block';
-    document.getElementById('feedback-screenshot-thumb').src = window._feedbackScreenshot;
-    document.getElementById('feedback-screenshot-data').value = window._feedbackScreenshot;
-}
-
-function annotationCancel() {
-    const overlay = document.getElementById('annotation-overlay');
-    if (overlay) overlay.remove();
-
-    // Show modal back without screenshot
-    document.getElementById('feedback-backdrop').style.display = 'block';
-    document.getElementById('feedback-modal-box').style.display = 'block';
-}
-
-function removeScreenshot() {
-    window._feedbackScreenshot = null;
-    document.getElementById('feedback-screenshot-preview').style.display = 'none';
-    document.getElementById('feedback-screenshot-thumb').src = '';
-    document.getElementById('feedback-screenshot-data').value = '';
 }
 """
 
@@ -3483,27 +3195,6 @@ def feedback_modal():
                     ),
                     cls="form-control mb-3"
                 ),
-                # Screenshot section
-                Div(
-                    Button(
-                        I(data_lucide="camera", style="width:16px;height:16px;margin-right:6px;"),
-                        "Добавить скриншот",
-                        type="button",
-                        onclick="captureScreenshot()",
-                        cls="theme-toggle",
-                        style="display:flex;align-items:center;padding:8px 16px;border:1px dashed #cbd5e1;border-radius:8px;background:white;color:#475569;cursor:pointer;font-size:14px;width:100%;"
-                    ),
-                    # Screenshot preview (hidden by default)
-                    Div(
-                        Img(id="feedback-screenshot-thumb", src="",
-                            style="max-height:120px;border-radius:6px;border:1px solid #e2e8f0;"),
-                        A("✕ Удалить", href="javascript:void(0)", onclick="removeScreenshot()",
-                          style="font-size:12px;color:#ef4444;margin-left:8px;"),
-                        id="feedback-screenshot-preview",
-                        style="display:none;margin-top:8px;align-items:flex-start;gap:8px;"
-                    ),
-                    cls="form-control mb-3"
-                ),
                 # Context preview (compact)
                 Div(
                     P("Автоматически прикрепится:", cls="text-xs text-gray-400 mb-1"),
@@ -3515,7 +3206,6 @@ def feedback_modal():
                 Input(type="hidden", name="page_url", id="feedback-page-url"),
                 Input(type="hidden", name="page_title", id="feedback-page-title"),
                 Input(type="hidden", name="debug_context", id="feedback-debug-context"),
-                Input(type="hidden", name="screenshot", id="feedback-screenshot-data"),
                 # Buttons
                 Div(
                     btn("Отправить", variant="primary", icon_name="send", type="submit", full_width=True),
@@ -3624,8 +3314,6 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
             Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"),
             # SheetJS - Excel/CSV file parsing
             Script(src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"),
-            # html2canvas - Screenshot capture for feedback
-            Script(src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"),
             # Sidebar toggle script
             NotStr(SIDEBAR_JS),
             # Feedback JS (debug context collection)
@@ -23939,77 +23627,11 @@ def generate_feedback_short_id():
     return f"FB-{now.strftime('%y%m%d%H%M%S')}"
 
 
-CLICKUP_API_KEY = os.getenv("CLICKUP_API_KEY", "")
-CLICKUP_BUG_LIST_ID = os.getenv("CLICKUP_BUG_LIST_ID", "")
-
-
-async def create_clickup_bug_task(
-    short_id: str,
-    feedback_type: str,
-    description: str,
-    user_name: str,
-    page_url: str,
-    debug_context: dict = None
-) -> str:
-    """Create a ClickUp task for a bug report. Returns task ID or empty string."""
-    if not CLICKUP_API_KEY or not CLICKUP_BUG_LIST_ID:
-        logger.info("ClickUp not configured, skipping task creation")
-        return ""
-
-    import httpx
-
-    type_prefix = {"bug": "Bug", "suggestion": "Idea", "question": "Question"}.get(feedback_type, "Feedback")
-    priority_map = {"bug": 2, "suggestion": 3, "question": 4}  # 1=urgent, 2=high, 3=normal, 4=low
-
-    # Build description with context
-    task_desc = f"**{short_id}**\n\n"
-    task_desc += f"**User:** {user_name}\n"
-    task_desc += f"**Page:** {page_url}\n\n"
-    task_desc += f"**Description:**\n{description}\n\n"
-    task_desc += f"**Admin:** https://kvotaflow.ru/admin/feedback?id={short_id}\n"
-
-    if debug_context:
-        errors = debug_context.get("consoleErrors", [])
-        if errors:
-            task_desc += f"\n**Console errors:** {len(errors)}\n"
-            for err in errors[:3]:
-                task_desc += f"- {str(err.get('message', ''))[:100]}\n"
-
-    # Truncate title
-    title_desc = description[:60] + ("..." if len(description) > 60 else "")
-    title = f"[{type_prefix}] {title_desc}"
-
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"https://api.clickup.com/api/v2/list/{CLICKUP_BUG_LIST_ID}/task",
-                headers={"Authorization": CLICKUP_API_KEY, "Content-Type": "application/json"},
-                json={
-                    "name": title,
-                    "description": task_desc,
-                    "priority": priority_map.get(feedback_type, 3),
-                    "tags": ["beta-feedback", feedback_type]
-                },
-                timeout=10.0
-            )
-            if resp.status_code == 200:
-                task_id = resp.json().get("id", "")
-                logger.info(f"ClickUp task created: {task_id} for {short_id}")
-                return task_id
-            else:
-                logger.error(f"ClickUp API error: {resp.status_code} {resp.text[:200]}")
-                return ""
-    except Exception as e:
-        logger.error(f"ClickUp task creation error: {e}")
-        return ""
-
-
 @rt("/api/feedback", methods=["POST"])
 async def submit_feedback(session, request: Request):
     """Handle feedback/bug report submission.
 
-    Saves to database, sends Telegram notification (with screenshot if available),
-    and creates ClickUp task.
+    Saves to database and sends notification to admin via Telegram.
     """
     import json as json_lib
 
@@ -24021,7 +23643,6 @@ async def submit_feedback(session, request: Request):
     page_url = form.get("page_url", "")
     page_title = form.get("page_title", "")
     debug_context_str = form.get("debug_context", "{}")
-    screenshot_data = form.get("screenshot", "")
 
     if not description:
         return Div("Пожалуйста, опишите проблему", cls="text-error mt-2")
@@ -24038,8 +23659,8 @@ async def submit_feedback(session, request: Request):
     supabase = get_supabase()
 
     try:
-        # 1. Save to database (with screenshot if provided)
-        insert_data = {
+        # 1. Save to database
+        supabase.table("user_feedback").insert({
             "short_id": short_id,
             "user_id": user.get("id"),
             "user_email": user.get("email"),
@@ -24052,31 +23673,9 @@ async def submit_feedback(session, request: Request):
             "feedback_type": feedback_type,
             "description": description,
             "debug_context": debug_context
-        }
-        if screenshot_data and screenshot_data.startswith("data:image"):
-            insert_data["screenshot_data"] = screenshot_data
+        }).execute()
 
-        supabase.table("user_feedback").insert(insert_data).execute()
-
-        # 2. Create ClickUp task (async, don't block on failure)
-        clickup_task_id = None
-        try:
-            clickup_task_id = await create_clickup_bug_task(
-                short_id=short_id,
-                feedback_type=feedback_type,
-                description=description,
-                user_name=user.get("name", user.get("email", "Неизвестный")),
-                page_url=page_url,
-                debug_context=debug_context
-            )
-            if clickup_task_id:
-                supabase.table("user_feedback").update({
-                    "clickup_task_id": clickup_task_id
-                }).eq("short_id", short_id).execute()
-        except Exception as e:
-            logger.error(f"ClickUp task creation failed for {short_id}: {e}")
-
-        # 3. Send to Telegram (with screenshot photo if available)
+        # 2. Send to Telegram
         await send_admin_bug_report(
             short_id=short_id,
             user_name=user.get("name", user.get("email", "Неизвестный")),
@@ -24085,12 +23684,10 @@ async def submit_feedback(session, request: Request):
             page_url=page_url,
             feedback_type=feedback_type,
             description=description,
-            debug_context=debug_context,
-            screenshot_data=screenshot_data if screenshot_data and screenshot_data.startswith("data:image") else None,
-            clickup_task_id=clickup_task_id
+            debug_context=debug_context
         )
 
-        # 4. Return success message with short ID
+        # 3. Return success message with short ID
         return Div(
             Div("Спасибо за обратную связь!", cls="text-success font-medium"),
             P(f"Номер обращения: {short_id}", cls="text-sm text-gray-500 mt-1 font-mono"),
@@ -30667,264 +30264,6 @@ def get(session):
     """GET /admin/impersonate/exit - Clear role impersonation."""
     session.pop("impersonated_role", None)
     return RedirectResponse("/", status_code=303)
-
-
-# ============================================================================
-# ADMIN FEEDBACK PAGE
-# ============================================================================
-
-@rt("/admin/feedback")
-def get(session, id: str = "", status_filter: str = ""):
-    """Admin page for viewing and managing user feedback reports."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    roles = user.get("roles", [])
-
-    if "admin" not in roles:
-        return page_layout("Доступ запрещён",
-            H1("Доступ запрещён"),
-            P("Эта страница доступна только администраторам."),
-            session=session
-        )
-
-    supabase = get_supabase()
-
-    # If specific feedback ID requested, show detail view
-    if id:
-        result = supabase.table("user_feedback").select("*").eq("short_id", id).execute()
-        if not result.data:
-            return page_layout("Обращение не найдено",
-                H1("Обращение не найдено"),
-                P(f"Обращение {id} не найдено."),
-                btn_link("К списку", href="/admin/feedback", variant="secondary"),
-                session=session, current_path="/admin/feedback"
-            )
-
-        fb = result.data[0]
-        import json as json_lib
-
-        # Status badge colors
-        status_colors = {
-            "new": "badge-error",
-            "in_progress": "badge-warning",
-            "resolved": "badge-success",
-            "closed": "badge-ghost"
-        }
-        status_labels = {
-            "new": "Новое",
-            "in_progress": "В работе",
-            "resolved": "Решено",
-            "closed": "Закрыто"
-        }
-
-        type_labels = {"bug": "Ошибка", "suggestion": "Предложение", "question": "Вопрос"}
-
-        # Screenshot section
-        screenshot_section = []
-        if fb.get("screenshot_data"):
-            screenshot_section = [
-                H3("Скриншот", cls="font-semibold text-base mt-6 mb-2"),
-                Img(src=fb["screenshot_data"],
-                    style="max-width:100%;border:1px solid #e2e8f0;border-radius:8px;"),
-            ]
-
-        # Debug context section
-        context_section = []
-        if fb.get("debug_context"):
-            ctx = fb["debug_context"]
-            context_section = [
-                H3("Контекст", cls="font-semibold text-base mt-6 mb-2"),
-                Pre(json_lib.dumps(ctx, indent=2, ensure_ascii=False),
-                    style="background:#f8fafc;padding:12px;border-radius:8px;font-size:12px;max-height:300px;overflow:auto;border:1px solid #e2e8f0;")
-            ]
-
-        # ClickUp link
-        clickup_section = []
-        if fb.get("clickup_task_id"):
-            clickup_section = [
-                A(f"ClickUp: {fb['clickup_task_id']}",
-                  href=f"https://app.clickup.com/t/{fb['clickup_task_id']}",
-                  target="_blank", cls="link link-primary text-sm")
-            ]
-
-        detail = Div(
-            # Header
-            Div(
-                btn_link("← Назад", href="/admin/feedback", variant="ghost", size="sm"),
-                cls="mb-4"
-            ),
-            Div(
-                Div(
-                    Span(f"#{fb['short_id']}", cls="font-mono font-bold text-lg"),
-                    Span(type_labels.get(fb.get("feedback_type", ""), fb.get("feedback_type", "")),
-                         cls="badge badge-outline ml-2"),
-                    Span(status_labels.get(fb.get("status", "new"), fb.get("status", "new")),
-                         cls=f"badge {status_colors.get(fb.get('status', 'new'), '')} ml-2"),
-                    cls="flex items-center gap-2 mb-4"
-                ),
-
-                # Info grid
-                Div(
-                    Div(
-                        P(Strong("Пользователь: "), fb.get("user_name", "—")),
-                        P(Strong("Email: "), fb.get("user_email", "—")),
-                        P(Strong("Организация: "), fb.get("organization_name", "—")),
-                        cls="space-y-1"
-                    ),
-                    Div(
-                        P(Strong("Страница: "), A(fb.get("page_url", "—"), href=fb.get("page_url", "#"), target="_blank", cls="link link-primary text-sm")),
-                        P(Strong("Дата: "), str(fb.get("created_at", "—"))[:19].replace("T", " ")),
-                        *clickup_section,
-                        cls="space-y-1"
-                    ),
-                    cls="grid grid-cols-2 gap-4 text-sm mb-4"
-                ),
-
-                # Description
-                H3("Описание", cls="font-semibold text-base mt-4 mb-2"),
-                P(fb.get("description", ""), cls="whitespace-pre-wrap bg-base-200 p-3 rounded-lg text-sm"),
-
-                *screenshot_section,
-                *context_section,
-
-                # Status update form
-                H3("Изменить статус", cls="font-semibold text-base mt-6 mb-2"),
-                Form(
-                    Div(
-                        Select(
-                            *[Option(status_labels[s], value=s, selected=(s == fb.get("status", "new")))
-                              for s in ["new", "in_progress", "resolved", "closed"]],
-                            name="new_status",
-                            cls="select select-bordered select-sm"
-                        ),
-                        btn("Обновить", variant="primary", size="sm", type="submit"),
-                        cls="flex items-center gap-2"
-                    ),
-                    hx_post=f"/admin/feedback/{fb['short_id']}/status",
-                    hx_swap="outerHTML",
-                    hx_target="closest div"
-                ),
-
-                cls="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
-            ),
-            cls="max-w-4xl"
-        )
-
-        return page_layout(f"Обращение {fb['short_id']}",
-            detail,
-            session=session, current_path="/admin/feedback"
-        )
-
-    # List view
-    query = supabase.table("user_feedback").select("short_id, feedback_type, description, user_name, user_email, page_url, status, clickup_task_id, created_at").order("created_at", desc=True)
-
-    if status_filter:
-        query = query.eq("status", status_filter)
-
-    result = query.limit(100).execute()
-    feedbacks = result.data or []
-
-    status_labels = {"new": "Новое", "in_progress": "В работе", "resolved": "Решено", "closed": "Закрыто"}
-    status_colors = {"new": "badge-error", "in_progress": "badge-warning", "resolved": "badge-success", "closed": "badge-ghost"}
-    type_icons = {"bug": "🐛", "suggestion": "💡", "question": "❓"}
-
-    # Filter tabs
-    filter_tabs = Div(
-        A("Все", href="/admin/feedback",
-          cls=f"tab {'tab-active' if not status_filter else ''}", style="font-size:14px;"),
-        A("Новые", href="/admin/feedback?status_filter=new",
-          cls=f"tab {'tab-active' if status_filter == 'new' else ''}", style="font-size:14px;"),
-        A("В работе", href="/admin/feedback?status_filter=in_progress",
-          cls=f"tab {'tab-active' if status_filter == 'in_progress' else ''}", style="font-size:14px;"),
-        A("Решено", href="/admin/feedback?status_filter=resolved",
-          cls=f"tab {'tab-active' if status_filter == 'resolved' else ''}", style="font-size:14px;"),
-        cls="tabs tabs-boxed mb-4"
-    )
-
-    # Count by status
-    count_new = sum(1 for f in feedbacks if f.get("status") == "new") if not status_filter else ""
-    header_text = f"Обращения ({len(feedbacks)})"
-
-    # Table rows
-    rows = []
-    for fb in feedbacks:
-        clickup_link = ""
-        if fb.get("clickup_task_id"):
-            clickup_link = A("CU", href=f"https://app.clickup.com/t/{fb['clickup_task_id']}",
-                            target="_blank", cls="badge badge-xs badge-info", title="ClickUp")
-
-        rows.append(Tr(
-            Td(A(fb.get("short_id", ""), href=f"/admin/feedback?id={fb.get('short_id', '')}",
-                 cls="link link-primary font-mono text-xs")),
-            Td(Span(type_icons.get(fb.get("feedback_type", ""), "📝"), title=fb.get("feedback_type", ""))),
-            Td(Span(status_labels.get(fb.get("status", "new"), fb.get("status", "new")),
-                     cls=f"badge badge-xs {status_colors.get(fb.get('status', 'new'), '')}")),
-            Td(fb.get("user_name", "—"), cls="text-sm"),
-            Td(Span(fb.get("description", "")[:80] + ("..." if len(fb.get("description", "")) > 80 else ""),
-                     cls="text-sm")),
-            Td(clickup_link),
-            Td(str(fb.get("created_at", ""))[:16].replace("T", " "), cls="text-xs text-gray-500"),
-            cls="hover:bg-base-200 cursor-pointer",
-            onclick=f"window.location='/admin/feedback?id={fb.get('short_id', '')}'"
-        ))
-
-    table = Table(
-        Thead(Tr(
-            Th("ID", style="width:130px;"),
-            Th("", style="width:30px;"),
-            Th("Статус", style="width:80px;"),
-            Th("Автор", style="width:150px;"),
-            Th("Описание"),
-            Th("CU", style="width:40px;"),
-            Th("Дата", style="width:130px;"),
-        )),
-        Tbody(*rows) if rows else Tbody(Tr(Td("Нет обращений", colspan="7", cls="text-center text-gray-400 py-8"))),
-        cls="table table-sm w-full"
-    )
-
-    content = Div(
-        Div(
-            H1(header_text, cls="text-xl font-bold"),
-            btn_link("← Админка", href="/admin", variant="ghost", size="sm"),
-            cls="flex items-center justify-between mb-4"
-        ),
-        filter_tabs,
-        Div(table, cls="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto"),
-    )
-
-    return page_layout("Обращения", content, session=session, current_path="/admin/feedback")
-
-
-@rt("/admin/feedback/{short_id}/status")
-def post(session, short_id: str, new_status: str = ""):
-    """Update feedback status via HTMX."""
-    user = session.get("user", {})
-    if "admin" not in user.get("roles", []):
-        return Div("Доступ запрещён", cls="text-error")
-
-    if new_status not in ("new", "in_progress", "resolved", "closed"):
-        return Div("Неверный статус", cls="text-error")
-
-    supabase = get_supabase()
-    from datetime import datetime
-    supabase.table("user_feedback").update({
-        "status": new_status,
-        "updated_at": datetime.now().isoformat()
-    }).eq("short_id", short_id).execute()
-
-    status_labels = {"new": "Новое", "in_progress": "В работе", "resolved": "Решено", "closed": "Закрыто"}
-    status_colors = {"new": "badge-error", "in_progress": "badge-warning", "resolved": "badge-success", "closed": "badge-ghost"}
-
-    return Div(
-        Span(f"Статус: ", cls="text-sm"),
-        Span(status_labels.get(new_status, new_status),
-             cls=f"badge {status_colors.get(new_status, '')}"),
-        Span(" — обновлено", cls="text-success text-xs ml-2"),
-        cls="flex items-center gap-1"
-    )
 
 
 # ============================================================================
