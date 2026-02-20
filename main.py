@@ -3210,15 +3210,24 @@ function openAnnotationEditor() {
         },
         onclone: function(clonedDoc) {
             // Fix oklch() colors that html2canvas cannot parse (Tailwind CSS uses oklch)
+            // Step 1: Replace oklch() in all <style> tag text (stylesheet parsing fix)
+            var styles = clonedDoc.querySelectorAll('style');
+            for (var s = 0; s < styles.length; s++) {
+                var txt = styles[s].textContent;
+                if (txt && txt.indexOf('oklch') !== -1) {
+                    styles[s].textContent = txt.replace(/oklch\\([^)]*\\)/g, '#888888');
+                }
+            }
+            // Step 2: Override computed oklch on elements (inline style fix)
             var all = clonedDoc.querySelectorAll('*');
             for (var i = 0; i < all.length; i++) {
                 var el = all[i];
                 try {
-                    var cs = window.getComputedStyle(el);
+                    var cs = clonedDoc.defaultView.getComputedStyle(el);
                     var props = ['color', 'background-color', 'border-color',
                                  'border-top-color', 'border-right-color',
                                  'border-bottom-color', 'border-left-color',
-                                 'outline-color', 'text-decoration-color'];
+                                 'outline-color'];
                     for (var j = 0; j < props.length; j++) {
                         var val = cs.getPropertyValue(props[j]);
                         if (val && val.indexOf('oklch') !== -1) {
