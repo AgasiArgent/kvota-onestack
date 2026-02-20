@@ -3411,7 +3411,10 @@ function drawArrow(ctx, x1, y1, x2, y2) {
     ctx.fill();
 }
 
+var _textInputActive = false;
 function placeTextInput(e, canvas, ctx, saveState) {
+    if (_textInputActive) return;
+    _textInputActive = true;
     var rect = canvas.getBoundingClientRect();
     var scaleX = canvas.width / rect.width;
     var scaleY = canvas.height / rect.height;
@@ -3420,11 +3423,16 @@ function placeTextInput(e, canvas, ctx, saveState) {
 
     var input = document.createElement('input');
     input.type = 'text';
-    input.style.cssText = 'position:fixed;left:' + (rect.left + x) + 'px;top:' + (rect.top + y) + 'px;background:rgba(0,0,0,0.6);color:#fff;border:1px solid #ff3333;padding:2px 6px;font-size:16px;z-index:10000;min-width:120px;outline:none;';
+    input.placeholder = 'Введите текст...';
+    input.style.cssText = 'position:fixed;left:' + (rect.left + x) + 'px;top:' + (rect.top + y - 14) + 'px;background:#222;color:#ff3333;border:2px solid #ff3333;padding:4px 8px;font:bold 18px sans-serif;z-index:10001;min-width:150px;outline:none;border-radius:4px;';
     document.body.appendChild(input);
-    input.focus();
+    // Prevent canvas mousedown from stealing focus
+    input.addEventListener('mousedown', function(ev) { ev.stopPropagation(); });
 
+    var committed = false;
     function commitText() {
+        if (committed) return;
+        committed = true;
         var text = input.value.trim();
         if (text) {
             saveState();
@@ -3433,12 +3441,17 @@ function placeTextInput(e, canvas, ctx, saveState) {
             ctx.fillText(text, x * scaleX, y * scaleY);
         }
         input.remove();
+        _textInputActive = false;
     }
 
-    input.addEventListener('blur', commitText);
+    // Delay focus + blur listener to prevent immediate blur
+    setTimeout(function() {
+        input.focus();
+        input.addEventListener('blur', commitText);
+    }, 50);
     input.addEventListener('keydown', function(ev) {
         if (ev.key === 'Enter') commitText();
-        if (ev.key === 'Escape') { input.remove(); }
+        if (ev.key === 'Escape') { input.remove(); _textInputActive = false; }
     });
 }
 
