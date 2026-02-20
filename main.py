@@ -3165,6 +3165,28 @@ function closeFeedbackModal() {
     const btn = document.getElementById('feedback-add-screenshot-btn');
     if (btn) btn.textContent = 'Добавить скриншот';
 }
+
+// Show success toast after feedback submission
+function showFeedbackToast() {
+    var toast = document.createElement('div');
+    toast.textContent = 'Спасибо! Обращение отправлено.';
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);' +
+        'background:#16a34a;color:#fff;padding:12px 24px;border-radius:8px;' +
+        'font-size:14px;font-weight:500;z-index:10000;box-shadow:0 4px 12px rgba(0,0,0,0.15);' +
+        'opacity:0;transition:opacity 0.3s ease;';
+    document.body.appendChild(toast);
+    // Fade in
+    requestAnimationFrame(function() {
+        toast.style.opacity = '1';
+    });
+    // Fade out after 3 seconds
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        setTimeout(function() {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+    }, 3000);
+}
 """
 
 ANNOTATION_EDITOR_JS = """
@@ -3185,6 +3207,26 @@ function openAnnotationEditor() {
         scale: 0.75,
         ignoreElements: function(el) {
             return el.id === 'feedback-modal' || el.id === 'feedback-backdrop';
+        },
+        onclone: function(clonedDoc) {
+            // Fix oklch() colors that html2canvas cannot parse (Tailwind CSS uses oklch)
+            var all = clonedDoc.querySelectorAll('*');
+            for (var i = 0; i < all.length; i++) {
+                var el = all[i];
+                try {
+                    var cs = window.getComputedStyle(el);
+                    var props = ['color', 'background-color', 'border-color',
+                                 'border-top-color', 'border-right-color',
+                                 'border-bottom-color', 'border-left-color',
+                                 'outline-color', 'text-decoration-color'];
+                    for (var j = 0; j < props.length; j++) {
+                        var val = cs.getPropertyValue(props[j]);
+                        if (val && val.indexOf('oklch') !== -1) {
+                            el.style.setProperty(props[j], '#888888', 'important');
+                        }
+                    }
+                } catch(e) { /* skip inaccessible elements */ }
+            }
         }
     }).then(function(capturedCanvas) {
         buildAnnotationEditor(capturedCanvas);
@@ -3499,7 +3541,7 @@ def feedback_modal():
                 hx_post="/api/feedback",
                 hx_swap="innerHTML",
                 hx_target="#feedback-result",
-                **{"hx-on::after-request": "if(event.detail.successful) setTimeout(() => closeFeedbackModal(), 1500)"}
+                **{"hx-on::after-request": "if(event.detail.successful){closeFeedbackModal();showFeedbackToast()}"}
             ),
             Div(id="feedback-result"),
             id="feedback-modal-box",
@@ -3598,7 +3640,7 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
             # SheetJS - Excel/CSV file parsing
             Script(src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"),
             # html2canvas - screenshot capture for bug reports
-            Script(src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"),
+            Script(src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),
             # Sidebar toggle script
             NotStr(SIDEBAR_JS),
             # Feedback JS (debug context collection)
