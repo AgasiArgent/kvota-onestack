@@ -2771,8 +2771,10 @@ def sidebar(session, current_path: str = ""):
 
     # === ADMIN SECTION ===
     if is_admin:
+        _feedback_href = "/admin" + "/feedback"
         admin_items = [
             {"icon": "user", "label": "Пользователи", "href": "/admin", "roles": ["admin"]},
+            {"icon": "message-square", "label": "Обращения", "href": _feedback_href, "roles": ["admin"]},
             {"icon": "settings", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
@@ -3154,21 +3156,284 @@ function closeFeedbackModal() {
     if (form) form.reset();
     const result = document.getElementById('feedback-result');
     if (result) result.innerHTML = '';
+    // Clear screenshot state
+    window._feedbackScreenshotData = null;
+    const thumb = document.getElementById('feedback-screenshot-thumb');
+    if (thumb) { thumb.src = ''; thumb.style.display = 'none'; }
+    const hidden = document.getElementById('feedback-screenshot-data');
+    if (hidden) hidden.value = '';
+    const btn = document.getElementById('feedback-add-screenshot-btn');
+    if (btn) btn.textContent = 'Добавить скриншот';
+}
+"""
+
+ANNOTATION_EDITOR_JS = """
+// ========================================
+// FEEDBACK: Screenshot annotation editor
+// ========================================
+
+window._feedbackScreenshotData = null;
+
+function openAnnotationEditor() {
+    // 1. Hide the feedback modal
+    document.getElementById('feedback-modal-box').style.display = 'none';
+
+    // 2. Use html2canvas to capture the page
+    html2canvas(document.body, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 0.75,
+        ignoreElements: function(el) {
+            return el.id === 'feedback-modal' || el.id === 'feedback-backdrop';
+        }
+    }).then(function(capturedCanvas) {
+        buildAnnotationEditor(capturedCanvas);
+    }).catch(function(err) {
+        console.error('html2canvas error:', err);
+        document.getElementById('feedback-modal-box').style.display = 'block';
+        alert('Failed to capture screenshot. Please try again.');
+    });
+}
+
+function buildAnnotationEditor(sourceCanvas) {
+    var overlay = document.createElement('div');
+    overlay.id = 'annotation-editor-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#1a1a1a;display:flex;flex-direction:column;';
+
+    var toolbar = document.createElement('div');
+    toolbar.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;background:#2d2d2d;flex-shrink:0;';
+
+    var tools = [
+        { id: 'tool-brush', label: 'Brush', title: 'Draw' },
+        { id: 'tool-arrow', label: 'Arrow', title: 'Arrow' },
+        { id: 'tool-text', label: 'Text', title: 'Text' },
+    ];
+    var activeTool = 'brush';
+
+    tools.forEach(function(t) {
+        var btn = document.createElement('button');
+        btn.id = t.id;
+        btn.textContent = t.label;
+        btn.title = t.title;
+        btn.style.cssText = 'padding:6px 12px;border:1px solid #555;background:#444;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;';
+        btn.onclick = function() {
+            activeTool = t.id.replace('tool-', '');
+            document.querySelectorAll('#annotation-editor-overlay button[id^=tool-]').forEach(function(b) {
+                b.style.background = '#444';
+            });
+            btn.style.background = '#e05b5b';
+        };
+        toolbar.appendChild(btn);
+    });
+
+    var undoBtn = document.createElement('button');
+    undoBtn.textContent = 'Undo';
+    undoBtn.style.cssText = 'padding:6px 12px;border:1px solid #555;background:#333;color:#ccc;border-radius:4px;cursor:pointer;font-size:13px;margin-left:8px;';
+    undoBtn.onclick = function() { undoAnnotation(); };
+    toolbar.appendChild(undoBtn);
+
+    var spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    toolbar.appendChild(spacer);
+
+    var doneBtn = document.createElement('button');
+    doneBtn.textContent = 'Done';
+    doneBtn.style.cssText = 'padding:6px 16px;border:none;background:#22c55e;color:#fff;border-radius:4px;cursor:pointer;font-size:13px;font-weight:600;';
+    doneBtn.onclick = function() { saveAnnotation(annotCanvas); };
+    toolbar.appendChild(doneBtn);
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding:6px 12px;border:1px solid #555;background:#333;color:#ccc;border-radius:4px;cursor:pointer;font-size:13px;margin-left:4px;';
+    cancelBtn.onclick = function() {
+        document.getElementById('annotation-editor-overlay').remove();
+        document.getElementById('feedback-modal-box').style.display = 'block';
+    };
+    toolbar.appendChild(cancelBtn);
+
+    overlay.appendChild(toolbar);
+
+    var canvasContainer = document.createElement('div');
+    canvasContainer.style.cssText = 'flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:12px;';
+
+    var annotCanvas = document.createElement('canvas');
+    annotCanvas.width = sourceCanvas.width;
+    annotCanvas.height = sourceCanvas.height;
+    annotCanvas.style.cssText = 'background-image:url(' + sourceCanvas.toDataURL() + ');background-size:100% 100%;cursor:crosshair;max-width:100%;';
+
+    var ctx = annotCanvas.getContext('2d');
+    ctx.strokeStyle = '#ff3333';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+
+    var undoStack = [];
+    var MAX_UNDO = 20;
+
+    function saveState() {
+        if (undoStack.length >= MAX_UNDO) undoStack.shift();
+        undoStack.push(ctx.getImageData(0, 0, annotCanvas.width, annotCanvas.height));
+    }
+
+    function undoAnnotation() {
+        if (undoStack.length === 0) return;
+        var prev = undoStack.pop();
+        ctx.putImageData(prev, 0, 0);
+    }
+
+    var isDrawing = false;
+    var startX = 0, startY = 0;
+    var arrowSnapshot = null;
+
+    function getPos(e) {
+        var rect = annotCanvas.getBoundingClientRect();
+        var scaleX = annotCanvas.width / rect.width;
+        var scaleY = annotCanvas.height / rect.height;
+        var clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        var clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    annotCanvas.addEventListener('mousedown', function(e) {
+        if (activeTool === 'text') { placeTextInput(e, annotCanvas, ctx, saveState); return; }
+        isDrawing = true;
+        var pos = getPos(e);
+        startX = pos.x; startY = pos.y;
+        saveState();
+        if (activeTool === 'brush') {
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+        }
+        if (activeTool === 'arrow') {
+            arrowSnapshot = ctx.getImageData(0, 0, annotCanvas.width, annotCanvas.height);
+        }
+    });
+
+    annotCanvas.addEventListener('mousemove', function(e) {
+        if (!isDrawing) return;
+        var pos = getPos(e);
+        if (activeTool === 'brush') {
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        }
+        if (activeTool === 'arrow' && arrowSnapshot) {
+            ctx.putImageData(arrowSnapshot, 0, 0);
+            drawArrow(ctx, startX, startY, pos.x, pos.y);
+        }
+    });
+
+    annotCanvas.addEventListener('mouseup', function(e) {
+        if (!isDrawing) return;
+        isDrawing = false;
+        var pos = getPos(e);
+        if (activeTool === 'arrow') {
+            ctx.putImageData(arrowSnapshot, 0, 0);
+            drawArrow(ctx, startX, startY, pos.x, pos.y);
+            arrowSnapshot = null;
+        }
+    });
+
+    canvasContainer.appendChild(annotCanvas);
+    overlay.appendChild(canvasContainer);
+    document.body.appendChild(overlay);
+
+    document.getElementById('tool-brush').style.background = '#e05b5b';
+}
+
+function drawArrow(ctx, x1, y1, x2, y2) {
+    var headLen = 18;
+    var angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.strokeStyle = '#ff3333';
+    ctx.fillStyle = '#ff3333';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI / 6), y2 - headLen * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI / 6), y2 - headLen * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
+    ctx.fill();
+}
+
+function placeTextInput(e, canvas, ctx, saveState) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var x = (e.clientX - rect.left);
+    var y = (e.clientY - rect.top);
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.style.cssText = 'position:fixed;left:' + (rect.left + x) + 'px;top:' + (rect.top + y) + 'px;background:rgba(0,0,0,0.6);color:#fff;border:1px solid #ff3333;padding:2px 6px;font-size:16px;z-index:10000;min-width:120px;outline:none;';
+    document.body.appendChild(input);
+    input.focus();
+
+    function commitText() {
+        var text = input.value.trim();
+        if (text) {
+            saveState();
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillStyle = '#ff3333';
+            ctx.fillText(text, x * scaleX, y * scaleY);
+        }
+        input.remove();
+    }
+
+    input.addEventListener('blur', commitText);
+    input.addEventListener('keydown', function(ev) {
+        if (ev.key === 'Enter') commitText();
+        if (ev.key === 'Escape') { input.remove(); }
+    });
+}
+
+function saveAnnotation(annotCanvas) {
+    var finalCanvas = document.createElement('canvas');
+    finalCanvas.width = annotCanvas.width;
+    finalCanvas.height = annotCanvas.height;
+    var finalCtx = finalCanvas.getContext('2d');
+
+    var bgUrl = annotCanvas.style.backgroundImage.replace(/url\\(["']?/, '').replace(/["']?\\)/, '');
+    var bgImg = new Image();
+    bgImg.onload = function() {
+        finalCtx.drawImage(bgImg, 0, 0);
+        finalCtx.drawImage(annotCanvas, 0, 0);
+        var dataUrl = finalCanvas.toDataURL('image/png');
+        window._feedbackScreenshotData = dataUrl;
+
+        var thumb = document.getElementById('feedback-screenshot-thumb');
+        thumb.src = dataUrl;
+        thumb.style.display = 'block';
+
+        var hidden = document.getElementById('feedback-screenshot-data');
+        hidden.value = dataUrl;
+
+        var addBtn = document.getElementById('feedback-add-screenshot-btn');
+        if (addBtn) addBtn.textContent = 'Change screenshot';
+
+        document.getElementById('annotation-editor-overlay').remove();
+        document.getElementById('feedback-modal-box').style.display = 'block';
+    };
+    bgImg.src = bgUrl;
 }
 """
 
 
 def feedback_modal():
-    """Feedback modal dialog for bug reports and suggestions"""
+    """Feedback modal dialog for bug reports and suggestions (with screenshot annotation)"""
     return Div(
-        # Backdrop (semi-transparent, click to close)
+        # Backdrop
         Div(
             id="feedback-backdrop",
             onclick="closeFeedbackModal()",
             cls="fixed inset-0 bg-black/50 z-[999]",
             style="display: none;"
         ),
-        # Modal box (white, centered)
+        # Modal box
         Div(
             H3("Сообщить о проблеме", cls="font-bold text-lg mb-4"),
             Form(
@@ -3195,7 +3460,25 @@ def feedback_modal():
                     ),
                     cls="form-control mb-3"
                 ),
-                # Context preview (compact)
+                # Screenshot section
+                Div(
+                    Button(
+                        "Добавить скриншот",
+                        id="feedback-add-screenshot-btn",
+                        type="button",
+                        cls="btn btn-sm btn-outline",
+                        onclick="openAnnotationEditor()"
+                    ),
+                    # Thumbnail preview (hidden until screenshot taken)
+                    Img(
+                        id="feedback-screenshot-thumb",
+                        src="",
+                        style="display:none; max-height:80px; margin-top:8px; border:1px solid #e5e7eb; border-radius:4px; cursor:pointer;",
+                        onclick="openAnnotationEditor()"
+                    ),
+                    cls="form-control mb-3"
+                ),
+                # Context preview
                 Div(
                     P("Автоматически прикрепится:", cls="text-xs text-gray-400 mb-1"),
                     Div(id="feedback-context-preview",
@@ -3206,6 +3489,7 @@ def feedback_modal():
                 Input(type="hidden", name="page_url", id="feedback-page-url"),
                 Input(type="hidden", name="page_title", id="feedback-page-title"),
                 Input(type="hidden", name="debug_context", id="feedback-debug-context"),
+                Input(type="hidden", name="screenshot", id="feedback-screenshot-data"),
                 # Buttons
                 Div(
                     btn("Отправить", variant="primary", icon_name="send", type="submit", full_width=True),
@@ -3215,7 +3499,6 @@ def feedback_modal():
                 hx_post="/api/feedback",
                 hx_swap="innerHTML",
                 hx_target="#feedback-result",
-                # Auto-close after successful submit
                 **{"hx-on::after-request": "if(event.detail.successful) setTimeout(() => closeFeedbackModal(), 1500)"}
             ),
             Div(id="feedback-result"),
@@ -3314,10 +3597,14 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
             Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css"),
             # SheetJS - Excel/CSV file parsing
             Script(src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"),
+            # html2canvas - screenshot capture for bug reports
+            Script(src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"),
             # Sidebar toggle script
             NotStr(SIDEBAR_JS),
             # Feedback JS (debug context collection)
             Script(FEEDBACK_JS),
+            # Annotation editor JS for screenshot feedback
+            Script(ANNOTATION_EDITOR_JS),
             # Theme initialization + Lucide icons initialization
             Script("""
                 (function() {
@@ -23512,7 +23799,10 @@ from services.telegram_service import (
     notify_creator_of_return,
     # Bug report imports
     send_admin_bug_report,
+    send_admin_bug_report_with_photo,
 )
+
+from services.clickup_service import create_clickup_bug_task
 
 
 @rt("/api/telegram/webhook")
@@ -23629,10 +23919,7 @@ def generate_feedback_short_id():
 
 @rt("/api/feedback", methods=["POST"])
 async def submit_feedback(session, request: Request):
-    """Handle feedback/bug report submission.
-
-    Saves to database and sends notification to admin via Telegram.
-    """
+    """Handle feedback/bug report submission with optional screenshot."""
     import json as json_lib
 
     user = session.get("user", {})
@@ -23643,24 +23930,27 @@ async def submit_feedback(session, request: Request):
     page_url = form.get("page_url", "")
     page_title = form.get("page_title", "")
     debug_context_str = form.get("debug_context", "{}")
+    screenshot_data = form.get("screenshot", "").strip()
 
     if not description:
         return Div("Пожалуйста, опишите проблему", cls="text-error mt-2")
 
-    # Parse debug_context
     try:
         debug_context = json_lib.loads(debug_context_str)
-    except:
+    except Exception:
         debug_context = {}
 
-    # Generate short ID
     short_id = generate_feedback_short_id()
-
     supabase = get_supabase()
+
+    # Strip data URI prefix for storage (store raw base64 only)
+    screenshot_b64 = None
+    if screenshot_data and screenshot_data.startswith("data:image"):
+        screenshot_b64 = screenshot_data.split(",", 1)[1] if "," in screenshot_data else None
 
     try:
         # 1. Save to database
-        supabase.table("user_feedback").insert({
+        insert_payload = {
             "short_id": short_id,
             "user_id": user.get("id"),
             "user_email": user.get("email"),
@@ -23672,22 +23962,56 @@ async def submit_feedback(session, request: Request):
             "user_agent": request.headers.get("user-agent", ""),
             "feedback_type": feedback_type,
             "description": description,
-            "debug_context": debug_context
-        }).execute()
+            "debug_context": debug_context,
+        }
+        if screenshot_b64:
+            insert_payload["screenshot_data"] = screenshot_b64
 
-        # 2. Send to Telegram
-        await send_admin_bug_report(
-            short_id=short_id,
-            user_name=user.get("name", user.get("email", "Неизвестный")),
-            user_email=user.get("email", ""),
-            org_name=user.get("org_name", ""),
-            page_url=page_url,
-            feedback_type=feedback_type,
-            description=description,
-            debug_context=debug_context
-        )
+        supabase.table("user_feedback").insert(insert_payload).execute()
 
-        # 3. Return success message with short ID
+        # 2. Create ClickUp task (best-effort, don't fail submission if it fails)
+        clickup_task_id = None
+        try:
+            admin_url = f"{os.getenv('APP_BASE_URL', 'https://kvotaflow.ru')}/admin/feedback/{short_id}"
+            clickup_task_id = await create_clickup_bug_task(
+                short_id=short_id,
+                feedback_type=feedback_type,
+                description=description,
+                user_name=user.get("name", user.get("email", "Неизвестный")),
+                user_email=user.get("email", ""),
+                org_name=user.get("org_name", ""),
+                page_url=page_url,
+                debug_context=debug_context,
+                admin_url=admin_url,
+                has_screenshot=bool(screenshot_b64)
+            )
+            if clickup_task_id:
+                supabase.table("user_feedback").update(
+                    {"clickup_task_id": clickup_task_id}
+                ).eq("short_id", short_id).execute()
+        except Exception as e:
+            logger.warning(f"ClickUp task creation failed for {short_id}: {e}")
+
+        # 3. Send to Telegram (with photo if available)
+        try:
+            clickup_url = None
+            if clickup_task_id:
+                clickup_url = f"https://app.clickup.com/t/{clickup_task_id}"
+            await send_admin_bug_report_with_photo(
+                short_id=short_id,
+                user_name=user.get("name", user.get("email", "Неизвестный")),
+                user_email=user.get("email", ""),
+                org_name=user.get("org_name", ""),
+                page_url=page_url,
+                feedback_type=feedback_type,
+                description=description,
+                debug_context=debug_context,
+                screenshot_b64=screenshot_b64,
+                clickup_url=clickup_url
+            )
+        except Exception as e:
+            logger.warning(f"Telegram notification failed for {short_id}: {e}")
+
         return Div(
             Div("Спасибо за обратную связь!", cls="text-success font-medium"),
             P(f"Номер обращения: {short_id}", cls="text-sm text-gray-500 mt-1 font-mono"),
@@ -29084,6 +29408,325 @@ def get(session):
         users_content,
 
         session=session
+    )
+
+
+# ============================================================================
+# ADMIN FEEDBACK LIST - /admin/feedback
+# ============================================================================
+
+STATUS_LABELS = {
+    "new": ("Новое", "status-error"),
+    "in_progress": ("В работе", "status-warning"),
+    "resolved": ("Решено", "status-success"),
+    "closed": ("Закрыто", "status-neutral"),
+}
+
+FEEDBACK_TYPE_LABELS_RU = {
+    "bug": "Ошибка",
+    "suggestion": "Предложение",
+    "question": "Вопрос",
+}
+
+
+@rt("/admin/feedback")
+def get(session, status_filter: str = ""):
+    """Admin page - list all user feedback / bug reports."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if "admin" not in user.get("roles", []):
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            session=session
+        )
+
+    supabase = get_supabase()
+
+    # Fetch list - deliberately exclude screenshot_data (potentially large)
+    query = supabase.table("user_feedback").select(
+        "id, short_id, user_name, user_email, organization_name, "
+        "feedback_type, description, status, clickup_task_id, created_at, page_url"
+    ).order("created_at", desc=True).limit(200)
+
+    if status_filter:
+        query = query.eq("status", status_filter)
+
+    result = query.execute()
+    items = result.data if result.data else []
+
+    # Status filter tabs
+    all_statuses = [("", "Все"), ("new", "Новые"), ("in_progress", "В работе"),
+                    ("resolved", "Решено"), ("closed", "Закрыто")]
+    filter_tabs = Div(
+        *[
+            A(label,
+              href=f"/admin/feedback{'?status_filter=' + s if s else ''}",
+              cls=f"tab-btn {'active' if status_filter == s else ''}")
+            for s, label in all_statuses
+        ],
+        cls="tabs-nav", style="margin-bottom: 20px;"
+    )
+
+    # Table rows
+    rows = []
+    for item in items:
+        status_label, status_cls = STATUS_LABELS.get(item.get("status", "new"), ("—", "status-neutral"))
+        type_label = FEEDBACK_TYPE_LABELS_RU.get(item.get("feedback_type", ""), item.get("feedback_type", ""))
+        desc_preview = (item.get("description") or "")[:80]
+        if len(item.get("description") or "") > 80:
+            desc_preview += "..."
+
+        clickup_cell = Td("—")
+        if item.get("clickup_task_id"):
+            clickup_cell = Td(
+                A(item["clickup_task_id"],
+                  href=f"https://app.clickup.com/t/{item['clickup_task_id']}",
+                  target="_blank",
+                  style="font-size: 0.75rem; color: #6366f1;")
+            )
+
+        item_short_id = item.get("short_id", "—")
+        rows.append(Tr(
+            Td(A(item_short_id,
+                 href=f"/admin/feedback/{item_short_id}",
+                 style="font-weight: 600; font-family: monospace; color: #3b82f6;")),
+            Td(Span(type_label, cls="status-badge status-neutral")),
+            Td(desc_preview, style="max-width: 300px; font-size: 0.875rem;"),
+            Td(item.get("user_name") or item.get("user_email") or "—", style="font-size: 0.875rem;"),
+            Td(Span(status_label, cls=f"status-badge {status_cls}")),
+            clickup_cell,
+            Td(format_date_russian(item.get("created_at")) if item.get("created_at") else "—",
+               style="font-size: 0.75rem; white-space: nowrap;"),
+            cls="clickable-row",
+            onclick=f"window.location='/admin/feedback/{item_short_id}'"
+        ))
+
+    table = Div(
+        Div(
+            Div(H4(f"Обращения ({len(items)})", style="margin: 0;"), cls="table-header-left"),
+            cls="table-header"
+        ),
+        Div(
+            Table(
+                Thead(Tr(
+                    Th("ID"), Th("Тип"), Th("Описание"), Th("Пользователь"),
+                    Th("Статус"), Th("ClickUp"), Th("Дата")
+                )),
+                Tbody(*rows) if rows else Tbody(Tr(
+                    Td("Нет обращений", colspan="7",
+                       style="text-align: center; padding: 2rem; color: #9ca3af;")
+                )),
+                cls="unified-table"
+            ),
+            cls="table-responsive"
+        ),
+        cls="table-container", style="margin: 0;"
+    )
+
+    return page_layout("Обращения",
+        Div(
+            icon("message-square", size=24, color="#475569"),
+            Span(" Обращения пользователей",
+                 style="font-size: 20px; font-weight: 600; color: #1e293b; margin-left: 8px;"),
+            style="display: flex; align-items: center; margin-bottom: 6px;"
+        ),
+        filter_tabs,
+        table,
+        Div(
+            btn_link("Назад", href="/admin", variant="secondary", icon_name="arrow-left"),
+            style="margin-top: 20px;"
+        ),
+        session=session,
+        current_path="/admin/feedback"
+    )
+
+
+@rt("/admin/feedback/{short_id}/status", methods=["POST"])
+async def post_feedback_status(session, short_id: str, status: str = "new"):
+    """HTMX endpoint to update feedback status."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if "admin" not in user.get("roles", []):
+        return Div("Нет прав", cls="text-error")
+
+    valid_statuses = {"new", "in_progress", "resolved", "closed"}
+    if status not in valid_statuses:
+        return Div("Недопустимый статус", cls="text-error")
+
+    supabase = get_supabase()
+    try:
+        supabase.table("user_feedback").update({
+            "status": status,
+            "updated_at": datetime.now().isoformat()
+        }).eq("short_id", short_id).execute()
+        status_label, _ = STATUS_LABELS.get(status, ("—", ""))
+        return Span(f"Сохранено: {status_label}", cls="text-success text-sm")
+    except Exception as e:
+        logger.error(f"Failed to update feedback status {short_id}: {e}")
+        return Div(f"Ошибка: {e}", cls="text-error text-sm")
+
+
+@rt("/admin/feedback/{short_id}")
+def get(session, short_id: str):
+    """Admin feedback detail page - shows full description, screenshot, context, status form."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if "admin" not in user.get("roles", []):
+        return page_layout("Доступ запрещён", H1("Доступ запрещён"), session=session)
+
+    supabase = get_supabase()
+
+    # Fetch full record including screenshot_data
+    result = supabase.table("user_feedback").select("*").eq("short_id", short_id).limit(1).execute()
+    if not result.data:
+        return page_layout("Не найдено",
+            H1("Обращение не найдено"),
+            P(f"ID: {short_id}"),
+            btn_link("К списку", href="/admin/feedback", variant="secondary"),
+            session=session
+        )
+
+    item = result.data[0]
+
+    status_label, status_cls = STATUS_LABELS.get(item.get("status", "new"), ("—", "status-neutral"))
+    type_label = FEEDBACK_TYPE_LABELS_RU.get(item.get("feedback_type", ""), item.get("feedback_type", ""))
+
+    # Screenshot display
+    screenshot_section = None
+    if item.get("screenshot_data"):
+        screenshot_section = Div(
+            H4("Скриншот", style="margin-bottom: 8px; font-weight: 600;"),
+            Img(
+                src=f"data:image/png;base64,{item['screenshot_data']}",
+                style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;"
+            ),
+            style="margin-bottom: 20px;"
+        )
+
+    # Debug context display
+    context_section = None
+    if item.get("debug_context"):
+        ctx = item["debug_context"]
+        if isinstance(ctx, str):
+            try:
+                ctx = json.loads(ctx)
+            except Exception:
+                ctx = {}
+        ua = ctx.get("userAgent", "")
+        browser = "Chrome" if "Chrome" in ua else "Firefox" if "Firefox" in ua else "Other"
+        context_lines = [
+            f"Browser: {browser}",
+            f"Screen: {ctx.get('screenSize', '—')}",
+            f"URL: {ctx.get('url', '—')}",
+        ]
+        errors = ctx.get("consoleErrors", [])
+        if errors:
+            context_lines.append(f"Console errors ({len(errors)}):")
+            for err in errors:
+                context_lines.append(f"  [{err.get('type', 'error')}] {str(err.get('message', ''))[:120]}")
+        requests_data = ctx.get("recentRequests", [])
+        if requests_data:
+            context_lines.append(f"Recent requests ({len(requests_data)}):")
+            for req in requests_data:
+                status_code = req.get("status", "?")
+                line = f"  {req.get('method', 'GET')} {req.get('url', '?')}: {status_code}"
+                if isinstance(status_code, int) and status_code >= 400:
+                    line += " [FAILED]"
+                context_lines.append(line)
+
+        context_section = Div(
+            H4("Debug контекст", style="margin-bottom: 8px; font-weight: 600;"),
+            Pre(
+                "\n".join(context_lines),
+                style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap;"
+            ),
+            style="margin-bottom: 20px;"
+        )
+
+    # Status update form (HTMX)
+    status_form = Div(
+        H4("Обновить статус", style="margin-bottom: 8px; font-weight: 600;"),
+        Form(
+            Select(
+                Option("Новое", value="new", selected=(item.get("status") == "new")),
+                Option("В работе", value="in_progress", selected=(item.get("status") == "in_progress")),
+                Option("Решено", value="resolved", selected=(item.get("status") == "resolved")),
+                Option("Закрыто", value="closed", selected=(item.get("status") == "closed")),
+                name="status",
+                cls="select select-bordered"
+            ),
+            Button("Сохранить", type="submit", cls="btn btn-sm btn-primary", style="margin-left: 8px;"),
+            Div(id=f"status-result-{short_id}"),
+            hx_post=f"/admin/feedback/{short_id}/status",
+            hx_target=f"#status-result-{short_id}",
+            hx_swap="innerHTML",
+            style="display: flex; align-items: center; gap: 8px;"
+        ),
+        style="margin-bottom: 20px;"
+    )
+
+    # ClickUp link if available
+    clickup_section = None
+    if item.get("clickup_task_id"):
+        clickup_section = Div(
+            A(
+                icon("external-link", size=14),
+                f" Открыть в ClickUp ({item['clickup_task_id']})",
+                href=f"https://app.clickup.com/t/{item['clickup_task_id']}",
+                target="_blank",
+                style="color: #6366f1; text-decoration: none; font-size: 0.875rem;"
+            ),
+            style="margin-bottom: 16px;"
+        )
+
+    content_parts = [
+        Div(
+            btn_link("К списку", href="/admin/feedback", variant="secondary", icon_name="arrow-left"),
+            style="margin-bottom: 16px;"
+        ),
+        Div(
+            Div(
+                Span(type_label, cls="status-badge status-neutral", style="margin-right: 8px;"),
+                Span(status_label, cls=f"status-badge {status_cls}"),
+                style="margin-bottom: 8px;"
+            ),
+            H2(item.get("short_id", ""), style="font-family: monospace; margin-bottom: 4px;"),
+            P(f"От: {item.get('user_name') or '—'} ({item.get('user_email') or '—'})",
+              style="color: #64748b; font-size: 0.875rem; margin: 0;"),
+            P(f"Организация: {item.get('organization_name') or '—'}",
+              style="color: #64748b; font-size: 0.875rem; margin: 0;"),
+            P(f"Страница: {item.get('page_url') or '—'}",
+              style="color: #64748b; font-size: 0.875rem; margin: 4px 0 0 0;"),
+            style="margin-bottom: 20px;"
+        ),
+        Div(
+            H4("Описание", style="margin-bottom: 8px; font-weight: 600;"),
+            P(item.get("description") or "—",
+              style="background: #f8fafc; border-left: 3px solid #3b82f6; padding: 12px; border-radius: 0 6px 6px 0;"),
+            style="margin-bottom: 20px;"
+        ),
+    ]
+    if clickup_section:
+        content_parts.append(clickup_section)
+    content_parts.append(status_form)
+    if screenshot_section:
+        content_parts.append(screenshot_section)
+    if context_section:
+        content_parts.append(context_section)
+
+    return page_layout(f"Обращение {short_id}",
+        *content_parts,
+        session=session,
+        current_path="/admin/feedback"
     )
 
 

@@ -3527,3 +3527,92 @@ async def send_admin_bug_report(
     except Exception as e:
         logger.error(f"Failed to send bug report to admin: {e}")
         return False
+
+
+async def send_admin_bug_report_with_photo(
+    short_id: str,
+    user_name: str,
+    user_email: str,
+    org_name: str,
+    page_url: str,
+    feedback_type: str,
+    description: str,
+    debug_context: dict = None,
+    screenshot_b64: str = None,
+    clickup_url: str = None,
+) -> bool:
+    """
+    Send bug report to admin via Telegram.
+    If screenshot_b64 (raw base64 PNG) is provided, sends as photo with caption.
+    Otherwise sends text-only message.
+
+    Returns True on success.
+    """
+    if not ADMIN_TELEGRAM_CHAT_ID:
+        logger.warning("ADMIN_TELEGRAM_CHAT_ID not configured, skipping bug report")
+        return False
+
+    bot = get_bot()
+    if not bot:
+        logger.warning("Telegram bot not available for bug report")
+        return False
+
+    type_emoji = {
+        "bug": "Bug",
+        "suggestion": "Suggestion",
+        "question": "Question",
+    }
+
+    # Build caption / message text (shared for both photo and text variants)
+    text = (
+        f"{'Bug' if feedback_type == 'bug' else type_emoji.get(feedback_type, 'Feedback')}  #{short_id}\n\n"
+        f"User: {user_name} ({user_email})\n"
+        f"Org: {org_name or 'N/A'}\n"
+        f"Page: {page_url}\n\n"
+        f"Description: {description}"
+    )
+
+    if debug_context:
+        context_lines = ["\n\nContext:"]
+        ua = debug_context.get("userAgent", "")
+        browser = "Chrome" if "Chrome" in ua else "Firefox" if "Firefox" in ua else "Other"
+        context_lines.append(f"- Browser: {browser}")
+        if debug_context.get("screenSize"):
+            context_lines.append(f"- Screen: {debug_context['screenSize']}")
+        errors = debug_context.get("consoleErrors", [])
+        if errors:
+            context_lines.append(f"- Console errors: {len(errors)}")
+            for err in errors[:3]:
+                context_lines.append(f"  - {str(err.get('message', ''))[:80]}")
+        requests_data = debug_context.get("recentRequests", [])
+        failed = [r for r in requests_data if isinstance(r.get("status"), int) and r.get("status", 0) >= 400]
+        if failed:
+            context_lines.append(f"- Failed requests: {len(failed)}")
+        text += "\n".join(context_lines)
+
+    if clickup_url:
+        text += f"\n\nClickUp: {clickup_url}"
+
+    # Telegram limits: caption max 1024 chars, message max 4096 chars
+    chat_id = int(ADMIN_TELEGRAM_CHAT_ID)
+
+    try:
+        if screenshot_b64:
+            import io as _io
+            import base64 as _b64
+            photo_bytes = _b64.b64decode(screenshot_b64)
+            photo_file = _io.BytesIO(photo_bytes)
+            photo_file.name = f"{short_id}.png"
+            await bot.send_photo(
+                chat_id=chat_id,
+                photo=photo_file,
+                caption=text[:1024]
+            )
+        else:
+            await bot.send_message(chat_id=chat_id, text=text[:4096])
+
+        logger.info(f"Bug report {short_id} sent to admin chat {chat_id} (photo={bool(screenshot_b64)})")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send bug report to admin: {e}")
+        return False
