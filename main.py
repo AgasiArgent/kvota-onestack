@@ -29610,7 +29610,7 @@ def get(session, status_filter: str = ""):
 
 @rt("/admin/feedback/{short_id}/status", methods=["POST"])
 async def post_feedback_status(session, short_id: str, status: str = "new"):
-    """HTMX endpoint to update feedback status."""
+    """HTMX endpoint to update feedback status. Syncs to ClickUp if configured."""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -29629,11 +29629,68 @@ async def post_feedback_status(session, short_id: str, status: str = "new"):
             "status": status,
             "updated_at": datetime.now().isoformat()
         }).eq("short_id", short_id).execute()
+
+        # Sync status to ClickUp if task_id exists
+        clickup_msg = ""
+        try:
+            from services.clickup_service import update_clickup_task_status
+            result = supabase.table("user_feedback").select("clickup_task_id").eq("short_id", short_id).limit(1).execute()
+            task_id = (result.data[0] if result.data else {}).get("clickup_task_id")
+            if task_id:
+                synced = await update_clickup_task_status(task_id, status)
+                clickup_msg = " (ClickUp обновлён)" if synced else " (ClickUp: ошибка синхронизации)"
+        except Exception as ce:
+            logger.warning(f"ClickUp sync failed for {short_id}: {ce}")
+
         status_label, _ = STATUS_LABELS.get(status, ("—", ""))
-        return Span(f"Сохранено: {status_label}", cls="text-success text-sm")
+        return Span(f"Сохранено: {status_label}{clickup_msg}", cls="text-success text-sm")
     except Exception as e:
         logger.error(f"Failed to update feedback status {short_id}: {e}")
         return Div(f"Ошибка: {e}", cls="text-error text-sm")
+
+
+@rt("/admin" + "/feedback/{short_id}/sync-clickup", methods=["POST"])
+async def post_feedback_sync_clickup(session, short_id: str):
+    """HTMX endpoint to pull ClickUp task status and update local feedback status."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if "admin" not in user.get("roles", []):
+        return Div("Нет прав", cls="text-error")
+
+    supabase = get_supabase()
+    try:
+        result = supabase.table("user_feedback").select("clickup_task_id, status").eq("short_id", short_id).limit(1).execute()
+        if not result.data:
+            return Span("Обращение не найдено", cls="text-error text-sm")
+
+        task_id = (result.data[0] or {}).get("clickup_task_id")
+        if not task_id:
+            return Span("Нет привязки к ClickUp", cls="text-warning text-sm")
+
+        from services.clickup_service import get_clickup_task_status
+        new_admin_status = await get_clickup_task_status(task_id)
+        if not new_admin_status:
+            return Span("Не удалось получить статус из ClickUp", cls="text-error text-sm")
+
+        current_status = result.data[0].get("status", "new")
+        if new_admin_status == current_status:
+            status_label, _ = STATUS_LABELS.get(current_status, ("—", ""))
+            return Span(f"Статусы совпадают: {status_label}", cls="text-info text-sm")
+
+        supabase.table("user_feedback").update({
+            "status": new_admin_status,
+            "updated_at": datetime.now().isoformat()
+        }).eq("short_id", short_id).execute()
+
+        old_label, _ = STATUS_LABELS.get(current_status, ("—", ""))
+        new_label, _ = STATUS_LABELS.get(new_admin_status, ("—", ""))
+        return Span(f"Синхронизировано: {old_label} → {new_label}", cls="text-success text-sm")
+    except Exception as e:
+        logger.error(f"ClickUp sync failed for {short_id}: {e}")
+        return Span(f"Ошибка: {e}", cls="text-error text-sm")
 
 
 @rt("/admin/feedback/{short_id}")
@@ -29738,17 +29795,30 @@ def get(session, short_id: str):
         style="margin-bottom: 20px;"
     )
 
-    # ClickUp link if available
+    # ClickUp link and sync button if available
     clickup_section = None
     if item.get("clickup_task_id"):
         clickup_section = Div(
-            A(
-                icon("external-link", size=14),
-                f" Открыть в ClickUp ({item['clickup_task_id']})",
-                href=f"https://app.clickup.com/t/{item['clickup_task_id']}",
-                target="_blank",
-                style="color: #6366f1; text-decoration: none; font-size: 0.875rem;"
+            Div(
+                A(
+                    icon("external-link", size=14),
+                    f" Открыть в ClickUp ({item['clickup_task_id']})",
+                    href=f"https://app.clickup.com/t/{item['clickup_task_id']}",
+                    target="_blank",
+                    style="color: #6366f1; text-decoration: none; font-size: 0.875rem;"
+                ),
+                Button(
+                    icon("refresh-cw", size=14),
+                    " Синхронизировать из ClickUp",
+                    hx_post=f"/admin/feedback/{short_id}/sync-clickup",
+                    hx_target=f"#clickup-sync-result-{short_id}",
+                    hx_swap="innerHTML",
+                    cls="btn btn-sm btn-secondary",
+                    style="margin-left: 12px; font-size: 0.75rem;"
+                ),
+                style="display: flex; align-items: center; gap: 8px;"
             ),
+            Div(id=f"clickup-sync-result-{short_id}"),
             style="margin-bottom: 16px;"
         )
 

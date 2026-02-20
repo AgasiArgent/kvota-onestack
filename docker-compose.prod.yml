@@ -17,6 +17,8 @@ services:
       - TELEGRAM_WEBHOOK_URL=${TELEGRAM_WEBHOOK_URL:-}
       - DADATA_API_KEY=${DADATA_API_KEY:-}
       - HERE_API_KEY=${HERE_API_KEY:-}
+      - CLICKUP_API_KEY=${CLICKUP_API_KEY:-}
+      - CLICKUP_BUG_LIST_ID=${CLICKUP_BUG_LIST_ID:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/login')"]
       interval: 30s
