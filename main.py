@@ -7908,7 +7908,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         manager_select = Select(
             *manager_opts,
             name="manager_id",
-            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: white; flex: 1; min-width: 120px; max-width: 250px;",
             onchange="this.form.submit()",
         )
 
@@ -7917,27 +7917,28 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         reset_link = A(
             "Сбросить",
             href="/quotes",
-            style="display: inline-flex; align-items: center; padding: 6px 12px; font-size: 13px; color: #64748b; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 6px; background: white;",
+            style="display: inline-flex; align-items: center; padding: 6px 10px; font-size: 12px; color: #64748b; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 6px; background: white; white-space: nowrap;",
         )
 
+    _filter_select_style = "padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; background: white; flex: 1; min-width: 120px; max-width: 250px;"
     filter_bar = Form(
         Select(
             *status_options,
             name="status",
-            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            style=_filter_select_style,
             onchange="this.form.submit()",
         ),
         Select(
             *customer_options,
             name="customer_id",
-            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            style=_filter_select_style,
             onchange="this.form.submit()",
         ),
         manager_select,
         reset_link,
         method="get",
         action="/quotes",
-        style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 16px;",
+        style="display: flex; flex-wrap: nowrap; gap: 8px; padding: 8px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 12px; align-items: center;",
     )
 
     # -- Styles --
