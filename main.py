@@ -2749,6 +2749,7 @@ def sidebar(session, current_path: str = ""):
     # Customers - for sales roles
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
         registries_items.append({"icon": "users", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
+        registries_items.append({"icon": "file-text", "label": "Коммерческие предложения", "href": "/quotes", "roles": ["sales", "sales_manager", "admin"]})
 
     # Suppliers - for procurement
     if is_admin or "procurement" in roles:
@@ -7806,13 +7807,20 @@ def get(session):
         return redirect
 
     user = session["user"]
+    roles = user.get("roles", [])
+    is_privileged = "admin" in roles or "top_manager" in roles
+
     supabase = get_supabase()
 
-    result = supabase.table("quotes") \
+    query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, quote_versions!quote_versions_quote_id_fkey(version)") \
         .eq("organization_id", user["org_id"]) \
-        .order("created_at", desc=True) \
-        .execute()
+        .order("created_at", desc=True)
+
+    if not is_privileged:
+        query = query.eq("created_by", user["id"])
+
+    result = query.execute()
 
     quotes = result.data or []
 
