@@ -312,31 +312,36 @@ class TestActionButtonPlacement:
     ABOVE the items table, not below it."""
 
     def test_calculate_button_before_items_table(self):
-        """Рассчитать button/link must appear BEFORE the items-spreadsheet div in code order."""
+        """Action toolbar (containing Рассчитать) must appear BEFORE the items-spreadsheet
+        div in code order. Buttons live in _sales_action_toolbar() helper."""
         section = _extract_overview_tab_section()
-        calc_pos = section.find("Рассчитать")
+        toolbar_pos = section.find("_sales_action_toolbar(")
         items_pos = section.find('id="items-spreadsheet"')
-        assert calc_pos != -1, "Рассчитать button not found"
+        # The toolbar helper encapsulates action buttons (Рассчитать, etc.)
+        assert toolbar_pos != -1, (
+            "_sales_action_toolbar() call not found in overview section. "
+            "Action buttons (Рассчитать, Отправить на контроль) must be rendered "
+            "via _sales_action_toolbar() helper."
+        )
         assert items_pos != -1, "items-spreadsheet not found"
-        assert calc_pos < items_pos, (
-            f"Рассчитать button (pos {calc_pos}) must appear BEFORE items table "
-            f"(pos {items_pos}). Currently it is after the table."
+        assert toolbar_pos < items_pos, (
+            f"_sales_action_toolbar() call (pos {toolbar_pos}) must appear BEFORE items table "
+            f"(pos {items_pos}). Action buttons should be above the spreadsheet."
         )
 
     def test_submit_control_button_above_items_table(self):
-        """An 'Отправить на контроль' button should exist ABOVE the items table,
-        in the same action bar as 'Рассчитать'."""
+        """Action toolbar (containing 'Отправить на контроль') should exist ABOVE
+        the items table. Buttons live in _sales_action_toolbar() helper."""
         section = _extract_overview_tab_section()
         items_pos = section.find('id="items-spreadsheet"')
         assert items_pos != -1, "items-spreadsheet not found"
         before_items = section[:items_pos]
-        # The button should be in a dedicated action bar before items, not in the
-        # conditional workflow section (pending_sales_review) that exists after items
-        has_button = "Отправить на контроль" in before_items
-        assert has_button, (
-            "Overview tab must have an 'Отправить на контроль' button ABOVE the items table, "
-            "in the same action bar as 'Рассчитать'. "
-            "Layout: Рассчитать (left), Отправить на контроль (right)."
+        # The action toolbar helper encapsulates both Рассчитать and Отправить на контроль
+        has_toolbar = "_sales_action_toolbar(" in before_items
+        assert has_toolbar, (
+            "Overview tab must call _sales_action_toolbar() ABOVE the items table. "
+            "This helper renders the action bar with 'Рассчитать' (left) and "
+            "'Отправить на контроль' (right)."
         )
 
 

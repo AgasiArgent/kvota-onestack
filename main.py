@@ -8627,6 +8627,43 @@ def overview_subtabs(quote_id, active_subtab):
     return Div(*pills, style="display: flex; gap: 0.5rem; margin-bottom: 1rem;")
 
 
+def _sales_action_toolbar(quote_id, workflow_status, is_revision, is_justification_needed):
+    """Persistent action toolbar shown on BOTH Обзор and Позиции sub-tabs.
+    Visually distinct from tab pills: thin bar with sm-sized outline buttons,
+    light gray background, top/bottom border separating it from content.
+    """
+    left_buttons = Div(
+        btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="secondary", icon_name="calculator", size="sm"),
+        btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history", size="sm"),
+        btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table", size="sm") if show_validation_excel(workflow_status) else None,
+        btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text", size="sm") if show_quote_pdf(workflow_status) else None,
+        btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text", size="sm") if show_invoice_and_spec(workflow_status) else None,
+        style="display: flex; gap: 0.375rem; flex-wrap: wrap; align-items: center;"
+    )
+    right_buttons = Div(
+        (Form(
+            btn("Отправить на контроль", variant="secondary", icon_name="send", type="submit", size="sm"),
+            method="post",
+            action=f"/quotes/{quote_id}/submit-quote-control",
+            style="display: inline;"
+        ) if workflow_status == "pending_sales_review" and not is_revision and not is_justification_needed else None),
+        btn("Удалить КП", variant="danger", icon_name="trash-2", size="sm",
+            id="btn-delete-quote", onclick="showDeleteModal()"),
+        style="display: flex; gap: 0.375rem; align-items: center;"
+    )
+    return Div(
+        Div(left_buttons, right_buttons,
+            style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"),
+        style=(
+            "background: #f8fafc; "
+            "border-top: 1px solid #e5e7eb; "
+            "border-bottom: 1px solid #e5e7eb; "
+            "padding: 0.5rem 0; "
+            "margin-bottom: 1rem;"
+        )
+    )
+
+
 def _overview_info_subtab(quote, quote_id, customer, customers, seller_companies, contacts,
                           creator_name, created_at_display, expiry_display, is_expired,
                           delivery_terms_options, delivery_method_options,
@@ -8971,9 +9008,6 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_total > 0 else "—"
     _itogo_margin_color = "#16a34a" if _itogo_profit > 0 else "#64748b"
 
-    # calculate button label (used in products sub-tab)
-    _calc_btn_label = "\u0420\u0430\u0441\u0441\u0447\u0438\u0442\u0430\u0442\u044c"
-
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
         # Persistent header with IDN, status, client name
         quote_header(quote, workflow_status, (customer or {}).get("name")),
@@ -8986,6 +9020,9 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
         # Sub-tab pills (Обзор / Позиции) — calculate and products via _overview_products_subtab(quote_id, subtab)
         overview_subtabs(quote_id, subtab),
+
+        # Persistent action toolbar — visible on both sub-tabs
+        _sales_action_toolbar(quote_id, workflow_status, is_revision, is_justification_needed),
 
         # Block I: ОСНОВНАЯ ИНФОРМАЦИЯ (2-column grid)
         Div(
@@ -9276,35 +9313,6 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             ),
             style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
         ) if subtab == "info" else None,
-
-        # Unified action card ABOVE items table (all buttons in one card)
-        Div(
-            Div(
-                # Left: Рассчитать, История версий, Валидация Excel, КП PDF, Счёт PDF
-                Div(
-                    btn_link(_calc_btn_label, href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
-                    btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history"),
-                    btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table") if show_validation_excel(workflow_status) else None,
-                    btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text") if show_quote_pdf(workflow_status) else None,
-                    btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text") if show_invoice_and_spec(workflow_status) else None,
-                    style="display: flex; gap: 0.5rem; flex-wrap: wrap;"
-                ),
-                # Right: Отправить на контроль + Удалить КП
-                Div(
-                    (Form(
-                        btn("Отправить на контроль", variant="secondary", icon_name="file-text", type="submit"),
-                        method="post",
-                        action=f"/quotes/{quote_id}/submit-quote-control",
-                        style="display: inline;"
-                    ) if workflow_status == "pending_sales_review" and not is_revision and not is_justification_needed else None),
-                    btn("Удалить КП", variant="danger", icon_name="trash-2", id="btn-delete-quote", onclick="showDeleteModal()"),
-                    style="display: flex; gap: 0.5rem; align-items: center;"
-                ),
-                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;"
-            ),
-            cls="card",
-            style="background: white; border-radius: 0.75rem; padding: 0.75rem 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ) if subtab == "products" else None,
 
         # Products (Handsontable spreadsheet) with gradient styling
         Div(
