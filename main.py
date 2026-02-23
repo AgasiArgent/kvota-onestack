@@ -2749,7 +2749,9 @@ def sidebar(session, current_path: str = ""):
     # Customers - for sales roles
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
         registries_items.append({"icon": "users", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
-        registries_items.append({"icon": "file-text", "label": "Коммерческие предложения", "href": "/quotes", "roles": ["sales", "sales_manager", "admin"]})
+
+    # Quotes registry - visible to ALL authenticated roles
+    registries_items.append({"icon": "file-text", "label": "Коммерческие предложения", "href": "/quotes", "roles": None})
 
     # Suppliers - for procurement
     if is_admin or "procurement" in roles:
@@ -7798,7 +7800,7 @@ def _calculate_quotes_stage_stats(quotes: list) -> dict:
 
 
 @rt("/quotes")
-def get(session):
+def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
     """
     Quotes List page — redesigned with summary stage blocks and compact table.
     """
@@ -7808,16 +7810,17 @@ def get(session):
 
     user = session["user"]
     roles = user.get("roles", [])
-    is_privileged = "admin" in roles or "top_manager" in roles
+    # is_sales_only: user has sales/sales_manager but no other privileged role
+    is_sales_only = bool(roles) and set(roles).issubset({"sales", "sales_manager"})
 
     supabase = get_supabase()
 
     query = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, quote_versions!quote_versions_quote_id_fkey(version)") \
+        .select("id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, created_by, quote_versions!quote_versions_quote_id_fkey(version)") \
         .eq("organization_id", user["org_id"]) \
         .order("created_at", desc=True)
 
-    if not is_privileged:
+    if is_sales_only:
         query = query.eq("created_by", user["id"])
 
     result = query.execute()
@@ -7830,8 +7833,112 @@ def get(session):
         q["version_count"] = len(versions)
         q["current_version"] = max([v.get("version", 1) for v in versions]) if versions else 1
 
-    # Calculate stage stats for summary blocks
+    # Calculate stage stats for summary blocks (uses UNFILTERED quotes)
     stage_stats = _calculate_quotes_stage_stats(quotes)
+
+    # --- Fetch dropdown data for filters ---
+    # Customers list for filter dropdown
+    try:
+        customers_result = supabase.table("customers") \
+            .select("id, name") \
+            .eq("organization_id", user["org_id"]) \
+            .order("name") \
+            .execute()
+        customers_list = customers_result.data or []
+    except Exception:
+        customers_list = []
+
+    # Manager options from distinct created_by values in quotes
+    managers = []
+    if not is_sales_only:
+        creator_ids = list(set(q.get("created_by") for q in quotes if q.get("created_by")))
+        if creator_ids:
+            try:
+                profiles_result = supabase.table("profiles") \
+                    .select("id, full_name") \
+                    .in_("id", creator_ids) \
+                    .order("full_name") \
+                    .execute()
+                managers = profiles_result.data or []
+            except Exception:
+                managers = []
+
+    # --- Python-side filtering ---
+    filtered_quotes = list(quotes)
+    if status:
+        filtered_quotes = [q for q in filtered_quotes if q.get("workflow_status") == status]
+    if customer_id:
+        filtered_quotes = [q for q in filtered_quotes if q.get("customer_id") == customer_id]
+    if manager_id:
+        filtered_quotes = [q for q in filtered_quotes if q.get("created_by") == manager_id]
+
+    # --- Build filter bar ---
+    any_filter_active = bool(status or customer_id or manager_id)
+
+    status_options = [
+        Option("Все статусы", value=""),
+        Option("Черновик", value="draft", selected=(status == "draft")),
+        Option("Закупки", value="pending_procurement", selected=(status == "pending_procurement")),
+        Option("Логистика", value="pending_logistics", selected=(status == "pending_logistics")),
+        Option("Таможня", value="pending_customs", selected=(status == "pending_customs")),
+        Option("Контроль КП", value="pending_quote_control", selected=(status == "pending_quote_control")),
+        Option("Контроль спец.", value="pending_spec_control", selected=(status == "pending_spec_control")),
+        Option("Ревизия", value="pending_sales_review", selected=(status == "pending_sales_review")),
+        Option("Согласование", value="pending_approval", selected=(status == "pending_approval")),
+        Option("Одобрено", value="approved", selected=(status == "approved")),
+        Option("Отправлено", value="sent_to_client", selected=(status == "sent_to_client")),
+        Option("Сделка", value="deal", selected=(status == "deal")),
+        Option("Отклонено", value="rejected", selected=(status == "rejected")),
+        Option("Отменено", value="cancelled", selected=(status == "cancelled")),
+    ]
+
+    customer_options = [Option("Все клиенты", value="")]
+    for c in customers_list:
+        customer_options.append(
+            Option(c.get("name", "—"), value=c.get("id", ""), selected=(customer_id == c.get("id", "")))
+        )
+
+    manager_select = None
+    if not is_sales_only:
+        manager_opts = [Option("Все менеджеры", value="")]
+        for m in managers:
+            manager_opts.append(
+                Option(m.get("full_name", "—"), value=m.get("id", ""), selected=(manager_id == m.get("id", "")))
+            )
+        manager_select = Select(
+            *manager_opts,
+            name="manager_id",
+            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            onchange="this.form.submit()",
+        )
+
+    reset_link = None
+    if any_filter_active:
+        reset_link = A(
+            "Сбросить",
+            href="/quotes",
+            style="display: inline-flex; align-items: center; padding: 6px 12px; font-size: 13px; color: #64748b; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 6px; background: white;",
+        )
+
+    filter_bar = Form(
+        Select(
+            *status_options,
+            name="status",
+            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            onchange="this.form.submit()",
+        ),
+        Select(
+            *customer_options,
+            name="customer_id",
+            style="padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 160px; background: white;",
+            onchange="this.form.submit()",
+        ),
+        manager_select,
+        reset_link,
+        method="get",
+        action="/quotes",
+        style="display: flex; flex-wrap: wrap; gap: 12px; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 16px;",
+    )
 
     # -- Styles --
     header_card_style = (
@@ -7894,20 +8001,20 @@ def get(session):
         style="display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 16px;",
     )
 
-    # Build table rows
+    # Build table rows (uses filtered_quotes for display)
     table_rows = []
-    for q in quotes:
+    for q in filtered_quotes:
         customer_name = (q.get("customers") or {}).get("name", "—")
-        customer_id = (q.get("customers") or {}).get("id")
+        cust_id = (q.get("customers") or {}).get("id")
         created_date = format_date_russian(q.get("created_at")) if q.get("created_at") else "—"
         idn_label = q.get("idn_quote", f"#{q['id'][:8]}")
         quote_currency = q.get("currency", "RUB")
 
         customer_cell = (
-            A(customer_name, href=f"/customers/{customer_id}",
+            A(customer_name, href=f"/customers/{cust_id}",
               style="color: #1e293b; text-decoration: none; font-weight: 500;",
               onclick="event.stopPropagation();")
-            if customer_id else Span(customer_name, style="color: #94a3b8;")
+            if cust_id else Span(customer_name, style="color: #94a3b8;")
         )
 
         table_rows.append(Tr(
@@ -7941,7 +8048,7 @@ def get(session):
             Div(
                 icon("file-text", size=22, style="color: #3b82f6;"),
                 H1("Коммерческие предложения", style=page_title_style),
-                Span(f"{len(quotes)}", style=count_badge_style),
+                Span(f"{len(filtered_quotes)}", style=count_badge_style),
                 style="display: flex; align-items: center; gap: 12px;"
             ),
             Div(
@@ -7959,6 +8066,9 @@ def get(session):
         # Summary stage blocks
         summary_grid,
 
+        # Filter bar
+        filter_bar,
+
         # Table content with compact styling
         Div(
             Div(
@@ -7975,7 +8085,7 @@ def get(session):
                     )),
                     Tbody(
                         *table_rows
-                    ) if quotes else Tbody(Tr(Td(
+                    ) if filtered_quotes else Tbody(Tr(Td(
                         Div(
                             icon("file-text", size=28, style="color: #94a3b8; margin-bottom: 8px;"),
                             Div("Нет коммерческих предложений", style="font-size: 14px; font-weight: 500; color: #64748b; margin-bottom: 6px;"),
@@ -8000,9 +8110,9 @@ def get(session):
 
         # Table footer with count
         Div(
-            Span(f"Всего: {len(quotes)} КП", style="font-size: 12px; color: #64748b;"),
+            Span(f"Всего: {len(filtered_quotes)} КП", style="font-size: 12px; color: #64748b;"),
             cls="table-footer"
-        ) if quotes else None,
+        ) if filtered_quotes else None,
 
         session=session,
         current_path="/quotes"
