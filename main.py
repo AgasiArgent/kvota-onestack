@@ -7809,7 +7809,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         return redirect
 
     user = session["user"]
-    roles = user.get("roles", [])
+    roles = get_effective_roles(session)
     # is_sales_only: user has sales/sales_manager but no other privileged role
     is_sales_only = bool(roles) and set(roles).issubset({"sales", "sales_manager"})
 
@@ -7876,7 +7876,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
     any_filter_active = bool(status or customer_id or manager_id)
 
     status_options = [
-        Option("Все статусы", value=""),
+        Option("Все статусы", value="", selected=(status == "")),
         Option("Черновик", value="draft", selected=(status == "draft")),
         Option("Закупки", value="pending_procurement", selected=(status == "pending_procurement")),
         Option("Логистика", value="pending_logistics", selected=(status == "pending_logistics")),
@@ -7900,7 +7900,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
 
     manager_select = None
     if not is_sales_only:
-        manager_opts = [Option("Все менеджеры", value="")]
+        manager_opts = [Option("Все менеджеры", value="", selected=(manager_id == ""))]
         for m in managers:
             manager_opts.append(
                 Option(m.get("full_name", "—"), value=m.get("id", ""), selected=(manager_id == m.get("id", "")))
