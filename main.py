@@ -8205,11 +8205,104 @@ async def post(inn: str = "", no_inn: str = "", session=None):
 # ============================================================================
 
 @rt("/quotes/new")
-def get(session):
-    """Create a new draft quote immediately and redirect to edit page."""
+def get(session, customer_id: str = ""):
+    """Show quote creation form with essential fields."""
     redirect = require_login(session)
     if redirect:
         return redirect
+
+    user = session["user"]
+    from services.customer_service import get_all_customers
+    from services.seller_company_service import get_all_seller_companies
+
+    customers = get_all_customers(organization_id=user["org_id"], limit=200)
+    seller_companies = get_all_seller_companies(organization_id=user["org_id"], is_active=True)
+
+    # Build customer options with pre-selection support
+    customer_opts = [Option("-- Выберите клиента --", value="", disabled=True, selected=(customer_id == ""))]
+    for c in customers:
+        customer_opts.append(Option(c.name, value=str(c.id), selected=(customer_id == str(c.id))))
+
+    return page_layout("Новый КП",
+        H1(icon("file-plus", size=28), " Новый КП", cls="page-header"),
+        Div(
+            Form(
+                # Customer (required)
+                Div(
+                    Label("Клиент *", For="customer_id"),
+                    Select(
+                        *customer_opts,
+                        name="customer_id", id="customer_id", required=True, cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+                # Seller company (optional)
+                Div(
+                    Label("Наше юрлицо", For="seller_company_id"),
+                    Select(
+                        Option("-- Не указано --", value=""),
+                        *[Option(sc.name, value=str(sc.id)) for sc in seller_companies],
+                        name="seller_company_id", id="seller_company_id", cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+                # Delivery city + country in one row
+                Div(
+                    Div(
+                        Label("Город доставки", For="delivery_city"),
+                        Input(name="delivery_city", id="delivery_city", type="text",
+                              placeholder="Москва", cls="form-input"),
+                        cls="form-group"
+                    ),
+                    Div(
+                        Label("Страна доставки", For="delivery_country"),
+                        Input(name="delivery_country", id="delivery_country", type="text",
+                              placeholder="Россия", cls="form-input"),
+                        cls="form-group"
+                    ),
+                    cls="form-row"
+                ),
+                # Delivery method (optional)
+                Div(
+                    Label("Способ доставки", For="delivery_method"),
+                    Select(
+                        Option("-- Не указан --", value=""),
+                        Option("Авиа", value="air"),
+                        Option("Авто", value="auto"),
+                        Option("Море", value="sea"),
+                        Option("Мультимодально", value="multimodal"),
+                        name="delivery_method", id="delivery_method", cls="form-input"
+                    ),
+                    cls="form-group"
+                ),
+                # Actions
+                Div(
+                    Button("Создать КП", type="submit", cls="btn btn-primary"),
+                    A("Отмена", href="/quotes", cls="btn btn-secondary"),
+                    cls="form-actions"
+                ),
+                method="post", action="/quotes/new"
+            ),
+            cls="card"
+        ),
+        session=session
+    )
+
+
+@rt("/quotes/new")
+def post(session,
+         customer_id: str = "",
+         seller_company_id: str = "",
+         delivery_city: str = "",
+         delivery_country: str = "",
+         delivery_method: str = ""):
+    """Create a new draft quote from form submission."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not customer_id:
+        return RedirectResponse("/quotes/new", status_code=303)
 
     user = session["user"]
     supabase = get_supabase()
@@ -8224,28 +8317,30 @@ def get(session):
         quote_num = (count_result.count or 0) + 1
         idn_quote = f"Q-{datetime.now().strftime('%Y%m')}-{quote_num:04d}"
 
-        # Create empty draft (customer_id is now nullable)
         insert_data = {
             "idn_quote": idn_quote,
             "title": "Новый КП",
-            "customer_id": None,  # Will be selected on detail page
+            "customer_id": customer_id,
             "organization_id": user["org_id"],
             "currency": "RUB",
             "delivery_terms": "DDP",
             "status": "draft",
-            "created_by": user["id"]
+            "created_by": user["id"],
+            "seller_company_id": seller_company_id if seller_company_id else None,
+            "delivery_city": delivery_city.strip() if delivery_city else None,
+            "delivery_country": delivery_country.strip() if delivery_country else None,
+            "delivery_method": delivery_method if delivery_method else None,
         }
 
         result = supabase.table("quotes").insert(insert_data).execute()
         new_quote = result.data[0]
 
-        # Redirect immediately to edit page
         return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
 
     except Exception as e:
         return page_layout("Ошибка",
             Div(f"Ошибка создания КП: {str(e)}", cls="alert alert-error"),
-            btn_link("Назад к списку КП", href="/quotes", variant="secondary", icon_name="arrow-left"),
+            btn_link("Назад", href="/quotes/new", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
