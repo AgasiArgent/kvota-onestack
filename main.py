@@ -41444,6 +41444,17 @@ def get(session):
     return page_layout("Обучение", content, session=session, current_path="/training")
 
 
+def _get_embed_url(video_id: str, platform: str) -> str:
+    """Get the embed URL based on platform."""
+    if platform == "youtube":
+        return f"https://www.youtube.com/embed/{video_id}"
+    elif platform == "rutube":
+        return f"https://rutube.ru/play/embed/{video_id}"
+    else:
+        # Fallback to rutube
+        return f"https://rutube.ru/play/embed/{video_id}"
+
+
 def _render_video_cards(videos, is_admin=False):
     """Render a list of video cards for the training grid."""
     if not videos:
@@ -41456,10 +41467,10 @@ def _render_video_cards(videos, is_admin=False):
 
     cards = []
     for v in videos:
-        # YouTube embed
+        # Video embed (platform-aware)
         embed = Div(
             Iframe(
-                src=f"https://www.youtube.com/embed/{v.youtube_id}",
+                src=_get_embed_url(v.youtube_id, v.platform),
                 width="100%",
                 height="200",
                 frameborder="0",
@@ -41564,8 +41575,9 @@ def get(session):
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
-                    Label("YouTube ссылка или ID *"),
-                    Input(name="youtube_url", placeholder="https://www.youtube.com/watch?v=... или ID видео", required=True, cls="form-control"),
+                    Label("Ссылка на видео *"),
+                    Input(name="youtube_url", placeholder="https://rutube.ru/video/... или https://youtube.com/watch?v=...", required=True, cls="form-control"),
+                    Small("Поддерживается: Rutube, YouTube", style="color: var(--text-secondary); font-size: 0.75rem;"),
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
@@ -41614,16 +41626,21 @@ def post(session, title: str = "", youtube_url: str = "", category: str = "", de
     org_id = user.get("org_id")
     user_id = user.get("id")
 
-    from services.training_video_service import create_video, get_all_videos
+    from services.training_video_service import create_video, get_all_videos, extract_video_info
+
+    video_info = extract_video_info(youtube_url)
+    video_id_val = video_info["video_id"]
+    platform = video_info["platform"]
 
     result = create_video(
         organization_id=org_id,
         title=title,
-        youtube_id=youtube_url,
+        youtube_id=video_id_val,
         category=category,
         description=description if description else None,
         created_by=user_id,
         sort_order=sort_order,
+        platform=platform,
     )
 
     if not result:
@@ -41657,6 +41674,12 @@ def get(session, video_id: str):
     if not video or video.organization_id != org_id:
         return Div(P("Видео не найдено"), style="color: red;")
 
+    # Reconstruct URL from stored ID + platform so re-save doesn't corrupt platform
+    if video.platform == "youtube":
+        display_url = f"https://www.youtube.com/watch?v={video.youtube_id}"
+    else:
+        display_url = f"https://rutube.ru/video/{video.youtube_id}/"
+
     form = Div(
         Div(
             Div(
@@ -41672,8 +41695,9 @@ def get(session, video_id: str):
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
-                    Label("YouTube ID"),
-                    Input(name="youtube_id", value=video.youtube_id, required=True, cls="form-control"),
+                    Label("Ссылка на видео *"),
+                    Input(name="youtube_id", value=display_url, required=True, cls="form-control"),
+                    Small("Поддерживается: Rutube, YouTube", style="color: var(--text-secondary); font-size: 0.75rem;"),
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
@@ -41721,19 +41745,24 @@ def post(session, video_id: str, title: str = "", youtube_id: str = "", category
     user = session["user"]
     org_id = user.get("org_id")
 
-    from services.training_video_service import get_video, update_video, get_all_videos
+    from services.training_video_service import get_video, update_video, get_all_videos, extract_video_info
 
     video = get_video(video_id)
     if not video or video.organization_id != org_id:
         return Div(P("Видео не найдено"), style="color: red;")
 
+    video_info = extract_video_info(youtube_id)
+    video_id_val = video_info["video_id"]
+    platform = video_info["platform"]
+
     update_video(
         video_id,
         title=title,
-        youtube_id=youtube_id,
+        youtube_id=video_id_val,
         category=category,
         description=description if description else None,
         sort_order=sort_order,
+        platform=platform,
     )
 
     # Return updated grid

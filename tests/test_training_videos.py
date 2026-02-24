@@ -1,11 +1,13 @@
 """
-Tests for Training Videos feature (TDD - tests first, implementation later).
+Tests for Training Videos feature.
 
-Feature: /training page with YouTube video embeds, category filtering, admin CRUD.
+Feature: /training page with multi-platform video embeds (Rutube, YouTube),
+category filtering, admin CRUD.
 
 Tests cover:
-- extract_youtube_id() pure function
-- TrainingVideo dataclass
+- extract_video_info() multi-platform URL parser
+- extract_youtube_id() legacy wrapper
+- TrainingVideo dataclass (with platform field)
 - Service CRUD operations (mocked Supabase)
 - Route access control (auth + role checks)
 - Org isolation (cross-org access prevention)
@@ -48,6 +50,7 @@ def sample_video_data(org_id, user_id):
         "title": "Как создать КП за 5 минут",
         "description": "Пошаговая инструкция по созданию коммерческого предложения",
         "youtube_id": "dQw4w9WgXcQ",
+        "platform": "youtube",
         "category": "Продажи",
         "sort_order": 0,
         "is_active": True,
@@ -66,6 +69,7 @@ def sample_video_data_logistics(org_id, user_id):
         "title": "Отслеживание грузов",
         "description": "Как отслеживать статус грузов в системе",
         "youtube_id": "abc123XYZ",
+        "platform": "rutube",
         "category": "Логистика",
         "sort_order": 10,
         "is_active": True,
@@ -84,6 +88,7 @@ def sample_video_data_other_org(other_org_id, user_id):
         "title": "Video from another org",
         "description": None,
         "youtube_id": "otherOrgVid",
+        "platform": "rutube",
         "category": "Общее",
         "sort_order": 0,
         "is_active": True,
@@ -103,6 +108,7 @@ def multiple_videos(org_id, user_id):
             "title": "Создание КП",
             "description": "Инструкция",
             "youtube_id": "vid001",
+            "platform": "rutube",
             "category": "Продажи",
             "sort_order": 0,
             "is_active": True,
@@ -116,6 +122,7 @@ def multiple_videos(org_id, user_id):
             "title": "Работа с поставщиками",
             "description": None,
             "youtube_id": "vid002",
+            "platform": "youtube",
             "category": "Закупки",
             "sort_order": 0,
             "is_active": True,
@@ -129,6 +136,7 @@ def multiple_videos(org_id, user_id):
             "title": "Отгрузка товара",
             "description": "Описание",
             "youtube_id": "vid003",
+            "platform": "rutube",
             "category": "Логистика",
             "sort_order": 10,
             "is_active": True,
@@ -142,6 +150,7 @@ def multiple_videos(org_id, user_id):
             "title": "Ещё один ролик по продажам",
             "description": None,
             "youtube_id": "vid004",
+            "platform": "rutube",
             "category": "Продажи",
             "sort_order": 10,
             "is_active": True,
@@ -153,7 +162,76 @@ def multiple_videos(org_id, user_id):
 
 
 # =============================================================================
-# TESTS: extract_youtube_id() pure function
+# TESTS: extract_video_info() multi-platform URL parser
+# =============================================================================
+
+class TestExtractVideoInfo:
+    """Tests for extract_video_info multi-platform URL parser."""
+
+    def test_rutube_full_url(self):
+        """Rutube URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://rutube.ru/video/abc123def456/")
+        assert result == {"video_id": "abc123def456", "platform": "rutube"}
+
+    def test_rutube_url_no_trailing_slash(self):
+        """Rutube URL without trailing slash works."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://rutube.ru/video/abc123def456")
+        assert result == {"video_id": "abc123def456", "platform": "rutube"}
+
+    def test_youtube_full_url(self):
+        """YouTube URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        assert result == {"video_id": "dQw4w9WgXcQ", "platform": "youtube"}
+
+    def test_youtube_short_url(self):
+        """YouTube short URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://youtu.be/dQw4w9WgXcQ")
+        assert result == {"video_id": "dQw4w9WgXcQ", "platform": "youtube"}
+
+    def test_youtube_embed_url(self):
+        """YouTube embed URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.youtube.com/embed/dQw4w9WgXcQ")
+        assert result == {"video_id": "dQw4w9WgXcQ", "platform": "youtube"}
+
+    def test_raw_id_defaults_to_rutube(self):
+        """Raw ID defaults to rutube platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("abc123def456")
+        assert result == {"video_id": "abc123def456", "platform": "rutube"}
+
+    def test_whitespace_stripped(self):
+        """Whitespace around input is stripped."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("  https://rutube.ru/video/abc123/  ")
+        assert result == {"video_id": "abc123", "platform": "rutube"}
+
+    def test_empty_string(self):
+        """Empty string returns empty video_id with rutube platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("")
+        assert result == {"video_id": "", "platform": "rutube"}
+
+    def test_youtube_url_with_extra_params(self):
+        """YouTube URL with extra params extracts correct ID."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.youtube.com/watch?v=abc123&t=42")
+        assert result == {"video_id": "abc123", "platform": "youtube"}
+
+    def test_rutube_long_hash(self):
+        """Rutube with long hash (32+ chars) works."""
+        from services.training_video_service import extract_video_info
+        long_hash = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+        result = extract_video_info(f"https://rutube.ru/video/{long_hash}/")
+        assert result == {"video_id": long_hash, "platform": "rutube"}
+
+
+# =============================================================================
+# TESTS: extract_youtube_id() legacy wrapper
 # =============================================================================
 
 class TestExtractYoutubeId:
@@ -256,6 +334,7 @@ class TestTrainingVideoDataclass:
         assert video.youtube_id == "dQw4w9WgXcQ"
         assert video.category == "Продажи"
         assert video.is_active is True
+        assert video.platform == "rutube"  # default
 
     def test_creation_with_all_fields(self):
         """TrainingVideo can be created with all fields including optional."""
@@ -269,6 +348,7 @@ class TestTrainingVideoDataclass:
             category="Логистика",
             sort_order=10,
             is_active=True,
+            platform="youtube",
             description="Some description",
             created_by="user-uuid",
             created_at=now,
@@ -278,6 +358,7 @@ class TestTrainingVideoDataclass:
         assert video.created_by == "user-uuid"
         assert video.created_at == now
         assert video.sort_order == 10
+        assert video.platform == "youtube"
 
     def test_optional_fields_default_to_none(self):
         """Optional fields default to None."""
@@ -291,6 +372,7 @@ class TestTrainingVideoDataclass:
             sort_order=0,
             is_active=True,
         )
+        assert video.platform == "rutube"  # default
         assert video.description is None
         assert video.created_by is None
         assert video.created_at is None
@@ -520,13 +602,20 @@ class TestCreateVideo:
             category="Продажи",
             description="Пошаговая инструкция",
             created_by=user_id,
+            platform="youtube",
         )
 
         assert result is not None
         assert isinstance(result, TrainingVideo)
         assert result.title == "Как создать КП за 5 минут"
         assert result.youtube_id == "dQw4w9WgXcQ"
+        assert result.platform == "youtube"
         mock_client.table.assert_called_with("training_videos")
+
+        # Verify platform is included in insert data
+        insert_call = mock_client.table.return_value.insert.call_args
+        inserted_data = insert_call[0][0]
+        assert inserted_data["platform"] == "youtube"
 
     @patch('services.training_video_service._get_supabase')
     def test_create_video_strips_whitespace(self, mock_get_supabase, org_id, sample_video_data):
