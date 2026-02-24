@@ -5137,7 +5137,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         log_result = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), workflow_status, created_at") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "pending_logistics") \
+            .in_("workflow_status", ["pending_logistics", "pending_logistics_and_customs"]) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -5179,7 +5179,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         cust_result = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), workflow_status, created_at") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "pending_customs") \
+            .in_("workflow_status", ["pending_customs", "pending_logistics_and_customs"]) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -7353,16 +7353,16 @@ def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
             .eq("organization_id", org_id).eq("workflow_status", "pending_procurement").execute()
         total += result.count or 0
 
-    # Logistics tasks
+    # Logistics tasks (pending_logistics + pending_logistics_and_customs)
     if 'logistics' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_logistics").execute()
+            .eq("organization_id", org_id).in_("workflow_status", ["pending_logistics", "pending_logistics_and_customs"]).execute()
         total += result.count or 0
 
-    # Customs tasks
+    # Customs tasks (pending_customs + pending_logistics_and_customs)
     if 'customs' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_customs").execute()
+            .eq("organization_id", org_id).in_("workflow_status", ["pending_customs", "pending_logistics_and_customs"]).execute()
         total += result.count or 0
 
     # Quote controller tasks
