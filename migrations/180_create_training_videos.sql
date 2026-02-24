@@ -46,8 +46,8 @@ CREATE POLICY training_videos_select_policy ON kvota.training_videos
     FOR SELECT
     USING (
         organization_id IN (
-            SELECT organization_id FROM kvota.user_organizations
-            WHERE user_id = auth.uid()
+            SELECT organization_id FROM kvota.organization_members
+            WHERE user_id = auth.uid() AND status = 'active'
         )
     );
 
@@ -56,10 +56,10 @@ CREATE POLICY training_videos_insert_policy ON kvota.training_videos
     FOR INSERT
     WITH CHECK (
         organization_id IN (
-            SELECT uo.organization_id FROM kvota.user_organizations uo
-            JOIN kvota.user_roles ur ON ur.user_id = uo.user_id AND ur.organization_id = uo.organization_id
+            SELECT om.organization_id FROM kvota.organization_members om
+            JOIN kvota.user_roles ur ON ur.user_id = om.user_id AND ur.organization_id = om.organization_id
             JOIN kvota.roles r ON r.id = ur.role_id
-            WHERE uo.user_id = auth.uid() AND r.slug = 'admin'
+            WHERE om.user_id = auth.uid() AND r.slug = 'admin'
         )
     );
 
@@ -68,10 +68,10 @@ CREATE POLICY training_videos_update_policy ON kvota.training_videos
     FOR UPDATE
     USING (
         organization_id IN (
-            SELECT uo.organization_id FROM kvota.user_organizations uo
-            JOIN kvota.user_roles ur ON ur.user_id = uo.user_id AND ur.organization_id = uo.organization_id
+            SELECT om.organization_id FROM kvota.organization_members om
+            JOIN kvota.user_roles ur ON ur.user_id = om.user_id AND ur.organization_id = om.organization_id
             JOIN kvota.roles r ON r.id = ur.role_id
-            WHERE uo.user_id = auth.uid() AND r.slug = 'admin'
+            WHERE om.user_id = auth.uid() AND r.slug = 'admin'
         )
     );
 
@@ -80,14 +80,14 @@ CREATE POLICY training_videos_delete_policy ON kvota.training_videos
     FOR DELETE
     USING (
         organization_id IN (
-            SELECT uo.organization_id FROM kvota.user_organizations uo
-            JOIN kvota.user_roles ur ON ur.user_id = uo.user_id AND ur.organization_id = uo.organization_id
+            SELECT om.organization_id FROM kvota.organization_members om
+            JOIN kvota.user_roles ur ON ur.user_id = om.user_id AND ur.organization_id = om.organization_id
             JOIN kvota.roles r ON r.id = ur.role_id
-            WHERE uo.user_id = auth.uid() AND r.slug = 'admin'
+            WHERE om.user_id = auth.uid() AND r.slug = 'admin'
         )
     );
 
 -- Track migration
-INSERT INTO kvota.migrations (id, name, applied_at)
-VALUES (180, '180_create_training_videos', now())
+INSERT INTO kvota.migrations (id, filename, applied_at)
+VALUES (180, '180_create_training_videos.sql', now())
 ON CONFLICT (id) DO NOTHING;
