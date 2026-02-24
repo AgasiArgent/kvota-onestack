@@ -16778,6 +16778,19 @@ def get(quote_id: str, session):
                             Option("Германия", value="DE"),
                             Option("США", value="US"),
                             Option("Италия", value="IT"),
+                            Option("Бельгия", value="BE"),
+                            Option("Нидерланды", value="NL"),
+                            Option("Франция", value="FR"),
+                            Option("Великобритания", value="GB"),
+                            Option("Испания", value="ES"),
+                            Option("Польша", value="PL"),
+                            Option("Чехия", value="CZ"),
+                            Option("Австрия", value="AT"),
+                            Option("Швеция", value="SE"),
+                            Option("Япония", value="JP"),
+                            Option("Южная Корея", value="KR"),
+                            Option("Индия", value="IN"),
+                            Option("Тайвань", value="TW"),
                             Option("Другое", value="OTHER"),
                             name="pickup_country",
                             required=True,
@@ -18950,10 +18963,12 @@ def get(session, quote_id: str):
             if invoice.get("pickup_location") and (invoice.get("pickup_location") or {}).get("city")
             else ""
         )
-        # Origin country: pickup_location > supplier > invoice.pickup_country
+        # Origin country: pickup_location > invoice.pickup_country > supplier.country
         raw_origin_country = (
             (invoice.get("pickup_location") or {}).get("country", "")
             if invoice.get("pickup_location") and (invoice.get("pickup_location") or {}).get("country")
+            else invoice.get("pickup_country", "")
+            if invoice.get("pickup_country") and invoice.get("pickup_country") != "OTHER"
             else ((invoice.get("supplier") or {}).get("country", ""))
             if invoice.get("supplier") and (invoice.get("supplier") or {}).get("country")
             else invoice.get("pickup_country", "")
