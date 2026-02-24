@@ -41355,15 +41355,10 @@ def get(session):
     admin_controls = []
     if is_admin:
         admin_controls.append(
-            Button(
-                icon("plus", size=16),
-                Span(" Добавить видео"),
+            btn("Добавить видео", variant="primary", icon_name="plus",
                 hx_get="/training/new-form",
                 hx_target="#training-modal-container",
-                hx_swap="innerHTML",
-                cls="btn btn-primary",
-                style="display: inline-flex; align-items: center; gap: 4px;"
-            )
+                hx_swap="innerHTML")
         )
 
     content = Div(
@@ -41498,25 +41493,15 @@ def _render_video_cards(videos, is_admin=False):
         if is_admin:
             body_items.append(
                 Div(
-                    Button(
-                        icon("pencil", size=14),
-                        Span(" Изменить", style="font-size: 0.8rem;"),
+                    btn("Изменить", variant="secondary", size="sm", icon_name="pencil",
                         hx_get=f"/training/{v.id}/edit-form",
                         hx_target="#training-modal-container",
-                        hx_swap="innerHTML",
-                        cls="btn btn-sm btn-secondary",
-                        style="display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px;"
-                    ),
-                    Button(
-                        icon("trash-2", size=14),
-                        Span(" Удалить", style="font-size: 0.8rem;"),
+                        hx_swap="innerHTML"),
+                    btn("Удалить", variant="danger", size="sm", icon_name="trash-2",
                         hx_delete=f"/training/{v.id}/delete",
                         hx_target="#video-grid",
                         hx_swap="innerHTML",
-                        hx_confirm="Удалить это видео?",
-                        cls="btn btn-sm btn-danger",
-                        style="display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; color: #ef4444;"
-                    ),
+                        hx_confirm="Удалить это видео?"),
                     cls="training-card-actions"
                 )
             )
@@ -41596,9 +41581,9 @@ def get(session):
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
-                    Button("Сохранить", type="submit", cls="btn btn-primary", style="margin-right: 8px;"),
-                    Button("Отмена", type="button", cls="btn btn-secondary",
-                           onclick="document.getElementById('training-modal-container').innerHTML=''"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                    btn("Отмена", variant="ghost", type="button",
+                        onclick="document.getElementById('training-modal-container').innerHTML=''"),
                     style="display: flex; gap: 8px;"
                 ),
                 hx_post="/training/new",
@@ -41716,9 +41701,9 @@ def get(session, video_id: str):
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
-                    Button("Сохранить", type="submit", cls="btn btn-primary"),
-                    Button("Отмена", type="button", cls="btn btn-secondary",
-                           onclick="document.getElementById('training-modal-container').innerHTML=''"),
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                    btn("Отмена", variant="ghost", type="button",
+                        onclick="document.getElementById('training-modal-container').innerHTML=''"),
                     style="display: flex; gap: 8px;"
                 ),
                 hx_post=f"/training/{video_id}/edit",
