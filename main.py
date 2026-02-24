@@ -41890,7 +41890,7 @@ def post(session, title: str = "", youtube_url: str = "", category: str = "", de
 
     from services.training_video_service import create_video, get_all_videos
 
-    create_video(
+    result = create_video(
         organization_id=org_id,
         title=title,
         youtube_id=youtube_url,
@@ -41899,6 +41899,9 @@ def post(session, title: str = "", youtube_url: str = "", category: str = "", de
         created_by=user_id,
         sort_order=sort_order,
     )
+
+    if not result:
+        return Div(P("Ошибка при сохранении видео", style="color: red; text-align: center; padding: 1rem;"))
 
     # Clear modal and return updated grid
     videos = get_all_videos(org_id)
@@ -41919,10 +41922,13 @@ def get(session, video_id: str):
     if not user_has_any_role(session, ["admin"]):
         return Div(P("Доступ запрещён"), style="color: red;")
 
+    user = session["user"]
+    org_id = user.get("org_id")
+
     from services.training_video_service import get_video
 
     video = get_video(video_id)
-    if not video:
+    if not video or video.organization_id != org_id:
         return Div(P("Видео не найдено"), style="color: red;")
 
     form = Div(
@@ -41989,7 +41995,11 @@ def post(session, video_id: str, title: str = "", youtube_id: str = "", category
     user = session["user"]
     org_id = user.get("org_id")
 
-    from services.training_video_service import update_video, get_all_videos
+    from services.training_video_service import get_video, update_video, get_all_videos
+
+    video = get_video(video_id)
+    if not video or video.organization_id != org_id:
+        return Div(P("Видео не найдено"), style="color: red;")
 
     update_video(
         video_id,
@@ -42022,7 +42032,13 @@ def delete(session, video_id: str):
     user = session["user"]
     org_id = user.get("org_id")
 
-    from services.training_video_service import delete_video, get_all_videos
+    from services.training_video_service import get_video, delete_video, get_all_videos
+
+    video = get_video(video_id)
+    if not video or video.organization_id != org_id:
+        videos = get_all_videos(org_id)
+        cards = _render_video_cards(videos, is_admin=True)
+        return Div(*cards)
 
     delete_video(video_id)
 
