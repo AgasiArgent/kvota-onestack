@@ -475,6 +475,7 @@ def get_all_customers(
     organization_id: str,
     *,
     is_active: Optional[bool] = None,
+    manager_id: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> List[Customer]:
@@ -484,6 +485,7 @@ def get_all_customers(
     Args:
         organization_id: Organization UUID
         is_active: Filter by active status (None = all)
+        manager_id: If provided, only return customers created by this user
         limit: Maximum number of results
         offset: Pagination offset
 
@@ -499,6 +501,9 @@ def get_all_customers(
 
         if is_active is not None:
             query = query.eq("is_active", is_active)
+
+        if manager_id is not None:
+            query = query.eq("created_by", manager_id)
 
         result = query.range(offset, offset + limit - 1).execute()
 
@@ -562,6 +567,7 @@ def search_customers(
     query: str,
     *,
     is_active: Optional[bool] = True,
+    manager_id: Optional[str] = None,
     limit: int = 20,
 ) -> List[Customer]:
     """
@@ -573,6 +579,7 @@ def search_customers(
         organization_id: Organization UUID
         query: Search query (matches name or inn)
         is_active: Filter by active status
+        manager_id: If provided, only return customers created by this user
         limit: Maximum number of results
 
     Returns:
@@ -593,6 +600,9 @@ def search_customers(
         if is_active is not None:
             base_query = base_query.eq("is_active", is_active)
 
+        if manager_id is not None:
+            base_query = base_query.eq("created_by", manager_id)
+
         result = base_query.ilike("name", search_pattern)\
             .order("name")\
             .limit(limit)\
@@ -608,6 +618,9 @@ def search_customers(
 
             if is_active is not None:
                 inn_query = inn_query.eq("is_active", is_active)
+
+            if manager_id is not None:
+                inn_query = inn_query.eq("created_by", manager_id)
 
             inn_result = inn_query.limit(limit - len(customers)).execute()
 

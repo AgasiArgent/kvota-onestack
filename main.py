@@ -5541,10 +5541,14 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     Used for admin and top_manager roles.
     """
     # Get overall quotes stats
-    quotes_result = supabase.table("quotes") \
+    is_admin = "admin" in roles or "top_manager" in roles
+
+    quotes_query = supabase.table("quotes") \
         .select("id, status, workflow_status, total_amount") \
-        .eq("organization_id", org_id) \
-        .execute()
+        .eq("organization_id", org_id)
+    if not is_admin:
+        quotes_query = quotes_query.eq("created_by", user_id)
+    quotes_result = quotes_query.execute()
 
     quotes = quotes_result.data or []
 
@@ -5559,12 +5563,14 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
                           ["draft", "approved", "deal", "rejected", "cancelled", None]])
 
     # Get recent quotes
-    recent_result = supabase.table("quotes") \
+    recent_query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at") \
         .eq("organization_id", org_id) \
         .order("created_at", desc=True) \
-        .limit(5) \
-        .execute()
+        .limit(5)
+    if not is_admin:
+        recent_query = recent_query.eq("created_by", user_id)
+    recent_result = recent_query.execute()
 
     recent_quotes = recent_result.data or []
 
@@ -16799,6 +16805,14 @@ def get(quote_id: str, session):
                         cls="mb-4"
                     ),
 
+                    # Pickup City
+                    Div(
+                        Label("Город отгрузки", cls="block mb-2 font-medium"),
+                        Input(type="text", name="pickup_city", placeholder="Например: Антверпен, Шанхай, Стамбул",
+                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        cls="mb-4"
+                    ),
+
                     # Currency
                     Div(
                         Label("Валюта *", cls="block mb-2 font-medium"),
@@ -16841,8 +16855,7 @@ def get(quote_id: str, session):
                             Input(type="file", name="invoice_file", id="create-invoice-file",
                                   accept=".pdf,.jpg,.jpeg,.png,.webp",
                                   style="position: absolute; inset: 0; opacity: 0; cursor: pointer;"),
-                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 1rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;",
-                            onclick="document.getElementById('create-invoice-file').click()"
+                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 1rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;"
                         ),
                         Div(id="create-invoice-filename", style="margin-top: 0.5rem; font-size: 0.875rem; color: #059669;"),
                         cls="mb-4"
@@ -16968,8 +16981,7 @@ def get(quote_id: str, session):
                             Input(type="file", name="invoice_file", id="edit-invoice-file",
                                   accept=".pdf,.jpg,.jpeg,.png,.webp",
                                   style="position: absolute; inset: 0; opacity: 0; cursor: pointer;"),
-                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 0.75rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;",
-                            onclick="document.getElementById('edit-invoice-file').click()"
+                            style="position: relative; display: flex; align-items: center; justify-content: center; padding: 0.75rem; border: 2px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer;"
                         ),
                         Div(id="edit-invoice-filename", style="margin-top: 0.5rem; font-size: 0.875rem; color: #059669;"),
                         cls="mb-4"
@@ -17527,6 +17539,7 @@ async def api_create_invoice(quote_id: str, session, request):
     buyer_company_id = form.get("buyer_company_id")
     pickup_location_id = form.get("pickup_location_id") or None
     pickup_country = form.get("pickup_country", "").strip()
+    pickup_city = form.get("pickup_city", "").strip()
     currency = form.get("currency", "USD")
     total_weight_kg = form.get("total_weight_kg")
     total_volume_m3 = form.get("total_volume_m3") or None
@@ -34817,12 +34830,17 @@ def get(session, q: str = "", status: str = ""):
 
     user = session["user"]
     org_id = user.get("org_id")
+    user_id = user.get("id")
 
     # Import customer service functions
     from services.customer_service import (
         get_all_customers, search_customers, get_customer_stats,
         get_contacts_for_customer, count_contacts
     )
+
+    # Sales-only users see only their own customers
+    is_sales_only = not user_has_any_role(session, ["admin", "top_manager"])
+    manager_filter = user_id if is_sales_only else None
 
     # Get customers based on filters
     try:
@@ -34833,6 +34851,7 @@ def get(session, q: str = "", status: str = ""):
                 organization_id=org_id,
                 query=q.strip(),
                 is_active=is_active_filter,
+                manager_id=manager_filter,
                 limit=100
             )
         else:
@@ -34841,6 +34860,7 @@ def get(session, q: str = "", status: str = ""):
             customers = get_all_customers(
                 organization_id=org_id,
                 is_active=is_active_filter,
+                manager_id=manager_filter,
                 limit=100
             )
 
