@@ -24207,6 +24207,8 @@ def generate_feedback_short_id():
 async def submit_feedback(session, request: Request):
     """Handle feedback/bug report submission with optional screenshot."""
     import json as json_lib
+    import logging
+    logger = logging.getLogger(__name__)
 
     user = session.get("user", {})
     form = await request.form()
@@ -24236,12 +24238,22 @@ async def submit_feedback(session, request: Request):
 
     try:
         # 1. Save to database
+        # Validate org_id exists (session may cache deleted org)
+        org_id = user.get("org_id")
+        try:
+            if org_id:
+                org_check = supabase.table("organizations").select("id").eq("id", org_id).limit(1).execute()
+                if not org_check.data:
+                    org_id = None
+        except Exception:
+            pass
+
         insert_payload = {
             "short_id": short_id,
             "user_id": user.get("id"),
             "user_email": user.get("email"),
             "user_name": user.get("name", user.get("email", "Неизвестный")),
-            "organization_id": user.get("org_id"),
+            "organization_id": org_id,
             "organization_name": user.get("org_name", ""),
             "page_url": page_url,
             "page_title": page_title,
