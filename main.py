@@ -5105,10 +5105,26 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         proc_count = len(proc_quotes)
 
         if proc_count > 0:
+            # Fetch buyer company names for these quotes via quote_items
+            proc_quote_ids = [q["id"] for q in proc_quotes]
+            buyer_names_by_quote = {}
+            if proc_quote_ids:
+                buyer_items_result = supabase.table("quote_items") \
+                    .select("quote_id, buyer_companies!buyer_company_id(name)") \
+                    .in_("quote_id", proc_quote_ids) \
+                    .not_.is_("buyer_company_id", "null") \
+                    .execute()
+                for bi in (buyer_items_result.data or []):
+                    qid = bi.get("quote_id")
+                    bc_name = (bi.get("buyer_companies") or {}).get("name", "")
+                    if bc_name:
+                        buyer_names_by_quote.setdefault(qid, set()).add(bc_name)
+
             proc_rows = [
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td((q.get("customers") or {}).get("name", "—")),
+                    Td(", ".join(sorted(buyer_names_by_quote.get(q["id"], set()))) or "—"),
                     Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
                     Td(A("Оценить", href=f"/procurement", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in proc_quotes
@@ -5120,7 +5136,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                        style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
                     Div(
                         Table(
-                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Создано"), Th("Действие"))),
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Юрлицо-закупки"), Th("Создано"), Th("Действие"))),
                             Tbody(*proc_rows),
                             cls="table-enhanced"
                         ),
@@ -13361,6 +13377,35 @@ def post(
             session=session
         )
 
+    # Validate that all available items have prices before calculation
+    items_without_price = []
+    for item in items:
+        if item.get("is_unavailable"):
+            continue
+        price = safe_decimal(item.get("purchase_price_original") or item.get("base_price_vat"))
+        if price <= 0:
+            item_name = item.get("product_name", "—")
+            item_brand = item.get("brand", "")
+            item_label = f"{item_brand} — {item_name}" if item_brand else item_name
+            items_without_price.append(item_label)
+
+    if items_without_price:
+        missing_list = Ul(
+            *[Li(name, style="margin-bottom: 4px;") for name in items_without_price],
+            style="margin: 12px 0; padding-left: 20px;"
+        )
+        return page_layout("Ошибка расчёта",
+            Div(
+                P(Strong("Не все позиции имеют цену. Заполните цены в разделе закупок перед расчётом."),
+                  style="margin-bottom: 8px;"),
+                P(f"Позиции без цены ({len(items_without_price)}):", style="margin-bottom: 4px; color: #64748b;"),
+                missing_list,
+                cls="alert alert-error"
+            ),
+            A("← Назад к КП", href=f"/quotes/{quote_id}", style="display: inline-block; margin-top: 12px;"),
+            session=session
+        )
+
     try:
         # ==========================================================================
         # AGGREGATE LOGISTICS FROM INVOICES (if form values are 0)
@@ -19133,16 +19178,20 @@ def get(session, quote_id: str):
                         ),
                         style="display: flex; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0;"
                     ),
-                    # Expandable items
-                    Details(
-                        Summary(Span("Показать товары", style="font-size: 12px; color: #3b82f6; cursor: pointer;")),
+                    # Items list (always visible)
+                    Div(
+                        Div("ТОВАРЫ ДЛЯ ЛОГИСТИКИ", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px;"),
                         Div(
                             *[Div(
-                                Span(f"{item.get('brand', '—')} — {item.get('product_name', '—')[:25]}", style="flex: 1; color: #475569;"),
-                                Span(f"×{item.get('quantity', 0)}", style="color: #94a3b8; font-weight: 500;"),
-                                style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px;"
+                                Span(f"{item.get('brand', '—')} — {item.get('product_name', '—')[:30]}", style="flex: 1; color: #475569;"),
+                                Span(
+                                    f"{item.get('purchase_price_original', 0)} {item.get('purchase_currency', '')}",
+                                    style="color: #059669; font-weight: 500; margin-right: 8px;"
+                                ) if item.get('purchase_price_original') else None,
+                                Span(f"x{item.get('quantity', 0)}", style="color: #94a3b8; font-weight: 500;"),
+                                style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 12px; border-bottom: 1px solid #f1f5f9;"
                             ) for item in items],
-                            style="margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 6px;"
+                            style="padding: 8px; background: #f8fafc; border-radius: 6px;"
                         ),
                         style="margin-top: 8px;"
                     ) if items else None,
@@ -19237,11 +19286,33 @@ def get(session, quote_id: str):
             style=card_style
         )
 
+    # Procurement totals (weight/volume) - prominent display
+    proc_total_weight = quote.get("procurement_total_weight_kg") or 0
+    proc_total_volume = quote.get("procurement_total_volume_m3") or 0
+    procurement_totals_card = Div(
+        Div(
+            Div(
+                Div(icon("package", size=18), " Общий вес (закупки)", style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;"),
+                Div(f"{proc_total_weight} кг", style=f"font-size: 20px; font-weight: 700; color: {'#059669' if proc_total_weight else '#94a3b8'};"),
+                style="flex: 1; text-align: center; padding: 12px;"
+            ),
+            Div(style="width: 1px; background: #e2e8f0; margin: 8px 0;"),
+            Div(
+                Div(icon("box", size=18), " Общий объём (закупки)", style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;"),
+                Div(f"{proc_total_volume} м³" if proc_total_volume else "—", style=f"font-size: 20px; font-weight: 700; color: {'#3b82f6' if proc_total_volume else '#94a3b8'};"),
+                style="flex: 1; text-align: center; padding: 12px;"
+            ),
+            style="display: flex; align-items: center; gap: 0;"
+        ),
+        style="background: linear-gradient(135deg, #f0fdf4 0%, #ecfeff 100%); border: 1px solid #d1fae5; border-radius: 10px; margin-bottom: 16px;"
+    ) if (proc_total_weight or proc_total_volume) else None
+
     # Build the invoice-level logistics form
     invoice_logistics_section = Div(
         H3(icon("file-text", size=20), " Логистика по инвойсам (v4.0)", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
         P("Введите стоимость доставки для каждого инвойса. Вес/габариты заполнены закупками.",
           style="color: #666; margin-bottom: 1rem;"),
+        procurement_totals_card,
         *[logistics_invoice_card(invoice, idx) for idx, invoice in enumerate(invoices_with_items)],
     ) if invoices_with_items else Div(
         P("Нет инвойсов для расчёта логистики. Закупки должны создать инвойсы сначала.", style="color: #666;"),
