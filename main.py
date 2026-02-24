@@ -31321,14 +31321,11 @@ def get(session):
 # Import location service for API endpoint
 from services.location_service import get_locations_for_dropdown, search_locations, format_location_for_dropdown
 
-# Import HERE service for city autocomplete
-from services.here_service import search_cities
-
-
 @rt("/api/cities/search")
 def get(session, q: str = "", limit: int = 5):
     """City autocomplete using HERE Geocode API.
     Returns datalist options with city names and country codes."""
+    from services.here_service import search_cities
     if not q or len(q) < 2:
         return ""
     cities = search_cities(q, count=limit)
@@ -32203,48 +32200,6 @@ def get(session, q: str = "", limit: int = 20):
     except Exception as e:
         print(f"Error in seller company search API: {e}")
         return Option(f"Ошибка: {str(e)}", value="", disabled=True)
-
-
-# ============================================================================
-# CITY AUTOCOMPLETE (HERE Geocoding Autosuggest)
-# ============================================================================
-
-@rt("/api/cities/search")
-def get(session, q: str = ""):
-    """
-    Search cities for HTMX datalist autocomplete using HERE Autosuggest API.
-
-    Query Parameters:
-        q: City name query (min 2 chars)
-
-    Returns:
-        HTML fragment with <option> elements for datalist
-    """
-    redirect = require_login(session)
-    if redirect:
-        return Option("Требуется авторизация", value="", disabled=True)
-
-    try:
-        from services.here_service import search_cities
-
-        cities = search_cities(q)
-
-        options = []
-        for city in cities:
-            display = city.get("display", city.get("city", ""))
-            options.append(Option(display, value=display, **{
-                "data-city": city.get("city", ""),
-                "data-country": city.get("country", ""),
-            }))
-
-        if not options and q and len(q.strip()) >= 2:
-            options.append(Option(f"Город не найден: '{q}'", value="", disabled=True))
-
-        return Group(*options)
-
-    except Exception as e:
-        print(f"Error in city search API: {e}")
-        return Option("Ошибка при поиске города", value="", disabled=True)
 
 
 # ============================================================================
