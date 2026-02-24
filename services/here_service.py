@@ -52,6 +52,7 @@ def _normalize_item(item: dict) -> dict:
     city = address.get("city", "")
     region = address.get("state", "")
     country = address.get("countryName", "")
+    country_code = address.get("countryCode", "")
 
     # Fall back to parsing label if structured fields are missing
     if not city or not country:
@@ -73,10 +74,22 @@ def _normalize_item(item: dict) -> dict:
         display_parts.append(country)
     display = ", ".join(display_parts)
 
+    # Convert ISO alpha-3 to alpha-2 for our dropdown values
+    alpha3_to_alpha2 = {
+        "BEL": "BE", "NLD": "NL", "DEU": "DE", "FRA": "FR", "GBR": "GB",
+        "ESP": "ES", "ITA": "IT", "POL": "PL", "CZE": "CZ", "AUT": "AT",
+        "SWE": "SE", "CHE": "CH", "FIN": "FI", "DNK": "DK", "USA": "US",
+        "CHN": "CN", "JPN": "JP", "KOR": "KR", "IND": "IN", "TWN": "TW",
+        "TUR": "TR", "RUS": "RU", "VNM": "VN", "THA": "TH", "MYS": "MY",
+        "SGP": "SG", "ARE": "AE", "SAU": "SA",
+    }
+    country_code_2 = alpha3_to_alpha2.get(country_code, country_code[:2] if len(country_code) >= 2 else "")
+
     return {
         "city": city,
         "region": region,
         "country": country,
+        "country_code": country_code_2,
         "display": display,
     }
 

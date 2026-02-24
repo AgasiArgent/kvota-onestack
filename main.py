@@ -2724,6 +2724,7 @@ def sidebar(session, current_path: str = ""):
     # === MAIN SECTION ===
     main_items = [
         {"icon": "inbox", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
+        {"icon": "play-circle", "label": "Обучение", "href": "/training", "roles": None},  # All users - training videos
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
@@ -16765,51 +16766,20 @@ def get(quote_id: str, session):
                         dropdown_id="modal-buyer"
                     ),
 
-                    # Location dropdown
-                    location_dropdown(
-                        name="pickup_location_id",
-                        label="Точка отгрузки",
-                        placeholder="Поиск локации...",
-                        dropdown_id="modal-location"
-                    ),
-
-                    # Pickup Country
+                    # City autocomplete (HERE Geocode API)
                     Div(
-                        Label("Страна отгрузки *", cls="block mb-2 font-medium"),
-                        Select(
-                            Option("— Выберите страну —", value="", disabled=True, selected=True),
-                            Option("Россия", value="RU"),
-                            Option("Китай", value="CN"),
-                            Option("Турция", value="TR"),
-                            Option("Германия", value="DE"),
-                            Option("США", value="US"),
-                            Option("Италия", value="IT"),
-                            Option("Бельгия", value="BE"),
-                            Option("Нидерланды", value="NL"),
-                            Option("Франция", value="FR"),
-                            Option("Великобритания", value="GB"),
-                            Option("Испания", value="ES"),
-                            Option("Польша", value="PL"),
-                            Option("Чехия", value="CZ"),
-                            Option("Австрия", value="AT"),
-                            Option("Швеция", value="SE"),
-                            Option("Япония", value="JP"),
-                            Option("Южная Корея", value="KR"),
-                            Option("Индия", value="IN"),
-                            Option("Тайвань", value="TW"),
-                            Option("Другое", value="OTHER"),
-                            name="pickup_country",
-                            required=True,
-                            cls="w-full p-2 border border-gray-300 rounded-md"
-                        ),
-                        cls="mb-4"
-                    ),
-
-                    # Pickup City
-                    Div(
-                        Label("Город отгрузки", cls="block mb-2 font-medium"),
-                        Input(type="text", name="pickup_city", placeholder="Например: Антверпен, Шанхай, Стамбул",
-                              cls="w-full p-2 border border-gray-300 rounded-md"),
+                        Label("Город отгрузки *", cls="block mb-2 font-medium"),
+                        Input(type="text", id="city-search-input", name="pickup_city",
+                              placeholder="Начните вводить город...", required=True,
+                              list="city-suggestions",
+                              autocomplete="off",
+                              cls="w-full p-2 border border-gray-300 rounded-md",
+                              **{"hx-get": "/api/cities/search", "hx-trigger": "input changed delay:300ms",
+                                 "hx-target": "#city-suggestions"}),
+                        Datalist(id="city-suggestions"),
+                        Input(type="hidden", name="pickup_country", id="city-country-code"),
+                        P("Страна заполнится автоматически", id="city-country-hint",
+                          style="font-size: 12px; color: #94a3b8; margin-top: 4px;"),
                         cls="mb-4"
                     ),
 
@@ -17075,6 +17045,30 @@ def get(quote_id: str, session):
                 var filename = e.target.files[0] ? e.target.files[0].name : '';
                 document.getElementById('edit-invoice-filename').textContent = filename ? '📎 Новый файл: ' + filename : '';
             }});
+
+            // City autocomplete: when user selects a city from datalist, extract country code
+            var cityInput = document.getElementById('city-search-input');
+            if (cityInput) {{
+                cityInput.addEventListener('input', function() {{
+                    var val = this.value;
+                    var datalist = document.getElementById('city-suggestions');
+                    var options = datalist ? datalist.querySelectorAll('option') : [];
+                    var hint = document.getElementById('city-country-hint');
+                    for (var i = 0; i < options.length; i++) {{
+                        if (options[i].value === val) {{
+                            var code = options[i].getAttribute('data-country-code');
+                            var city = options[i].getAttribute('data-city');
+                            if (code) {{
+                                document.getElementById('city-country-code').value = code;
+                                if (hint) hint.textContent = 'Страна: ' + val.split(', ').slice(1).join(', ') + ' (' + code + ')';
+                            }}
+                            // Store just the city name, not the full "City, Country" display
+                            if (city) this.value = city;
+                            break;
+                        }}
+                    }}
+                }});
+            }}
 
             window.submitCreateInvoiceForm = function() {{
                 var form = document.getElementById('create-invoice-form');
@@ -17581,6 +17575,8 @@ async def api_create_invoice(quote_id: str, session, request):
             "total_volume_m3": float(total_volume_m3) if total_volume_m3 else None,
             "status": "pending_procurement",
         }
+        if pickup_city:
+            invoice_data["pickup_city"] = pickup_city
         if pickup_location_id:
             invoice_data["pickup_location_id"] = pickup_location_id
 
@@ -18970,11 +18966,11 @@ def get(session, quote_id: str):
             "Singapore": "Сингапур", "UAE": "ОАЭ", "Saudi Arabia": "Саудовская Аравия",
         }
 
-        # Get origin location text
+        # Get origin location text: invoice.pickup_city > pickup_location.city
         origin_city = (
-            (invoice.get("pickup_location") or {}).get("city", "")
-            if invoice.get("pickup_location") and (invoice.get("pickup_location") or {}).get("city")
-            else ""
+            invoice.get("pickup_city", "")
+            or ((invoice.get("pickup_location") or {}).get("city", "")
+                if invoice.get("pickup_location") else "")
         )
         # Origin country: pickup_location > invoice.pickup_country > supplier.country
         raw_origin_country = (
@@ -31325,6 +31321,29 @@ def get(session):
 # Import location service for API endpoint
 from services.location_service import get_locations_for_dropdown, search_locations, format_location_for_dropdown
 
+# Import HERE service for city autocomplete
+from services.here_service import search_cities
+
+
+@rt("/api/cities/search")
+def get(session, q: str = "", limit: int = 5):
+    """City autocomplete using HERE Geocode API.
+    Returns datalist options with city names and country codes."""
+    if not q or len(q) < 2:
+        return ""
+    cities = search_cities(q, count=limit)
+    if not cities:
+        return Option("Ничего не найдено", value="", disabled=True)
+    options = []
+    for c in cities:
+        # value = display text, data attributes for JS to extract
+        options.append(Option(
+            c["display"],
+            value=c["display"],
+            **{"data-city": c["city"], "data-country-code": c["country_code"]}
+        ))
+    return Group(*options)
+
 
 @rt("/api/locations/search")
 def get(session, q: str = "", hub_only: str = "", customs_only: str = "", limit: int = 20):
@@ -41559,6 +41578,458 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
     result = update_stage_status(stage_id, status, deal_id=deal_id)
 
     return RedirectResponse(f"/finance/{deal_id}?tab=logistics", status_code=303)
+
+
+# ============================================================================
+# TRAINING VIDEOS
+# ============================================================================
+
+@rt("/training")
+def get(session):
+    """Training videos page - knowledge base with YouTube embeds and category filtering."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    roles = user.get("roles", [])
+    is_admin = "admin" in roles
+
+    from services.training_video_service import get_all_videos, get_categories
+
+    categories = get_categories(org_id)
+    videos = get_all_videos(org_id)
+
+    # Category tabs
+    category_tabs = [
+        A("Все",
+          hx_get="/training/videos",
+          hx_target="#video-grid",
+          hx_swap="innerHTML",
+          cls="training-tab active",
+          data_category="all",
+          onclick="setActiveTab(this)")
+    ]
+    for cat in categories:
+        category_tabs.append(
+            A(cat,
+              hx_get=f"/training/videos?category={cat}",
+              hx_target="#video-grid",
+              hx_swap="innerHTML",
+              cls="training-tab",
+              data_category=cat,
+              onclick="setActiveTab(this)")
+        )
+
+    # Video cards
+    video_cards = _render_video_cards(videos, is_admin)
+
+    # Admin add button
+    admin_controls = []
+    if is_admin:
+        admin_controls.append(
+            Button(
+                icon("plus", size=16),
+                Span(" Добавить видео"),
+                hx_get="/training/new-form",
+                hx_target="#training-modal-container",
+                hx_swap="innerHTML",
+                cls="btn btn-primary",
+                style="display: inline-flex; align-items: center; gap: 4px;"
+            )
+        )
+
+    content = Div(
+        # Page header
+        Div(
+            Div(
+                H1("Обучение", style="margin: 0; font-size: 1.5rem;"),
+                P("Обучающие видеоматериалы по работе с системой", style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
+                style="flex: 1;"
+            ),
+            Div(*admin_controls) if admin_controls else None,
+            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;"
+        ),
+        # Category tabs
+        Div(
+            *category_tabs,
+            cls="training-tabs",
+            style="display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap;"
+        ),
+        # Video grid
+        Div(
+            *video_cards,
+            id="video-grid",
+            cls="training-grid",
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;"
+        ),
+        # Modal container for forms
+        Div(id="training-modal-container"),
+        # Tab switching script
+        Script("""
+            function setActiveTab(el) {
+                document.querySelectorAll('.training-tab').forEach(t => t.classList.remove('active'));
+                el.classList.add('active');
+            }
+        """),
+        # Tab styling
+        Style("""
+            .training-tab {
+                padding: 6px 16px;
+                border-radius: 20px;
+                font-size: 0.875rem;
+                cursor: pointer;
+                background: var(--bg-secondary, #f1f5f9);
+                color: var(--text-primary, #334155);
+                text-decoration: none;
+                border: 1px solid transparent;
+                transition: all 0.2s;
+            }
+            .training-tab:hover {
+                background: var(--bg-tertiary, #e2e8f0);
+            }
+            .training-tab.active {
+                background: var(--color-primary, #3b82f6);
+                color: white;
+                border-color: var(--color-primary, #3b82f6);
+            }
+            .training-card {
+                border: 1px solid var(--border-color, #e2e8f0);
+                border-radius: 12px;
+                overflow: hidden;
+                background: var(--bg-card, white);
+                transition: box-shadow 0.2s;
+            }
+            .training-card:hover {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            }
+            .training-card-body {
+                padding: 1rem;
+            }
+            .training-card-actions {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+            }
+        """)
+    )
+
+    return page_layout("Обучение", content, session=session, current_path="/training")
+
+
+def _render_video_cards(videos, is_admin=False):
+    """Render a list of video cards for the training grid."""
+    if not videos:
+        return [
+            Div(
+                P("Пока нет обучающих видео.", style="color: var(--text-secondary); text-align: center; padding: 3rem;"),
+                style="grid-column: 1 / -1;"
+            )
+        ]
+
+    cards = []
+    for v in videos:
+        # YouTube embed
+        embed = Div(
+            Iframe(
+                src=f"https://www.youtube.com/embed/{v.youtube_id}",
+                width="100%",
+                height="200",
+                frameborder="0",
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+                allowfullscreen=True,
+                style="display: block;"
+            ),
+        )
+
+        # Card body
+        body_items = [
+            Div(
+                Span(v.category, style="background: var(--bg-secondary, #f1f5f9); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; color: var(--text-secondary);"),
+                style="margin-bottom: 8px;"
+            ),
+            H3(v.title, style="margin: 0 0 4px; font-size: 1rem;"),
+        ]
+
+        if v.description:
+            body_items.append(
+                P(v.description, style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;")
+            )
+
+        # Admin actions
+        if is_admin:
+            body_items.append(
+                Div(
+                    Button(
+                        icon("pencil", size=14),
+                        Span(" Изменить", style="font-size: 0.8rem;"),
+                        hx_get=f"/training/{v.id}/edit-form",
+                        hx_target="#training-modal-container",
+                        hx_swap="innerHTML",
+                        cls="btn btn-sm btn-secondary",
+                        style="display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px;"
+                    ),
+                    Button(
+                        icon("trash-2", size=14),
+                        Span(" Удалить", style="font-size: 0.8rem;"),
+                        hx_delete=f"/training/{v.id}/delete",
+                        hx_target="#video-grid",
+                        hx_swap="innerHTML",
+                        hx_confirm="Удалить это видео?",
+                        cls="btn btn-sm btn-danger",
+                        style="display: inline-flex; align-items: center; gap: 2px; padding: 4px 10px; color: #ef4444;"
+                    ),
+                    cls="training-card-actions"
+                )
+            )
+
+        cards.append(
+            Div(
+                embed,
+                Div(*body_items, cls="training-card-body"),
+                cls="training-card"
+            )
+        )
+    return cards
+
+
+@rt("/training/videos")
+def get(session, category: str = ""):
+    """HTMX partial - filtered video grid."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    roles = user.get("roles", [])
+    is_admin = "admin" in roles
+
+    from services.training_video_service import get_all_videos
+
+    videos = get_all_videos(org_id, category=category if category else None)
+    cards = _render_video_cards(videos, is_admin)
+    return Div(*cards)
+
+
+@rt("/training/new-form")
+def get(session):
+    """HTMX partial - create video form (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return Div(P("Доступ запрещён"), style="color: red;")
+
+    form = Div(
+        Div(
+            Div(
+                H2("Добавить видео", style="margin: 0;"),
+                Button("✕", onclick="document.getElementById('training-modal-container').innerHTML=''",
+                       style="background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 4px;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+            ),
+            Form(
+                Div(
+                    Label("Название *"),
+                    Input(name="title", placeholder="Как создать КП за 5 минут", required=True, cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("YouTube ссылка или ID *"),
+                    Input(name="youtube_url", placeholder="https://www.youtube.com/watch?v=... или ID видео", required=True, cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Категория"),
+                    Input(name="category", placeholder="Продажи, Закупки, Логистика...", value="Общее", cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Описание"),
+                    Textarea(name="description", placeholder="Краткое описание видео...", rows="3", cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Порядок сортировки"),
+                    Input(name="sort_order", type="number", value="0", cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Button("Сохранить", type="submit", cls="btn btn-primary", style="margin-right: 8px;"),
+                    Button("Отмена", type="button", cls="btn btn-secondary",
+                           onclick="document.getElementById('training-modal-container').innerHTML=''"),
+                    style="display: flex; gap: 8px;"
+                ),
+                hx_post="/training/new",
+                hx_target="#video-grid",
+                hx_swap="innerHTML",
+            ),
+            style="background: var(--bg-card, white); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 1.5rem; max-width: 500px; margin: 0 auto;"
+        ),
+        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;"
+    )
+    return form
+
+
+@rt("/training/new")
+def post(session, title: str = "", youtube_url: str = "", category: str = "", description: str = "", sort_order: int = 0):
+    """Handle create video (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return Div(P("Доступ запрещён"), style="color: red;")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+
+    from services.training_video_service import create_video, get_all_videos
+
+    create_video(
+        organization_id=org_id,
+        title=title,
+        youtube_id=youtube_url,
+        category=category,
+        description=description if description else None,
+        created_by=user_id,
+        sort_order=sort_order,
+    )
+
+    # Clear modal and return updated grid
+    videos = get_all_videos(org_id)
+    cards = _render_video_cards(videos, is_admin=True)
+    return Div(
+        *cards,
+        Script("document.getElementById('training-modal-container').innerHTML='';")
+    )
+
+
+@rt("/training/{video_id}/edit-form")
+def get(session, video_id: str):
+    """HTMX partial - edit video form (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return Div(P("Доступ запрещён"), style="color: red;")
+
+    from services.training_video_service import get_video
+
+    video = get_video(video_id)
+    if not video:
+        return Div(P("Видео не найдено"), style="color: red;")
+
+    form = Div(
+        Div(
+            Div(
+                H2("Редактировать видео", style="margin: 0;"),
+                Button("✕", onclick="document.getElementById('training-modal-container').innerHTML=''",
+                       style="background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 4px;"),
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;"
+            ),
+            Form(
+                Div(
+                    Label("Название *"),
+                    Input(name="title", value=video.title, required=True, cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("YouTube ID"),
+                    Input(name="youtube_id", value=video.youtube_id, required=True, cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Категория"),
+                    Input(name="category", value=video.category, cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Описание"),
+                    Textarea(video.description or "", name="description", rows="3", cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Label("Порядок сортировки"),
+                    Input(name="sort_order", type="number", value=str(video.sort_order), cls="form-control"),
+                    cls="form-group", style="margin-bottom: 0.75rem;"
+                ),
+                Div(
+                    Button("Сохранить", type="submit", cls="btn btn-primary"),
+                    Button("Отмена", type="button", cls="btn btn-secondary",
+                           onclick="document.getElementById('training-modal-container').innerHTML=''"),
+                    style="display: flex; gap: 8px;"
+                ),
+                hx_post=f"/training/{video_id}/edit",
+                hx_target="#video-grid",
+                hx_swap="innerHTML",
+            ),
+            style="background: var(--bg-card, white); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 1.5rem; max-width: 500px; margin: 0 auto;"
+        ),
+        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;"
+    )
+    return form
+
+
+@rt("/training/{video_id}/edit")
+def post(session, video_id: str, title: str = "", youtube_id: str = "", category: str = "", description: str = "", sort_order: int = 0):
+    """Handle edit video (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return Div(P("Доступ запрещён"), style="color: red;")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.training_video_service import update_video, get_all_videos
+
+    update_video(
+        video_id,
+        title=title,
+        youtube_id=youtube_id,
+        category=category,
+        description=description if description else None,
+        sort_order=sort_order,
+    )
+
+    # Return updated grid
+    videos = get_all_videos(org_id)
+    cards = _render_video_cards(videos, is_admin=True)
+    return Div(
+        *cards,
+        Script("document.getElementById('training-modal-container').innerHTML='';")
+    )
+
+
+@rt("/training/{video_id}/delete")
+def delete(session, video_id: str):
+    """Handle delete video (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return Div(P("Доступ запрещён"), style="color: red;")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.training_video_service import delete_video, get_all_videos
+
+    delete_video(video_id)
+
+    # Return updated grid
+    videos = get_all_videos(org_id)
+    cards = _render_video_cards(videos, is_admin=True)
+    return Div(*cards)
 
 
 # ============================================================================
