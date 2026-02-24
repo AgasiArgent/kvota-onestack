@@ -8277,10 +8277,15 @@ def get(session, customer_id: str = ""):
                 ),
                 # Actions
                 Div(
-                    Button("Создать КП", type="submit", cls="btn btn-primary"),
-                    A("Отмена", href="/quotes", cls="btn btn-secondary"),
+                    Button("Создать КП", type="submit", id="btn-create-quote", cls="btn btn--primary", disabled=True),
+                    A("Отмена", href="/quotes", cls="btn btn--secondary"),
                     cls="form-actions"
                 ),
+                Script("""
+                    document.getElementById('customer_id').addEventListener('change', function() {
+                        document.getElementById('btn-create-quote').disabled = !this.value;
+                    });
+                """),
                 method="post", action="/quotes/new"
             ),
             cls="card"
