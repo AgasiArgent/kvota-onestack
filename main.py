@@ -8429,11 +8429,15 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
         )
 
     # --- Action buttons row ---
+    # Download button only available after quote controller approval
+    _download_allowed_statuses = {"pending_approval", "approved", "sent_to_client", "client_negotiation", "pending_spec_control", "deal"}
+    _current_wf_status = quote.get("workflow_status") or quote.get("status", "draft")
+    _download_btn = btn("Скачать", variant="secondary", icon_name="download",
+        onclick=f"location.href='/quotes/{quote.get('id')}/export/specification'") if _current_wf_status in _download_allowed_statuses else None
     action_buttons = Div(
         btn("Отправить на проверку", variant="primary", icon_name="send",
             onclick=f"location.href='/quote-control/{quote.get('id')}'"),
-        btn("Скачать", variant="secondary", icon_name="download",
-            onclick=f"location.href='/quotes/{quote.get('id')}/export/specification'"),
+        _download_btn,
         style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem;"
     )
 
@@ -9148,6 +9152,16 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                         expiry_display,
                         style=f"font-size: 14px; padding: 6px 10px; border-radius: 6px; display: inline-block; font-weight: 500; {'background: #fef2f2; color: #dc2626;' if is_expired else 'background: #f0fdf4; color: #16a34a;'}" if expiry_display != "\u2014" else "font-size: 14px; color: #334155; padding: 8px 0; display: block;"
                     ),
+                ),
+                # Col 1, Row 5: Customs manager (read-only)
+                Div(
+                    Div("ТАМОЖЕННЫЙ МЕНЕДЖЕР", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Div(customs_user_name or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                ),
+                # Col 2, Row 5: Logistics manager (read-only)
+                Div(
+                    Div("ЛОГИСТИЧЕСКИЙ МЕНЕДЖЕР", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.375rem;"),
+                    Div(logistics_user_name or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
                 ),
                 style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1.5rem;"
             ),
