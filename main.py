@@ -12708,6 +12708,31 @@ def post(
     if not items:
         return Div("Add products to preview.", cls="alert alert-info", id="preview-panel")
 
+    # Validate that all available items have prices before calculation
+    items_without_price = []
+    for item in items:
+        if item.get("is_unavailable"):
+            continue
+        price = safe_decimal(item.get("purchase_price_original") or item.get("base_price_vat"))
+        if price <= 0:
+            item_name = item.get("product_name", "—")
+            item_brand = item.get("brand", "")
+            item_label = f"{item_brand} — {item_name}" if item_brand else item_name
+            items_without_price.append(item_label)
+
+    if items_without_price:
+        missing_list = Ul(
+            *[Li(name, style="margin-bottom: 4px;") for name in items_without_price],
+            style="margin: 12px 0; padding-left: 20px;"
+        )
+        return Div(
+            P(Strong("Не все позиции имеют цену."), style="margin-bottom: 8px;"),
+            P("Заполните цены в разделе закупок перед расчётом."),
+            P(f"Позиции без цены ({len(items_without_price)}):", style="margin-bottom: 4px; color: #64748b;"),
+            missing_list,
+            cls="alert alert-error", id="preview-panel"
+        )
+
     try:
         # Aggregate delivery time from items (production_time_days) and invoices (logistics_total_days)
         max_production_days = max((item.get("production_time_days") or 0) for item in items) if items else 0
