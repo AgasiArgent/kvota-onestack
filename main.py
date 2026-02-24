@@ -5064,7 +5064,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 approval_rows.append(Tr(
                     Td(quote_idn),
                     Td(customer_name),
-                    Td(format_money(quote_info.get('total_amount'))),
+                    Td(format_money(quote_info.get('total_amount'), quote_info.get('currency', 'RUB'))),
                     Td(format_date_russian(a.get('requested_at')) if a.get('requested_at') else '—'),
                     Td(
                         A("Согласовать", href=f"/quotes/{a.get('quote_id')}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;")
@@ -5219,7 +5219,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     # -------------------------------------------------------------------------
     if 'quote_controller' in roles or 'admin' in roles:
         qc_result = supabase.table("quotes") \
-            .select("id, idn_quote, customers(name), workflow_status, total_amount, created_at") \
+            .select("id, idn_quote, customers(name), workflow_status, total_amount, currency, created_at") \
             .eq("organization_id", org_id) \
             .eq("workflow_status", "pending_quote_control") \
             .order("created_at", desc=False) \
@@ -5234,7 +5234,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td((q.get("customers") or {}).get("name", "—")),
-                    Td(format_money(q.get("total_amount"))),
+                    Td(format_money(q.get("total_amount"), q.get("currency", "RUB"))),
                     Td(A("Проверить", href=f"/quote-control/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in qc_quotes
             ]
@@ -5378,7 +5378,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     # -------------------------------------------------------------------------
     if 'sales' in roles:
         sales_result = supabase.table("quotes") \
-            .select("id, idn_quote, customers(name), workflow_status, total_amount") \
+            .select("id, idn_quote, customers(name), workflow_status, total_amount, currency") \
             .eq("organization_id", org_id) \
             .eq("workflow_status", "pending_sales_review") \
             .order("updated_at", desc=True) \
@@ -5393,7 +5393,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 Tr(
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td((q.get("customers") or {}).get("name", "—")),
-                    Td(format_money(q.get("total_amount"))),
+                    Td(format_money(q.get("total_amount"), q.get("currency", "RUB"))),
                     Td(A("Продолжить", href=f"/quotes/{q['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
                 ) for q in sales_quotes
             ]
@@ -5663,14 +5663,14 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     ]
 
 
-def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
+def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None, real_admin: bool = False) -> list:
     """
     Procurement workspace tab content.
     Shows quotes with items having brands assigned to current user.
     Admin users see ALL items regardless of brand assignment.
     """
     try:
-        return _dashboard_procurement_content_inner(user_id, org_id, supabase, status_filter, roles)
+        return _dashboard_procurement_content_inner(user_id, org_id, supabase, status_filter, roles, real_admin)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -5685,10 +5685,10 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
         ]
 
 
-def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
+def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None, real_admin: bool = False) -> list:
     """Inner implementation of procurement content (extracted for error handling)."""
-    # Check if user is admin - bypass brand filtering
-    is_admin = roles and "admin" in roles
+    # Check if user is admin - bypass brand filtering (real_admin bypasses even during impersonation)
+    is_admin = real_admin or (roles and "admin" in roles)
 
     # Get brands assigned to this user (empty for admin = see all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
@@ -8709,9 +8709,9 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         .execute()
 
     if not result.data:
-        return page_layout("Not Found",
-            H1("Quote not found"),
-            A("← Back to Quotes", href="/quotes"),
+        return page_layout("Не найдено",
+            H1("КП не найден"),
+            A("← Назад к списку КП", href="/quotes"),
             session=session
         )
 
@@ -10217,7 +10217,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
         # Workflow Actions (for pending_sales_review - submit for Quote Control, return after revision, or submit justification)
         Div(
-            H3("Workflow"),
+            H3("Действия"),
             # Justification flow: Submit justification for approval (Feature: approval justification workflow)
             Div(
                 btn_link("Отправить обоснование", href=f"/quotes/{quote_id}/submit-justification", variant="primary", icon_name="check", size="lg"),
@@ -10225,8 +10225,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             ) if is_justification_needed else None,
             # Normal flow: Submit for Quote Control
             Form(
-                btn("Submit for Quote Control", variant="primary", icon_name="file-text", size="lg", type="submit"),
-                P("Send calculated quote to Zhanna for validation review.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
+                btn("Отправить на контроль КП", variant="primary", icon_name="file-text", size="lg", type="submit"),
+                P("Отправить рассчитанный КП на проверку контроллёру.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
                 method="post",
                 action=f"/quotes/{quote_id}/submit-quote-control"
             ) if not is_revision and not is_justification_needed else None,
@@ -10400,14 +10400,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         # Activity log (workflow transitions history, products subtab only)
         workflow_transition_history(quote_id, limit=50, collapsed=True) if subtab == "products" else None,
 
-        # Back button (both subtabs)
-        Div(
-            Div(
-                btn_link("Назад", href="/quotes", variant="secondary", icon_name="arrow-left"),
-                style="display: flex; align-items: center; gap: 1rem;"
-            ),
-            style="margin-top: 1rem;"
-        ),
+        # Back button removed — toolbar at top has all navigation
 
         # Delete confirmation modal
         Script(f"""
@@ -10545,7 +10538,7 @@ def post(quote_id: str, session):
     else:
         return page_layout("Error",
             Div(f"Error submitting quote: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -11063,7 +11056,7 @@ def post(quote_id: str, session, action: str = "", comment: str = ""):
         if not comment:
             return page_layout("Error",
                 Div("Для отклонения необходимо указать причину.", cls="alert alert-error"),
-                A("← Back to Quote", href=f"/quotes/{quote_id}"),
+                A("← Назад к КП", href=f"/quotes/{quote_id}"),
                 session=session
             )
     else:
@@ -11083,7 +11076,7 @@ def post(quote_id: str, session, action: str = "", comment: str = ""):
     else:
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -11330,7 +11323,7 @@ def post(quote_id: str, session, sent_to_email: str = ""):
     else:
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -11359,7 +11352,7 @@ def post(quote_id: str, session, change_type: str = "", client_comment: str = ""
     if change_type not in valid_types:
         return page_layout("Error",
             Div("Invalid change type", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -11409,7 +11402,7 @@ def post(quote_id: str, session, change_type: str = "", client_comment: str = ""
     else:
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -11444,7 +11437,7 @@ def post(quote_id: str, session):
     else:
         return page_layout("Error",
             Div(f"Error: {result.error_message}", cls="alert alert-error"),
-            A("← Back to Quote", href=f"/quotes/{quote_id}"),
+            A("← Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -12194,7 +12187,7 @@ def post(quote_id: str, customer_id: str, status: str, currency: str, delivery_t
     except Exception as e:
         return page_layout("Error",
             Div(f"Error: {str(e)}", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}/edit"),
+            A("← Назад", href=f"/quotes/{quote_id}/edit"),
             session=session
         )
 
@@ -12800,10 +12793,10 @@ def get(quote_id: str, session):
     items = items_result.data or []
 
     if not items:
-        return page_layout("Cannot Calculate",
-            H1("No Products"),
-            P("Add products to the quote before calculating."),
-            A("Back to Quote", href=f"/quotes/{quote_id}"),
+        return page_layout("Невозможно рассчитать",
+            H1("Нет позиций"),
+            P("Добавьте товары в КП перед расчётом."),
+            A("Назад к КП", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -13343,7 +13336,7 @@ def post(
     if not items:
         return page_layout("Error",
             Div("Cannot calculate - no products in quote", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -13831,30 +13824,30 @@ def post(
                 )
             )
 
-        return page_layout(f"Calculation Results - {quote.get('idn_quote', '')}",
-            Div("Calculation completed and saved!", cls="alert alert-success"),
+        return page_layout(f"Результат расчёта - {quote.get('idn_quote', '')}",
+            Div("Расчёт выполнен и сохранён!", cls="alert alert-success"),
 
-            H1(f"Results for {quote.get('idn_quote', '')}"),
+            H1(f"Результат: {quote.get('idn_quote', '')}"),
 
             # Summary stats
             Div(
                 Div(
-                    Div("Total (excl VAT)", style="font-size: 0.875rem; color: #666;"),
+                    Div("Итого (без НДС)", style="font-size: 0.875rem; color: #666;"),
                     Div(format_money(total_no_vat, currency), cls="stat-value"),
                     cls="stat-card"
                 ),
                 Div(
-                    Div("Total (incl VAT)", style="font-size: 0.875rem; color: #666;"),
+                    Div("Итого (с НДС)", style="font-size: 0.875rem; color: #666;"),
                     Div(format_money(total_with_vat, currency), cls="stat-value", style="color: #28a745;"),
                     cls="stat-card"
                 ),
                 Div(
-                    Div("Total Profit", style="font-size: 0.875rem; color: #666;"),
+                    Div("Общий профит", style="font-size: 0.875rem; color: #666;"),
                     Div(format_money(total_profit, currency), cls="stat-value"),
                     cls="stat-card"
                 ),
                 Div(
-                    Div("Avg Margin", style="font-size: 0.875rem; color: #666;"),
+                    Div("Средняя маржа", style="font-size: 0.875rem; color: #666;"),
                     Div(f"{avg_margin:.1f}%", cls="stat-value"),
                     cls="stat-card"
                 ),
@@ -13863,35 +13856,35 @@ def post(
 
             # Cost breakdown
             Div(
-                H3("Cost Breakdown"),
+                H3("Структура затрат"),
                 Table(
-                    Tr(Td("Products Purchase Total:"), Td(format_money(total_purchase, currency))),
-                    Tr(Td("Logistics Total:"), Td(format_money(total_logistics, currency))),
-                    Tr(Td("Brokerage Total:"), Td(format_money(total_brokerage, currency))),
-                    Tr(Td("Total COGS:"), Td(format_money(total_cogs, currency))),
-                    Tr(Td(Strong("VAT Payable:")), Td(Strong(format_money(total_vat, currency)))),
+                    Tr(Td("Закупка товаров:"), Td(format_money(total_purchase, currency))),
+                    Tr(Td("Логистика:"), Td(format_money(total_logistics, currency))),
+                    Tr(Td("Брокерские услуги:"), Td(format_money(total_brokerage, currency))),
+                    Tr(Td("Себестоимость:"), Td(format_money(total_cogs, currency))),
+                    Tr(Td(Strong("НДС к уплате:")), Td(Strong(format_money(total_vat, currency)))),
                 ),
                 cls="card"
             ),
 
             # Product details
             Div(
-                H3("Product Details"),
+                H3("Детализация по позициям"),
                 Table(
                     Thead(
                         Tr(
-                            Th("Product"),
-                            Th("Qty"),
-                            Th("COGS/unit"),
-                            Th("Price/unit"),
-                            Th("Total"),
-                            Th("Profit"),
+                            Th("Товар"),
+                            Th("Кол-во"),
+                            Th("Себест./ед."),
+                            Th("Цена/ед."),
+                            Th("Итого"),
+                            Th("Профит"),
                         )
                     ),
                     Tbody(*product_rows),
                     Tfoot(
                         Tr(
-                            Td(Strong("TOTAL"), colspan="4"),
+                            Td(Strong("ИТОГО"), colspan="4"),
                             Td(Strong(format_money(total_with_vat, currency))),
                             Td(Strong(format_money(total_profit, currency))),
                         )
@@ -13902,21 +13895,21 @@ def post(
 
             # Variables used
             Div(
-                H3("Calculation Variables"),
+                H3("Параметры расчёта"),
                 Table(
-                    Tr(Td("Markup:"), Td(f"{variables['markup']}%")),
-                    Tr(Td("Incoterms:"), Td(variables['offer_incoterms'])),
-                    Tr(Td("Delivery Time:"), Td(f"{variables['delivery_time']} days")),
-                    Tr(Td("Client Advance:"), Td(f"{variables['advance_from_client']}%")),
-                    Tr(Td("Exchange Rate:"), Td(str(variables['exchange_rate']))),
+                    Tr(Td("Наценка:"), Td(f"{variables['markup']}%")),
+                    Tr(Td("Инкотермс:"), Td(variables['offer_incoterms'])),
+                    Tr(Td("Срок поставки:"), Td(f"{variables['delivery_time']} дн.")),
+                    Tr(Td("Аванс клиента:"), Td(f"{variables['advance_from_client']}%")),
+                    Tr(Td("Курс:"), Td(str(variables['exchange_rate']))),
                 ),
                 cls="card"
             ),
 
             # Actions
             Div(
-                btn_link("Back to Quote", href=f"/quotes/{quote_id}", variant="secondary", icon_name="arrow-left"),
-                btn_link("Recalculate", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
+                btn_link("Назад к КП", href=f"/quotes/{quote_id}", variant="secondary", icon_name="arrow-left"),
+                btn_link("Пересчитать", href=f"/quotes/{quote_id}/calculate", variant="primary", icon_name="calculator"),
                 cls="form-actions"
             ),
 
@@ -13926,9 +13919,9 @@ def post(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return page_layout("Calculation Error",
-            Div(f"Error: {str(e)}", cls="alert alert-error"),
-            btn_link("Back", href=f"/quotes/{quote_id}/calculate", variant="secondary", icon_name="arrow-left"),
+        return page_layout("Ошибка расчёта",
+            Div(f"Ошибка: {str(e)}", cls="alert alert-error"),
+            btn_link("Назад", href=f"/quotes/{quote_id}/calculate", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
@@ -14610,13 +14603,13 @@ def get(quote_id: str, session):
     except ValueError as e:
         return page_layout("Export Error",
             Div(str(e), cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
     except Exception as e:
         return page_layout("Export Error",
             Div(f"Failed to generate PDF: {str(e)}", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -14654,13 +14647,13 @@ def get(quote_id: str, session):
     except ValueError as e:
         return page_layout("Export Error",
             Div(str(e), cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
     except Exception as e:
         return page_layout("Export Error",
             Div(f"Failed to generate PDF: {str(e)}", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -14692,13 +14685,13 @@ def get(quote_id: str, session):
     except ValueError as e:
         return page_layout("Export Error",
             Div(str(e), cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
     except Exception as e:
         return page_layout("Export Error",
             Div(f"Failed to generate Excel: {str(e)}", cls="alert alert-error"),
-            A("← Back", href=f"/quotes/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -14906,7 +14899,7 @@ def post(rate_forex_risk: float, rate_fin_comm: float, rate_loan_interest_daily:
     except Exception as e:
         return page_layout("Settings Error",
             Div(f"Error: {str(e)}", cls="alert alert-error"),
-            A("← Back", href="/settings"),
+            A("← Назад", href="/settings"),
             session=session
         )
 
@@ -16804,7 +16797,7 @@ def get(quote_id: str, session):
                             cls="flex-1"
                         ),
                         Div(
-                            Label("Объём, м³", cls="block mb-2 font-medium"),
+                            Label("Габариты, м³", cls="block mb-2 font-medium"),
                             Input(type="number", name="total_volume_m3", step="0.0001", min="0",
                                   placeholder="2.5", cls="w-full p-2 border border-gray-300 rounded-md"),
                             cls="flex-1"
@@ -16920,7 +16913,7 @@ def get(quote_id: str, session):
 
                     # Volume
                     Div(
-                        Label("Общий объём, м³", cls="block mb-2 font-medium"),
+                        Label("Габариты, м³", cls="block mb-2 font-medium"),
                         Input(type="number", name="total_volume_m3", id="edit-invoice-volume", step="0.0001", min="0",
                               placeholder="2.5",
                               cls="w-full p-2 border border-gray-300 rounded-md"),
@@ -17398,6 +17391,7 @@ def get(quote_id: str, session):
                 var columns = [
                     {{data: 'selected', type: 'checkbox', width: 40, readOnly: !canEdit}},
                     {{data: 'brand', type: 'text', readOnly: true, width: 100}},
+                    {{data: 'product_code', type: 'text', readOnly: true, width: 100}},
                     {{data: 'product_name', type: 'text', readOnly: true, width: 200}},
                     {{data: 'quantity', type: 'numeric', readOnly: true, width: 50}},
                     {{data: 'price', type: 'numeric', width: 80, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
@@ -17431,7 +17425,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'НДС', 'Н/Д', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'НДС', 'Н/Д', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -18765,7 +18759,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("Quote Not Found"),
             P("The requested quote was not found or you don't have access."),
-            A("← Back to Tasks", href="/tasks"),
+            A("← Назад к задачам", href="/tasks"),
             session=session
         )
 
@@ -19208,7 +19202,7 @@ def get(session, quote_id: str):
     # Build the invoice-level logistics form
     invoice_logistics_section = Div(
         H3(icon("file-text", size=20), " Логистика по инвойсам (v4.0)", style="margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
-        P("Введите стоимость доставки для каждого инвойса. Вес/объём заполнен закупками.",
+        P("Введите стоимость доставки для каждого инвойса. Вес/габариты заполнены закупками.",
           style="color: #666; margin-bottom: 1rem;"),
         *[logistics_invoice_card(invoice, idx) for idx, invoice in enumerate(invoices_with_items)],
     ) if invoices_with_items else Div(
@@ -19772,7 +19766,7 @@ def get(session, quote_id: str):
         return page_layout("Quote Not Found",
             H1("Quote Not Found"),
             P("The requested quote was not found or you don't have access."),
-            A("← Back to Tasks", href="/tasks"),
+            A("← Назад к задачам", href="/tasks"),
             session=session
         )
 
@@ -35169,8 +35163,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
             quotes_rows.append(
                 Tr(
                     Td(A(q.get("idn_quote") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500;")),
-                    Td(f"{q.get('total_sum', 0):,.0f} ₽", style="text-align: right;"),
-                    Td(f"{q.get('total_profit', 0):,.0f} ₽", style="text-align: right; color: #10b981;"),
+                    Td(format_money(q.get('total_sum'), q.get('currency', 'RUB')), style="text-align: right;"),
+                    Td(format_money(q.get('total_profit'), q.get('currency', 'RUB')), style="text-align: right; color: #10b981;"),
                     Td(q_date),
                     Td(render_status_badge(q.get("workflow_status"))),
                 )
@@ -35363,7 +35357,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Div(
                         Div(
                             H3(icon("file-text", size=18), " КП", style="margin: 0; color: #374151; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;"),
-                            Span(f"Всего: {stats['quotes_count']} • Сумма: {stats['quotes_sum']:,.0f} ₽", style="color: #6b7280; font-size: 0.75rem;"),
+                            Span(f"Всего: {stats['quotes_count']}", style="color: #6b7280; font-size: 0.75rem;"),
                             style="display: flex; flex-direction: column; gap: 0.25rem;"
                         ),
                         A("Все →", href=f"/customers/{customer_id}?tab=quotes",
@@ -35641,11 +35635,12 @@ def get(customer_id: str, session, request, tab: str = "general"):
             total_sum = quote.get("total_sum", 0)
             total_profit = quote.get("total_profit", 0)
 
+            q_currency = quote.get("currency", "RUB")
             quotes_rows.append(
                 Tr(
                     Td(A(Strong(quote.get("idn_quote", "—")), href=f"/quotes/{quote['id']}")),
-                    Td(f"{total_sum:,.0f} ₽" if total_sum else "—", style="text-align: right;"),
-                    Td(f"{total_profit:,.0f} ₽" if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
+                    Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right;"),
+                    Td(format_money(total_profit, q_currency) if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
                     Td(created_at or "—", style="font-size: 0.9em;"),
                     Td(Span(status_text, cls="status-badge")),
                 )
@@ -35715,12 +35710,13 @@ def get(customer_id: str, session, request, tab: str = "general"):
             total_sum = spec.get("total_sum", 0)
             total_profit = spec.get("total_profit", 0)
 
+            spec_currency = (spec.get("quotes") or {}).get("currency", "RUB")
             specs_rows.append(
                 Tr(
                     Td(Strong(spec.get("specification_number", "—"))),
                     Td(A(quote_idn, href=f"/quotes/{spec.get('quote_id')}") if spec.get("quote_id") else "—"),
-                    Td(f"{total_sum:,.0f} ₽" if total_sum else "—", style="text-align: right;"),
-                    Td(f"{total_profit:,.0f} ₽" if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
+                    Td(format_money(total_sum, spec_currency) if total_sum else "—", style="text-align: right;"),
+                    Td(format_money(total_profit, spec_currency) if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
                     Td(sign_date or "—", style="font-size: 0.9em;"),
                     Td(Span(status_text, cls="status-badge")),
                 )
@@ -35777,7 +35773,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
             # Price
             last_price = item.get("last_price")
-            price_display = f"{last_price:,.2f} ₽" if last_price else "—"
+            last_currency = item.get("last_currency", "RUB")
+            price_display = format_money(last_price, last_currency) if last_price else "—"
 
             # Was sold status
             was_sold = item.get("was_sold", False)

@@ -1630,7 +1630,7 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
         # Get specifications for these quotes
         # Use explicit FK hint to avoid PostgREST ambiguous relationship error
         # (specifications has both quote_id->quotes and quote_version_id->quote_versions->quotes)
-        specs_result = supabase.table("specifications").select("*, quotes!specifications_quote_id_fkey(idn_quote, customer_id)")\
+        specs_result = supabase.table("specifications").select("*, quotes!specifications_quote_id_fkey(idn_quote, customer_id, currency)")\
             .in_("quote_id", quote_ids)\
             .order("sign_date", desc=True)\
             .execute()
@@ -1806,7 +1806,7 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
 
         # Get all quote items (no products table join - quote_items has product info inline)
         result = supabase.table("quote_items").select(
-            "*, quotes!quote_items_quote_id_fkey(id, idn_quote, created_at, workflow_status)"
+            "*, quotes!quote_items_quote_id_fkey(id, idn_quote, created_at, workflow_status, currency)"
         )\
             .in_("quote_id", quote_ids)\
             .order("created_at", desc=True)\
@@ -1823,6 +1823,7 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
             "times_requested": 0,
             "total_quantity": 0,
             "last_price": None,
+            "last_currency": "RUB",
             "last_requested_at": None,
             "brands": set(),
             "quotes": [],
@@ -1857,6 +1858,7 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
                     if not product_map[group_key]["last_requested_at"] or \
                        request_date > product_map[group_key]["last_requested_at"]:
                         product_map[group_key]["last_price"] = item["base_price_vat"]
+                        product_map[group_key]["last_currency"] = quote_data.get("currency", "RUB")
                         product_map[group_key]["last_requested_at"] = request_date
 
             # Track brands
