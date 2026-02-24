@@ -5663,14 +5663,14 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     ]
 
 
-def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None, real_admin: bool = False) -> list:
+def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
     """
     Procurement workspace tab content.
     Shows quotes with items having brands assigned to current user.
     Admin users see ALL items regardless of brand assignment.
     """
     try:
-        return _dashboard_procurement_content_inner(user_id, org_id, supabase, status_filter, roles, real_admin)
+        return _dashboard_procurement_content_inner(user_id, org_id, supabase, status_filter, roles)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -5685,10 +5685,10 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
         ]
 
 
-def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None, real_admin: bool = False) -> list:
+def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
     """Inner implementation of procurement content (extracted for error handling)."""
-    # Check if user is admin - bypass brand filtering (real_admin bypasses even during impersonation)
-    is_admin = real_admin or (roles and "admin" in roles)
+    # Check if user is admin - bypass brand filtering
+    is_admin = roles and "admin" in roles
 
     # Get brands assigned to this user (empty for admin = see all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
