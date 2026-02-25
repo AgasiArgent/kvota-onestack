@@ -118,6 +118,7 @@ ROLE_LABELS_RU = {
     "top_manager": "Руководитель", "finance": "Финансы", "system": "Система",
     "head_of_sales": "Нач. продаж", "head_of_procurement": "Нач. закупок",
     "head_of_logistics": "Нач. логистики",
+    "training_manager": "Менеджер обучения",
 }
 
 # ============================================================================
@@ -2680,6 +2681,8 @@ def sidebar(session, current_path: str = ""):
 
     real_roles = user.get("roles", [])
     is_real_admin = "admin" in real_roles
+    is_training_manager = "training_manager" in real_roles
+    can_impersonate = is_real_admin or is_training_manager
 
     # Use impersonated role for menu visibility if active
     impersonated_role = session.get("impersonated_role")
@@ -2688,18 +2691,19 @@ def sidebar(session, current_path: str = ""):
         is_admin = (impersonated_role == "admin")
     else:
         roles = real_roles
-        is_admin = is_real_admin
+        is_admin = is_real_admin or is_training_manager
 
     user_id = user.get("id")
 
-    # Role impersonation dropdown (real admins only)
+    # Role impersonation dropdown (admins and training managers)
     impersonation_select = None
-    if is_real_admin:
+    if can_impersonate:
         active_roles = ["sales", "procurement", "logistics", "customs", "finance",
                         "quote_controller", "spec_controller", "top_manager",
                         "head_of_sales", "head_of_procurement", "head_of_logistics"]
         current_impersonation = session.get("impersonated_role", "")
-        options = [Option("Администратор (все права)", value="", selected=not current_impersonation)]
+        default_label = "Менеджер обучения (все разделы)" if is_training_manager and not is_real_admin else "Администратор (все права)"
+        options = [Option(default_label, value="", selected=not current_impersonation)]
         for r in active_roles:
             options.append(Option(ROLE_LABELS_RU.get(r, r), value=r, selected=(current_impersonation == r)))
         impersonation_select = Div(
@@ -2758,8 +2762,8 @@ def sidebar(session, current_path: str = ""):
     if is_admin or "procurement" in roles:
         registries_items.append({"icon": "building-2", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
-    # Company registries - for admin
-    if is_admin:
+    # Company registries - for admin (not training_manager)
+    if is_real_admin:
         registries_items.append({"icon": "building", "label": "Юрлица", "href": "/companies", "roles": ["admin"]})
 
     if registries_items:
@@ -2774,7 +2778,7 @@ def sidebar(session, current_path: str = ""):
         menu_sections.append({"title": "Финансы", "items": finance_items})
 
     # === ADMIN SECTION ===
-    if is_admin:
+    if is_real_admin:
         _feedback_href = "/admin" + "/feedback"
         admin_items = [
             {"icon": "user", "label": "Пользователи", "href": "/admin", "roles": ["admin"]},
@@ -29792,6 +29796,7 @@ def get(session):
                 "head_of_sales": "status-info",
                 "head_of_procurement": "status-success",
                 "head_of_logistics": "status-warning",
+                "training_manager": "status-neutral",
             }.get(code, "status-neutral")
             role_badges.append(
                 Span(name, cls=f"status-badge {badge_class}", style="margin-right: 4px;")
@@ -31446,16 +31451,17 @@ def post(assignment_id: str, session):
 # ============================================================================
 
 VALID_IMPERSONATION_ROLES = {
-    "admin", "sales", "procurement", "logistics", "customs",
+    "sales", "procurement", "logistics", "customs",
     "quote_controller", "spec_controller", "finance",
     "top_manager", "head_of_sales", "head_of_procurement", "head_of_logistics",
 }
 
 @rt("/admin/impersonate")
 def get(session, role: str = ""):
-    """GET /admin/impersonate - Set or clear role impersonation (admin only)."""
+    """GET /admin/impersonate - Set or clear role impersonation (admin and training_manager)."""
     user = session.get("user")
-    if not user or "admin" not in user.get("roles", []):
+    user_roles = user.get("roles", []) if user else []
+    if not user or ("admin" not in user_roles and "training_manager" not in user_roles):
         return RedirectResponse("/", status_code=303)
 
     if role:
