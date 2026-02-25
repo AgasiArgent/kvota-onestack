@@ -5432,6 +5432,50 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 )
             )
 
+    # -------------------------------------------------------------------------
+    # SALES: Approved quotes - need to send to client
+    # -------------------------------------------------------------------------
+    if 'sales' in roles:
+        approved_result = supabase.table("quotes") \
+            .select("id, idn_quote, customers(name), total_amount, currency") \
+            .eq("organization_id", org_id) \
+            .eq("workflow_status", "approved") \
+            .order("updated_at", desc=True) \
+            .limit(5) \
+            .execute()
+
+        approved_quotes = approved_result.data or []
+        approved_count = len(approved_quotes)
+
+        if approved_count > 0:
+            approved_rows = [
+                Tr(
+                    Td(q.get("idn_quote", f"#{q['id'][:8]}")),
+                    Td((q.get("customers") or {}).get("name", "—")),
+                    Td(format_money(q.get("total_amount"), q.get("currency", "RUB"))),
+                    Td(A("Отправить клиенту", href=f"/quotes/{q['id']}", cls="button",
+                         style="padding: 0.25rem 0.5rem; font-size: 0.875rem; background: #0891b2; color: white; border-color: #0891b2;"))
+                ) for q in approved_quotes
+            ]
+
+            sections.append(
+                Div(
+                    H2(icon("check-circle", size=20), f" Одобрено: готово к отправке клиенту ({approved_count})",
+                       style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                    Div(
+                        Table(
+                            Thead(Tr(Th("КП #"), Th("Клиент"), Th("Сумма"), Th("Действие"))),
+                            Tbody(*approved_rows),
+                            cls="table-enhanced"
+                        ),
+                        cls="table-enhanced-container"
+                    ),
+                    A("Все мои КП →", href="/quotes?status=approved",
+                      style="display: inline-block; margin-top: 12px; font-size: 13px; color: #0891b2; font-weight: 500;"),
+                    cls="card-elevated", style="border-left: 4px solid #0891b2; padding: 16px;"
+                )
+            )
+
     return sections
 
 
@@ -15402,7 +15446,8 @@ def workflow_progress_bar(status_str: str):
         ("logistics_customs", "Лог+Там", [WorkflowStatus.PENDING_LOGISTICS, WorkflowStatus.PENDING_CUSTOMS]),
         ("sales", "Продажи", [WorkflowStatus.PENDING_SALES_REVIEW]),
         ("control", "Контроль", [WorkflowStatus.PENDING_QUOTE_CONTROL]),
-        ("approval", "Согласование", [WorkflowStatus.PENDING_APPROVAL, WorkflowStatus.APPROVED]),
+        ("approval", "Согласование", [WorkflowStatus.PENDING_APPROVAL]),
+        ("approved", "Одобрено", [WorkflowStatus.APPROVED]),
         ("client", "Клиент", [WorkflowStatus.SENT_TO_CLIENT, WorkflowStatus.CLIENT_NEGOTIATION]),
         ("spec", "Спец-я", [WorkflowStatus.PENDING_SPEC_CONTROL, WorkflowStatus.PENDING_SIGNATURE]),
         ("deal", "Сделка", [WorkflowStatus.DEAL]),
