@@ -16885,17 +16885,18 @@ def get(quote_id: str, session):
                         dropdown_id="modal-buyer"
                     ),
 
-                    # City autocomplete (HERE Geocode API)
+                    # City autocomplete (HERE Geocode API) - pure JS fetch, no HTMX (modal compatibility)
                     Div(
                         Label("Город отгрузки *", cls="block mb-2 font-medium"),
-                        Input(type="text", id="city-search-input", name="pickup_city",
-                              placeholder="Введите город (рус/eng)...", required=True,
-                              list="city-suggestions",
-                              autocomplete="off",
-                              cls="w-full p-2 border border-gray-300 rounded-md",
-                              **{"hx-get": "/api/cities/search", "hx-trigger": "keyup changed delay:300ms",
-                                 "hx-target": "#city-suggestions"}),
-                        Datalist(id="city-suggestions"),
+                        Div(
+                            Input(type="text", id="city-search-input", name="pickup_city",
+                                  placeholder="Введите город (рус/eng)...", required=True,
+                                  autocomplete="off",
+                                  cls="w-full p-2 border border-gray-300 rounded-md"),
+                            Div(id="city-dropdown",
+                                style="display:none; position:absolute; left:0; right:0; top:100%; background:#fff; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:50; max-height:200px; overflow-y:auto;"),
+                            style="position: relative;"
+                        ),
                         Input(type="hidden", name="pickup_country", id="city-country-code"),
                         Div(
                             Span("🌍", style="margin-right: 4px;"),
@@ -17170,43 +17171,65 @@ def get(quote_id: str, session):
                 document.getElementById('edit-invoice-filename').textContent = filename ? '📎 Новый файл: ' + filename : '';
             }});
 
-            // City autocomplete: when user selects a city from datalist, extract country code
+            // City autocomplete: fetch-based (no HTMX - works in modals)
             var cityInput = document.getElementById('city-search-input');
-            if (cityInput) {{
-                var _cityProgrammatic = false;
+            var cityDropdown = document.getElementById('city-dropdown');
+            var _cityTimer = null;
+            if (cityInput && cityDropdown) {{
                 cityInput.addEventListener('input', function() {{
-                    if (_cityProgrammatic) {{ _cityProgrammatic = false; return; }}
-                    var val = this.value;
-                    var datalist = document.getElementById('city-suggestions');
-                    var options = datalist ? datalist.querySelectorAll('option') : [];
-                    var hint = document.getElementById('city-country-hint');
-                    var badge = document.getElementById('city-country-badge');
-                    for (var i = 0; i < options.length; i++) {{
-                        if (options[i].value === val) {{
-                            var code = options[i].getAttribute('data-country-code');
-                            var city = options[i].getAttribute('data-city');
-                            var countryName = val.split(', ').slice(1).join(', ');
-                            if (code) {{
-                                document.getElementById('city-country-code').value = code;
-                                if (hint) {{
-                                    hint.textContent = countryName + ' (' + code + ')';
-                                    hint.style.color = '#059669';
-                                    hint.style.fontWeight = '600';
-                                }}
-                                if (badge) {{
-                                    badge.style.background = '#ecfdf5';
-                                    badge.style.padding = '6px 10px';
-                                    badge.style.borderRadius = '6px';
-                                    badge.style.border = '1px solid #a7f3d0';
-                                }}
-                            }}
-                            // Store just the city name, not the full "City, Country" display
-                            if (city) {{
-                                _cityProgrammatic = true;
-                                this.value = city;
-                            }}
-                            break;
-                        }}
+                    var q = this.value.trim();
+                    clearTimeout(_cityTimer);
+                    if (q.length < 2) {{ cityDropdown.style.display = 'none'; return; }}
+                    _cityTimer = setTimeout(function() {{
+                        fetch('/api/cities/search?q=' + encodeURIComponent(q))
+                            .then(function(r) {{ return r.text(); }})
+                            .then(function(html) {{
+                                if (!html || html.trim() === '') {{ cityDropdown.style.display = 'none'; return; }}
+                                // Parse options from HTML response
+                                var parser = new DOMParser();
+                                var doc = parser.parseFromString('<select>' + html + '</select>', 'text/html');
+                                var opts = doc.querySelectorAll('option');
+                                if (opts.length === 0) {{ cityDropdown.style.display = 'none'; return; }}
+                                cityDropdown.innerHTML = '';
+                                opts.forEach(function(opt) {{
+                                    if (opt.disabled) return;
+                                    var item = document.createElement('div');
+                                    item.textContent = opt.value;
+                                    item.style.cssText = 'padding:8px 12px; cursor:pointer; font-size:0.875rem; border-bottom:1px solid #f1f5f9;';
+                                    item.addEventListener('mouseenter', function() {{ this.style.background = '#f0f9ff'; }});
+                                    item.addEventListener('mouseleave', function() {{ this.style.background = '#fff'; }});
+                                    item.addEventListener('click', function() {{
+                                        var city = opt.getAttribute('data-city') || opt.value;
+                                        var code = opt.getAttribute('data-country-code') || '';
+                                        var countryName = opt.value.split(', ').slice(1).join(', ');
+                                        cityInput.value = city;
+                                        document.getElementById('city-country-code').value = code;
+                                        // Update badge
+                                        var hint = document.getElementById('city-country-hint');
+                                        var badge = document.getElementById('city-country-badge');
+                                        if (hint && code) {{
+                                            hint.textContent = countryName + ' (' + code + ')';
+                                            hint.style.color = '#059669';
+                                            hint.style.fontWeight = '600';
+                                        }}
+                                        if (badge && code) {{
+                                            badge.style.background = '#ecfdf5';
+                                            badge.style.padding = '6px 10px';
+                                            badge.style.borderRadius = '6px';
+                                            badge.style.border = '1px solid #a7f3d0';
+                                        }}
+                                        cityDropdown.style.display = 'none';
+                                    }});
+                                    cityDropdown.appendChild(item);
+                                }});
+                                cityDropdown.style.display = 'block';
+                            }});
+                    }}, 300);
+                }});
+                // Hide dropdown on outside click
+                document.addEventListener('click', function(e) {{
+                    if (!cityInput.contains(e.target) && !cityDropdown.contains(e.target)) {{
+                        cityDropdown.style.display = 'none';
                     }}
                 }});
             }}
