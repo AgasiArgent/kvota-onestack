@@ -26353,6 +26353,52 @@ def post(session, spec_id: str):
         except Exception as e:
             print(f"Note: Could not initialize logistics stages: {e}")
 
+        # Step 2c: Generate currency invoices for the new deal
+        try:
+            from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
+
+            # Fetch quote items with buyer_company info
+            ci_items_resp = supabase.table("quote_items").select(
+                "*, buyer_companies!buyer_company_id(id, name, country)"
+            ).eq("quote_id", quote_id).execute()
+            ci_items = ci_items_resp.data or []
+
+            # Build buyer_companies lookup dict
+            bc_lookup = {}
+            for ci_item in ci_items:
+                bc = (ci_item.get("buyer_companies") or {})
+                if bc and bc.get("id"):
+                    bc_lookup[bc["id"]] = bc
+
+            # Get seller_company and quote IDN
+            ci_quote_resp = supabase.table("quotes").select(
+                "idn, seller_companies!seller_company_id(id, name)"
+            ).eq("id", quote_id).single().execute()
+            ci_quote_data = ci_quote_resp.data or {}
+            sc = (ci_quote_data.get("seller_companies") or {})
+            ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
+            ci_quote_idn = ci_quote_data.get("idn", "")
+
+            if bc_lookup and ci_seller_company.get("id"):
+                ci_invoices = generate_currency_invoices(
+                    deal_id=str(deal_id),
+                    quote_idn=ci_quote_idn,
+                    items=ci_items,
+                    buyer_companies=bc_lookup,
+                    seller_company=ci_seller_company,
+                    organization_id=org_id,
+                )
+                if ci_invoices:
+                    save_currency_invoices(supabase, ci_invoices)
+                    print(f"Currency invoices generated: {len(ci_invoices)} invoice(s) for deal {deal_id}")
+                else:
+                    print(f"No currency invoices generated for deal {deal_id} (no eligible items)")
+            else:
+                print(f"Currency invoice generation skipped: no buyer companies or seller company for deal {deal_id}")
+        except Exception as e:
+            print(f"Warning: currency invoice generation failed: {e}")
+            # Non-blocking — deal creation still succeeds
+
         # Step 3: Update quote workflow status to deal_signed (if workflow service available)
         try:
             from services import transition_quote_status, WorkflowStatus
