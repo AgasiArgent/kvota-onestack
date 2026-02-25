@@ -41431,72 +41431,317 @@ def get(session):
         Div(
             Div(
                 H1("Обучение", style="margin: 0; font-size: 1.5rem;"),
-                P("Обучающие видеоматериалы по работе с системой", style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
+                P("Видеоматериалы по работе с системой", style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
                 style="flex: 1;"
             ),
             Div(*admin_controls) if admin_controls else None,
-            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;"
+            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;"
         ),
         # Category tabs
         Div(
             *category_tabs,
             cls="training-tabs",
-            style="display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap;"
+            style="display: flex; gap: 6px; margin-bottom: 1.25rem; flex-wrap: wrap;"
         ),
-        # Video grid
+        # Video grid — 3 columns, compact
         Div(
             *video_cards,
             id="video-grid",
-            cls="training-grid",
-            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 1.5rem;"
+            cls="tv-grid"
         ),
-        # Modal container for forms
+        # Video player modal (single shared iframe)
+        Div(
+            Div(
+                Div(
+                    Span(id="tv-modal-title", style="font-weight: 600; font-size: 0.9rem;"),
+                    Button("✕", onclick="closeVideoPlayer()", cls="tv-modal-close"),
+                    cls="tv-modal-header"
+                ),
+                Div(
+                    Iframe(id="tv-modal-iframe", src="", width="100%", height="100%",
+                           frameborder="0", allowfullscreen=True,
+                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"),
+                    cls="tv-modal-video"
+                ),
+                cls="tv-modal-content"
+            ),
+            id="tv-player-modal",
+            cls="tv-modal",
+            onclick="if(event.target===this)closeVideoPlayer()"
+        ),
+        # Modal container for admin forms
         Div(id="training-modal-container"),
-        # Tab switching script
+        # Scripts
         Script("""
             function setActiveTab(el) {
                 document.querySelectorAll('.training-tab').forEach(t => t.classList.remove('active'));
                 el.classList.add('active');
             }
+            function openVideoPlayer(el) {
+                var modal = document.getElementById('tv-player-modal');
+                var iframe = document.getElementById('tv-modal-iframe');
+                var title = document.getElementById('tv-modal-title');
+                iframe.src = el.dataset.embed;
+                title.textContent = el.dataset.title;
+                modal.classList.add('tv-modal--open');
+                document.body.style.overflow = 'hidden';
+            }
+            function closeVideoPlayer() {
+                var modal = document.getElementById('tv-player-modal');
+                var iframe = document.getElementById('tv-modal-iframe');
+                modal.classList.remove('tv-modal--open');
+                iframe.src = '';
+                document.body.style.overflow = '';
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') closeVideoPlayer();
+            });
         """),
-        # Tab styling
+        # Styles
         Style("""
+            /* --- Category tabs --- */
             .training-tab {
-                padding: 6px 16px;
-                border-radius: 20px;
-                font-size: 0.875rem;
+                padding: 5px 14px;
+                border-radius: 6px;
+                font-size: 0.8rem;
+                font-weight: 500;
                 cursor: pointer;
                 background: var(--bg-secondary, #f1f5f9);
-                color: var(--text-primary, #334155);
+                color: var(--text-secondary, #64748b);
                 text-decoration: none;
-                border: 1px solid transparent;
-                transition: all 0.2s;
+                border: 1px solid var(--border-color, #e2e8f0);
+                transition: all 0.15s ease;
             }
             .training-tab:hover {
-                background: var(--bg-tertiary, #e2e8f0);
+                color: var(--text-primary);
+                border-color: var(--accent, #3b82f6);
             }
             .training-tab.active {
-                background: var(--color-primary, #3b82f6);
-                color: white;
-                border-color: var(--color-primary, #3b82f6);
+                background: var(--accent, #3b82f6);
+                color: var(--text-on-accent, #fff);
+                border-color: var(--accent, #3b82f6);
             }
-            .training-card {
+
+            /* --- Grid --- */
+            .tv-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                gap: 1rem;
+            }
+
+            /* --- Card --- */
+            .tv-card {
+                border-radius: 10px;
+                overflow: hidden;
                 border: 1px solid var(--border-color, #e2e8f0);
+                background: var(--bg-card, #fff);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+                animation: tvFadeIn 0.35s ease both;
+            }
+            .tv-card:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            }
+            @keyframes tvFadeIn {
+                from { opacity: 0; transform: translateY(8px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+
+            /* --- Thumbnail --- */
+            .tv-thumb {
+                position: relative;
+                aspect-ratio: 16 / 9;
+                background-size: cover;
+                background-position: center;
+                cursor: pointer;
+                overflow: hidden;
+            }
+            .tv-thumb::after {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(0deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.1) 100%);
+                transition: background 0.2s;
+            }
+            .tv-card:hover .tv-thumb::after {
+                background: linear-gradient(0deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.15) 100%);
+            }
+            /* Fallback gradients per platform */
+            .tv-thumb--loom { background-color: #625df5; }
+            .tv-thumb--youtube { background-color: #cc0000; }
+            .tv-thumb--rutube { background-color: #1b9d5b; }
+
+            /* --- Play button --- */
+            .tv-play-btn {
+                position: absolute;
+                top: 50%; left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 2;
+                width: 44px; height: 44px;
+                border-radius: 50%;
+                background: rgba(255,255,255,0.92);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
+            }
+            .tv-card:hover .tv-play-btn {
+                transform: translate(-50%, -50%) scale(1.1);
+                box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            }
+            .tv-play-triangle {
+                width: 0; height: 0;
+                border-style: solid;
+                border-width: 8px 0 8px 14px;
+                border-color: transparent transparent transparent #1e293b;
+                margin-left: 3px;
+            }
+
+            /* --- Platform badge --- */
+            .tv-badge {
+                position: absolute;
+                top: 8px; left: 8px;
+                z-index: 2;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 0.65rem;
+                font-weight: 600;
+                letter-spacing: 0.03em;
+                text-transform: uppercase;
+                color: #fff;
+                background: rgba(0,0,0,0.45);
+                backdrop-filter: blur(4px);
+            }
+
+            /* --- Card body --- */
+            .tv-body {
+                padding: 10px 12px 10px;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+            .tv-title {
+                font-size: 0.875rem;
+                font-weight: 600;
+                color: var(--text-primary);
+                line-height: 1.3;
+            }
+            .tv-desc {
+                font-size: 0.75rem;
+                color: var(--text-secondary);
+                line-height: 1.4;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .tv-footer {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-top: 6px;
+            }
+            .tv-cat {
+                font-size: 0.7rem;
+                font-weight: 500;
+                color: var(--text-secondary);
+                background: var(--bg-secondary, #f1f5f9);
+                padding: 2px 8px;
+                border-radius: 4px;
+            }
+
+            /* --- Admin icon buttons --- */
+            .tv-actions { display: flex; gap: 4px; }
+            .tv-icon-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px; height: 28px;
+                border-radius: 6px;
+                border: 1px solid var(--border-color, #e2e8f0);
+                background: var(--bg-secondary, #f8fafc);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all 0.15s;
+                padding: 0;
+            }
+            .tv-icon-btn:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+                background: var(--accent-light, rgba(59,130,246,0.08));
+            }
+            .tv-icon-btn--del:hover {
+                border-color: #ef4444;
+                color: #ef4444;
+                background: rgba(239,68,68,0.08);
+            }
+
+            /* --- Video Player Modal --- */
+            .tv-modal {
+                display: none;
+                position: fixed;
+                inset: 0;
+                z-index: 9999;
+                background: rgba(0,0,0,0.75);
+                backdrop-filter: blur(4px);
+                align-items: center;
+                justify-content: center;
+                padding: 2rem;
+            }
+            .tv-modal--open {
+                display: flex;
+                animation: tvModalIn 0.2s ease;
+            }
+            @keyframes tvModalIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            .tv-modal-content {
+                width: 100%;
+                max-width: 900px;
                 border-radius: 12px;
                 overflow: hidden;
-                background: var(--bg-card, white);
-                transition: box-shadow 0.2s;
+                background: #000;
+                box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+                animation: tvModalSlide 0.25s ease;
             }
-            .training-card:hover {
-                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            @keyframes tvModalSlide {
+                from { opacity: 0; transform: scale(0.96) translateY(10px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
             }
-            .training-card-body {
-                padding: 1rem;
-            }
-            .training-card-actions {
+            .tv-modal-header {
                 display: flex;
-                gap: 8px;
-                margin-top: 8px;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                background: #111;
+                color: #fff;
+            }
+            .tv-modal-close {
+                background: none;
+                border: none;
+                color: #999;
+                font-size: 1.2rem;
+                cursor: pointer;
+                padding: 4px 8px;
+                border-radius: 6px;
+                transition: all 0.15s;
+            }
+            .tv-modal-close:hover {
+                color: #fff;
+                background: rgba(255,255,255,0.1);
+            }
+            .tv-modal-video {
+                aspect-ratio: 16 / 9;
+            }
+            .tv-modal-video iframe {
+                display: block;
+            }
+
+            @media (max-width: 640px) {
+                .tv-grid { grid-template-columns: 1fr; }
+                .tv-modal { padding: 1rem; }
             }
         """)
     )
@@ -41507,77 +41752,91 @@ def get(session):
 def _get_embed_url(video_id: str, platform: str) -> str:
     """Get the embed URL based on platform."""
     if platform == "youtube":
-        return f"https://www.youtube.com/embed/{video_id}"
+        return f"https://www.youtube.com/embed/{video_id}?autoplay=1"
     elif platform == "loom":
-        return f"https://www.loom.com/embed/{video_id}"
+        return f"https://www.loom.com/embed/{video_id}?autoplay=1"
     elif platform == "rutube":
-        return f"https://rutube.ru/play/embed/{video_id}"
+        return f"https://rutube.ru/play/embed/{video_id}?autoplay=1"
     else:
-        # Fallback to rutube
-        return f"https://rutube.ru/play/embed/{video_id}"
+        return f"https://rutube.ru/play/embed/{video_id}?autoplay=1"
+
+
+def _get_thumbnail_url(video_id: str, platform: str) -> str:
+    """Get thumbnail image URL for video preview card."""
+    if platform == "youtube":
+        return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+    elif platform == "loom":
+        return f"https://cdn.loom.com/sessions/thumbnails/{video_id}-00001.jpg"
+    else:
+        return ""
+
+
+_PLATFORM_LABELS = {"loom": "Loom", "youtube": "YouTube", "rutube": "Rutube"}
 
 
 def _render_video_cards(videos, is_admin=False):
-    """Render a list of video cards for the training grid."""
+    """Render compact video cards with click-to-play thumbnails."""
     if not videos:
         return [
             Div(
-                P("Пока нет обучающих видео.", style="color: var(--text-secondary); text-align: center; padding: 3rem;"),
+                Div(
+                    icon("film", size=32, style="opacity: 0.3; margin-bottom: 8px;"),
+                    P("Пока нет обучающих видео", style="margin: 0; color: var(--text-secondary); font-size: 0.875rem;"),
+                    style="display: flex; flex-direction: column; align-items: center; padding: 3rem;"
+                ),
                 style="grid-column: 1 / -1;"
             )
         ]
 
     cards = []
-    for v in videos:
-        # Video embed (platform-aware)
-        embed = Div(
-            Iframe(
-                src=_get_embed_url(v.youtube_id, v.platform),
-                width="100%",
-                height="200",
-                frameborder="0",
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
-                allowfullscreen=True,
-                style="display: block;"
+    for i, v in enumerate(videos):
+        thumb_url = _get_thumbnail_url(v.youtube_id, v.platform)
+        embed_url = _get_embed_url(v.youtube_id, v.platform)
+
+        # Thumbnail with play overlay
+        thumb_bg = f"background-image: url('{thumb_url}');" if thumb_url else ""
+        thumbnail = Div(
+            Span(_PLATFORM_LABELS.get(v.platform, v.platform), cls=f"tv-badge tv-badge--{v.platform}"),
+            Div(
+                Div(cls="tv-play-triangle"),
+                cls="tv-play-btn"
             ),
+            cls=f"tv-thumb tv-thumb--{v.platform}",
+            style=thumb_bg,
+            data_embed=embed_url,
+            data_title=v.title,
+            onclick="openVideoPlayer(this)"
         )
 
-        # Card body
-        body_items = [
-            Div(
-                Span(v.category, style="background: var(--bg-secondary, #f1f5f9); padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; color: var(--text-secondary);"),
-                style="margin-bottom: 8px;"
-            ),
-            H3(v.title, style="margin: 0 0 4px; font-size: 1rem;"),
-        ]
+        # Card body - compact
+        body = [Div(v.title, cls="tv-title")]
 
         if v.description:
-            body_items.append(
-                P(v.description, style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.4;")
-            )
+            body.append(Div(v.description, cls="tv-desc"))
 
-        # Admin actions
+        # Footer with category + admin actions
+        footer_items = [Span(v.category, cls="tv-cat")]
         if is_admin:
-            body_items.append(
+            footer_items.append(
                 Div(
-                    btn("Изменить", variant="secondary", size="sm", icon_name="pencil",
-                        hx_get=f"/training/{v.id}/edit-form",
-                        hx_target="#training-modal-container",
-                        hx_swap="innerHTML"),
-                    btn("Удалить", variant="danger", size="sm", icon_name="trash-2",
-                        hx_delete=f"/training/{v.id}/delete",
-                        hx_target="#video-grid",
-                        hx_swap="innerHTML",
-                        hx_confirm="Удалить это видео?"),
-                    cls="training-card-actions"
+                    Button(icon("pencil", size=13), cls="tv-icon-btn",
+                           hx_get=f"/training/{v.id}/edit-form",
+                           hx_target="#training-modal-container",
+                           hx_swap="innerHTML", title="Изменить"),
+                    Button(icon("trash-2", size=13), cls="tv-icon-btn tv-icon-btn--del",
+                           hx_delete=f"/training/{v.id}/delete",
+                           hx_target="#video-grid", hx_swap="innerHTML",
+                           hx_confirm="Удалить это видео?", title="Удалить"),
+                    cls="tv-actions"
                 )
             )
 
         cards.append(
             Div(
-                embed,
-                Div(*body_items, cls="training-card-body"),
-                cls="training-card"
+                thumbnail,
+                Div(*body, Div(*footer_items, cls="tv-footer"), cls="tv-body"),
+                cls="tv-card",
+                style=f"animation-delay: {i * 60}ms;"
             )
         )
     return cards
