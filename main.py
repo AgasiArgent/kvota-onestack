@@ -42366,6 +42366,632 @@ def delete(session, video_id: str):
 
 
 # ============================================================================
+# CURRENCY INVOICE DETAIL PAGE
+# ============================================================================
+
+def _ci_segment_badge(segment):
+    """Return a styled Span badge for currency invoice segment."""
+    colors = {
+        "EURTR": "background: #ede9fe; color: #5b21b6;",
+        "TRRU": "background: #fce7f3; color: #9d174d;",
+    }
+    style = colors.get(segment, "background: #f1f5f9; color: #475569;")
+    return Span(segment or "—", style=f"padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; {style}")
+
+
+def _ci_get_company_options(supabase, segment, role):
+    """Get company dropdown options filtered by segment and role (seller/buyer).
+
+    Returns list of (value, label) tuples where value is 'entity_type:entity_id'.
+
+    Segment filtering:
+      EURTR seller: buyer_companies (EU suppliers)
+      EURTR buyer: buyer_companies where country = 'TR'
+      TRRU seller: buyer_companies where country = 'TR' + seller_companies
+      TRRU buyer: seller_companies where country = 'RU'
+    """
+    options = []
+    try:
+        if segment == "EURTR" and role == "seller":
+            # EU suppliers - all buyer_companies
+            resp = supabase.table("buyer_companies").select("id, name, country").order("name").execute()
+            for c in (resp.data or []):
+                label = f"{c.get('name', '')} ({c.get('country', '')})"
+                options.append((f"buyer_company:{c['id']}", label))
+
+        elif segment == "EURTR" and role == "buyer":
+            # Turkish intermediary - buyer_companies where country = TR
+            resp = supabase.table("buyer_companies").select("id, name, country").eq("country", "TR").order("name").execute()
+            for c in (resp.data or []):
+                label = f"{c.get('name', '')} ({c.get('country', '')})"
+                options.append((f"buyer_company:{c['id']}", label))
+
+        elif segment == "TRRU" and role == "seller":
+            # Turkish intermediary - buyer_companies TR + seller_companies
+            resp_bc = supabase.table("buyer_companies").select("id, name, country").eq("country", "TR").order("name").execute()
+            for c in (resp_bc.data or []):
+                label = f"{c.get('name', '')} ({c.get('country', '')})"
+                options.append((f"buyer_company:{c['id']}", label))
+            resp_sc = supabase.table("seller_companies").select("id, name").order("name").execute()
+            for c in (resp_sc.data or []):
+                label = f"{c.get('name', '')} (ЮЛ-продажи)"
+                options.append((f"seller_company:{c['id']}", label))
+
+        elif segment == "TRRU" and role == "buyer":
+            # Russian buyer - seller_companies where country = RU
+            resp = supabase.table("seller_companies").select("id, name").order("name").execute()
+            for c in (resp.data or []):
+                label = f"{c.get('name', '')}"
+                options.append((f"seller_company:{c['id']}", label))
+
+    except Exception as e:
+        print(f"Error fetching company options for {segment}/{role}: {e}")
+
+    return options
+
+
+def _ci_current_entity_value(entity_type, entity_id):
+    """Build the dropdown value string from entity_type + entity_id."""
+    if not entity_type or not entity_id:
+        return ""
+    return f"{entity_type}:{entity_id}"
+
+
+@rt("/currency-invoices/{ci_id}")
+def get(session, ci_id: str):
+    """Currency invoice detail page with editing capabilities."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return page_layout("Доступ запрещён",
+            Div(P("У вас нет прав для просмотра валютных инвойсов."), style="padding: 40px; text-align: center; color: #64748b;"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    user = session["user"]
+
+    # Fetch invoice
+    try:
+        ci_resp = supabase.table("currency_invoices").select("*").eq("id", ci_id).single().execute()
+        ci = ci_resp.data
+    except Exception as e:
+        print(f"Error fetching currency invoice {ci_id}: {e}")
+        ci = None
+
+    if not ci:
+        return page_layout("Инвойс не найден",
+            Div(
+                H2("Валютный инвойс не найден", style="color: #1e293b; margin-bottom: 8px;"),
+                P("Запрашиваемый инвойс не существует или был удалён.", style="color: #64748b;"),
+                style="padding: 40px; text-align: center;"
+            ),
+            session=session
+        )
+
+    # Fetch items
+    try:
+        items_resp = supabase.table("currency_invoice_items").select("*").eq("currency_invoice_id", ci_id).order("sort_order").execute()
+        items = items_resp.data or []
+    except Exception as e:
+        print(f"Error fetching currency invoice items for {ci_id}: {e}")
+        items = []
+
+    # Fetch deal info for back link
+    deal_id = ci.get("deal_id", "")
+    deal_number = ""
+    quote_id = ""
+    try:
+        deal_resp = supabase.table("deals").select(
+            "deal_number, specification_id, specifications!specification_id(quote_id)"
+        ).eq("id", deal_id).single().execute()
+        deal_data = deal_resp.data or {}
+        deal_number = deal_data.get("deal_number", "")
+        specs = deal_data.get("specifications") or {}
+        quote_id = specs.get("quote_id", "")
+    except Exception:
+        pass
+
+    segment = ci.get("segment", "")
+    status = ci.get("status", "draft")
+    invoice_number = ci.get("invoice_number", "—")
+    currency = ci.get("currency", "EUR")
+    markup_percent = float(ci.get("markup_percent", 2.0) or 2.0)
+    total_amount = float(ci.get("total_amount", 0) or 0)
+    generated_at = ci.get("generated_at", "")
+
+    # Format date
+    display_date = ""
+    if generated_at:
+        try:
+            from datetime import datetime as dt_cls
+            if "T" in str(generated_at):
+                dt_obj = dt_cls.fromisoformat(str(generated_at).replace("Z", "+00:00"))
+                display_date = dt_obj.strftime("%d.%m.%Y %H:%M")
+            else:
+                display_date = str(generated_at)[:10]
+        except Exception:
+            display_date = str(generated_at)[:19]
+
+    # Resolve current company names
+    seller_name = _resolve_company_name(supabase, ci.get("seller_entity_type"), ci.get("seller_entity_id"))
+    buyer_name = _resolve_company_name(supabase, ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    # Get company dropdown options
+    seller_options = _ci_get_company_options(supabase, segment, "seller")
+    buyer_options = _ci_get_company_options(supabase, segment, "buyer")
+    current_seller_value = _ci_current_entity_value(ci.get("seller_entity_type"), ci.get("seller_entity_id"))
+    current_buyer_value = _ci_current_entity_value(ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    # --- Build page ---
+
+    # Styles
+    card_style = "background: white; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 20px;"
+    section_label_style = "font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;"
+    field_label_style = "font-size: 12px; color: #64748b; font-weight: 500; margin-bottom: 4px;"
+    select_style = "width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; color: #1e293b; background: white;"
+    input_style = "width: 120px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; color: #1e293b;"
+    table_header_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    cell_style = "padding: 10px 14px; font-size: 13px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
+    # Back link
+    back_link_href = f"/quotes/{quote_id}?tab=currency_invoices" if quote_id else "/dashboard"
+    back_link = A(
+        icon("arrow-left", size=14, color="#64748b"),
+        Span(f" Назад к сделке {deal_number}" if deal_number else " Назад", style="margin-left: 4px;"),
+        href=back_link_href,
+        style="display: inline-flex; align-items: center; color: #64748b; text-decoration: none; font-size: 13px; font-weight: 500; margin-bottom: 16px;"
+    )
+
+    # Header
+    header = Div(
+        Div(
+            H1(invoice_number, style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 12px 0 0;"),
+            _ci_segment_badge(segment),
+            _ci_status_badge(status),
+            style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;"
+        ),
+        Div(
+            Span(f"Дата создания: {display_date}" if display_date else "", style="font-size: 13px; color: #94a3b8;"),
+            Span(f"  |  Валюта: {currency}", style="font-size: 13px; color: #94a3b8; margin-left: 12px;") if currency else "",
+            style="margin-top: 6px;"
+        ),
+        style="margin-bottom: 24px;"
+    )
+
+    # Determine if editable (only draft status)
+    is_editable = (status == "draft")
+
+    # Companies section (form)
+    seller_select = Select(
+        Option("— Не выбрана —", value=""),
+        *[Option(label, value=val, selected=(val == current_seller_value)) for val, label in seller_options],
+        name="seller_entity",
+        style=select_style,
+        disabled=None if is_editable else "disabled"
+    )
+
+    buyer_select = Select(
+        Option("— Не выбрана —", value=""),
+        *[Option(label, value=val, selected=(val == current_buyer_value)) for val, label in buyer_options],
+        name="buyer_entity",
+        style=select_style,
+        disabled=None if is_editable else "disabled"
+    )
+
+    companies_section = Div(
+        Div(
+            icon("building", size=14, color="#64748b"),
+            Span("КОМПАНИИ", style="margin-left: 6px;"),
+            style=section_label_style
+        ),
+        Div(
+            Div(
+                Div("Продавец", style=field_label_style),
+                seller_select,
+                Div(f"Текущий: {seller_name}", style="font-size: 11px; color: #94a3b8; margin-top: 4px;") if seller_name != "Не выбрана" else "",
+            ),
+            Div(
+                Div("Покупатель", style=field_label_style),
+                buyer_select,
+                Div(f"Текущий: {buyer_name}", style="font-size: 11px; color: #94a3b8; margin-top: 4px;") if buyer_name != "Не выбрана" else "",
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;"
+        ),
+        style=card_style
+    )
+
+    # Markup section
+    markup_section = Div(
+        Div(
+            icon("percent", size=14, color="#64748b"),
+            Span("НАЦЕНКА НА СЕГМЕНТ", style="margin-left: 6px;"),
+            style=section_label_style
+        ),
+        Div(
+            Div("Наценка, %", style=field_label_style),
+            Input(
+                type="number",
+                name="markup_percent",
+                value=str(markup_percent),
+                step="0.01",
+                min="0",
+                max="100",
+                style=input_style,
+                disabled=None if is_editable else "disabled"
+            ),
+            Div("При изменении наценки цены всех позиций будут пересчитаны",
+                style="font-size: 11px; color: #94a3b8; margin-top: 4px;"),
+        ),
+        style=card_style
+    )
+
+    # Items table
+    item_rows = []
+    for idx, item in enumerate(items, 1):
+        item_base_price = float(item.get("base_price", 0) or 0)
+        item_price = float(item.get("price", 0) or 0)
+        item_total = float(item.get("total", 0) or 0)
+        item_qty = float(item.get("quantity", 0) or 0)
+
+        item_rows.append(Tr(
+            Td(str(idx), style=f"{cell_style} color: #94a3b8; width: 40px;"),
+            Td(item.get("product_name", "—"), style=f"{cell_style} font-weight: 500;"),
+            Td(item.get("sku", "—"), style=f"{cell_style} font-family: monospace; font-size: 12px;"),
+            Td(item.get("idn_sku", "—"), style=f"{cell_style} font-family: monospace; font-size: 12px;"),
+            Td(item.get("manufacturer", "—"), style=cell_style),
+            Td(f"{item_qty:g}", style=f"{cell_style} text-align: right;"),
+            Td(item.get("unit", "pcs"), style=f"{cell_style} text-align: center;"),
+            Td(item.get("hs_code", "—"), style=f"{cell_style} font-family: monospace; font-size: 12px;"),
+            Td(f"{item_base_price:,.4f}", style=f"{cell_style} text-align: right; color: #64748b;"),
+            Td(f"{item_price:,.4f}", style=f"{cell_style} text-align: right; font-weight: 500;"),
+            Td(f"{item_total:,.2f}", style=f"{cell_style} text-align: right; font-weight: 600;"),
+        ))
+
+    # Total row
+    item_rows.append(Tr(
+        Td("", colspan="9", style="padding: 12px 14px; border-top: 2px solid #e2e8f0;"),
+        Td("ИТОГО:", style="padding: 12px 14px; text-align: right; font-weight: 700; font-size: 13px; color: #1e293b; border-top: 2px solid #e2e8f0;"),
+        Td(f"{total_amount:,.2f} {currency}", style="padding: 12px 14px; text-align: right; font-weight: 700; font-size: 14px; color: #1e293b; border-top: 2px solid #e2e8f0;"),
+    ))
+
+    items_section = Div(
+        Div(
+            icon("list", size=14, color="#64748b"),
+            Span("ПОЗИЦИИ", style="margin-left: 6px;"),
+            style=section_label_style
+        ),
+        Div(
+            Table(
+                Thead(Tr(
+                    Th("#", style=f"{table_header_style} width: 40px;"),
+                    Th("Наименование", style=table_header_style),
+                    Th("SKU", style=table_header_style),
+                    Th("IDN-SKU", style=table_header_style),
+                    Th("Производитель", style=table_header_style),
+                    Th("Кол-во", style=f"{table_header_style} text-align: right;"),
+                    Th("Ед.", style=f"{table_header_style} text-align: center;"),
+                    Th("HS Code", style=table_header_style),
+                    Th("Базовая цена", style=f"{table_header_style} text-align: right;"),
+                    Th("Цена", style=f"{table_header_style} text-align: right;"),
+                    Th("Итого", style=f"{table_header_style} text-align: right;"),
+                )),
+                Tbody(*item_rows),
+                style="width: 100%; border-collapse: collapse;"
+            ),
+            style="overflow-x: auto;"
+        ),
+        style=card_style
+    )
+
+    # Success/error message from query params (via session flash)
+    flash_msg = ""
+    flash_type = session.get("_ci_flash_type", "")
+    flash_text = session.get("_ci_flash_text", "")
+    if flash_text:
+        bg_color = "#dcfce7" if flash_type == "success" else "#fef2f2"
+        text_color = "#166534" if flash_type == "success" else "#991b1b"
+        flash_msg = Div(
+            flash_text,
+            style=f"background: {bg_color}; color: {text_color}; padding: 12px 16px; border-radius: 8px; font-size: 14px; margin-bottom: 16px;"
+        )
+        # Clear flash
+        session.pop("_ci_flash_type", None)
+        session.pop("_ci_flash_text", None)
+
+    # Action buttons
+    btn_base_style = "padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;"
+    btn_primary_style = f"{btn_base_style} background: #3b82f6; color: white;"
+    btn_success_style = f"{btn_base_style} background: #16a34a; color: white;"
+    btn_secondary_style = f"{btn_base_style} background: #f1f5f9; color: #475569; border: 1px solid #d1d5db;"
+    btn_disabled_style = f"{btn_base_style} background: #f1f5f9; color: #94a3b8; cursor: not-allowed;"
+
+    action_buttons = []
+
+    if is_editable:
+        # Save button (submits the form)
+        action_buttons.append(
+            Button(
+                icon("save", size=14, color="white"),
+                " Сохранить",
+                type="submit",
+                style=btn_primary_style
+            )
+        )
+        # Verify button
+        action_buttons.append(
+            Button(
+                icon("check-circle", size=14, color="white"),
+                " Подтвердить",
+                hx_post=f"/currency-invoices/{ci_id}/verify",
+                hx_confirm="Подтвердить инвойс? После подтверждения редактирование будет заблокировано.",
+                style=btn_success_style
+            )
+        )
+    else:
+        action_buttons.append(
+            Span(
+                icon("check-circle", size=14, color="#16a34a"),
+                " Инвойс подтверждён",
+                style="color: #16a34a; font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px;"
+            )
+        )
+
+    # Regenerate button (placeholder, disabled for now - Task 10)
+    action_buttons.append(
+        Button(
+            icon("refresh-cw", size=14, color="#94a3b8"),
+            " Пересоздать из источника",
+            disabled="disabled",
+            title="Будет доступно позже",
+            style=btn_disabled_style
+        )
+    )
+
+    # Export buttons (placeholders - Task 8)
+    action_buttons.append(
+        A(
+            icon("file-text", size=14, color="#475569"),
+            " Экспорт DOCX",
+            href=f"/currency-invoices/{ci_id}/download-docx",
+            style=btn_secondary_style
+        )
+    )
+    action_buttons.append(
+        A(
+            icon("file", size=14, color="#475569"),
+            " Экспорт PDF",
+            href=f"/currency-invoices/{ci_id}/download-pdf",
+            style=btn_secondary_style
+        )
+    )
+
+    actions_section = Div(
+        *action_buttons,
+        style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;"
+    )
+
+    # Wrap editable sections in a form
+    if is_editable:
+        page_content = Form(
+            flash_msg if flash_msg else "",
+            companies_section,
+            markup_section,
+            items_section,
+            Div(actions_section, style=card_style),
+            method="post",
+            action=f"/currency-invoices/{ci_id}",
+        )
+    else:
+        page_content = Div(
+            flash_msg if flash_msg else "",
+            companies_section,
+            markup_section,
+            items_section,
+            Div(actions_section, style=card_style),
+        )
+
+    return page_layout(
+        f"Инвойс {invoice_number}",
+        back_link,
+        header,
+        page_content,
+        session=session,
+        current_path=f"/currency-invoices/{ci_id}"
+    )
+
+
+@rt("/currency-invoices/{ci_id}")
+def post(
+    session,
+    ci_id: str,
+    seller_entity: str = "",
+    buyer_entity: str = "",
+    markup_percent: str = "2.0",
+):
+    """Save currency invoice changes: company selections and markup recalculation."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    supabase = get_supabase()
+
+    # Parse entity selections
+    seller_entity_type = None
+    seller_entity_id = None
+    if seller_entity and ":" in seller_entity:
+        parts = seller_entity.split(":", 1)
+        seller_entity_type = parts[0]
+        seller_entity_id = parts[1]
+
+    buyer_entity_type = None
+    buyer_entity_id = None
+    if buyer_entity and ":" in buyer_entity:
+        parts = buyer_entity.split(":", 1)
+        buyer_entity_type = parts[0]
+        buyer_entity_id = parts[1]
+
+    # Parse markup
+    try:
+        new_markup = float(markup_percent.strip())
+    except (ValueError, AttributeError):
+        new_markup = 2.0
+
+    # Fetch current invoice to check if markup changed
+    try:
+        ci_resp = supabase.table("currency_invoices").select("*").eq("id", ci_id).single().execute()
+        ci = ci_resp.data
+    except Exception as e:
+        print(f"Error fetching currency invoice {ci_id} for update: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Ошибка при загрузке инвойса"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if not ci:
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Инвойс не найден"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if ci.get("status") != "draft":
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Нельзя редактировать подтверждённый инвойс"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    old_markup = float(ci.get("markup_percent", 2.0) or 2.0)
+    segment = ci.get("segment", "")
+
+    # Update invoice record
+    update_data = {
+        "markup_percent": new_markup,
+        "updated_at": datetime.now().isoformat(),
+    }
+    if seller_entity_type:
+        update_data["seller_entity_type"] = seller_entity_type
+        update_data["seller_entity_id"] = seller_entity_id
+    else:
+        update_data["seller_entity_type"] = "buyer_company"
+        update_data["seller_entity_id"] = None
+
+    if buyer_entity_type:
+        update_data["buyer_entity_type"] = buyer_entity_type
+        update_data["buyer_entity_id"] = buyer_entity_id
+    else:
+        update_data["buyer_entity_type"] = "buyer_company"
+        update_data["buyer_entity_id"] = None
+
+    # Recalculate item prices if markup changed
+    if abs(new_markup - old_markup) > 0.001:
+        try:
+            from decimal import Decimal
+            from services.currency_invoice_service import calculate_segment_price
+
+            items_resp = supabase.table("currency_invoice_items").select("*").eq("currency_invoice_id", ci_id).execute()
+            items = items_resp.data or []
+
+            new_total = Decimal("0")
+            for item in items:
+                base_price = Decimal(str(item.get("base_price", 0) or 0))
+                quantity = Decimal(str(item.get("quantity", 0) or 0))
+
+                # For simplicity: recalculate using base_price + new markup
+                # base_price already accounts for prior segment markup for TRRU items from EU chain
+                new_price = base_price * (1 + Decimal(str(new_markup)) / Decimal("100"))
+                new_price = new_price.quantize(Decimal("0.0001"))
+                item_total = (quantity * new_price).quantize(Decimal("0.01"))
+
+                supabase.table("currency_invoice_items").update({
+                    "price": float(new_price),
+                    "total": float(item_total),
+                }).eq("id", item["id"]).execute()
+
+                new_total += item_total
+
+            update_data["total_amount"] = float(new_total)
+        except Exception as e:
+            print(f"Error recalculating currency invoice items: {e}")
+            session["_ci_flash_type"] = "error"
+            session["_ci_flash_text"] = f"Ошибка при пересчёте цен: {e}"
+            return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    try:
+        supabase.table("currency_invoices").update(update_data).eq("id", ci_id).execute()
+    except Exception as e:
+        print(f"Error updating currency invoice {ci_id}: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = f"Ошибка при сохранении: {e}"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    session["_ci_flash_type"] = "success"
+    session["_ci_flash_text"] = "Инвойс сохранён"
+    return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+
+@rt("/currency-invoices/{ci_id}/verify")
+def post(session, ci_id: str):
+    """Verify (confirm) a currency invoice. Requires seller and buyer to be set."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Нет прав для подтверждения инвойса"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+
+    # Fetch invoice
+    try:
+        ci_resp = supabase.table("currency_invoices").select("*").eq("id", ci_id).single().execute()
+        ci = ci_resp.data
+    except Exception as e:
+        print(f"Error fetching currency invoice {ci_id} for verification: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Ошибка при загрузке инвойса"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if not ci:
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Инвойс не найден"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if ci.get("status") != "draft":
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Инвойс уже подтверждён"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    # Validate: both companies must be selected
+    if not ci.get("seller_entity_id") or not ci.get("buyer_entity_id"):
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Выберите компании продавца и покупателя"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    # Update status to verified
+    try:
+        supabase.table("currency_invoices").update({
+            "status": "verified",
+            "verified_by": user["id"],
+            "verified_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+        }).eq("id", ci_id).execute()
+    except Exception as e:
+        print(f"Error verifying currency invoice {ci_id}: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = f"Ошибка при подтверждении: {e}"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    session["_ci_flash_type"] = "success"
+    session["_ci_flash_text"] = "Инвойс подтверждён"
+    return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+
+# ============================================================================
 # RUN SERVER
 # ============================================================================
 
