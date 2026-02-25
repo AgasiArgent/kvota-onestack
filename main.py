@@ -119,6 +119,7 @@ ROLE_LABELS_RU = {
     "head_of_sales": "Нач. продаж", "head_of_procurement": "Нач. закупок",
     "head_of_logistics": "Нач. логистики",
     "training_manager": "Менеджер обучения",
+    "currency_controller": "Контроль валютных инвойсов",
 }
 
 # ============================================================================
@@ -2700,7 +2701,8 @@ def sidebar(session, current_path: str = ""):
     if can_impersonate:
         active_roles = ["sales", "procurement", "logistics", "customs", "finance",
                         "quote_controller", "spec_controller", "top_manager",
-                        "head_of_sales", "head_of_procurement", "head_of_logistics"]
+                        "head_of_sales", "head_of_procurement", "head_of_logistics",
+                        "currency_controller"]
         current_impersonation = session.get("impersonated_role", "")
         default_label = "Менеджер обучения (все разделы)" if is_training_manager and not is_real_admin else "Администратор (все права)"
         options = [Option(default_label, value="", selected=not current_impersonation)]
@@ -2770,11 +2772,14 @@ def sidebar(session, current_path: str = ""):
         menu_sections.append({"title": "Реестры", "items": registries_items})
 
     # === FINANCE SECTION (for finance roles) ===
-    if is_admin or any(r in roles for r in ["finance", "top_manager"]):
+    if is_admin or any(r in roles for r in ["finance", "top_manager", "currency_controller"]):
         finance_items = [
             {"icon": "file-text", "label": "Контроль платежей", "href": "/finance?tab=erps", "roles": ["finance", "top_manager", "admin"]},
             {"icon": "calendar", "label": "Календарь", "href": "/payments/calendar", "roles": ["finance", "top_manager", "admin"]},
         ]
+        # Currency invoices registry for admin and currency_controller
+        if is_admin or "currency_controller" in roles:
+            finance_items.append({"icon": "file-text", "label": "Валютные инвойсы", "href": "/currency-invoices", "roles": ["currency_controller", "admin"]})
         menu_sections.append({"title": "Финансы", "items": finance_items})
 
     # === ADMIN SECTION ===
@@ -5393,6 +5398,49 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                     cls="card-elevated", style="border-left: 4px solid #10b981; padding: 16px;"
                 )
             )
+
+    # -------------------------------------------------------------------------
+    # CURRENCY_CONTROLLER: Draft currency invoices needing review
+    # -------------------------------------------------------------------------
+    if 'currency_controller' in roles or 'admin' in roles:
+        try:
+            draft_ci_resp = supabase.table("currency_invoices").select(
+                "id, deal_id, invoice_number, segment, status, deals!deal_id(deal_number)"
+            ).eq("status", "draft").eq("organization_id", org_id).order("created_at", desc=False).limit(10).execute()
+            draft_cis = draft_ci_resp.data or []
+
+            if draft_cis:
+                ci_rows = []
+                for ci in draft_cis:
+                    deal_info = (ci.get("deals") or {})
+                    ci_rows.append(Tr(
+                        Td(ci.get("invoice_number", "—"), style="font-weight: 500;"),
+                        Td(
+                            Span(ci.get("segment", ""),
+                                 style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;"),
+                        ),
+                        Td(deal_info.get("deal_number", "—")),
+                        Td(A("Проверить", href=f"/currency-invoices/{ci['id']}", cls="button", style="padding: 0.25rem 0.5rem; font-size: 0.875rem;"))
+                    ))
+
+                sections.append(
+                    Div(
+                        H2(icon("file-text", size=20), f" Валютные инвойсы: на проверке ({len(draft_cis)})",
+                           style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
+                        Div(
+                            Table(
+                                Thead(Tr(Th("Номер инвойса"), Th("Сегмент"), Th("Сделка"), Th("Действие"))),
+                                Tbody(*ci_rows),
+                                cls="table-enhanced"
+                            ),
+                            cls="table-enhanced-container"
+                        ),
+                        A("Открыть реестр Валютных инвойсов →", href="/currency-invoices", style="display: inline-block; margin-top: 12px; font-size: 13px; color: #8b5cf6; font-weight: 500;"),
+                        cls="card-elevated", style="border-left: 4px solid #8b5cf6; padding: 16px;"
+                    )
+                )
+        except Exception as e:
+            print(f"Warning: failed to load currency invoice tasks: {e}")
 
     # -------------------------------------------------------------------------
     # SALES: My quotes (pending sales review)
@@ -42437,6 +42485,141 @@ def _ci_current_entity_value(entity_type, entity_id):
     return f"{entity_type}:{entity_id}"
 
 
+# ============================================================================
+# CURRENCY INVOICES REGISTRY (Task 6) - must be BEFORE {ci_id} routes
+# ============================================================================
+
+@rt("/currency-invoices")
+def get(session):
+    """Currency invoices registry page - lists all currency invoices across all deals."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return page_layout("Доступ запрещён",
+            Div(P("У вас нет прав для просмотра реестра валютных инвойсов."), style="padding: 40px; text-align: center; color: #64748b;"),
+            session=session
+        )
+
+    supabase = get_supabase()
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    # Fetch all currency invoices with deal info
+    try:
+        ci_resp = supabase.table("currency_invoices").select(
+            "*, deals!deal_id(deal_number, specification_id)"
+        ).eq("organization_id", org_id).order("created_at", desc=True).execute()
+        currency_invoices = ci_resp.data or []
+    except Exception as e:
+        print(f"Error fetching currency invoices registry: {e}")
+        currency_invoices = []
+
+    # Resolve company names for each invoice
+    for ci in currency_invoices:
+        ci["seller_name"] = _resolve_company_name(supabase, ci.get("seller_entity_type"), ci.get("seller_entity_id"))
+        ci["buyer_name"] = _resolve_company_name(supabase, ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    # Styles
+    table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
+    if currency_invoices:
+        rows = []
+        for ci in currency_invoices:
+            total_amount = float(ci.get("total_amount", 0) or 0)
+            deal_info = (ci.get("deals") or {})
+            deal_number = deal_info.get("deal_number", "—")
+            deal_id = ci.get("deal_id", "")
+
+            # Format date
+            display_date = "—"
+            generated_at = ci.get("generated_at", "")
+            if generated_at:
+                try:
+                    from datetime import datetime as dt_cls
+                    if "T" in str(generated_at):
+                        dt_obj = dt_cls.fromisoformat(str(generated_at).replace("Z", "+00:00"))
+                        display_date = dt_obj.strftime("%d.%m.%Y")
+                    else:
+                        display_date = str(generated_at)[:10]
+                except Exception:
+                    display_date = str(generated_at)[:10]
+
+            rows.append(Tr(
+                Td(display_date, style=f"{cell_style} color: #64748b; font-size: 13px;"),
+                Td(
+                    A(ci.get("invoice_number", "—"),
+                      href=f"/currency-invoices/{ci['id']}",
+                      style="color: #3b82f6; text-decoration: none; font-weight: 500;"),
+                    style=cell_style
+                ),
+                Td(
+                    _ci_segment_badge(ci.get("segment", "")),
+                    style=cell_style
+                ),
+                Td(ci.get("seller_name", "Не выбрана"), style=cell_style),
+                Td(ci.get("buyer_name", "Не выбрана"), style=cell_style),
+                Td(
+                    A(deal_number, href=f"/finance/{deal_id}", style="color: #3b82f6; text-decoration: none;") if deal_id else deal_number,
+                    style=cell_style
+                ),
+                Td(f"{total_amount:,.2f}", style=f"{cell_style} text-align: right; font-weight: 500;"),
+                Td(ci.get("currency", ""), style=cell_style),
+                Td(_ci_status_badge(ci.get("status", "draft")), style=cell_style),
+                style="transition: background-color 0.15s ease;",
+                onmouseover="this.style.backgroundColor='#f8fafc'",
+                onmouseout="this.style.backgroundColor='transparent'"
+            ))
+
+        invoices_table = Table(
+            Thead(
+                Tr(
+                    Th("Дата", style=table_header_style),
+                    Th("Номер инвойса", style=table_header_style),
+                    Th("Сегмент", style=table_header_style),
+                    Th("Продавец", style=table_header_style),
+                    Th("Покупатель", style=table_header_style),
+                    Th("Сделка", style=table_header_style),
+                    Th("Сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Валюта", style=table_header_style),
+                    Th("Статус", style=table_header_style),
+                )
+            ),
+            Tbody(*rows),
+            style="width: 100%; border-collapse: collapse;"
+        )
+    else:
+        invoices_table = Div(
+            Div(icon("file-text", size=40, color="#94a3b8"), style="margin-bottom: 12px;"),
+            P("Валютные инвойсы ещё не созданы", style="color: #64748b; font-size: 14px; margin: 0;"),
+            P("Инвойсы автоматически создаются при подписании сделки.", style="color: #94a3b8; font-size: 13px; margin-top: 8px;"),
+            style="text-align: center; padding: 60px 20px;"
+        )
+
+    card_style = "background: white; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+
+    return page_layout(
+        "Валютные инвойсы",
+        Div(
+            H1("Валютные инвойсы", style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;"),
+            P(f"Всего: {len(currency_invoices)} инвойс(ов)", style="color: #64748b; font-size: 14px; margin: 0;"),
+            style="margin-bottom: 24px;"
+        ),
+        Div(
+            Div(invoices_table, style="overflow-x: auto;"),
+            style=card_style
+        ),
+        session=session,
+        current_path="/currency-invoices"
+    )
+
+
+# ============================================================================
+# CURRENCY INVOICE DETAIL PAGE (Task 5)
+# ============================================================================
+
 @rt("/currency-invoices/{ci_id}")
 def get(session, ci_id: str):
     """Currency invoice detail page with editing capabilities."""
@@ -42461,7 +42644,7 @@ def get(session, ci_id: str):
         print(f"Error fetching currency invoice {ci_id}: {e}")
         ci = None
 
-    if not ci:
+    if not ci or ci.get("organization_id") != user.get("org_id", ""):
         return page_layout("Инвойс не найден",
             Div(
                 H2("Валютный инвойс не найден", style="color: #1e293b; margin-bottom: 8px;"),
@@ -42739,14 +42922,14 @@ def get(session, ci_id: str):
             )
         )
 
-    # Regenerate button (placeholder, disabled for now - Task 10)
+    # Regenerate button
     action_buttons.append(
         Button(
-            icon("refresh-cw", size=14, color="#94a3b8"),
+            icon("refresh-cw", size=14, color="#475569"),
             " Пересоздать из источника",
-            disabled="disabled",
-            title="Будет доступно позже",
-            style=btn_disabled_style
+            hx_post=f"/currency-invoices/{ci_id}/regenerate",
+            hx_confirm="Все ручные изменения будут потеряны. Пересоздать?",
+            style=btn_secondary_style
         )
     )
 
@@ -42820,6 +43003,8 @@ def post(
         return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
 
     supabase = get_supabase()
+    user = session["user"]
+    org_id = user.get("org_id", "")
 
     # Parse entity selections
     seller_entity_type = None
@@ -42852,7 +43037,7 @@ def post(
         session["_ci_flash_text"] = "Ошибка при загрузке инвойса"
         return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
 
-    if not ci:
+    if not ci or ci.get("organization_id") != org_id:
         session["_ci_flash_type"] = "error"
         session["_ci_flash_text"] = "Инвойс не найден"
         return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
@@ -42945,6 +43130,7 @@ def post(session, ci_id: str):
 
     supabase = get_supabase()
     user = session["user"]
+    org_id = user.get("org_id", "")
 
     # Fetch invoice
     try:
@@ -42956,7 +43142,7 @@ def post(session, ci_id: str):
         session["_ci_flash_text"] = "Ошибка при загрузке инвойса"
         return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
 
-    if not ci:
+    if not ci or ci.get("organization_id") != org_id:
         session["_ci_flash_type"] = "error"
         session["_ci_flash_text"] = "Инвойс не найден"
         return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
@@ -42989,6 +43175,336 @@ def post(session, ci_id: str):
     session["_ci_flash_type"] = "success"
     session["_ci_flash_text"] = "Инвойс подтверждён"
     return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+
+# ============================================================================
+# CURRENCY INVOICE DOWNLOAD ROUTES (Task 8)
+# ============================================================================
+
+def _fetch_ci_for_download(supabase, ci_id, org_id):
+    """Fetch currency invoice with items and company details for download.
+
+    Returns (ci, items, seller, buyer) or (None, None, None, None) if not found
+    or org_id doesn't match.
+    """
+    try:
+        ci_resp = supabase.table("currency_invoices").select("*").eq("id", ci_id).single().execute()
+        ci = ci_resp.data
+    except Exception as e:
+        print(f"Error fetching currency invoice {ci_id} for download: {e}")
+        return None, None, None, None
+
+    if not ci or ci.get("organization_id") != org_id:
+        return None, None, None, None
+
+    # Fetch items
+    try:
+        items_resp = supabase.table("currency_invoice_items").select("*").eq("currency_invoice_id", ci_id).order("sort_order").execute()
+        items = items_resp.data or []
+    except Exception as e:
+        print(f"Error fetching currency invoice items for download: {e}")
+        items = []
+
+    # Resolve seller and buyer company details
+    seller = _resolve_company_details(supabase, ci.get("seller_entity_type"), ci.get("seller_entity_id"))
+    buyer = _resolve_company_details(supabase, ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    return ci, items, seller, buyer
+
+
+@rt("/currency-invoices/{ci_id}/download-docx")
+def get(session, ci_id: str):
+    """Download currency invoice as DOCX file."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    ci, items, seller, buyer = _fetch_ci_for_download(supabase, ci_id, org_id)
+    if not ci:
+        return Titled("Ошибка", P("Доступ запрещён"))
+
+    # Generate DOCX
+    try:
+        from services.currency_invoice_export import generate_currency_invoice_docx
+        docx_bytes = generate_currency_invoice_docx(ci, seller, buyer, items)
+    except Exception as e:
+        print(f"Error generating currency invoice DOCX: {e}")
+        import traceback
+        traceback.print_exc()
+        return page_layout("Ошибка",
+            H1("Ошибка генерации DOCX"),
+            Div(f"Ошибка: {str(e)}", style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px;"),
+            A("Назад", href=f"/currency-invoices/{ci_id}"),
+            session=session
+        )
+
+    # Build filename
+    invoice_number = ci.get("invoice_number", "currency-invoice")
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(invoice_number))
+
+    from starlette.responses import Response
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.docx"'}
+    )
+
+
+@rt("/currency-invoices/{ci_id}/download-pdf")
+def get(session, ci_id: str):
+    """Download currency invoice as PDF file (requires libreoffice on server)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    ci, items, seller, buyer = _fetch_ci_for_download(supabase, ci_id, org_id)
+    if not ci:
+        return Titled("Ошибка", P("Доступ запрещён"))
+
+    # Generate DOCX first, then convert to PDF
+    try:
+        from services.currency_invoice_export import generate_currency_invoice_docx
+        docx_bytes = generate_currency_invoice_docx(ci, seller, buyer, items)
+    except Exception as e:
+        print(f"Error generating currency invoice DOCX for PDF conversion: {e}")
+        import traceback
+        traceback.print_exc()
+        return page_layout("Ошибка",
+            H1("Ошибка генерации PDF"),
+            Div(f"Ошибка: {str(e)}", style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px;"),
+            A("Назад", href=f"/currency-invoices/{ci_id}"),
+            session=session
+        )
+
+    # Convert DOCX to PDF using libreoffice
+    pdf_bytes = _convert_docx_to_pdf(docx_bytes)
+    if pdf_bytes is None:
+        # Fallback: libreoffice not available
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "PDF конвертация доступна только на сервере. Используйте DOCX экспорт."
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    # Build filename
+    invoice_number = ci.get("invoice_number", "currency-invoice")
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(invoice_number))
+
+    from starlette.responses import Response
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.pdf"'}
+    )
+
+
+def _resolve_company_details(supabase, entity_type, entity_id):
+    """Resolve full company details (name, address, tax_id) from polymorphic FK."""
+    if not entity_type or not entity_id:
+        return {"name": "Не выбрана", "address": "", "tax_id": ""}
+    table = "buyer_companies" if entity_type == "buyer_company" else "seller_companies"
+    try:
+        resp = supabase.table(table).select("name, address, tax_id").eq("id", entity_id).single().execute()
+        data = resp.data or {}
+        return {
+            "name": data.get("name", "Неизвестно"),
+            "address": data.get("address", ""),
+            "tax_id": data.get("tax_id", ""),
+        }
+    except Exception:
+        return {"name": "Неизвестно", "address": "", "tax_id": ""}
+
+
+def _convert_docx_to_pdf(docx_bytes):
+    """Convert DOCX bytes to PDF using libreoffice headless. Returns None if unavailable."""
+    import subprocess
+    import tempfile
+    import os
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            docx_path = os.path.join(tmpdir, "invoice.docx")
+            with open(docx_path, "wb") as f:
+                f.write(docx_bytes)
+            result = subprocess.run(
+                ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, docx_path],
+                capture_output=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                print(f"libreoffice conversion failed: {result.stderr.decode('utf-8', errors='replace')}")
+                return None
+            pdf_path = os.path.join(tmpdir, "invoice.pdf")
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    return f.read()
+    except FileNotFoundError:
+        print("libreoffice not found - PDF conversion unavailable locally")
+        return None
+    except subprocess.TimeoutExpired:
+        print("libreoffice conversion timed out")
+        return None
+    except Exception as e:
+        print(f"PDF conversion error: {e}")
+        return None
+    return None
+
+
+# ============================================================================
+# CURRENCY INVOICE REGENERATION (Task 10)
+# ============================================================================
+
+@rt("/currency-invoices/{ci_id}/regenerate")
+def post(session, ci_id: str):
+    """Regenerate all currency invoices for the deal from source data.
+
+    Deletes ALL existing currency invoices for the deal and re-generates
+    from current quote_items data. All manual edits will be lost.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller"]):
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Нет прав для пересоздания инвойсов"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    supabase = get_supabase()
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    # Fetch the currency invoice to get deal_id
+    try:
+        ci_resp = supabase.table("currency_invoices").select("deal_id, organization_id").eq("id", ci_id).single().execute()
+        ci = ci_resp.data
+    except Exception as e:
+        print(f"Error fetching currency invoice {ci_id} for regeneration: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = f"Ошибка при загрузке инвойса: {e}"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if not ci:
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Инвойс не найден"
+        return RedirectResponse("/currency-invoices", status_code=303)
+
+    # IDOR check: verify invoice belongs to user's organization
+    if not org_id or ci.get("organization_id") != org_id:
+        return Titled("Ошибка", P("Доступ запрещён"))
+
+    deal_id = ci.get("deal_id")
+
+    if not deal_id:
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "Сделка не найдена для этого инвойса"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    # Fetch deal to get quote_id
+    try:
+        deal_resp = supabase.table("deals").select(
+            "id, specification_id, specifications!specification_id(quote_id)"
+        ).eq("id", deal_id).single().execute()
+        deal_data = deal_resp.data or {}
+        specs = deal_data.get("specifications") or {}
+        quote_id = specs.get("quote_id", "")
+    except Exception as e:
+        print(f"Error fetching deal {deal_id} for regeneration: {e}")
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = f"Ошибка при загрузке сделки: {e}"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    if not quote_id:
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = "КП для сделки не найдено"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    try:
+        # Step 1: Delete all existing currency_invoice_items for this deal's invoices
+        existing_ci_resp = supabase.table("currency_invoices").select("id").eq("deal_id", deal_id).execute()
+        existing_ci_ids = [r["id"] for r in (existing_ci_resp.data or [])]
+        for existing_id in existing_ci_ids:
+            supabase.table("currency_invoice_items").delete().eq("currency_invoice_id", existing_id).execute()
+
+        # Step 2: Delete all currency_invoices for this deal
+        supabase.table("currency_invoices").delete().eq("deal_id", deal_id).execute()
+
+        # Step 3: Re-fetch source data and regenerate
+        from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
+
+        # Fetch quote items with buyer_company info
+        ci_items_resp = supabase.table("quote_items").select(
+            "*, buyer_companies!buyer_company_id(id, name, country)"
+        ).eq("quote_id", quote_id).execute()
+        ci_items = ci_items_resp.data or []
+
+        # Build buyer_companies lookup dict
+        bc_lookup = {}
+        for ci_item in ci_items:
+            bc = (ci_item.get("buyer_companies") or {})
+            if bc and bc.get("id"):
+                bc_lookup[bc["id"]] = bc
+
+        # Get seller_company and quote IDN
+        ci_quote_resp = supabase.table("quotes").select(
+            "idn, seller_companies!seller_company_id(id, name)"
+        ).eq("id", quote_id).single().execute()
+        ci_quote_data = ci_quote_resp.data or {}
+        sc = (ci_quote_data.get("seller_companies") or {})
+        ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
+        ci_quote_idn = ci_quote_data.get("idn", "")
+
+        if bc_lookup and ci_seller_company.get("id"):
+            new_invoices = generate_currency_invoices(
+                deal_id=str(deal_id),
+                quote_idn=ci_quote_idn,
+                items=ci_items,
+                buyer_companies=bc_lookup,
+                seller_company=ci_seller_company,
+                organization_id=org_id,
+            )
+            if new_invoices:
+                saved = save_currency_invoices(supabase, new_invoices)
+                print(f"Currency invoices regenerated: {len(saved)} invoice(s) for deal {deal_id}")
+
+                # Redirect to the first new invoice
+                if saved and saved[0].get("id"):
+                    session["_ci_flash_type"] = "success"
+                    session["_ci_flash_text"] = f"Инвойсы пересозданы: {len(saved)} шт."
+                    return RedirectResponse(f"/currency-invoices/{saved[0]['id']}", status_code=303)
+            else:
+                session["_ci_flash_type"] = "error"
+                session["_ci_flash_text"] = "Не удалось сгенерировать инвойсы (нет подходящих позиций)"
+                return RedirectResponse("/currency-invoices", status_code=303)
+        else:
+            session["_ci_flash_type"] = "error"
+            session["_ci_flash_text"] = "Не найдены компании для генерации инвойсов"
+            return RedirectResponse("/currency-invoices", status_code=303)
+
+    except Exception as e:
+        print(f"Error regenerating currency invoices for deal {deal_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        session["_ci_flash_type"] = "error"
+        session["_ci_flash_text"] = f"Ошибка при пересоздании: {e}"
+        return RedirectResponse(f"/currency-invoices/{ci_id}", status_code=303)
+
+    # Fallback redirect
+    session["_ci_flash_type"] = "success"
+    session["_ci_flash_text"] = "Инвойсы пересозданы"
+    return RedirectResponse("/currency-invoices", status_code=303)
 
 
 # ============================================================================
