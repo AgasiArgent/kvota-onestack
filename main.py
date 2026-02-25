@@ -41397,7 +41397,7 @@ def get(session):
         A("Все",
           hx_get="/training/videos",
           hx_target="#video-grid",
-          hx_swap="innerHTML",
+          hx_swap="outerHTML",
           cls="training-tab active",
           data_category="all",
           onclick="setActiveTab(this)")
@@ -41407,7 +41407,7 @@ def get(session):
             A(cat,
               hx_get=f"/training/videos?category={cat}",
               hx_target="#video-grid",
-              hx_swap="innerHTML",
+              hx_swap="outerHTML",
               cls="training-tab",
               data_category=cat,
               onclick="setActiveTab(this)")
@@ -41825,7 +41825,7 @@ def _render_video_cards(videos, is_admin=False):
                            hx_swap="innerHTML", title="Изменить"),
                     Button(icon("trash-2", size=13), cls="tv-icon-btn tv-icon-btn--del",
                            hx_delete=f"/training/{v.id}/delete",
-                           hx_target="#video-grid", hx_swap="innerHTML",
+                           hx_target="#video-grid", hx_swap="outerHTML",
                            hx_confirm="Удалить это видео?", title="Удалить"),
                     cls="tv-actions"
                 )
@@ -41858,7 +41858,7 @@ def get(session, category: str = ""):
 
     videos = get_all_videos(org_id, category=category if category else None)
     cards = _render_video_cards(videos, is_admin)
-    return Div(*cards)
+    return Div(*cards, id="video-grid", cls="tv-grid")
 
 
 @rt("/training/new-form")
@@ -41914,7 +41914,7 @@ def get(session):
                 ),
                 hx_post="/training/new",
                 hx_target="#video-grid",
-                hx_swap="innerHTML",
+                hx_swap="outerHTML",
             ),
             style="background: var(--bg-card, white); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 1.5rem; max-width: 500px; margin: 0 auto;"
         ),
@@ -41962,7 +41962,8 @@ def post(session, title: str = "", youtube_url: str = "", category: str = "", de
     cards = _render_video_cards(videos, is_admin=True)
     return Div(
         *cards,
-        Script("document.getElementById('training-modal-container').innerHTML='';")
+        Script("document.getElementById('training-modal-container').innerHTML='';"),
+        id="video-grid", cls="tv-grid"
     )
 
 
@@ -42036,7 +42037,7 @@ def get(session, video_id: str):
                 ),
                 hx_post=f"/training/{video_id}/edit",
                 hx_target="#video-grid",
-                hx_swap="innerHTML",
+                hx_swap="outerHTML",
             ),
             style="background: var(--bg-card, white); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 1.5rem; max-width: 500px; margin: 0 auto;"
         ),
@@ -42083,7 +42084,8 @@ def post(session, video_id: str, title: str = "", youtube_id: str = "", category
     cards = _render_video_cards(videos, is_admin=True)
     return Div(
         *cards,
-        Script("document.getElementById('training-modal-container').innerHTML='';")
+        Script("document.getElementById('training-modal-container').innerHTML='';"),
+        id="video-grid", cls="tv-grid"
     )
 
 
@@ -42106,14 +42108,14 @@ def delete(session, video_id: str):
     if not video or video.organization_id != org_id:
         videos = get_all_videos(org_id)
         cards = _render_video_cards(videos, is_admin=True)
-        return Div(*cards)
+        return Div(*cards, id="video-grid", cls="tv-grid")
 
     delete_video(video_id)
 
     # Return updated grid
     videos = get_all_videos(org_id)
     cards = _render_video_cards(videos, is_admin=True)
-    return Div(*cards)
+    return Div(*cards, id="video-grid", cls="tv-grid")
 
 
 # ============================================================================
