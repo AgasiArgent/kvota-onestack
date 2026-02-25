@@ -8991,18 +8991,32 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     deal_id = deal["id"] if deal else None
 
     # If a finance tab is requested but no deal exists, fall back to summary
-    if tab in ("finance_main", "plan_fact", "logistics_stages") and not deal:
+    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices") and not deal:
         tab = "summary"
 
     # Render finance tab content if requested
-    if tab in ("finance_main", "plan_fact", "logistics_stages") and deal:
+    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices") and deal:
         user_roles = user.get("roles", [])
         # Check role access for finance tabs
         finance_roles = ["finance", "admin", "top_manager"]
         if tab == "logistics_stages":
             finance_roles.append("logistics")
+        if tab == "currency_invoices":
+            finance_roles.append("currency_controller")
         if not any(r in user_roles for r in finance_roles):
             return RedirectResponse("/unauthorized", status_code=303)
+
+        # Currency invoices tab does not need full deal data fetch
+        if tab == "currency_invoices":
+            finance_content = _finance_currency_invoices_tab_content(deal_id)
+            modal_elements = _finance_payment_modal(deal_id)
+            return page_layout(f"Quote {quote.get('idn_quote', '')}",
+                quote_header(quote, workflow_status, (customer or {}).get("name")),
+                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                Div(finance_content, id="tab-content", style="margin-top: 20px;"),
+                *modal_elements,
+                session=session
+            )
 
         # Fetch full deal data for finance tabs
         deal_full, plan_fact_items_deal, _ = _finance_fetch_deal_data(deal_id, user["org_id"], user_roles)
@@ -15810,6 +15824,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
                 "href": f"/quotes/{quote_id}?tab=logistics_stages",
                 "roles": ["finance", "logistics", "admin", "top_manager"],
             },
+            {
+                "id": "currency_invoices",
+                "label": "Валютные инвойсы",
+                "icon": "file-text",
+                "href": f"/quotes/{quote_id}?tab=currency_invoices",
+                "roles": ["admin", "currency_controller", "finance"],
+            },
         ])
 
     # Filter tabs based on user roles
@@ -15858,7 +15879,7 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
         )
 
     # Split tab elements into core and finance groups
-    FINANCE_TAB_IDS = {"finance_main", "plan_fact", "logistics_stages"}
+    FINANCE_TAB_IDS = {"finance_main", "plan_fact", "logistics_stages", "currency_invoices"}
     core_tab_elements = []
     finance_tab_elements = []
     for tab, elem in zip(visible_tabs, tab_elements):
@@ -40949,6 +40970,43 @@ def get(session, deal_id: str, tab: str = "info"):
     return RedirectResponse(f"/finance/{deal_id}", status_code=301)
 
 
+# ============================================================================
+# CURRENCY INVOICES HELPERS
+# ============================================================================
+
+def _resolve_company_name(supabase, entity_type, entity_id):
+    """Resolve company name from polymorphic FK (entity_type + entity_id).
+
+    Used by currency invoices to look up buyer/seller company names
+    from either buyer_companies or seller_companies tables.
+    """
+    if not entity_type or not entity_id:
+        return "Не выбрана"
+    table = "buyer_companies" if entity_type == "buyer_company" else "seller_companies"
+    try:
+        resp = supabase.table(table).select("name").eq("id", entity_id).single().execute()
+        return (resp.data or {}).get("name", "Неизвестно")
+    except Exception:
+        return "Неизвестно"
+
+
+def _ci_status_badge(status):
+    """Return a styled Span badge for currency invoice status."""
+    colors = {
+        "draft": "background: #fef9c3; color: #854d0e;",
+        "verified": "background: #dcfce7; color: #166534;",
+        "exported": "background: #dbeafe; color: #1e40af;",
+    }
+    labels = {
+        "draft": "Черновик",
+        "verified": "Проверен",
+        "exported": "Экспортирован",
+    }
+    style = colors.get(status, "background: #f1f5f9; color: #475569;")
+    label = labels.get(status, status or "—")
+    return Span(label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; {style}")
+
+
 def _finance_fetch_deal_data(deal_id, org_id, user_roles):
     """
     Fetch deal and plan-fact data needed for finance tabs on quote detail page.
@@ -41293,6 +41351,84 @@ def _finance_logistics_tab_content(deal_id, deal, session):
             style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
         ),
         _deals_logistics_tab(deal_id, deal, session),
+        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+    )
+
+
+def _finance_currency_invoices_tab_content(deal_id):
+    """Render the 'Валютные инвойсы' tab content: table of currency invoices for a deal."""
+    supabase = get_supabase()
+
+    try:
+        ci_resp = supabase.table("currency_invoices").select("*").eq("deal_id", deal_id).order("segment").execute()
+        currency_invoices = ci_resp.data or []
+    except Exception as e:
+        print(f"Error fetching currency invoices for deal {deal_id}: {e}")
+        currency_invoices = []
+
+    # Resolve company names (polymorphic lookup)
+    for ci in currency_invoices:
+        ci["seller_name"] = _resolve_company_name(supabase, ci.get("seller_entity_type"), ci.get("seller_entity_id"))
+        ci["buyer_name"] = _resolve_company_name(supabase, ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
+    if currency_invoices:
+        rows = []
+        for ci in currency_invoices:
+            total_amount = float(ci.get("total_amount", 0) or 0)
+            rows.append(Tr(
+                Td(
+                    A(ci.get("invoice_number", "—"),
+                      href=f"/currency-invoices/{ci['id']}",
+                      style="color: #3b82f6; text-decoration: none; font-weight: 500;"),
+                    style=cell_style
+                ),
+                Td(
+                    Span(ci.get("segment", ""),
+                         style="background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;"),
+                    style=cell_style
+                ),
+                Td(ci.get("seller_name", "Не выбрана"), style=cell_style),
+                Td(ci.get("buyer_name", "Не выбрана"), style=cell_style),
+                Td(f"{total_amount:,.2f}", style=f"{cell_style} text-align: right; font-weight: 500;"),
+                Td(ci.get("currency", ""), style=cell_style),
+                Td(_ci_status_badge(ci.get("status", "draft")), style=cell_style),
+                style="transition: background-color 0.15s ease;",
+                onmouseover="this.style.backgroundColor='#f8fafc'",
+                onmouseout="this.style.backgroundColor='transparent'"
+            ))
+
+        invoices_table = Table(
+            Thead(
+                Tr(
+                    Th("Номер инвойса", style=table_header_style),
+                    Th("Сегмент", style=table_header_style),
+                    Th("Продавец", style=table_header_style),
+                    Th("Покупатель", style=table_header_style),
+                    Th("Сумма", style=f"{table_header_style} text-align: right;"),
+                    Th("Валюта", style=table_header_style),
+                    Th("Статус", style=table_header_style),
+                )
+            ),
+            Tbody(*rows),
+            style="width: 100%; border-collapse: collapse;"
+        )
+    else:
+        invoices_table = Div(
+            Div(icon("file-text", size=40, color="#94a3b8"), style="margin-bottom: 12px;"),
+            P("Валютные инвойсы не сгенерированы", style="color: #64748b; font-size: 14px; margin: 0;"),
+            style="text-align: center; padding: 40px 20px;"
+        )
+
+    return Div(
+        Div(
+            icon("file-text", size=14, color="#64748b"),
+            Span("ВАЛЮТНЫЕ ИНВОЙСЫ", style="margin-left: 6px;"),
+            style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+        ),
+        invoices_table,
         style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
     )
 
