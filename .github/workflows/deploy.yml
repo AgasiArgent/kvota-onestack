@@ -19,6 +19,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
           script: |
             cd /root/onestack
             git pull origin main
@@ -26,11 +27,27 @@ jobs:
             docker image prune -f
             bash scripts/apply-migrations.sh
 
-      - name: Deployment status
-        if: always()
-        run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "Deployment successful!"
-          else
-            echo "Deployment failed!"
-          fi
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          script: |
+            echo "Waiting for container to start..."
+            sleep 5
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
+            echo "Container health: $STATUS"
+            if [ "$STATUS" != "healthy" ]; then
+              echo "Container not healthy, waiting 10 more seconds..."
+              sleep 10
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
+              echo "Container health after retry: $STATUS"
+            fi
+            if [ "$STATUS" != "healthy" ]; then
+              echo "::error::Container kvota-onestack is not healthy: $STATUS"
+              docker logs kvota-onestack --tail 20
+              exit 1
+            fi
+            echo "Deployment verified: container is healthy"
