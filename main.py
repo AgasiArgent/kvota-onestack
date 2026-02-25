@@ -8668,7 +8668,7 @@ def _sales_action_toolbar(quote_id, workflow_status, is_revision, is_justificati
         btn_link("Рассчитать", href=f"/quotes/{quote_id}/calculate", variant="secondary", icon_name="calculator", size="sm"),
         btn_link("История версий", href=f"/quotes/{quote_id}/versions", variant="secondary", icon_name="history", size="sm"),
         btn_link("Валидация Excel", href=f"/quotes/{quote_id}/export/validation", variant="secondary", icon_name="table", size="sm") if show_validation_excel(workflow_status) else None,
-        btn_link("КП PDF", href=f"/quotes/{quote_id}/export/specification", variant="secondary", icon_name="file-text", size="sm") if show_quote_pdf(workflow_status) else None,
+        btn_link("КП PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text", size="sm") if show_quote_pdf(workflow_status) else None,
         btn_link("Счёт PDF", href=f"/quotes/{quote_id}/export/invoice", variant="secondary", icon_name="file-text", size="sm") if show_invoice_and_spec(workflow_status) else None,
         style="display: flex; gap: 0.375rem; flex-wrap: wrap; align-items: center;"
     )
