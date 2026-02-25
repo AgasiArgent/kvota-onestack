@@ -114,16 +114,28 @@ def extract_video_info(url_or_id: str) -> dict:
     if not s:
         return {"video_id": "", "platform": "rutube"}
 
-    # Rutube: /video/{hash} or /play/embed/{hash}
+    # Rutube: /video/{hash}, /video/private/{hash}/?p=TOKEN, /play/embed/{hash}
     if "rutube.ru" in s:
         parsed = urlparse(s)
         path_parts = parsed.path.rstrip("/").split("/")
-        # /video/{hash}
-        if len(path_parts) >= 3 and path_parts[1] == "video":
-            return {"video_id": path_parts[2], "platform": "rutube"}
+        qs = parse_qs(parsed.query)
+        private_token = qs.get("p", [None])[0]
+
+        video_hash = None
+        # /video/private/{hash} (private videos)
+        if len(path_parts) >= 4 and path_parts[1] == "video" and path_parts[2] == "private":
+            video_hash = path_parts[3]
+        # /video/{hash} (public videos)
+        elif len(path_parts) >= 3 and path_parts[1] == "video":
+            video_hash = path_parts[2]
         # /play/embed/{hash}
-        if len(path_parts) >= 4 and path_parts[1] == "play" and path_parts[2] == "embed":
-            return {"video_id": path_parts[3], "platform": "rutube"}
+        elif len(path_parts) >= 4 and path_parts[1] == "play" and path_parts[2] == "embed":
+            video_hash = path_parts[3]
+
+        if video_hash:
+            # Append private token to ID so embed URLs include it
+            video_id = f"{video_hash}?p={private_token}" if private_token else video_hash
+            return {"video_id": video_id, "platform": "rutube"}
         # Fallback: last path segment
         video_id = path_parts[-1] if path_parts else s
         return {"video_id": video_id, "platform": "rutube"}
@@ -200,7 +212,9 @@ def fetch_thumbnail_url(video_id: str, platform: str) -> Optional[str]:
 
     if platform == "rutube":
         try:
-            api_url = f"https://rutube.ru/api/video/{quote(video_id)}/"
+            # Strip private token for API call (use just the hash)
+            bare_id = video_id.split("?")[0] if "?" in video_id else video_id
+            api_url = f"https://rutube.ru/api/video/{quote(bare_id)}/"
             req = urllib.request.Request(api_url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())

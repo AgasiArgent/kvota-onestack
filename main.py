@@ -41808,9 +41808,12 @@ def _get_embed_url(video_id: str, platform: str) -> str:
     elif platform == "loom":
         return f"https://www.loom.com/embed/{video_id}?autoplay=1"
     elif platform == "rutube":
-        return f"https://rutube.ru/play/embed/{video_id}?autoplay=1"
+        # Private videos store ID as "hash?p=TOKEN" — use & for extra params
+        sep = "&" if "?" in video_id else "?"
+        return f"https://rutube.ru/play/embed/{video_id}{sep}autoplay=1"
     else:
-        return f"https://rutube.ru/play/embed/{video_id}?autoplay=1"
+        sep = "&" if "?" in video_id else "?"
+        return f"https://rutube.ru/play/embed/{video_id}{sep}autoplay=1"
 
 
 def _get_thumbnail_url(video) -> str:
@@ -42049,7 +42052,12 @@ def get(session, video_id: str):
     elif video.platform == "loom":
         display_url = f"https://www.loom.com/share/{video.youtube_id}"
     else:
-        display_url = f"https://rutube.ru/video/{video.youtube_id}/"
+        # Private videos: hash?p=TOKEN → /video/private/hash/?p=TOKEN
+        if "?p=" in video.youtube_id:
+            bare_id, token = video.youtube_id.split("?p=", 1)
+            display_url = f"https://rutube.ru/video/private/{bare_id}/?p={token}"
+        else:
+            display_url = f"https://rutube.ru/video/{video.youtube_id}/"
 
     form = Div(
         Div(
