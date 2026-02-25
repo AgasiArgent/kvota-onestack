@@ -5,7 +5,7 @@ This module provides functions for managing training videos (Rutube, YouTube, Lo
 organized by categories. Used for the internal knowledge base at /training.
 
 Features:
-- Multi-platform URL parsing (auto-detect Rutube, YouTube from URL)
+- Multi-platform URL parsing (auto-detect Rutube, YouTube, Loom from URL)
 - CRUD operations for training videos
 - Category listing with deduplication
 - Organization-scoped queries
@@ -92,6 +92,8 @@ def extract_video_info(url_or_id: str) -> dict:
     - YouTube: https://www.youtube.com/watch?v=ID -> platform='youtube', video_id=ID
     - YouTube short: https://youtu.be/ID -> platform='youtube', video_id=ID
     - YouTube embed: https://www.youtube.com/embed/ID -> platform='youtube', video_id=ID
+    - Loom: https://www.loom.com/share/ID -> platform='loom', video_id=ID
+    - Loom embed: https://www.loom.com/embed/ID -> platform='loom', video_id=ID
     - Raw ID (default): assumes 'rutube' platform
 
     Args:
@@ -121,6 +123,17 @@ def extract_video_info(url_or_id: str) -> dict:
         # Fallback: last path segment
         video_id = path_parts[-1] if path_parts else s
         return {"video_id": video_id, "platform": "rutube"}
+
+    # Loom: /share/{id} or /embed/{id}
+    if "loom.com" in s:
+        parsed = urlparse(s)
+        path_parts = parsed.path.rstrip("/").split("/")
+        # /share/{id} or /embed/{id}
+        if len(path_parts) >= 3 and path_parts[1] in ("share", "embed"):
+            return {"video_id": path_parts[2].split("?")[0], "platform": "loom"}
+        # Fallback: last path segment
+        video_id = path_parts[-1] if path_parts else s
+        return {"video_id": video_id, "platform": "loom"}
 
     # YouTube - try to parse as URL
     try:

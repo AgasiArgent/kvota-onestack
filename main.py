@@ -41508,6 +41508,8 @@ def _get_embed_url(video_id: str, platform: str) -> str:
     """Get the embed URL based on platform."""
     if platform == "youtube":
         return f"https://www.youtube.com/embed/{video_id}"
+    elif platform == "loom":
+        return f"https://www.loom.com/embed/{video_id}"
     elif platform == "rutube":
         return f"https://rutube.ru/play/embed/{video_id}"
     else:
@@ -41627,7 +41629,7 @@ def get(session):
                 Div(
                     Label("Ссылка на видео *"),
                     Input(name="youtube_url", placeholder="https://rutube.ru/video/... или https://youtube.com/watch?v=...", required=True, cls="form-control"),
-                    Small("Поддерживается: Rutube, YouTube", style="color: var(--text-secondary); font-size: 0.75rem;"),
+                    Small("Поддерживается: Rutube, YouTube, Loom", style="color: var(--text-secondary); font-size: 0.75rem;"),
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(
@@ -41727,6 +41729,8 @@ def get(session, video_id: str):
     # Reconstruct URL from stored ID + platform so re-save doesn't corrupt platform
     if video.platform == "youtube":
         display_url = f"https://www.youtube.com/watch?v={video.youtube_id}"
+    elif video.platform == "loom":
+        display_url = f"https://www.loom.com/share/{video.youtube_id}"
     else:
         display_url = f"https://rutube.ru/video/{video.youtube_id}/"
 
@@ -41747,7 +41751,7 @@ def get(session, video_id: str):
                 Div(
                     Label("Ссылка на видео *"),
                     Input(name="youtube_id", value=display_url, required=True, cls="form-control"),
-                    Small("Поддерживается: Rutube, YouTube", style="color: var(--text-secondary); font-size: 0.75rem;"),
+                    Small("Поддерживается: Rutube, YouTube, Loom", style="color: var(--text-secondary); font-size: 0.75rem;"),
                     cls="form-group", style="margin-bottom: 0.75rem;"
                 ),
                 Div(

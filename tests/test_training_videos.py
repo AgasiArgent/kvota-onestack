@@ -229,6 +229,30 @@ class TestExtractVideoInfo:
         result = extract_video_info(f"https://rutube.ru/video/{long_hash}/")
         assert result == {"video_id": long_hash, "platform": "rutube"}
 
+    def test_loom_share_url(self):
+        """Loom share URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.loom.com/share/abc123def456")
+        assert result == {"video_id": "abc123def456", "platform": "loom"}
+
+    def test_loom_embed_url(self):
+        """Loom embed URL extracts video ID and platform."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.loom.com/embed/abc123def456")
+        assert result == {"video_id": "abc123def456", "platform": "loom"}
+
+    def test_loom_url_with_query_params(self):
+        """Loom URL with query params extracts clean ID."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://www.loom.com/share/abc123?sid=xyz")
+        assert result == {"video_id": "abc123", "platform": "loom"}
+
+    def test_loom_url_no_www(self):
+        """Loom URL without www prefix works."""
+        from services.training_video_service import extract_video_info
+        result = extract_video_info("https://loom.com/share/abc123def456")
+        assert result == {"video_id": "abc123def456", "platform": "loom"}
+
 
 # =============================================================================
 # TESTS: extract_youtube_id() legacy wrapper
