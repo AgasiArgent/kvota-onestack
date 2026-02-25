@@ -393,8 +393,11 @@ class TestLicenseDataPreparation:
     def test_save_function_sends_license_fields(self):
         """JS saveCustomsItems must include license fields in PATCH payload."""
         source = _read_main_source()
+        # Extract saveCustomsItems function body up to the next top-level
+        # function definition (initTable). Simple lazy match fails because
+        # the f-string body contains nested {{}} (empty JS object literals).
         match = re.search(
-            r'saveCustomsItems\s*=\s*function\(\)\s*\{(.*?)\};',
+            r'saveCustomsItems\s*=\s*function\(\)\s*\{\{(.*?)\}\};\s*\n\s*function\s+initTable',
             source,
             re.DOTALL,
         )

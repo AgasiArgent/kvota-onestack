@@ -220,8 +220,9 @@ class TestSaveDoesNotSendProductCode:
         """
         source = _read_main_source()
         # Find the return block inside sourceData.map
+        # Note: function signature is (row, rowIndex) after customs bug fix
         match = re.search(
-            r"sourceData\.map\(function\(row\)\s*\{\{(.*?)\}\};\s*\n\s*\}\}\)",
+            r"sourceData\.map\(function\(row,\s*rowIndex\)\s*\{\{(.*?)\}\};\s*\n\s*\}\}\)",
             source,
             re.DOTALL,
         )

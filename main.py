@@ -19864,7 +19864,7 @@ def get(session, status_filter: str = None):
 # ============================================================================
 
 @rt("/customs/{quote_id}")
-def get(session, quote_id: str):
+def get(session, quote_id: str, error: str = ""):
     """
     Customs detail page - view and edit customs data for each item in a quote.
 
@@ -20440,6 +20440,15 @@ def get(session, quote_id: str):
         style="background-color: #dcfce7; border: 1px solid #22c55e; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
     ) if customs_done else None
 
+    error_banner = Div(
+        P(
+            icon("alert-circle", size=16),
+            " Невозможно завершить таможню: не все позиции заполнены кодом ТН ВЭД. Проверьте таблицу и нажмите «Сохранить данные» перед завершением.",
+            style="margin: 0; display: flex; align-items: center; gap: 0.5rem;"
+        ),
+        style="background-color: #fee2e2; border: 1px solid #ef4444; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;"
+    ) if error == "hs_code_missing" else None
+
     # Progress indicator
     progress_percent = int(items_with_hs / total_items * 100) if total_items > 0 else 0
 
@@ -20476,6 +20485,7 @@ def get(session, quote_id: str):
         # Status banners
         not_ready_banner,
         success_banner,
+        error_banner,
         status_banner,
 
         # Quote summary with customs stats (v3.0) - gradient styling
@@ -20593,12 +20603,14 @@ def get(session, quote_id: str):
                 // Save all customs items data (called on form submit)
                 window.saveCustomsItems = function() {{
                     if (!hot) return Promise.resolve({{ success: true }});
-                    // IMPORTANT: Finish any active cell edit before reading data
+                    // IMPORTANT: getSourceData() may strip fields not in columns config (like id).
+                    // Use initialData array (set at render time) for stable id lookup by row index.
                     hot.deselectCell();
                     var sourceData = hot.getSourceData();
-                    var items = sourceData.map(function(row) {{
+                    var items = sourceData.map(function(row, rowIndex) {{
+                        var originalRow = initialData[rowIndex] || {{}};
                         return {{
-                            id: row.id,
+                            id: originalRow.id,
                             hs_code: row.hs_code || '',
                             customs_duty: parseFloat(row.customs_duty) || 0,
                             license_ds_required: !!row.license_ds_required,
