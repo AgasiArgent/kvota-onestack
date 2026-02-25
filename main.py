@@ -16889,16 +16889,21 @@ def get(quote_id: str, session):
                     Div(
                         Label("Город отгрузки *", cls="block mb-2 font-medium"),
                         Input(type="text", id="city-search-input", name="pickup_city",
-                              placeholder="Начните вводить город...", required=True,
+                              placeholder="Введите город (рус/eng)...", required=True,
                               list="city-suggestions",
                               autocomplete="off",
                               cls="w-full p-2 border border-gray-300 rounded-md",
-                              **{"hx-get": "/api/cities/search", "hx-trigger": "input changed delay:300ms",
+                              **{"hx-get": "/api/cities/search", "hx-trigger": "keyup changed delay:300ms",
                                  "hx-target": "#city-suggestions"}),
                         Datalist(id="city-suggestions"),
                         Input(type="hidden", name="pickup_country", id="city-country-code"),
-                        P("Страна заполнится автоматически", id="city-country-hint",
-                          style="font-size: 12px; color: #94a3b8; margin-top: 4px;"),
+                        Div(
+                            Span("🌍", style="margin-right: 4px;"),
+                            Span("Страна определится из города", id="city-country-hint",
+                                 style="color: #94a3b8;"),
+                            id="city-country-badge",
+                            style="margin-top: 6px; font-size: 0.8125rem; display: flex; align-items: center;"
+                        ),
                         cls="mb-4"
                     ),
 
@@ -17168,21 +17173,38 @@ def get(quote_id: str, session):
             // City autocomplete: when user selects a city from datalist, extract country code
             var cityInput = document.getElementById('city-search-input');
             if (cityInput) {{
+                var _cityProgrammatic = false;
                 cityInput.addEventListener('input', function() {{
+                    if (_cityProgrammatic) {{ _cityProgrammatic = false; return; }}
                     var val = this.value;
                     var datalist = document.getElementById('city-suggestions');
                     var options = datalist ? datalist.querySelectorAll('option') : [];
                     var hint = document.getElementById('city-country-hint');
+                    var badge = document.getElementById('city-country-badge');
                     for (var i = 0; i < options.length; i++) {{
                         if (options[i].value === val) {{
                             var code = options[i].getAttribute('data-country-code');
                             var city = options[i].getAttribute('data-city');
+                            var countryName = val.split(', ').slice(1).join(', ');
                             if (code) {{
                                 document.getElementById('city-country-code').value = code;
-                                if (hint) hint.textContent = 'Страна: ' + val.split(', ').slice(1).join(', ') + ' (' + code + ')';
+                                if (hint) {{
+                                    hint.textContent = countryName + ' (' + code + ')';
+                                    hint.style.color = '#059669';
+                                    hint.style.fontWeight = '600';
+                                }}
+                                if (badge) {{
+                                    badge.style.background = '#ecfdf5';
+                                    badge.style.padding = '6px 10px';
+                                    badge.style.borderRadius = '6px';
+                                    badge.style.border = '1px solid #a7f3d0';
+                                }}
                             }}
                             // Store just the city name, not the full "City, Country" display
-                            if (city) this.value = city;
+                            if (city) {{
+                                _cityProgrammatic = true;
+                                this.value = city;
+                            }}
                             break;
                         }}
                     }}
@@ -31486,13 +31508,14 @@ def get(session):
 # ============================================================================
 
 @rt("/api/cities/search")
-def get(session, q: str = "", limit: int = 5):
+def get(session, q: str = "", pickup_city: str = "", limit: int = 5):
     """City autocomplete using HERE Geocode API.
     Returns datalist options with city names and country codes."""
     from services.here_service import search_cities
-    if not q or len(q) < 2:
+    search_term = q or pickup_city
+    if not search_term or len(search_term) < 2:
         return ""
-    cities = search_cities(q, count=limit)
+    cities = search_cities(search_term, count=limit)
     if not cities:
         return Option("Ничего не найдено", value="", disabled=True)
     options = []

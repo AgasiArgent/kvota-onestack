@@ -191,12 +191,23 @@ def extract_youtube_id(url_or_id: str) -> str:
 def fetch_thumbnail_url(video_id: str, platform: str) -> Optional[str]:
     """Fetch thumbnail URL for a video from platform APIs.
 
+    - Rutube: uses /api/video/{id}/ endpoint (returns thumbnail_url)
     - Loom: uses oEmbed API (thumbnail has signed token)
     - YouTube: deterministic CDN URL
-    - Rutube: no reliable thumbnail API, returns None
     """
     if platform == "youtube":
         return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+    if platform == "rutube":
+        try:
+            api_url = f"https://rutube.ru/api/video/{quote(video_id)}/"
+            req = urllib.request.Request(api_url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                return data.get("thumbnail_url")
+        except Exception as e:
+            logger.warning(f"Failed to fetch Rutube thumbnail for {video_id}: {e}")
+            return None
 
     if platform == "loom":
         try:
