@@ -53,6 +53,7 @@ class BuyerCompany:
 
     # Location
     country: Optional[str] = None
+    region: Optional[str] = None  # 'EU' or 'TR' for currency invoice routing
 
     # Legal identifiers (Russian legal entity)
     inn: Optional[str] = None  # ИНН (10 digits for legal entities)
@@ -83,6 +84,7 @@ def _parse_buyer_company(data: dict) -> BuyerCompany:
         name=data["name"],
         company_code=data["company_code"],
         country=data.get("country"),
+        region=data.get("region"),
         inn=data.get("inn"),
         kpp=data.get("kpp"),
         ogrn=data.get("ogrn"),
@@ -103,6 +105,7 @@ def _buyer_company_to_dict(company: BuyerCompany) -> dict:
         "name": company.name,
         "company_code": company.company_code,
         "country": company.country,
+        "region": company.region,
         "inn": company.inn,
         "kpp": company.kpp,
         "ogrn": company.ogrn,
@@ -190,6 +193,7 @@ def create_buyer_company(
     company_code: str,
     *,
     country: Optional[str] = None,
+    region: Optional[str] = None,
     inn: Optional[str] = None,
     kpp: Optional[str] = None,
     ogrn: Optional[str] = None,
@@ -254,6 +258,7 @@ def create_buyer_company(
             "name": name,
             "company_code": company_code,
             "country": country,
+            "region": region,
             "inn": inn,
             "kpp": kpp,
             "ogrn": ogrn,
@@ -559,6 +564,7 @@ def update_buyer_company(
     name: Optional[str] = None,
     company_code: Optional[str] = None,
     country: Optional[str] = None,
+    region: Optional[str] = None,
     inn: Optional[str] = None,
     kpp: Optional[str] = None,
     ogrn: Optional[str] = None,
@@ -612,6 +618,8 @@ def update_buyer_company(
             update_data["company_code"] = company_code
         if country is not None:
             update_data["country"] = country
+        if region is not None:
+            update_data["region"] = region
         if inn is not None:
             update_data["inn"] = inn
         if kpp is not None:

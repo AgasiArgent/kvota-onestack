@@ -187,7 +187,7 @@ class TestGenerateCurrencyInvoices:
     def test_eu_buyer_creates_two_invoices(self):
         """EU buyer_company -> 2 currency invoices (EURTR + TRRU)."""
         buyer_companies = {
-            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "country": "EU"},
+            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "region": "EU"},
         }
         items = [
             {
@@ -213,7 +213,7 @@ class TestGenerateCurrencyInvoices:
     def test_tr_buyer_creates_one_invoice(self):
         """TR buyer_company -> 1 currency invoice (TRRU only)."""
         buyer_companies = {
-            "bc-tr": {"id": "bc-tr", "name": "MB TR", "country": "TR"},
+            "bc-tr": {"id": "bc-tr", "name": "MB TR", "region": "TR"},
         }
         items = [
             {
@@ -238,8 +238,8 @@ class TestGenerateCurrencyInvoices:
     def test_trru_contains_all_items_from_eu_and_tr(self):
         """TRRU invoice should contain ALL items (from both EU and TR chains)."""
         buyer_companies = {
-            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "country": "EU"},
-            "bc-tr": {"id": "bc-tr", "name": "MB TR", "country": "TR"},
+            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "region": "EU"},
+            "bc-tr": {"id": "bc-tr", "name": "MB TR", "region": "TR"},
         }
         items = [
             {
@@ -271,7 +271,7 @@ class TestGenerateCurrencyInvoices:
     def test_items_snapshot_has_all_required_fields(self):
         """Currency invoice items contain all required snapshot fields."""
         buyer_companies = {
-            "bc-tr": {"id": "bc-tr", "name": "MB TR", "country": "TR"},
+            "bc-tr": {"id": "bc-tr", "name": "MB TR", "region": "TR"},
         }
         items = [
             {
@@ -305,7 +305,7 @@ class TestGenerateCurrencyInvoices:
     def test_eu_buyer_eurtr_invoice_has_correct_segment_metadata(self):
         """EURTR invoice should have correct segment, currency, and entity types."""
         buyer_companies = {
-            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "country": "EU"},
+            "bc-eu": {"id": "bc-eu", "name": "EuroInvest", "region": "EU"},
         }
         items = [
             {

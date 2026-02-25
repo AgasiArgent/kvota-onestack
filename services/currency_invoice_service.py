@@ -144,7 +144,7 @@ def generate_currency_invoices(
         deal_id: UUID of the deal.
         quote_idn: Quote IDN for invoice numbering.
         items: List of quote item dicts with buyer_company_id, purchase_price_original, etc.
-        buyer_companies: Dict mapping buyer_company_id to company info (must have 'country').
+        buyer_companies: Dict mapping buyer_company_id to company info (must have 'region').
         seller_company: Seller company dict with 'id', 'name', 'entity_type'.
         organization_id: Organization UUID.
         markup_percent: Markup percentage per segment (default 2.0%).
@@ -164,9 +164,9 @@ def generate_currency_invoices(
 
     for bc_id, group_items in groups.items():
         bc = buyer_companies.get(bc_id, {})
-        country = bc.get("country", "")
+        region = bc.get("region", "")
 
-        if country == "EU":
+        if region == "EU":
             # --- EURTR invoice: EU buyer sells to Turkish intermediary ---
             currency = group_items[0].get("purchase_currency", "EUR")
             seq_counters[(currency, "EURTR")] += 1
@@ -207,7 +207,7 @@ def generate_currency_invoices(
                 trru_items.append(snapshot)
                 trru_item_currencies.append(item.get("purchase_currency", "USD"))
 
-        elif country == "TR":
+        elif region == "TR":
             # TR buyer -> TRRU only (single markup)
             for idx, item in enumerate(group_items):
                 snapshot = _build_item_snapshot(

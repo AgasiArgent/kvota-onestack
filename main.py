@@ -26428,7 +26428,7 @@ def post(session, spec_id: str):
 
             # Fetch quote items with buyer_company info
             ci_items_resp = supabase.table("quote_items").select(
-                "*, buyer_companies!buyer_company_id(id, name, country)"
+                "*, buyer_companies!buyer_company_id(id, name, country, region)"
             ).eq("quote_id", quote_id).execute()
             ci_items = ci_items_resp.data or []
 
@@ -33404,6 +33404,7 @@ def post(
     company_code: str,
     name: str,
     country: str = "Россия",
+    region: str = "",
     inn: str = "",
     kpp: str = "",
     ogrn: str = "",
@@ -33477,6 +33478,7 @@ def post(
             name=name.strip(),
             company_code=company_code,
             country=country.strip() or "Россия",
+            region=region.strip() or None,
             inn=inn_clean,
             kpp=kpp_clean or None,
             ogrn=ogrn_clean or None,
@@ -33799,7 +33801,18 @@ def _buyer_company_form(company=None, error=None, session=None):
                         Input(name="country", value=company.country if company else "Россия", placeholder="Россия", style=input_style),
                         style="flex: 1;"
                     ),
-                    Div(style="flex: 1;"),  # Spacer
+                    Div(
+                        Label("Регион (для валютных инвойсов)", style=label_style),
+                        Select(
+                            Option("-- Не указан --", value="", selected=not (company and getattr(company, 'region', None))),
+                            Option("EU", value="EU", selected=(getattr(company, 'region', None) == "EU") if company else False),
+                            Option("TR", value="TR", selected=(getattr(company, 'region', None) == "TR") if company else False),
+                            name="region",
+                            style=input_style
+                        ),
+                        Small("EU = европейская компания, TR = турецкая компания", style="color: #94a3b8; font-size: 12px; display: block; margin-top: 4px;"),
+                        style="flex: 1;"
+                    ),
                     style="display: flex; gap: 16px; margin-bottom: 20px;"
                 ),
 
@@ -33944,6 +33957,7 @@ def post(
     company_code: str,
     name: str,
     country: str = "Россия",
+    region: str = "",
     inn: str = "",
     kpp: str = "",
     ogrn: str = "",
@@ -34031,6 +34045,7 @@ def post(
             name=name.strip(),
             company_code=company_code,
             country=country.strip() or "Россия",
+            region=region.strip() or None,
             inn=inn_clean,
             kpp=kpp_clean or None,
             ogrn=ogrn_clean or None,
@@ -43446,7 +43461,7 @@ def post(session, ci_id: str):
 
         # Fetch quote items with buyer_company info
         ci_items_resp = supabase.table("quote_items").select(
-            "*, buyer_companies!buyer_company_id(id, name, country)"
+            "*, buyer_companies!buyer_company_id(id, name, country, region)"
         ).eq("quote_id", quote_id).execute()
         ci_items = ci_items_resp.data or []
 
