@@ -22796,14 +22796,22 @@ def get(session, quote_id: str, preset: str = None):
                     role="button",
                     style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
                 ),
-                # Approve or send for approval
+                # Always allow direct approval
                 A(
-                    icon("check" if not needs_approval else "clock", size=16, color="white"),
-                    Span(" Одобрить" if not needs_approval else " Отправить на согласование", style="margin-left: 6px;"),
-                    href=f"/quote-control/{quote_id}/approve" if not needs_approval else f"/quote-control/{quote_id}/request-approval",
+                    icon("check", size=16, color="white"),
+                    Span(" Одобрить", style="margin-left: 6px;"),
+                    href=f"/quote-control/{quote_id}/approve",
                     role="button",
                     style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
                 ) if workflow_status == "pending_quote_control" else None,
+                # Optionally send for top-manager approval
+                A(
+                    icon("clock", size=16, color="white"),
+                    Span(" Отправить на согласование", style="margin-left: 6px;"),
+                    href=f"/quote-control/{quote_id}/request-approval",
+                    role="button",
+                    style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                ) if workflow_status == "pending_quote_control" and needs_approval else None,
                 style="display: flex; gap: 1rem; flex-wrap: wrap;"
             ),
             cls="card",
