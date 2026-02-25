@@ -134,7 +134,7 @@ No `create-task.sh` script exists. Use the ClickUp API directly:
 2. Run:
    ```bash
    curl -s -X POST "https://api.clickup.com/api/v2/list/{LIST_ID}/task" \
-     -H "Authorization: pk_192091183_AELOKRZPPK2T1WIV2VSXVP3QLQEVU0WI" \
+     -H "Authorization: pk_192091183_KF8DWKPWFZQOBVK3I5MT8M4ONMOIBGO3" \
      -H "Content-Type: application/json" \
      -d @/tmp/clickup_task.json
    ```

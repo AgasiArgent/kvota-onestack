@@ -10,13 +10,17 @@
 - Session 7 (2026-02-09): 4 VERIFY tasks deployed, then post-session rework (1 reverted: payments)
 - Session 8 (2026-02-10): 15 tasks, marathon session, core flow validation + P2 features + bugs + design audit
 - Session 9 (2026-02-11): 2 tasks, FK null-safety fix (44 patterns, 61 tests) + migration 168 roles cleanup (86->12)
-- Running average: 5.0 tasks/session (45 total / 9 sessions)
+- Session 10 (2026-02-23): ad-hoc, quotes registry for sales (sidebar + created_by filter)
+- Session 11 (2026-02-25): 1 task, training_manager role (migration 184, 21 tests, 1 fix cycle)
+- Running average: 4.6 tasks/session (46 total / 10 sessions)
 
 ## ClickUp Patterns
 - kvota list ID: 901324690894 (45 tasks, ~30 open after session 8 completions)
 - sprint 2 list ID: 901325258087 (6 tasks)
 - sprint list is empty
 - No shell scripts exist; use direct ClickUp API calls per skill.md
+- API key in: ~/.claude/skills/clickup-work/skill.md (CLICKUP_API_KEY env var may be empty)
+- API key value: pk_192091183_KF8DWKPWFZQOBVK3I5MT8M4ONMOIBGO3
 - find-task.sh does NOT exist; search by listing tasks and filtering client-side
 - Time tracking: use start/end timestamps (not just duration); response only returns entry ID
 - Task IDs are alphanumeric (e.g., 86af5uphp)
@@ -24,7 +28,7 @@
 
 ## Session Patterns
 - Sessions file at: .claude/dev-team/sessions/session_YYYY-MM-DD_N.md
-- Current latest migration: 168
+- Current latest migration: 184
 - Session 7 had first revert: spec payments removed post-session (payments belong on deals, not specs)
 - ClickUp scripts path changed: no shell scripts, use direct API calls per skill.md
 - create-task.sh exists at ~/.claude/skills/clickup-backlog/create-task.sh (but API is more flexible)
@@ -61,3 +65,4 @@
 - 86af9jpuz (BUG-2 city save fix) -- CREATED+COMPLETE, 15min
 - 86afac4p5 (FK null-safety crash fix) -- CREATED+COMPLETE, 90min
 - 86afac4t0 (Migration 168 roles cleanup) -- CREATED+COMPLETE, 30min
+- 86afq1j9w (training_manager role + impersonation) -- CREATED+COMPLETE, 90min

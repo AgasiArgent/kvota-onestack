@@ -38,5 +38,13 @@
     "developer_extra_skills": ["db-kvota", "cicd"]
   },
   "max_parallel_squads": 3,
-  "max_fix_cycles": 3
+  "max_fix_cycles": 3,
+  "code_intelligence": {
+    "enabled": true,
+    "mcp_server": "code-graph",
+    "output_dir": ".claude/code-intelligence",
+    "cache_ttl_hours": 2,
+    "tools": ["analyze_codebase", "project_statistics", "dependency_analysis", "complexity_analysis"],
+    "serena_focus_files": ["main.py", "services/database.py"]
+  }
 }
