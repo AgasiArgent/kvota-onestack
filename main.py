@@ -41761,14 +41761,19 @@ def _get_embed_url(video_id: str, platform: str) -> str:
         return f"https://rutube.ru/play/embed/{video_id}?autoplay=1"
 
 
-def _get_thumbnail_url(video_id: str, platform: str) -> str:
-    """Get thumbnail image URL for video preview card."""
-    if platform == "youtube":
-        return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
-    elif platform == "loom":
-        return f"https://cdn.loom.com/sessions/thumbnails/{video_id}-00001.jpg"
-    else:
-        return ""
+def _get_thumbnail_url(video) -> str:
+    """Get thumbnail image URL for video preview card.
+
+    Uses stored thumbnail_url from DB (fetched via oEmbed on creation).
+    Falls back to deterministic CDN URLs for YouTube.
+    """
+    # Prefer stored thumbnail (from oEmbed API)
+    if video.thumbnail_url:
+        return video.thumbnail_url
+    # Fallback for YouTube (deterministic CDN)
+    if video.platform == "youtube":
+        return f"https://img.youtube.com/vi/{video.youtube_id}/hqdefault.jpg"
+    return ""
 
 
 _PLATFORM_LABELS = {"loom": "Loom", "youtube": "YouTube", "rutube": "Rutube"}
@@ -41790,7 +41795,7 @@ def _render_video_cards(videos, is_admin=False):
 
     cards = []
     for i, v in enumerate(videos):
-        thumb_url = _get_thumbnail_url(v.youtube_id, v.platform)
+        thumb_url = _get_thumbnail_url(v)
         embed_url = _get_embed_url(v.youtube_id, v.platform)
 
         # Thumbnail with play overlay

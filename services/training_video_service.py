@@ -16,7 +16,9 @@ from typing import Optional
 from datetime import datetime
 import logging
 import os
-from urllib.parse import urlparse, parse_qs
+import urllib.request
+import json
+from urllib.parse import urlparse, parse_qs, quote
 
 from supabase import create_client, ClientOptions
 
@@ -58,6 +60,7 @@ class TrainingVideo:
 
     # Optional fields
     platform: str = "rutube"
+    thumbnail_url: Optional[str] = None
     description: Optional[str] = None
     created_by: Optional[str] = None
     created_at: Optional[datetime] = None
@@ -75,6 +78,7 @@ def _parse_video(data: dict) -> TrainingVideo:
         sort_order=data.get("sort_order", 0) or 0,
         is_active=data.get("is_active", True) if data.get("is_active") is not None else True,
         platform=data.get("platform", "rutube"),
+        thumbnail_url=data.get("thumbnail_url"),
         description=data.get("description"),
         created_by=data.get("created_by"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
@@ -182,6 +186,30 @@ def extract_youtube_id(url_or_id: str) -> str:
         Extracted video ID string, or empty string if input is empty/whitespace
     """
     return extract_video_info(url_or_id)["video_id"]
+
+
+def fetch_thumbnail_url(video_id: str, platform: str) -> Optional[str]:
+    """Fetch thumbnail URL for a video from platform APIs.
+
+    - Loom: uses oEmbed API (thumbnail has signed token)
+    - YouTube: deterministic CDN URL
+    - Rutube: no reliable thumbnail API, returns None
+    """
+    if platform == "youtube":
+        return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+    if platform == "loom":
+        try:
+            oembed_url = f"https://www.loom.com/v1/oembed?url=https://www.loom.com/share/{quote(video_id)}"
+            req = urllib.request.Request(oembed_url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+                return data.get("thumbnail_url")
+        except Exception as e:
+            logger.warning(f"Failed to fetch Loom thumbnail for {video_id}: {e}")
+            return None
+
+    return None
 
 
 def get_all_videos(org_id: str, category: str = None) -> list:
@@ -323,6 +351,11 @@ def create_video(
         if created_by:
             insert_data["created_by"] = created_by
 
+        # Auto-fetch thumbnail from platform API
+        thumb = fetch_thumbnail_url(youtube_id, platform)
+        if thumb:
+            insert_data["thumbnail_url"] = thumb
+
         response = client.table("training_videos").insert(insert_data).execute()
         if response.data:
             return _parse_video(response.data[0])
@@ -384,6 +417,21 @@ def update_video(
 
         if platform is not None:
             update_data["platform"] = platform
+
+        # Refresh thumbnail when video URL or platform changes
+        if "youtube_id" in update_data or "platform" in update_data:
+            vid = update_data.get("youtube_id")
+            plat = update_data.get("platform")
+            # Need both values - fetch current if not being updated
+            if vid is None or plat is None:
+                current = get_video(video_id)
+                if current:
+                    vid = vid or current.youtube_id
+                    plat = plat or current.platform
+            if vid and plat:
+                thumb = fetch_thumbnail_url(vid, plat)
+                if thumb:
+                    update_data["thumbnail_url"] = thumb
 
         # If nothing to update, return current video
         if not update_data:
