@@ -18373,78 +18373,84 @@ async def api_complete_procurement(quote_id: str, session):
     if not user_has_any_role(session, ["procurement", "admin"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
-    # Check if user is admin - bypass brand filtering
-    is_admin = user_has_any_role(session, ["admin"])
+    try:
+        # Check if user is admin - bypass brand filtering
+        is_admin = user_has_any_role(session, ["admin"])
 
-    supabase = get_supabase()
+        supabase = get_supabase()
 
-    # Get user's assigned brands (admin sees all)
-    my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
-    my_brands_lower = [b.lower() for b in my_brands]
+        # Get user's assigned brands (admin sees all)
+        my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
+        my_brands_lower = [b.lower() for b in my_brands]
 
-    # Get all items for this quote
-    items_result = supabase.table("quote_items") \
-        .select("id, brand") \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    all_items = items_result.data or []
-
-    # Filter items for my brands - admin can complete all
-    if is_admin:
-        my_item_ids = [item["id"] for item in all_items]
-    else:
-        my_item_ids = [item["id"] for item in all_items
-                       if (item.get("brand") or "").lower() in my_brands_lower]
-
-    if my_item_ids:
-        # Mark items as completed
-        supabase.table("quote_items") \
-            .update({
-                "procurement_status": "completed",
-                "procurement_completed_at": datetime.utcnow().isoformat(),
-                "procurement_completed_by": user_id
-            }) \
-            .in_("id", my_item_ids) \
-            .execute()
-
-    # Get invoices linked to this quote's items for status tracking
-    invoice_ids_result = supabase.table("quote_items") \
-        .select("invoice_id") \
-        .eq("quote_id", quote_id) \
-        .not_.is_("invoice_id", "null") \
-        .execute()
-
-    linked_invoice_ids = list(set(
-        item["invoice_id"] for item in (invoice_ids_result.data or [])
-        if item.get("invoice_id")
-    ))
-
-    if linked_invoice_ids:
-        # Update invoices status to reflect procurement completion
-        supabase.table("invoices") \
-            .update({
-                "status": "pending_logistics",
-                "procurement_completed_at": datetime.utcnow().isoformat(),
-                "procurement_completed_by": user_id,
-            }) \
-            .in_("id", linked_invoice_ids) \
+        # Get all items for this quote
+        items_result = supabase.table("quote_items") \
+            .select("id, brand") \
             .eq("quote_id", quote_id) \
             .execute()
 
-    # Check if ALL items are complete and trigger workflow transition
-    user_roles = get_user_roles_from_session(session)
-    completion_result = complete_procurement(
-        quote_id=quote_id,
-        actor_id=user_id,
-        actor_roles=user_roles
-    )
+        all_items = items_result.data or []
 
-    return JSONResponse({
-        "success": True,
-        "completed_items": len(my_item_ids),
-        "workflow_transitioned": completion_result.success if completion_result else False
-    })
+        # Filter items for my brands - admin can complete all
+        if is_admin:
+            my_item_ids = [item["id"] for item in all_items]
+        else:
+            my_item_ids = [item["id"] for item in all_items
+                           if (item.get("brand") or "").lower() in my_brands_lower]
+
+        if my_item_ids:
+            # Mark items as completed
+            supabase.table("quote_items") \
+                .update({
+                    "procurement_status": "completed",
+                    "procurement_completed_at": datetime.utcnow().isoformat(),
+                    "procurement_completed_by": user_id
+                }) \
+                .in_("id", my_item_ids) \
+                .execute()
+
+        # Get invoices linked to this quote's items for status tracking
+        invoice_ids_result = supabase.table("quote_items") \
+            .select("invoice_id") \
+            .eq("quote_id", quote_id) \
+            .not_.is_("invoice_id", "null") \
+            .execute()
+
+        linked_invoice_ids = list(set(
+            item["invoice_id"] for item in (invoice_ids_result.data or [])
+            if item.get("invoice_id")
+        ))
+
+        if linked_invoice_ids:
+            # Update invoices status to reflect procurement completion
+            supabase.table("invoices") \
+                .update({
+                    "status": "pending_logistics",
+                    "procurement_completed_at": datetime.utcnow().isoformat(),
+                    "procurement_completed_by": user_id,
+                }) \
+                .in_("id", linked_invoice_ids) \
+                .eq("quote_id", quote_id) \
+                .execute()
+
+        # Check if ALL items are complete and trigger workflow transition
+        user_roles = get_user_roles_from_session(session)
+        completion_result = complete_procurement(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles
+        )
+
+        return JSONResponse({
+            "success": True,
+            "completed_items": len(my_item_ids),
+            "workflow_transitioned": completion_result.success if completion_result else False
+        })
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error completing procurement for {quote_id}: {e}", exc_info=True)
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
 # ============================================================================
