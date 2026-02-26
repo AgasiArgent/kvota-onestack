@@ -3580,7 +3580,7 @@ def feedback_modal():
             ),
             Div(id="feedback-result"),
             id="feedback-modal-box",
-            cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-2xl",
+            cls="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl p-6 z-[1000] w-[90%] max-w-2xl max-h-[90vh] overflow-y-auto",
             style="display: none;"
         ),
         id="feedback-modal"
