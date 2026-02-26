@@ -18293,7 +18293,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
 
     items = data.get("items", [])
     if not items:
-        return JSONResponse({"success": False, "error": "No items provided"}, status_code=400)
+        return JSONResponse({"success": True, "updated": 0})
 
     supabase = get_supabase()
 
@@ -31614,6 +31614,7 @@ VALID_IMPERSONATION_ROLES = {
     "sales", "procurement", "logistics", "customs",
     "quote_controller", "spec_controller", "finance",
     "top_manager", "head_of_sales", "head_of_procurement", "head_of_logistics",
+    "currency_controller",
 }
 
 @rt("/admin/impersonate")
