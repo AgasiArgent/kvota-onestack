@@ -227,7 +227,7 @@ def approve_department(
 
         quote = result.data[0]
         status = quote.get('workflow_status') or quote.get('status', 'draft')
-        approvals = quote.get('approvals', {})
+        approvals = quote.get('approvals') or {}
 
         # 2. Check status allows approval (not yet approved by spec controller)
         if status not in ['draft', 'pending_review', 'pending_procurement', 'pending_logistics',
@@ -321,7 +321,7 @@ def reject_department(
             return False, "Quote not found"
 
         quote = result.data[0]
-        approvals = quote.get('approvals', {})
+        approvals = quote.get('approvals') or {}
 
         # 2. Clear approval for this department
         approvals[department] = {
@@ -412,7 +412,7 @@ def get_approval_status(quote_id: str, organization_id: str) -> Optional[Dict]:
             return None
 
         quote = result.data[0]
-        approvals = quote.get('approvals', {})
+        approvals = quote.get('approvals') or {}
 
         # Build status dict for each department
         status_dict = {}
@@ -493,7 +493,7 @@ def get_quotes_pending_approval(
         # Filter by workflow rules
         pending_quotes = []
         for quote in result.data:
-            approvals = quote.get('approvals', {})
+            approvals = quote.get('approvals') or {}
             if can_department_approve(approvals, department):
                 # Add department-specific metadata
                 quote['department'] = department

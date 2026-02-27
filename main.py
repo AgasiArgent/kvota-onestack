@@ -25825,12 +25825,12 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                                 bc_lookup[bc["id"]] = bc
 
                         ci_quote_resp = supabase.table("quotes").select(
-                            "idn, seller_companies!seller_company_id(id, name)"
+                            "idn_quote, seller_companies!seller_company_id(id, name)"
                         ).eq("id", quote_id_val).single().execute()
                         ci_quote_data = ci_quote_resp.data or {}
                         sc = (ci_quote_data.get("seller_companies") or {})
                         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
-                        ci_quote_idn = ci_quote_data.get("idn", "")
+                        ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
                         if bc_lookup and ci_seller_company.get("id"):
                             ci_invoices = generate_currency_invoices(
@@ -26502,12 +26502,12 @@ def post(session, spec_id: str):
 
             # Get seller_company and quote IDN
             ci_quote_resp = supabase.table("quotes").select(
-                "idn, seller_companies!seller_company_id(id, name)"
+                "idn_quote, seller_companies!seller_company_id(id, name)"
             ).eq("id", quote_id).single().execute()
             ci_quote_data = ci_quote_resp.data or {}
             sc = (ci_quote_data.get("seller_companies") or {})
             ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
-            ci_quote_idn = ci_quote_data.get("idn", "")
+            ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
             if bc_lookup and ci_seller_company.get("id"):
                 ci_invoices = generate_currency_invoices(
@@ -41797,12 +41797,12 @@ def post(session, deal_id: str):
 
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
-            "idn, seller_companies!seller_company_id(id, name)"
+            "idn_quote, seller_companies!seller_company_id(id, name)"
         ).eq("id", quote_id).single().execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
-        ci_quote_idn = ci_quote_data.get("idn", "")
+        ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
         if bc_lookup and ci_seller_company.get("id"):
             ci_invoices = generate_currency_invoices(
@@ -43632,12 +43632,12 @@ def post(session, ci_id: str):
 
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
-            "idn, seller_companies!seller_company_id(id, name)"
+            "idn_quote, seller_companies!seller_company_id(id, name)"
         ).eq("id", quote_id).single().execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
-        ci_quote_idn = ci_quote_data.get("idn", "")
+        ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
         if bc_lookup and ci_seller_company.get("id"):
             new_invoices = generate_currency_invoices(
