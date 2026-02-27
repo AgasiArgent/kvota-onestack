@@ -42898,15 +42898,15 @@ def _ci_get_company_options(supabase, segment, role):
                 options.append((f"buyer_company:{c['id']}", label))
 
         elif segment == "EURTR" and role == "buyer":
-            # Turkish intermediary - buyer_companies where country = TR
-            resp = supabase.table("buyer_companies").select("id, name, country").eq("country", "TR").order("name").execute()
+            # Turkish intermediary - buyer_companies where region = TR
+            resp = supabase.table("buyer_companies").select("id, name, country").eq("region", "TR").order("name").execute()
             for c in (resp.data or []):
                 label = f"{c.get('name', '')} ({c.get('country', '')})"
                 options.append((f"buyer_company:{c['id']}", label))
 
         elif segment == "TRRU" and role == "seller":
             # Turkish intermediary - buyer_companies TR + seller_companies
-            resp_bc = supabase.table("buyer_companies").select("id, name, country").eq("country", "TR").order("name").execute()
+            resp_bc = supabase.table("buyer_companies").select("id, name, country").eq("region", "TR").order("name").execute()
             for c in (resp_bc.data or []):
                 label = f"{c.get('name', '')} ({c.get('country', '')})"
                 options.append((f"buyer_company:{c['id']}", label))
