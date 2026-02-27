@@ -42307,7 +42307,7 @@ def get(session):
             /* --- Play button --- */
             .tv-play-btn {
                 position: absolute;
-                top: 50%; left: 50%;
+                top: 65%; left: 50%;
                 transform: translate(-50%, -50%);
                 z-index: 2;
                 width: 44px; height: 44px;
