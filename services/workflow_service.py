@@ -344,11 +344,11 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         requires_comment=True
     ),
 
-    # From PENDING_APPROVAL (Top manager approval via Telegram)
+    # From PENDING_APPROVAL (Top manager via Telegram OR quote_controller direct approval)
     StatusTransition(
         WorkflowStatus.PENDING_APPROVAL,
         WorkflowStatus.APPROVED,
-        ["top_manager", "admin"],
+        ["top_manager", "quote_controller", "admin"],
         requires_comment=False
     ),
     StatusTransition(

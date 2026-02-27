@@ -22512,7 +22512,7 @@ def get(session, quote_id: str, preset: str = None):
         user_calc_columns = CALC_PRESET_BASIC
 
     # Determine if editing is allowed
-    can_edit = workflow_status == "pending_quote_control"
+    can_edit = workflow_status in {"pending_quote_control", "pending_approval"}
 
     # Load organization's calculation settings for fallback values
     calc_settings_result = supabase.table("calculation_settings") \
@@ -22972,7 +22972,7 @@ def get(session, quote_id: str, preset: str = None):
                     href=f"/quote-control/{quote_id}/approve",
                     role="button",
                     style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); border: none; border-radius: 8px; padding: 0.625rem 1rem; display: inline-flex; align-items: center; text-decoration: none; color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
-                ) if workflow_status == "pending_quote_control" else None,
+                ) if workflow_status in {"pending_quote_control", "pending_approval"} else None,
                 # Optionally send for top-manager approval
                 A(
                     icon("clock", size=16, color="white"),
@@ -23512,7 +23512,7 @@ def get(session):
                 Div(
                     Span(f"Обновлено: {updated_at}", style="color: #9ca3af; font-size: 0.875rem;"),
                     Div(
-                        A(icon("check", size=14), " Одобрить", href=f"/quotes/{quote_id}",
+                        A(icon("check", size=14), " Одобрить", href=f"/quotes/{quote_id}?tab=overview",
                           style="background: #16a34a; color: white; padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; font-size: 0.875rem; margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
                         A(icon("eye", size=14), " Подробнее", href=f"/quotes/{quote_id}",
                           style="background: #3b82f6; color: white; padding: 0.375rem 0.75rem; border-radius: 6px; text-decoration: none; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 0.25rem;"),
@@ -24175,8 +24175,9 @@ def get(session, quote_id: str):
     quote = quote_result.data[0]
     workflow_status = quote.get("workflow_status", "draft")
 
-    # Check if quote is in correct status
-    if workflow_status != "pending_quote_control":
+    # Check if quote is in correct status (allow both pending_quote_control and pending_approval)
+    APPROVABLE_STATUSES = {"pending_quote_control", "pending_approval"}
+    if workflow_status not in APPROVABLE_STATUSES:
         return page_layout("Одобрение невозможно",
             H1("Одобрение невозможно"),
             P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}' и не может быть одобрено."),
@@ -24214,7 +24215,8 @@ def get(session, quote_id: str):
         approval_reasons.append(f"Есть вознаграждение ЛПРа")
 
     # If approval is required, redirect to request-approval
-    if approval_reasons:
+    # Only check at pending_quote_control — pending_approval already passed this gate
+    if approval_reasons and workflow_status == "pending_quote_control":
         return page_layout("Требуется согласование",
             H1(icon("alert-triangle", size=28), " Требуется согласование топ-менеджера", cls="page-header"),
             P("Это КП не может быть одобрено напрямую, так как имеются следующие причины для согласования:"),
@@ -24334,8 +24336,8 @@ def post(session, quote_id: str, comment: str = ""):
     current_status = quote.get("workflow_status", "draft")
     idn_quote = quote.get("idn_quote", "")
 
-    # Check if quote is in correct status
-    if current_status != "pending_quote_control":
+    # Check if quote is in correct status (allow both pending_quote_control and pending_approval)
+    if current_status not in {"pending_quote_control", "pending_approval"}:
         return page_layout("Одобрение невозможно",
             H1("Одобрение невозможно"),
             P(f"КП находится в статусе '{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}' и не может быть одобрено."),
@@ -25795,7 +25797,60 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                     "status": "active",
                     "created_by": user_id,
                 }
-                supabase.table("deals").insert(deal_data).execute()
+                deal_result = supabase.table("deals").insert(deal_data).execute()
+                new_deal_id = (deal_result.data[0]["id"]) if deal_result.data else None
+
+                # Initialize logistics stages for the new deal
+                if new_deal_id:
+                    try:
+                        from services.logistics_service import initialize_logistics_stages
+                        initialize_logistics_stages(new_deal_id, user_id)
+                    except Exception as e:
+                        print(f"Note: Could not initialize logistics stages (admin sign): {e}")
+
+                # Generate currency invoices for the new deal
+                if new_deal_id:
+                    try:
+                        from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
+
+                        ci_items_resp = supabase.table("quote_items").select(
+                            "*, buyer_companies!buyer_company_id(id, name, country, region)"
+                        ).eq("quote_id", quote_id_val).execute()
+                        ci_items = ci_items_resp.data or []
+
+                        bc_lookup = {}
+                        for ci_item in ci_items:
+                            bc = (ci_item.get("buyer_companies") or {})
+                            if bc and bc.get("id"):
+                                bc_lookup[bc["id"]] = bc
+
+                        ci_quote_resp = supabase.table("quotes").select(
+                            "idn, seller_companies!seller_company_id(id, name)"
+                        ).eq("id", quote_id_val).single().execute()
+                        ci_quote_data = ci_quote_resp.data or {}
+                        sc = (ci_quote_data.get("seller_companies") or {})
+                        ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
+                        ci_quote_idn = ci_quote_data.get("idn", "")
+
+                        if bc_lookup and ci_seller_company.get("id"):
+                            ci_invoices = generate_currency_invoices(
+                                deal_id=str(new_deal_id),
+                                quote_idn=ci_quote_idn,
+                                items=ci_items,
+                                buyer_companies=bc_lookup,
+                                seller_company=ci_seller_company,
+                                organization_id=org_id,
+                            )
+                            if ci_invoices:
+                                save_currency_invoices(supabase, ci_invoices)
+                                print(f"Currency invoices generated (admin sign): {len(ci_invoices)} for deal {new_deal_id}")
+                            else:
+                                print(f"No currency invoices generated (admin sign) for deal {new_deal_id}")
+                        else:
+                            print(f"Currency invoice generation skipped (admin sign): no buyer/seller company for deal {new_deal_id}")
+                    except Exception as e:
+                        print(f"Warning: currency invoice generation failed (admin sign): {e}")
+                        # Non-blocking — deal creation still succeeds
 
                 # Update quote workflow_status to deal_signed
                 try:
@@ -41488,7 +41543,18 @@ def _finance_currency_invoices_tab_content(deal_id):
     else:
         invoices_table = Div(
             Div(icon("file-text", size=40, color="#94a3b8"), style="margin-bottom: 12px;"),
-            P("Валютные инвойсы не сгенерированы", style="color: #64748b; font-size: 14px; margin: 0;"),
+            P("Валютные инвойсы не сгенерированы", style="color: #64748b; font-size: 14px; margin: 0 0 16px 0;"),
+            Form(
+                Button(
+                    icon("refresh-cw", size=14, color="white"),
+                    " Сгенерировать инвойсы",
+                    type="submit",
+                    style="background: #3b82f6; color: white; border: none; padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;",
+                    onclick="return confirm('Сгенерировать валютные инвойсы для этой сделки?')"
+                ),
+                method="post",
+                action=f"/finance/{deal_id}/generate-currency-invoices"
+            ),
             style="text-align: center; padding: 40px 20px;"
         )
 
@@ -41673,6 +41739,91 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
     result = update_stage_status(stage_id, status, deal_id=deal_id)
 
     return RedirectResponse(f"/finance/{deal_id}?tab=logistics", status_code=303)
+
+
+@rt("/finance/{deal_id}/generate-currency-invoices")
+def post(session, deal_id: str):
+    """Generate currency invoices for a deal that has none.
+
+    Fallback button for deals where invoice generation was missed
+    (e.g., created via admin status change before the fix).
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "currency_controller", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    supabase = get_supabase()
+
+    # Verify deal belongs to org
+    deal_check = supabase.table("deals").select(
+        "id, quote_id, organization_id"
+    ).eq("id", deal_id).eq("organization_id", org_id).execute()
+    if not deal_check.data:
+        return RedirectResponse("/deals", status_code=303)
+
+    deal = deal_check.data[0]
+    quote_id = deal.get("quote_id")
+
+    if not quote_id:
+        return RedirectResponse(f"/finance/{deal_id}?tab=currency_invoices", status_code=303)
+
+    # Idempotency: skip if invoices already exist
+    existing_ci = supabase.table("currency_invoices").select("id", count="exact").eq("deal_id", deal_id).execute()
+    if existing_ci.data:
+        print(f"Currency invoices already exist for deal {deal_id}, skipping generation")
+        return RedirectResponse(f"/finance/{deal_id}?tab=currency_invoices", status_code=303)
+
+    try:
+        from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
+
+        # Fetch quote items with buyer_company info
+        ci_items_resp = supabase.table("quote_items").select(
+            "*, buyer_companies!buyer_company_id(id, name, country, region)"
+        ).eq("quote_id", quote_id).execute()
+        ci_items = ci_items_resp.data or []
+
+        # Build buyer_companies lookup dict
+        bc_lookup = {}
+        for ci_item in ci_items:
+            bc = (ci_item.get("buyer_companies") or {})
+            if bc and bc.get("id"):
+                bc_lookup[bc["id"]] = bc
+
+        # Get seller_company and quote IDN
+        ci_quote_resp = supabase.table("quotes").select(
+            "idn, seller_companies!seller_company_id(id, name)"
+        ).eq("id", quote_id).single().execute()
+        ci_quote_data = ci_quote_resp.data or {}
+        sc = (ci_quote_data.get("seller_companies") or {})
+        ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
+        ci_quote_idn = ci_quote_data.get("idn", "")
+
+        if bc_lookup and ci_seller_company.get("id"):
+            ci_invoices = generate_currency_invoices(
+                deal_id=str(deal_id),
+                quote_idn=ci_quote_idn,
+                items=ci_items,
+                buyer_companies=bc_lookup,
+                seller_company=ci_seller_company,
+                organization_id=org_id,
+            )
+            if ci_invoices:
+                save_currency_invoices(supabase, ci_invoices)
+                print(f"Currency invoices generated (fallback): {len(ci_invoices)} for deal {deal_id}")
+            else:
+                print(f"No currency invoices generated (fallback) for deal {deal_id}")
+        else:
+            print(f"Currency invoice generation skipped (fallback): no buyer/seller company for deal {deal_id}")
+    except Exception as e:
+        print(f"Error generating currency invoices (fallback) for deal {deal_id}: {e}")
+
+    return RedirectResponse(f"/finance/{deal_id}?tab=currency_invoices", status_code=303)
 
 
 # ============================================================================
