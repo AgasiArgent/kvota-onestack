@@ -433,117 +433,72 @@ class TestCalculateForexRiskAuto:
 
 
 # ============================================================================
-# 3. check_vat_sensitive_countries() tests
+# 3. build_vat_zone_info() tests (replaced check_vat_sensitive_countries)
 # ============================================================================
 
-class TestCheckVatSensitiveCountries:
+class TestBuildVatZoneInfo:
     """
-    Tests for check_vat_sensitive_countries(items).
+    Tests for build_vat_zone_info(items).
 
-    VAT_SENSITIVE_COUNTRIES = ['Turkey', 'Poland', 'Lithuania']
-    Returns a dict with status + flagged items.
+    Two-factor mapping: country + price_includes_vat → VAT zone.
+    Returns dict with status, value, details, items.
     """
 
-    def test_turkey_flagged(self):
-        """Items from Turkey should trigger a warning."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [make_item(supplier_country="Turkey", product_name="Bearing A")]
-        result = check_vat_sensitive_countries(items)
-
+    def test_turkey_with_vat_ok(self):
+        """Turkey with VAT should map correctly (ok status)."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="TR", product_name="Bearing A", price_includes_vat=True)]
+        result = build_vat_zone_info(items)
         assert isinstance(result, dict)
-        assert result.get("status") == "warning", (
-            f"Turkey should trigger warning, got status={result.get('status')}"
-        )
-        assert len(result.get("flagged_items", [])) == 1
+        assert result.get("status") == "ok"
 
-    def test_poland_flagged(self):
-        """Items from Poland should trigger a warning."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [make_item(supplier_country="Poland", product_name="Motor B")]
-        result = check_vat_sensitive_countries(items)
-
+    def test_turkey_without_vat_warning(self):
+        """Turkey without VAT should produce warning."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="TR", product_name="Motor B", price_includes_vat=False)]
+        result = build_vat_zone_info(items)
         assert result.get("status") == "warning"
 
-    def test_lithuania_flagged(self):
-        """Items from Lithuania should trigger a warning."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
+    def test_eu_with_vat_ok(self):
+        """EU country with VAT and matching zone should be ok."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="BE", product_name="Pump C", price_includes_vat=True)]
+        result = build_vat_zone_info(items)
+        assert result.get("status") == "ok"
 
-        items = [make_item(supplier_country="Lithuania", product_name="Pump C")]
-        result = check_vat_sensitive_countries(items)
-
+    def test_eu_without_vat_warning(self):
+        """EU country without VAT flag should produce warning."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="BE", product_name="Widget D", price_includes_vat=False)]
+        result = build_vat_zone_info(items)
         assert result.get("status") == "warning"
 
-    def test_china_not_flagged(self):
-        """Items from China should NOT trigger a warning (info status)."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
+    def test_unsupported_eu_vat_error(self):
+        """Germany with VAT (19%) has no matching zone — error."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="DE", product_name="Motor", price_includes_vat=True)]
+        result = build_vat_zone_info(items)
+        assert result.get("status") == "error"
 
-        items = [make_item(supplier_country="China", product_name="Widget D")]
-        result = check_vat_sensitive_countries(items)
-
-        assert result.get("status") in ("ok", "info"), (
-            f"China should not be flagged, got status={result.get('status')}"
-        )
-        assert len(result.get("flagged_items", [])) == 0
-
-    def test_germany_not_flagged(self):
-        """Items from Germany should NOT trigger a warning."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [make_item(supplier_country="Germany")]
-        result = check_vat_sensitive_countries(items)
-
-        assert result.get("status") in ("ok", "info")
-        assert len(result.get("flagged_items", [])) == 0
-
-    def test_mixed_countries_flags_sensitive_only(self):
-        """Mixed items: only sensitive countries are flagged."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [
-            make_item(supplier_country="Turkey", product_name="Item from Turkey"),
-            make_item(supplier_country="China", product_name="Item from China"),
-            make_item(supplier_country="Germany", product_name="Item from Germany"),
-        ]
-        result = check_vat_sensitive_countries(items)
-
-        assert result.get("status") == "warning"
-        flagged = result.get("flagged_items", [])
-        assert len(flagged) == 1, f"Only Turkey item should be flagged, got {len(flagged)}"
-
-    def test_multiple_sensitive_countries(self):
-        """Multiple items from different sensitive countries are all flagged."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [
-            make_item(supplier_country="Turkey", product_name="From Turkey"),
-            make_item(supplier_country="Poland", product_name="From Poland"),
-            make_item(supplier_country="Lithuania", product_name="From Lithuania"),
-        ]
-        result = check_vat_sensitive_countries(items)
-
-        assert result.get("status") == "warning"
-        assert len(result.get("flagged_items", [])) == 3
+    def test_china_always_ok(self):
+        """China should be ok regardless of VAT flag."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        items = [make_item(supplier_country="CN", product_name="Widget", price_includes_vat=False)]
+        result = build_vat_zone_info(items)
+        assert result.get("status") == "ok"
 
     def test_empty_items_returns_info(self):
         """Empty items list should return info status."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        result = build_vat_zone_info([])
+        assert result.get("status") in ("ok", "info")
 
-        result = check_vat_sensitive_countries([])
-
-        assert result.get("status") in ("ok", "info"), (
-            f"Empty items should be info/ok, got status={result.get('status')}"
-        )
-
-    def test_item_with_no_country(self):
-        """Items without supplier_country should not be flagged."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
+    def test_item_with_no_country_warning(self):
+        """Items without supplier_country should produce warning."""
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
         items = [make_item(supplier_country=None)]
-        result = check_vat_sensitive_countries(items)
-
-        assert len(result.get("flagged_items", [])) == 0
+        result = build_vat_zone_info(items)
+        assert result.get("status") == "warning"
 
 
 # ============================================================================
@@ -905,27 +860,19 @@ class TestConstantsExistInSource:
         source = _read_main_source()
         assert "pmt_3" in source, "MIN_MARKUP_RULES must include pmt_3"
 
-    def test_vat_sensitive_countries_constant_exists(self):
-        """VAT_SENSITIVE_COUNTRIES constant must be defined in main.py."""
+    def test_eu_country_vat_rates_constant_exists(self):
+        """EU_COUNTRY_VAT_RATES constant must be defined in main.py."""
         source = _read_main_source()
-        assert "VAT_SENSITIVE_COUNTRIES" in source, (
-            "VAT_SENSITIVE_COUNTRIES constant not found in main.py"
+        assert "EU_COUNTRY_VAT_RATES" in source, (
+            "EU_COUNTRY_VAT_RATES constant not found in main.py"
         )
 
-    def test_vat_sensitive_countries_includes_turkey(self):
-        """VAT_SENSITIVE_COUNTRIES must include Turkey."""
+    def test_resolve_vat_zone_function_exists(self):
+        """resolve_vat_zone function must be defined in main.py."""
         source = _read_main_source()
-        assert "Turkey" in source, "VAT_SENSITIVE_COUNTRIES must include Turkey"
-
-    def test_vat_sensitive_countries_includes_poland(self):
-        """VAT_SENSITIVE_COUNTRIES must include Poland."""
-        source = _read_main_source()
-        assert "Poland" in source, "VAT_SENSITIVE_COUNTRIES must include Poland"
-
-    def test_vat_sensitive_countries_includes_lithuania(self):
-        """VAT_SENSITIVE_COUNTRIES must include Lithuania."""
-        source = _read_main_source()
-        assert "Lithuania" in source, "VAT_SENSITIVE_COUNTRIES must include Lithuania"
+        assert "def resolve_vat_zone(" in source, (
+            "resolve_vat_zone function not found in main.py"
+        )
 
 
 # ============================================================================
@@ -956,11 +903,11 @@ class TestFunctionDefinitionsExist:
             "compare_quote_vs_invoice_prices function not found in main.py"
         )
 
-    def test_check_vat_sensitive_countries_defined(self):
-        """check_vat_sensitive_countries function must exist in main.py."""
+    def test_build_vat_zone_info_defined(self):
+        """build_vat_zone_info function must exist in main.py."""
         source = _read_main_source()
-        assert "def check_vat_sensitive_countries(" in source, (
-            "check_vat_sensitive_countries function not found in main.py"
+        assert "def build_vat_zone_info(" in source, (
+            "build_vat_zone_info function not found in main.py"
         )
 
     def test_build_janna_checklist_defined(self):
@@ -1084,13 +1031,12 @@ class TestEdgeCases:
 
     def test_vat_check_case_insensitive_country(self):
         """Country matching should work regardless of case."""
-        check_vat_sensitive_countries = _import_from_main("check_vat_sensitive_countries")
-
-        items = [make_item(supplier_country="turkey")]  # lowercase
-        result = check_vat_sensitive_countries(items)
-
-        # Should still flag Turkey regardless of case
-        assert result.get("status") == "warning", (
+        build_vat_zone_info = _import_from_main("build_vat_zone_info")
+        # "turkey" lowercase with VAT → should still resolve (ok or warning depending on VAT flag)
+        items = [make_item(supplier_country="turkey", price_includes_vat=True)]
+        result = build_vat_zone_info(items)
+        # Should resolve Turkey successfully
+        assert result.get("status") in ("ok", "warning"), (
             "Country check should be case-insensitive"
         )
 

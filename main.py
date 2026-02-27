@@ -12458,15 +12458,6 @@ SUPPLIER_COUNTRY_MAPPING = {
     "": "Прочие",  # Empty defaults to OTHER
 }
 
-def map_supplier_country(value: str) -> str:
-    """Map database supplier_country value to SupplierCountry enum value.
-
-    Returns "Прочие" (OTHER) for any unmapped values.
-    """
-    if not value:
-        return "Прочие"
-    return SUPPLIER_COUNTRY_MAPPING.get(value, "Прочие")
-
 # Shared mapping from ISO country codes to Russian names for UI display.
 # Used by supplier list, customs workspace, logistics, and other pages.
 COUNTRY_NAME_MAP = {
@@ -12505,6 +12496,216 @@ COUNTRY_NAME_MAP = {
     "SG": "Сингапур",
     "SA": "Саудовская Аравия",
 }
+
+# ============================================================================
+# VAT ZONE MAPPING (Two-factor: country + price_includes_vat → SupplierCountry)
+# ============================================================================
+
+# EU countries: ISO code → {name_ru, vat_rate, zone (SupplierCountry enum value or None)}
+# zone=None means the VAT rate has no matching SupplierCountry zone → error when price_includes_vat=True
+EU_COUNTRY_VAT_RATES = {
+    # 21% → maps to LITHUANIA zone
+    "BE": {"name_ru": "Бельгия", "vat_rate": 21, "zone": "Литва"},
+    "NL": {"name_ru": "Нидерланды", "vat_rate": 21, "zone": "Литва"},
+    "CZ": {"name_ru": "Чехия", "vat_rate": 21, "zone": "Литва"},
+    "ES": {"name_ru": "Испания", "vat_rate": 21, "zone": "Литва"},
+    "LT": {"name_ru": "Литва", "vat_rate": 21, "zone": "Литва"},
+    "LV": {"name_ru": "Латвия", "vat_rate": 21, "zone": "Латвия"},
+    # 20% → maps to BULGARIA zone
+    "BG": {"name_ru": "Болгария", "vat_rate": 20, "zone": "Болгария"},
+    "FR": {"name_ru": "Франция", "vat_rate": 20, "zone": "Болгария"},
+    "AT": {"name_ru": "Австрия", "vat_rate": 20, "zone": "Болгария"},
+    "SK": {"name_ru": "Словакия", "vat_rate": 20, "zone": "Болгария"},
+    # 23% → maps to POLAND zone
+    "PL": {"name_ru": "Польша", "vat_rate": 23, "zone": "Польша"},
+    "PT": {"name_ru": "Португалия", "vat_rate": 23, "zone": "Польша"},
+    "IE": {"name_ru": "Ирландия", "vat_rate": 23, "zone": "Польша"},
+    # Unsupported rates → zone=None → ERROR when price_includes_vat=True
+    "DE": {"name_ru": "Германия", "vat_rate": 19, "zone": None},
+    "IT": {"name_ru": "Италия", "vat_rate": 22, "zone": None},
+    "SE": {"name_ru": "Швеция", "vat_rate": 25, "zone": None},
+    "DK": {"name_ru": "Дания", "vat_rate": 25, "zone": None},
+    "FI": {"name_ru": "Финляндия", "vat_rate": 25.5, "zone": None},
+    "HU": {"name_ru": "Венгрия", "vat_rate": 27, "zone": None},
+    "RO": {"name_ru": "Румыния", "vat_rate": 19, "zone": None},
+    "HR": {"name_ru": "Хорватия", "vat_rate": 25, "zone": None},
+    "SI": {"name_ru": "Словения", "vat_rate": 22, "zone": None},
+    "EE": {"name_ru": "Эстония", "vat_rate": 22, "zone": None},
+    "GR": {"name_ru": "Греция", "vat_rate": 24, "zone": None},
+}
+
+EU_ISO_CODES = set(EU_COUNTRY_VAT_RATES.keys())
+
+# Direct country matches: ISO code → SupplierCountry enum value
+# These countries have dedicated zones in the calculation engine
+DIRECT_COUNTRY_ZONES = {
+    "TR": "Турция",
+    "RU": "Россия",
+    "CN": "Китай",
+    "AE": "ОАЭ",
+}
+
+# Reverse lookup: Russian name → ISO code
+_RUSSIAN_TO_ISO = {}
+for _iso, _name_ru in COUNTRY_NAME_MAP.items():
+    _RUSSIAN_TO_ISO[_name_ru] = _iso
+# Add EU countries not in COUNTRY_NAME_MAP
+for _iso, _info in EU_COUNTRY_VAT_RATES.items():
+    _RUSSIAN_TO_ISO[_info["name_ru"]] = _iso
+
+# English name → ISO code (for common names)
+_ENGLISH_TO_ISO = {
+    "Turkey": "TR", "Russia": "RU", "China": "CN", "Lithuania": "LT",
+    "Latvia": "LV", "Bulgaria": "BG", "Poland": "PL", "UAE": "AE",
+    "Germany": "DE", "Italy": "IT", "France": "FR", "Japan": "JP",
+    "South Korea": "KR", "Korea": "KR", "India": "IN", "Belgium": "BE",
+    "Netherlands": "NL", "Spain": "ES", "Czech Republic": "CZ",
+    "Austria": "AT", "Switzerland": "CH", "Sweden": "SE", "Finland": "FI",
+    "Denmark": "DK", "Portugal": "PT", "Ireland": "IE", "Greece": "GR",
+    "Hungary": "HU", "Romania": "RO", "Croatia": "HR", "Slovenia": "SI",
+    "Estonia": "EE", "Slovakia": "SK",
+}
+
+# SupplierCountry enum value → ISO code (for values already mapped to zones)
+_ENUM_TO_ISO = {
+    "Турция": "TR", "Россия": "RU", "Китай": "CN", "Литва": "LT",
+    "Латвия": "LV", "Болгария": "BG", "Польша": "PL", "ОАЭ": "AE",
+}
+
+
+def normalize_country_to_iso(value: str) -> str:
+    """Normalize any country representation to ISO 2-letter code.
+
+    Handles: ISO codes ("BE"), Russian names ("Бельгия"), English names ("Belgium"),
+    SupplierCountry enum values ("Литва").
+
+    Returns empty string if not recognized.
+    """
+    if not value:
+        return ""
+    v = value.strip()
+    upper = v.upper()
+
+    # Already an ISO code?
+    if len(v) == 2 and upper.isalpha():
+        return upper
+
+    # Russian name?
+    if v in _RUSSIAN_TO_ISO:
+        return _RUSSIAN_TO_ISO[v]
+
+    # English name?
+    if v in _ENGLISH_TO_ISO:
+        return _ENGLISH_TO_ISO[v]
+
+    # SupplierCountry enum value?
+    if v in _ENUM_TO_ISO:
+        return _ENUM_TO_ISO[v]
+
+    # Case-insensitive fallbacks
+    v_lower = v.lower()
+    for eng, iso in _ENGLISH_TO_ISO.items():
+        if eng.lower() == v_lower:
+            return iso
+
+    return ""
+
+
+def resolve_vat_zone(country_raw: str, price_includes_vat: bool) -> dict:
+    """Map (country, price_includes_vat) → SupplierCountry enum value with reason.
+
+    Returns dict:
+        zone: str or None — SupplierCountry enum value for calculation engine
+        reason: str — human-readable explanation for quote control page
+        warning: str or None — warning message (needs manual check)
+        error: str or None — error message (cannot calculate)
+    """
+    iso = normalize_country_to_iso(country_raw)
+    name_ru = COUNTRY_NAME_MAP.get(iso, "") or EU_COUNTRY_VAT_RATES.get(iso, {}).get("name_ru", country_raw or "неизвестная")
+
+    # 1. Empty/unknown country → Прочие with warning
+    if not iso:
+        return {
+            "zone": "Прочие",
+            "reason": f"Страна не определена ({country_raw or '—'}) → Прочие",
+            "warning": "Страна поставщика не указана — проверьте",
+            "error": None,
+        }
+
+    # 2. China — always "Китай" regardless of VAT flag
+    # Engine already handles China as VAT-free (line 200: if supplier_country == CHINA: N16 = base_price_VAT)
+    if iso == "CN":
+        return {
+            "zone": "Китай",
+            "reason": f"{name_ru} → Китай (НДС не применяется)",
+            "warning": None,
+            "error": None,
+        }
+
+    # 3. Direct match countries (TR, RU, AE) — have their own zones
+    if iso in DIRECT_COUNTRY_ZONES:
+        zone = DIRECT_COUNTRY_ZONES[iso]
+        if price_includes_vat:
+            return {
+                "zone": zone,
+                "reason": f"{name_ru} с НДС → {zone}",
+                "warning": None,
+                "error": None,
+            }
+        else:
+            # Price without VAT → engine shouldn't strip VAT → use Прочие (0%)
+            return {
+                "zone": "Прочие",
+                "reason": f"{name_ru}, цена без НДС → Прочие (0%)",
+                "warning": f"Цена без НДС для {name_ru} — проверьте корректность",
+                "error": None,
+            }
+
+    # 4. EU countries
+    if iso in EU_ISO_CODES:
+        eu_info = EU_COUNTRY_VAT_RATES[iso]
+        vat_rate = eu_info["vat_rate"]
+
+        if not price_includes_vat:
+            # EU without VAT → cross-border (0% VAT, 4% EU route markup)
+            return {
+                "zone": "ЕС (между странами ЕС)",
+                "reason": f"{name_ru}, цена без НДС → ЕС cross-border (0% НДС, 4% наценка)",
+                "warning": f"Цена без НДС для ЕС ({name_ru}) — проверьте",
+                "error": None,
+            }
+        else:
+            # EU with VAT — need matching zone
+            zone = eu_info["zone"]
+            if zone:
+                return {
+                    "zone": zone,
+                    "reason": f"{name_ru} с НДС {vat_rate}% → зона {zone} (очистка {vat_rate}%)",
+                    "warning": None,
+                    "error": None,
+                }
+            else:
+                return {
+                    "zone": None,
+                    "reason": f"НДС {name_ru} ({vat_rate}%) не поддерживается расчётной моделью",
+                    "warning": None,
+                    "error": f"НДС {name_ru} ({vat_rate}%) не поддерживается. Поддерживаемые ставки: 20% (Болгария), 21% (Литва), 23% (Польша)",
+                }
+
+    # 5. Non-EU, non-direct country → Прочие
+    if price_includes_vat:
+        return {
+            "zone": "Прочие",
+            "reason": f"{name_ru} → Прочие",
+            "warning": f"Цена с НДС для {name_ru} — НДС не будет очищен",
+            "error": None,
+        }
+    return {
+        "zone": "Прочие",
+        "reason": f"{name_ru} → Прочие",
+        "warning": None,
+        "error": None,
+    }
 
 
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
@@ -12623,7 +12824,10 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
             'quantity': item.get('quantity', 1),
             'weight_in_kg': safe_decimal(item.get('weight_in_kg')),
             'customs_code': item.get('customs_code', '0000000000'),
-            'supplier_country': map_supplier_country(item.get('supplier_country') or variables.get('supplier_country', '')),
+            'supplier_country': resolve_vat_zone(
+                item.get('supplier_country') or variables.get('supplier_country', ''),
+                bool(item.get('price_includes_vat', False))
+            )["zone"] or "Прочие",
             'currency_of_base_price': item_currency,
             'import_tariff': item.get('customs_duty') or item.get('import_tariff'),  # customs_duty is saved by customs workspace
             'markup': item.get('markup'),
@@ -21588,8 +21792,7 @@ MIN_MARKUP_RULES = {
     'pmt_3': {'code': 'pmt_3', 'name': 'Частичная оплата', 'min_markup_supply': 12.5, 'min_markup_transit': 5.0},
 }
 
-# Countries requiring VAT clarification (checklist item #3)
-VAT_SENSITIVE_COUNTRIES = ['Turkey', 'Poland', 'Lithuania']
+# VAT_SENSITIVE_COUNTRIES removed — replaced by two-factor resolve_vat_zone() mapping
 
 
 def get_user_calc_columns(user_id: str, supabase) -> list:
@@ -22107,48 +22310,86 @@ def check_markup_vs_payment_terms(deal_type, markup, payment_terms_code=None, pr
     return result
 
 
-def check_vat_sensitive_countries(items):
+def build_vat_zone_info(items):
     """
-    Check if any items come from VAT-sensitive countries.
+    Analyze VAT zone mapping for all items using resolve_vat_zone().
 
-    Returns dict with: status, value, details, flagged_items, countries.
+    Returns dict with:
+        status: 'ok' | 'warning' | 'error'
+        value: summary text for checklist card
+        details: detailed explanation
+        items: per-item analysis list
     """
     if not items:
         return {
             'status': 'info',
             'value': 'Нет позиций для проверки',
             'details': None,
-            'flagged_items': [],
-            'countries': [],
+            'items': [],
         }
 
-    flagged_items = []
-    flagged_countries = set()
-
-    vat_countries_lower = [c.lower() for c in VAT_SENSITIVE_COUNTRIES]
+    analyzed_items = []
+    has_error = False
+    has_warning = False
 
     for item in items:
-        country = item.get('supplier_country')
-        if country and country.lower() in vat_countries_lower:
-            flagged_items.append(item)
-            flagged_countries.add(country)
+        country_raw = item.get('supplier_country', '')
+        vat_flag = bool(item.get('price_includes_vat', False))
+        result = resolve_vat_zone(country_raw, vat_flag)
 
-    if flagged_items:
-        countries_list = sorted(flagged_countries)
-        return {
-            'status': 'warning',
-            'value': f"Страны с НДС: {', '.join(countries_list)}",
-            'details': f"{len(flagged_items)} позиций из стран, требующих уточнения НДС",
-            'flagged_items': flagged_items,
-            'countries': countries_list,
-        }
+        iso = normalize_country_to_iso(country_raw)
+        eu_info = EU_COUNTRY_VAT_RATES.get(iso)
+        vat_rate_str = f" ({eu_info['vat_rate']}%)" if eu_info and vat_flag else ""
+
+        item_status = 'ok'
+        if result["error"]:
+            item_status = 'error'
+            has_error = True
+        elif result["warning"]:
+            item_status = 'warning'
+            has_warning = True
+
+        analyzed_items.append({
+            'product_name': item.get('product_name', '—'),
+            'country': country_raw,
+            'country_display': COUNTRY_NAME_MAP.get(iso, country_raw or '—'),
+            'iso': iso,
+            'price_includes_vat': vat_flag,
+            'vat_zone': f"{result['zone']}{vat_rate_str}" if result['zone'] else '—',
+            'reason': result['reason'],
+            'warning': result.get('warning'),
+            'error': result.get('error'),
+            'status': item_status,
+        })
+
+    # Build summary
+    total = len(analyzed_items)
+    errors = sum(1 for i in analyzed_items if i['status'] == 'error')
+    warnings = sum(1 for i in analyzed_items if i['status'] == 'warning')
+    ok_count = total - errors - warnings
+
+    if has_error:
+        status = 'error'
+        value = f"{errors} из {total} позиций — ошибка маппинга НДС"
+    elif has_warning:
+        status = 'warning'
+        value = f"{total} позиций, {warnings} требуют проверки"
+    else:
+        status = 'ok'
+        value = f"{total} позиций — все зоны определены"
+
+    # Build details text
+    zones_used = set()
+    for ai in analyzed_items:
+        if ai['status'] != 'error':
+            zones_used.add(ai.get('vat_zone', ''))
+    details = f"Зоны: {', '.join(sorted(zones_used))}" if zones_used else None
 
     return {
-        'status': 'info',
-        'value': 'Все страны стандартные',
-        'details': None,
-        'flagged_items': [],
-        'countries': [],
+        'status': status,
+        'value': value,
+        'details': details,
+        'items': analyzed_items,
     }
 
 
@@ -22293,14 +22534,15 @@ def build_janna_checklist(quote, calc_vars, calc_summary, items, supabase=None):
         'type': 'auto',
     })
 
-    # 3. Страна + НДС
-    vat_result = check_vat_sensitive_countries(items)
+    # 3. Страна + НДС (two-factor mapping: country + price_includes_vat)
+    vat_result = build_vat_zone_info(items)
     checklist.append({
         'name': 'Страна + НДС',
         'status': vat_result['status'],
         'value': vat_result['value'],
         'details': vat_result.get('details'),
         'type': 'auto_flag',
+        'vat_items': vat_result.get('items', []),
     })
 
     # 4. Логистика
@@ -22660,6 +22902,41 @@ def get(session, quote_id: str, preset: str = None):
                 hx_target="#invoice-comparison-details",
                 hx_swap="innerHTML",
                 onclick="toggleInvoiceComparisonCard(this)",
+                style="cursor: pointer;",
+            )
+        # Card #3 (idx=2): "Страна + НДС" — expandable per-item VAT zone detail
+        if idx == 2 and cl_item.get('vat_items'):
+            vat_detail_rows = []
+            for vi in cl_item['vat_items']:
+                vat_flag_icon = "☑ НДС" if vi['price_includes_vat'] else "☐ без НДС"
+                row_color = {"ok": "#166534", "warning": "#92400e", "error": "#991b1b"}.get(vi['status'], "#374151")
+                status_prefix = {"warning": "⚠️ ", "error": "❌ "}.get(vi['status'], "")
+                vat_detail_rows.append(
+                    Div(
+                        Div(
+                            Span(f"{status_prefix}{vi['product_name'][:30]}", style=f"font-weight: 500; color: {row_color};"),
+                            Span(f"{vi['country_display']} ({vi['iso']})" if vi['iso'] else vi['country_display'],
+                                 style="color: #64748b; margin-left: 8px; font-size: 0.8125rem;"),
+                            Span(vat_flag_icon, style="margin-left: 8px; font-size: 0.75rem; color: #64748b;"),
+                            style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;"
+                        ),
+                        Div(
+                            Span(f"→ {vi['reason']}", style="font-size: 0.75rem; color: #6b7280;"),
+                            Span(vi['error'], style="font-size: 0.75rem; color: #ef4444; margin-left: 8px;") if vi.get('error') else None,
+                            style="margin-top: 2px;"
+                        ),
+                        style="padding: 6px 0; border-bottom: 1px solid #f1f5f9;"
+                    )
+                )
+            vat_detail_panel = Div(
+                *vat_detail_rows,
+                id="vat-zone-details",
+                style="display: none; margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; font-size: 0.8125rem;"
+            )
+            card = Div(
+                card,
+                vat_detail_panel,
+                onclick="var d=this.querySelector('#vat-zone-details'); d.style.display=d.style.display==='none'?'block':'none';",
                 style="cursor: pointer;",
             )
         checklist_items.append(card)
@@ -25813,16 +26090,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                     try:
                         from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
 
-                        ci_items_resp = supabase.table("quote_items").select(
-                            "*, buyer_companies!buyer_company_id(id, name, country, region)"
-                        ).eq("quote_id", quote_id_val).execute()
-                        ci_items = ci_items_resp.data or []
-
-                        bc_lookup = {}
-                        for ci_item in ci_items:
-                            bc = (ci_item.get("buyer_companies") or {})
-                            if bc and bc.get("id"):
-                                bc_lookup[bc["id"]] = bc
+                        ci_items, bc_lookup = _fetch_items_with_buyer_companies(supabase, quote_id_val)
 
                         ci_quote_resp = supabase.table("quotes").select(
                             "idn_quote, seller_companies!seller_company_id(id, name)"
@@ -26487,18 +26755,7 @@ def post(session, spec_id: str):
         try:
             from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
 
-            # Fetch quote items with buyer_company info
-            ci_items_resp = supabase.table("quote_items").select(
-                "*, buyer_companies!buyer_company_id(id, name, country, region)"
-            ).eq("quote_id", quote_id).execute()
-            ci_items = ci_items_resp.data or []
-
-            # Build buyer_companies lookup dict
-            bc_lookup = {}
-            for ci_item in ci_items:
-                bc = (ci_item.get("buyer_companies") or {})
-                if bc and bc.get("id"):
-                    bc_lookup[bc["id"]] = bc
+            ci_items, bc_lookup = _fetch_items_with_buyer_companies(supabase, quote_id)
 
             # Get seller_company and quote IDN
             ci_quote_resp = supabase.table("quotes").select(
@@ -41132,6 +41389,37 @@ def _ci_status_badge(status):
     return Span(label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; {style}")
 
 
+def _fetch_items_with_buyer_companies(supabase, quote_id):
+    """Fetch quote items enriched with buyer_company_id from invoices.
+
+    buyer_company_id lives on the invoices table, not on quote_items.
+    Items link to invoices via quote_items.invoice_id.
+    This function resolves that indirection and returns items with
+    buyer_company_id set, plus a bc_lookup dict of buyer companies.
+    """
+    items_resp = supabase.table("quote_items").select("*").eq("quote_id", quote_id).execute()
+    items = items_resp.data or []
+
+    inv_resp = supabase.table("invoices").select(
+        "id, buyer_company_id, buyer_companies!buyer_company_id(id, name, country, region)"
+    ).eq("quote_id", quote_id).execute()
+    inv_data = inv_resp.data or []
+
+    bc_lookup = {}
+    inv_bc_map = {}
+    for inv in inv_data:
+        bc = (inv.get("buyer_companies") or {})
+        if bc and bc.get("id"):
+            bc_lookup[bc["id"]] = bc
+            inv_bc_map[inv["id"]] = bc["id"]
+
+    for item in items:
+        if not item.get("buyer_company_id") and item.get("invoice_id"):
+            item["buyer_company_id"] = inv_bc_map.get(item["invoice_id"])
+
+    return items, bc_lookup
+
+
 def _finance_fetch_deal_data(deal_id, org_id, user_roles):
     """
     Fetch deal and plan-fact data needed for finance tabs on quote detail page.
@@ -41782,18 +42070,7 @@ def post(session, deal_id: str):
     try:
         from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
 
-        # Fetch quote items with buyer_company info
-        ci_items_resp = supabase.table("quote_items").select(
-            "*, buyer_companies!buyer_company_id(id, name, country, region)"
-        ).eq("quote_id", quote_id).execute()
-        ci_items = ci_items_resp.data or []
-
-        # Build buyer_companies lookup dict
-        bc_lookup = {}
-        for ci_item in ci_items:
-            bc = (ci_item.get("buyer_companies") or {})
-            if bc and bc.get("id"):
-                bc_lookup[bc["id"]] = bc
+        ci_items, bc_lookup = _fetch_items_with_buyer_companies(supabase, quote_id)
 
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
@@ -43617,18 +43894,7 @@ def post(session, ci_id: str):
         # Step 3: Re-fetch source data and regenerate
         from services.currency_invoice_service import generate_currency_invoices, save_currency_invoices
 
-        # Fetch quote items with buyer_company info
-        ci_items_resp = supabase.table("quote_items").select(
-            "*, buyer_companies!buyer_company_id(id, name, country, region)"
-        ).eq("quote_id", quote_id).execute()
-        ci_items = ci_items_resp.data or []
-
-        # Build buyer_companies lookup dict
-        bc_lookup = {}
-        for ci_item in ci_items:
-            bc = (ci_item.get("buyer_companies") or {})
-            if bc and bc.get("id"):
-                bc_lookup[bc["id"]] = bc
+        ci_items, bc_lookup = _fetch_items_with_buyer_companies(supabase, quote_id)
 
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
