@@ -42163,7 +42163,8 @@ def get(session):
         Div(
             Div(
                 H1("Обучение", style="margin: 0; font-size: 1.5rem;"),
-                P("Видеоматериалы по работе с системой", style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
+                P("Видеоматериалы по работе с системой. Создание заявки = Создание КП (коммерческого предложения).",
+                  style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
                 style="flex: 1;"
             ),
             Div(*admin_controls) if admin_controls else None,
