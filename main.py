@@ -9043,11 +9043,11 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     deal_id = deal["id"] if deal else None
 
     # If a finance tab is requested but no deal exists, fall back to summary
-    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices") and not deal:
+    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices", "logistics_expenses") and not deal:
         tab = "summary"
 
     # Render finance tab content if requested
-    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices") and deal:
+    if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices", "logistics_expenses") and deal:
         user_roles = user.get("roles", [])
         # Check role access for finance tabs
         finance_roles = ["finance", "admin", "top_manager"]
@@ -9055,12 +9055,26 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             finance_roles.append("logistics")
         if tab == "currency_invoices":
             finance_roles.append("currency_controller")
+        if tab == "logistics_expenses":
+            finance_roles.append("logistics")
         if not any(r in user_roles for r in finance_roles):
             return RedirectResponse("/unauthorized", status_code=303)
 
         # Currency invoices tab does not need full deal data fetch
         if tab == "currency_invoices":
             finance_content = _finance_currency_invoices_tab_content(deal_id)
+            modal_elements = _finance_payment_modal(deal_id)
+            return page_layout(f"Quote {quote.get('idn_quote', '')}",
+                quote_header(quote, workflow_status, (customer or {}).get("name")),
+                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                Div(finance_content, id="tab-content", style="margin-top: 20px;"),
+                *modal_elements,
+                session=session
+            )
+
+        # Logistics expenses tab does not need full deal data fetch
+        if tab == "logistics_expenses":
+            finance_content = _finance_logistics_expenses_tab_content(deal_id, user["org_id"], session)
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
@@ -16086,6 +16100,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
                 "icon": "file-text",
                 "href": f"/quotes/{quote_id}?tab=currency_invoices",
                 "roles": ["admin", "currency_controller", "finance"],
+            },
+            {
+                "id": "logistics_expenses",
+                "label": "Расходы логистики",
+                "icon": "dollar-sign",
+                "href": f"/quotes/{quote_id}?tab=logistics_expenses",
+                "roles": ["finance", "logistics", "admin", "top_manager"],
             },
         ])
 
@@ -42273,6 +42294,144 @@ def _finance_currency_invoices_tab_content(deal_id):
     )
 
 
+def _finance_logistics_expenses_tab_content(deal_id: str, org_id: str, session) -> object:
+    """
+    Render 'Расходы логистики' tab.
+    Groups expenses by route segment (logistics stage).
+    Each segment card has an 'Добавить расход' button that loads an inline HTMX form.
+    """
+    from services.logistics_service import get_stages_for_deal, STAGE_NAMES, stage_allows_expenses
+    from services.logistics_expense_service import (
+        get_expenses_for_deal, EXPENSE_SUBTYPE_LABELS, get_deal_logistics_summary
+    )
+
+    stages = get_stages_for_deal(deal_id)
+    all_expenses = get_expenses_for_deal(deal_id)
+
+    # Group expenses by stage_id for O(1) lookup
+    expenses_by_stage: dict = {}
+    for exp in all_expenses:
+        sid = exp.logistics_stage_id
+        if sid not in expenses_by_stage:
+            expenses_by_stage[sid] = []
+        expenses_by_stage[sid].append(exp)
+
+    summary = get_deal_logistics_summary(deal_id)
+    grand_total_usd = summary.get("grand_total_usd", 0)
+
+    # Header summary
+    header = Div(
+        Div(
+            icon("dollar-sign", size=14, color="#64748b"),
+            Span("ФАКТИЧЕСКИЕ РАСХОДЫ НА ЛОГИСТИКУ", style="margin-left: 6px;"),
+            style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
+        ),
+        Div(
+            Span("Итого (USD): ", style="font-size: 13px; color: #64748b;"),
+            Span(f"${float(grand_total_usd):,.2f}", style="font-size: 18px; font-weight: 700; color: #1e293b;"),
+            style="margin-top: 4px;"
+        ),
+        style="margin-bottom: 20px;"
+    )
+
+    # One card per stage
+    stage_sections = []
+    for stage in stages:
+        if not stage_allows_expenses(stage.stage_code):
+            continue  # skip gtd_upload
+        stage_expenses = expenses_by_stage.get(stage.id, [])
+        stage_name = STAGE_NAMES.get(stage.stage_code, stage.stage_code)
+        stage_summary = summary.get(stage.stage_code, {})
+        stage_total_usd = stage_summary.get("total_usd", 0) if isinstance(stage_summary, dict) else 0
+
+        # Expense rows table
+        expense_rows = []
+        for exp in stage_expenses:
+            subtype_label = EXPENSE_SUBTYPE_LABELS.get(exp.expense_subtype, exp.expense_subtype)
+            amount_fmt = f"{float(exp.amount):,.2f} {exp.currency}"
+            date_fmt = exp.expense_date.strftime("%d.%m.%Y") if exp.expense_date else "—"
+            doc_link = ""
+            if exp.document_id:
+                doc_link = A(
+                    icon("paperclip", size=12),
+                    href=f"/documents/{exp.document_id}/download",
+                    style="color: #3b82f6; margin-left: 4px;",
+                    target="_blank"
+                )
+            expense_rows.append(
+                Tr(
+                    Td(date_fmt, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
+                    Td(subtype_label, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
+                    Td(amount_fmt, style="padding: 8px 12px; font-size: 13px; font-weight: 500; text-align: right;"),
+                    Td(exp.description or "—", style="padding: 8px 12px; font-size: 12px; color: #64748b;"),
+                    Td(doc_link, style="padding: 8px 12px; text-align: center;"),
+                    Td(
+                        Button(
+                            icon("trash-2", size=12),
+                            hx_delete=f"/finance/{deal_id}/logistics-expenses/{exp.id}",
+                            hx_target=f"#stage-expenses-{stage.id}",
+                            hx_swap="outerHTML",
+                            hx_confirm="Удалить расход?",
+                            style="background: none; border: none; cursor: pointer; color: #ef4444; padding: 2px 4px;"
+                        ),
+                        style="padding: 8px 12px; text-align: center;"
+                    ),
+                    style="border-bottom: 1px solid #f1f5f9;"
+                )
+            )
+
+        expenses_table = ""
+        if expense_rows:
+            expenses_table = Table(
+                Thead(Tr(
+                    Th("Дата", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                    Th("Тип", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                    Th("Сумма", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: right;"),
+                    Th("Описание", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                    Th("Файл", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: center;"),
+                    Th("", style="padding: 8px 12px; background: #f8fafc;"),
+                )),
+                Tbody(*expense_rows),
+                style="width: 100%; border-collapse: collapse;"
+            )
+
+        stage_total_display = Div(
+            Span(f"Итого по этапу: ", style="font-size: 12px; color: #64748b;"),
+            Span(f"${float(stage_total_usd):,.2f}", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
+            style="margin-bottom: 8px;"
+        ) if stage_expenses else ""
+
+        add_btn = Button(
+            icon("plus", size=12),
+            " Добавить расход",
+            hx_get=f"/finance/{deal_id}/logistics-expenses/new-form?stage_id={stage.id}",
+            hx_target=f"#expense-form-{stage.id}",
+            hx_swap="innerHTML",
+            style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
+        )
+
+        # The section div gets id for HTMX targeting on delete + re-render
+        stage_section = Div(
+            Div(
+                Span(stage_name, style="font-weight: 600; font-size: 14px; color: #1e293b;"),
+                add_btn,
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"
+            ),
+            Div(id=f"expense-form-{stage.id}"),  # HTMX target for inline form
+            stage_total_display,
+            expenses_table if expense_rows else P("Нет расходов", style="color: #94a3b8; font-size: 13px;"),
+            id=f"stage-expenses-{stage.id}",
+            style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0; margin-bottom: 16px;"
+        )
+        stage_sections.append(stage_section)
+
+    return Div(
+        header,
+        *stage_sections,
+        style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; margin-bottom: 24px;"
+    )
+
+
 def _finance_payment_modal(deal_id):
     """Render the payment modal overlay (hidden by default, populated via HTMX)."""
     modal_css = """
@@ -42443,6 +42602,302 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
     result = update_stage_status(stage_id, status, deal_id=deal_id)
 
     return RedirectResponse(f"/finance/{deal_id}?tab=logistics", status_code=303)
+
+
+# ============================================================================
+# Logistics Expenses Routes (Feature [86aftzex6])
+# ============================================================================
+
+@rt("/finance/{deal_id}/logistics-expenses/new-form")
+def get(session, deal_id: str, stage_id: str = ""):
+    """Return an inline form for adding a new logistics expense to a stage."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "logistics", "admin", "top_manager"]):
+        return P("Нет доступа", style="color: #ef4444;")
+
+    from services.logistics_expense_service import EXPENSE_SUBTYPE_LABELS, SUPPORTED_CURRENCIES
+    from datetime import date as _date
+
+    today = _date.today().isoformat()
+
+    subtype_options = [Option(label, value=code, selected=(code == "transport"))
+                       for code, label in EXPENSE_SUBTYPE_LABELS.items()]
+
+    currency_options = [Option(c, value=c, selected=(c == "USD"))
+                        for c in SUPPORTED_CURRENCIES]
+
+    return Div(
+        Form(
+            Div(
+                Div(
+                    Label("Тип расхода", style="font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px;"),
+                    Select(*subtype_options, name="expense_subtype",
+                           style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Сумма", style="font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px;"),
+                    Input(type="number", name="amount", step="0.01", min="0.01", required=True, placeholder="0.00",
+                          style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
+                    style="flex: 1;"
+                ),
+                Div(
+                    Label("Валюта", style="font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px;"),
+                    Select(*currency_options, name="currency",
+                           style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
+                    style="flex: 0 0 100px;"
+                ),
+                style="display: flex; gap: 10px; margin-bottom: 8px;"
+            ),
+            Div(
+                Div(
+                    Label("Дата расхода", style="font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px;"),
+                    Input(type="date", name="expense_date", value=today, required=True,
+                          style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
+                    style="flex: 0 0 160px;"
+                ),
+                Div(
+                    Label("Описание (необязательно)", style="font-size: 12px; font-weight: 500; color: #374151; margin-bottom: 4px;"),
+                    Input(type="text", name="description", placeholder="Описание расхода...", maxlength="500",
+                          style="width: 100%; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; gap: 10px; margin-bottom: 10px;"
+            ),
+            Input(type="hidden", name="stage_id", value=stage_id),
+            Div(
+                Button(
+                    "Сохранить",
+                    type="submit",
+                    style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: 500; cursor: pointer;"
+                ),
+                Button(
+                    "Отмена",
+                    type="button",
+                    onclick=f"document.getElementById('expense-form-{stage_id}').innerHTML = ''",
+                    style="background: #f1f5f9; color: #64748b; border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 16px; font-size: 12px; cursor: pointer; margin-left: 6px;"
+                ),
+                style="display: flex; gap: 6px;"
+            ),
+            hx_post=f"/finance/{deal_id}/logistics-expenses",
+            hx_target=f"#stage-expenses-{stage_id}",
+            hx_swap="outerHTML",
+        ),
+        style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 10px;"
+    )
+
+
+@rt("/finance/{deal_id}/logistics-expenses")
+def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "transport",
+         amount: str = "0", currency: str = "USD", expense_date: str = "",
+         description: str = ""):
+    """Create a new logistics expense record."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "logistics", "admin", "top_manager"]):
+        return P("Нет доступа", style="color: #ef4444;")
+
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    from services.logistics_expense_service import create_expense, sync_plan_fact_for_stage
+    from services.logistics_service import get_stages_for_deal
+    from decimal import Decimal
+    from datetime import date as _date
+
+    # Verify deal belongs to user's org
+    supabase = get_supabase()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    if not deal_check.data:
+        return P("Сделка не найдена", style="color: #ef4444;")
+
+    # Parse and validate amount
+    try:
+        exp_amount = Decimal(amount)
+    except Exception:
+        exp_amount = Decimal("0")
+
+    if exp_amount <= 0:
+        return P("Сумма должна быть больше нуля", style="color: #ef4444; font-size: 13px; padding: 8px;")
+
+    # Parse date
+    try:
+        exp_date = _date.fromisoformat(expense_date) if expense_date else _date.today()
+    except Exception:
+        exp_date = _date.today()
+
+    # Create the expense
+    created = create_expense(
+        deal_id=deal_id,
+        logistics_stage_id=stage_id,
+        organization_id=org_id,
+        expense_subtype=expense_subtype,
+        amount=exp_amount,
+        currency=currency,
+        expense_date=exp_date,
+        description=description if description else None,
+        created_by=user.get("id"),
+    )
+
+    # Sync plan-fact for this stage
+    if created:
+        # Find stage code for sync
+        stages = get_stages_for_deal(deal_id)
+        for s in stages:
+            if s.id == stage_id:
+                sync_plan_fact_for_stage(deal_id, stage_id, s.stage_code, org_id)
+                break
+
+    # Re-render the stage section
+    return _finance_logistics_expenses_stage_section(deal_id, stage_id, org_id)
+
+
+@rt("/finance/{deal_id}/logistics-expenses/{expense_id}")
+def delete(session, deal_id: str, expense_id: str):
+    """Delete a logistics expense record."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["finance", "logistics", "admin", "top_manager"]):
+        return P("Нет доступа", style="color: #ef4444;")
+
+    user = session["user"]
+    org_id = user.get("org_id", "")
+
+    from services.logistics_expense_service import get_expense, delete_expense, sync_plan_fact_for_stage
+    from services.logistics_service import get_stages_for_deal
+
+    # Get expense and verify org ownership (IDOR prevention)
+    expense = get_expense(expense_id)
+    if not expense:
+        return P("Расход не найден", style="color: #ef4444;")
+    if expense.organization_id != org_id:
+        return P("Нет доступа", style="color: #ef4444;")
+
+    stage_id = expense.logistics_stage_id
+
+    # Delete the expense
+    delete_expense(expense_id)
+
+    # Sync plan-fact for this stage after deletion
+    stages = get_stages_for_deal(deal_id)
+    for s in stages:
+        if s.id == stage_id:
+            sync_plan_fact_for_stage(deal_id, stage_id, s.stage_code, org_id)
+            break
+
+    # Re-render the stage section
+    return _finance_logistics_expenses_stage_section(deal_id, stage_id, org_id)
+
+
+def _finance_logistics_expenses_stage_section(deal_id: str, stage_id: str, org_id: str):
+    """Re-render a single stage section (used after create/delete for HTMX swap)."""
+    from services.logistics_service import get_stages_for_deal, STAGE_NAMES, stage_allows_expenses
+    from services.logistics_expense_service import (
+        get_expenses_for_stage as get_stage_expenses, EXPENSE_SUBTYPE_LABELS, get_deal_logistics_summary
+    )
+
+    # Find the stage
+    stages = get_stages_for_deal(deal_id)
+    target_stage = None
+    for s in stages:
+        if s.id == stage_id:
+            target_stage = s
+            break
+    if not target_stage:
+        return P("Этап не найден", style="color: #ef4444;")
+
+    stage = target_stage
+    stage_expenses = get_stage_expenses(stage_id)
+    stage_name = STAGE_NAMES.get(stage.stage_code, stage.stage_code)
+    summary = get_deal_logistics_summary(deal_id)
+    stage_summary = summary.get(stage.stage_code, {})
+    stage_total_usd = stage_summary.get("total_usd", 0) if isinstance(stage_summary, dict) else 0
+
+    # Expense rows table
+    expense_rows = []
+    for exp in stage_expenses:
+        subtype_label = EXPENSE_SUBTYPE_LABELS.get(exp.expense_subtype, exp.expense_subtype)
+        amount_fmt = f"{float(exp.amount):,.2f} {exp.currency}"
+        date_fmt = exp.expense_date.strftime("%d.%m.%Y") if exp.expense_date else "—"
+        doc_link = ""
+        if exp.document_id:
+            doc_link = A(
+                icon("paperclip", size=12),
+                href=f"/documents/{exp.document_id}/download",
+                style="color: #3b82f6; margin-left: 4px;",
+                target="_blank"
+            )
+        expense_rows.append(
+            Tr(
+                Td(date_fmt, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
+                Td(subtype_label, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
+                Td(amount_fmt, style="padding: 8px 12px; font-size: 13px; font-weight: 500; text-align: right;"),
+                Td(exp.description or "—", style="padding: 8px 12px; font-size: 12px; color: #64748b;"),
+                Td(doc_link, style="padding: 8px 12px; text-align: center;"),
+                Td(
+                    Button(
+                        icon("trash-2", size=12),
+                        hx_delete=f"/finance/{deal_id}/logistics-expenses/{exp.id}",
+                        hx_target=f"#stage-expenses-{stage.id}",
+                        hx_swap="outerHTML",
+                        hx_confirm="Удалить расход?",
+                        style="background: none; border: none; cursor: pointer; color: #ef4444; padding: 2px 4px;"
+                    ),
+                    style="padding: 8px 12px; text-align: center;"
+                ),
+                style="border-bottom: 1px solid #f1f5f9;"
+            )
+        )
+
+    expenses_table = ""
+    if expense_rows:
+        expenses_table = Table(
+            Thead(Tr(
+                Th("Дата", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                Th("Тип", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                Th("Сумма", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: right;"),
+                Th("Описание", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: left;"),
+                Th("Файл", style="padding: 8px 12px; font-size: 11px; color: #64748b; font-weight: 600; text-transform: uppercase; background: #f8fafc; text-align: center;"),
+                Th("", style="padding: 8px 12px; background: #f8fafc;"),
+            )),
+            Tbody(*expense_rows),
+            style="width: 100%; border-collapse: collapse;"
+        )
+
+    stage_total_display = Div(
+        Span(f"Итого по этапу: ", style="font-size: 12px; color: #64748b;"),
+        Span(f"${float(stage_total_usd):,.2f}", style="font-size: 14px; font-weight: 600; color: #1e293b;"),
+        style="margin-bottom: 8px;"
+    ) if stage_expenses else ""
+
+    add_btn = Button(
+        icon("plus", size=12),
+        " Добавить расход",
+        hx_get=f"/finance/{deal_id}/logistics-expenses/new-form?stage_id={stage.id}",
+        hx_target=f"#expense-form-{stage.id}",
+        hx_swap="innerHTML",
+        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
+    )
+
+    return Div(
+        Div(
+            Span(stage_name, style="font-weight: 600; font-size: 14px; color: #1e293b;"),
+            add_btn,
+            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"
+        ),
+        Div(id=f"expense-form-{stage.id}"),
+        stage_total_display,
+        expenses_table if expense_rows else P("Нет расходов", style="color: #94a3b8; font-size: 13px;"),
+        id=f"stage-expenses-{stage.id}",
+        style="background: white; border-radius: 10px; padding: 16px; border: 1px solid #e2e8f0; margin-bottom: 16px;"
+    )
 
 
 @rt("/finance/{deal_id}/generate-currency-invoices")
