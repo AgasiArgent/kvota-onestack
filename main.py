@@ -93,6 +93,13 @@ from calculation_models import (
 # Import currency service for multi-currency logistics
 from services.currency_service import convert_to_usd
 
+# Import customs declaration service for GTD XML import
+from services.customs_declaration_service import (
+    parse_gtd_xml, save_declaration, list_declarations,
+    get_declaration_items, match_items_to_deals,
+    GTDParseResult, GTDItem
+)
+
 # Import CBR rates service for exchange rates on Svodka tab
 from services.cbr_rates_service import get_usd_rub_rate
 
@@ -2763,6 +2770,10 @@ def sidebar(session, current_path: str = ""):
     # Suppliers - for procurement
     if is_admin or "procurement" in roles:
         registries_items.append({"icon": "building-2", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
+
+    # Customs declarations registry - for customs, finance, admin
+    if is_admin or any(r in roles for r in ["customs", "finance"]):
+        registries_items.append({"icon": "file-text", "label": "Таможенные декларации", "href": "/customs/declarations", "roles": ["customs", "finance", "admin"]})
 
     # Calls journal - for sales and admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager", "top_manager"]):
@@ -21754,6 +21765,491 @@ def post(quote_id: str, session, comment: str = ""):
             A("← Назад", href=f"/customs/{quote_id}/return-to-control"),
             session=session
         )
+
+
+# ============================================================================
+# CUSTOMS DECLARATIONS (GTD) - XML IMPORT & REGISTRY
+# Feature [86aftzmne]: GTD XML import + customs payments in plan-fact
+# ============================================================================
+
+@rt("/customs/declarations")
+def get(session, uploaded: str = "", matched: str = ""):
+    """Registry of all uploaded GTD customs declarations with HTMX-expandable item rows."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    declarations = list_declarations(org_id)
+
+    th = "padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;background:#f8fafc;border-bottom:2px solid #e2e8f0;"
+    td_base = "padding:10px 14px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;"
+
+    rows = []
+    for d in declarations:
+        decl_id = d["id"]
+        item_count = d.get("item_count", 0)
+        matched_count = d.get("matched_count", 0)
+        match_badge = (
+            Span(f"{matched_count}/{item_count} совпад.", style="background:#d1fae5;color:#059669;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;")
+            if matched_count > 0
+            else Span("Нет совпадений", style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px;")
+        )
+
+        decl_date = d.get("declaration_date") or "—"
+        rows.append(Tr(
+            Td(
+                Span("▶", id=f"arrow-{decl_id}", style="margin-right:6px;font-size:10px;color:#94a3b8;transition:transform 0.2s;"),
+                A(d.get("regnum", "—"), href="#",
+                  onclick=f"toggleGTDItems('{decl_id}'); return false;",
+                  style="color:#3b82f6;text-decoration:none;font-weight:500;"),
+                style=td_base
+            ),
+            Td(str(decl_date)[:10], style=td_base),
+            Td((d.get("sender_name") or "—")[:40], style=td_base),
+            Td(d.get("internal_ref") or "—", style=td_base),
+            Td(f"{float(d.get('total_customs_value_rub') or 0):,.0f}", style=f"{td_base} text-align:right;"),
+            Td(f"{float(d.get('total_duty_rub') or 0):,.0f}", style=f"{td_base} text-align:right;"),
+            Td(f"{float(d.get('total_fee_rub') or 0):,.0f}", style=f"{td_base} text-align:right;"),
+            Td(str(item_count), style=f"{td_base} text-align:center;"),
+            Td(match_badge, style=td_base),
+            style="cursor:pointer;",
+            onclick=f"toggleGTDItems('{decl_id}')"
+        ))
+        # Expandable items row (collapsed by default, lazy-loaded via HTMX)
+        rows.append(Tr(
+            Td(
+                Div(id=f"gtd-items-{decl_id}",
+                    hx_get=f"/customs/declarations/{decl_id}/items",
+                    hx_trigger="load-items",
+                    hx_swap="innerHTML",
+                    style="display:none;"),
+                colspan="9", style="padding:0;border-bottom:1px solid #e2e8f0;"
+            ),
+            id=f"gtd-row-{decl_id}",
+            style="display:none;"
+        ))
+
+    toggle_js = Script("""
+        function toggleGTDItems(declId) {
+            var row = document.getElementById('gtd-row-' + declId);
+            var div = document.getElementById('gtd-items-' + declId);
+            var arrow = document.getElementById('arrow-' + declId);
+            if (!row) return;
+            if (row.style.display === 'none' || row.style.display === '') {
+                row.style.display = 'table-row';
+                div.style.display = 'block';
+                if (arrow) arrow.style.transform = 'rotate(90deg)';
+                // Trigger HTMX load on first expand
+                if (div && div.innerHTML.trim() === '') {
+                    htmx.trigger(div, 'load-items');
+                }
+            } else {
+                row.style.display = 'none';
+                div.style.display = 'none';
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
+            }
+        }
+    """)
+
+    success_banner = None
+    if uploaded:
+        success_banner = Div(
+            f"Декларация {uploaded} успешно загружена. Совпадений с позициями сделок: {matched}.",
+            style="background:#d1fae5;border-left:4px solid #10b981;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:14px;"
+        )
+
+    return page_layout(
+        "Реестр таможенных деклараций",
+        success_banner,
+        Div(
+            Div(
+                icon("file-text", size=24, color="#8b5cf6"),
+                Span("Таможенные декларации (ДТ)", style="font-size:22px;font-weight:600;color:#1e293b;margin-left:10px;"),
+                Span(str(len(declarations)), style="background:#ede9fe;color:#7c3aed;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px;margin-left:12px;"),
+                style="display:flex;align-items:center;flex:1;"
+            ),
+            btn_link("Загрузить ДТ", href="/customs/declarations/upload", variant="primary", icon_name="upload"),
+            style="display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#fafbfc 0%,#f4f5f7 100%);border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;"
+        ),
+        Div(
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Номер ДТ", style=th), Th("Дата", style=th),
+                        Th("Отправитель", style=th), Th("Внутр. ссылка", style=th),
+                        Th("Там. стоимость, руб.", style=f"{th} text-align:right;"),
+                        Th("Пошлина, руб.", style=f"{th} text-align:right;"),
+                        Th("Сбор, руб.", style=f"{th} text-align:right;"),
+                        Th("Позиций", style=f"{th} text-align:center;"),
+                        Th("Совпадения", style=th),
+                    )),
+                    Tbody(*rows) if rows else Tbody(
+                        Tr(Td("Декларации ещё не загружены", colspan="9",
+                               style="text-align:center;padding:40px;color:#94a3b8;"))
+                    ),
+                    style="width:100%;border-collapse:collapse;"
+                ),
+                style="overflow-x:auto;"
+            ),
+            toggle_js,
+            style="background:white;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04);border:1px solid #e2e8f0;"
+        ),
+        session=session,
+        current_path="/customs/declarations"
+    )
+
+
+@rt("/customs/declarations/upload")
+def get(session):
+    """GTD XML upload page - file selector form."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    return page_layout(
+        "Загрузка ДТ",
+        Div(
+            Div(
+                icon("file-text", size=24, color="#8b5cf6"),
+                Span("Загрузка таможенной декларации (ДТ)", style="font-size:22px;font-weight:600;color:#1e293b;margin-left:10px;"),
+                style="display:flex;align-items:center;margin-bottom:8px;"
+            ),
+            P("Загрузите XML-файл в формате AltaGTD (кодировка windows-1251)", style="color:#64748b;font-size:14px;margin:0;"),
+            style="background:linear-gradient(135deg,#fafbfc 0%,#f4f5f7 100%);border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04);"
+        ),
+        Div(
+            Form(
+                Div(
+                    Label("XML-файл декларации (.xml)", style="display:block;font-size:13px;font-weight:500;color:#374151;margin-bottom:6px;"),
+                    Input(type="file", name="gtd_file", accept=".xml", required=True,
+                          style="width:100%;padding:10px;border:2px dashed #d1d5db;border-radius:8px;font-size:14px;cursor:pointer;"),
+                    style="margin-bottom:16px;"
+                ),
+                Div(
+                    btn("Загрузить и проверить", variant="primary", icon_name="upload", type="submit"),
+                    btn_link("Отмена", href="/customs/declarations", variant="secondary", icon_name="arrow-left"),
+                    style="display:flex;gap:12px;align-items:center;"
+                ),
+                action="/customs/declarations/upload",
+                method="POST",
+                enctype="multipart/form-data",
+            ),
+            style="background:white;border-radius:12px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,0.04);border:1px solid #e2e8f0;"
+        ),
+        session=session,
+        current_path="/customs/declarations"
+    )
+
+
+@rt("/customs/declarations/upload")
+async def post(session, request):
+    """Parse uploaded GTD XML, write to temp file, redirect to preview."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    form = await request.form()
+    gtd_file = form.get("gtd_file")
+
+    if not gtd_file or not hasattr(gtd_file, 'filename') or not gtd_file.filename:
+        return page_layout("Ошибка",
+            Div("Файл не выбран.", style="background:#fee2e2;border-left:4px solid #dc2626;border-radius:8px;padding:16px;"),
+            btn_link("Назад", href="/customs/declarations/upload", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    xml_bytes = await gtd_file.read()
+
+    if not xml_bytes:
+        return page_layout("Ошибка",
+            Div("Файл пустой.", style="background:#fee2e2;border-left:4px solid #dc2626;border-radius:8px;padding:16px;"),
+            btn_link("Назад", href="/customs/declarations/upload", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Write to temp file for preview (avoid session cookie 4KB limit)
+    user = session["user"]
+    user_id = user["id"]
+    import uuid as _uuid
+    tmp_filename = f"/tmp/gtd_{user_id}_{_uuid.uuid4().hex}.xml"
+    with open(tmp_filename, "wb") as f:
+        f.write(xml_bytes)
+
+    # Quick validation parse
+    result = parse_gtd_xml(tmp_filename)
+
+    if result.errors and not result.regnum:
+        # Fatal parsing error - clean up temp file
+        try:
+            os.unlink(tmp_filename)
+        except Exception:
+            pass
+        return page_layout("Ошибка парсинга",
+            Div(
+                P("Не удалось прочитать XML-файл:"),
+                *[P(f"* {e}", style="color:#dc2626;font-size:13px;") for e in result.errors],
+                style="background:#fee2e2;border-left:4px solid #dc2626;border-radius:8px;padding:16px;"
+            ),
+            btn_link("Назад", href="/customs/declarations/upload", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Store temp file path in session (small string, fits in cookie)
+    session["pending_gtd_tmp_file"] = tmp_filename
+    session["pending_gtd_filename"] = gtd_file.filename
+
+    return RedirectResponse("/customs/declarations/upload/preview", status_code=303)
+
+
+@rt("/customs/declarations/upload/preview")
+def get(session):
+    """Preview parsed GTD data before saving to database."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    tmp_file = session.get("pending_gtd_tmp_file")
+    if not tmp_file:
+        return RedirectResponse("/customs/declarations/upload", status_code=303)
+
+    # Check file still exists
+    if not os.path.exists(tmp_file):
+        session.pop("pending_gtd_tmp_file", None)
+        session.pop("pending_gtd_filename", None)
+        return RedirectResponse("/customs/declarations/upload", status_code=303)
+
+    result = parse_gtd_xml(tmp_file)
+
+    th = "padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;background:#f8fafc;border-bottom:1px solid #e2e8f0;"
+    td = "padding:8px 12px;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;"
+
+    items_rows = []
+    for item in result.items:
+        desc = item.description or ""
+        items_rows.append(
+            Tr(
+                Td(item.hs_code or "—", style=td),
+                Td(item.sku or "—", style=td),
+                Td(desc[:60] + ("..." if len(desc) > 60 else ""), style=td),
+                Td(item.brand or "—", style=td),
+                Td(f"{int(item.quantity)} {item.unit or ''}", style=td),
+                Td(f"{float(item.invoice_cost):,.2f} {result.currency or ''}", style=td),
+                Td(f"{float(item.customs_value_rub):,.2f}", style=td),
+                Td(f"{float(item.duty_rub):,.2f}", style=td),
+                Td(f"{float(item.fee_rub):,.2f}", style=td),
+                Td(f"{float(item.vat_rub):,.2f}", style=td),
+            )
+        )
+
+    # Warnings section
+    warnings = None
+    if result.errors:
+        warnings = Div(
+            *[Div(f"Предупреждение: {e}", style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:6px;padding:10px 14px;margin-bottom:8px;font-size:13px;")
+              for e in result.errors],
+        )
+
+    return page_layout(
+        "Предпросмотр ДТ",
+        # Header summary card
+        Div(
+            Div(H3(f"ДТ No {result.regnum}", style="margin:0;font-size:18px;font-weight:700;"),
+                P(f"Дата: {result.declaration_date} | Внутр. ссылка: {result.internal_ref or '—'}", style="color:#64748b;font-size:13px;margin:4px 0 0 0;"),
+                style="flex:1;"),
+            Div(
+                P(f"Отправитель: {result.sender_name} ({result.sender_country})", style="font-size:13px;margin:0 0 4px 0;"),
+                P(f"Получатель: {result.receiver_name} (ИНН: {result.receiver_inn})", style="font-size:13px;margin:0 0 4px 0;"),
+                P(f"Валюта: {result.currency} | Курс: {result.exchange_rate}", style="font-size:13px;margin:0;"),
+                style="flex:1;"
+            ),
+            Div(
+                P(f"Там. стоимость: {float(result.total_customs_value_rub):,.2f} руб.", style="font-size:13px;font-weight:600;margin:0 0 4px 0;"),
+                P(f"Сбор (1010): {float(result.total_fee_rub):,.2f} руб.", style="font-size:13px;margin:0 0 4px 0;"),
+                P(f"Пошлина (2010): {float(result.total_duty_rub):,.2f} руб.", style="font-size:13px;margin:0 0 4px 0;"),
+                P(f"НДС (5010): {float(result.total_vat_rub):,.2f} руб.", style="font-size:13px;margin:0;"),
+                style="flex:1;"
+            ),
+            style="display:flex;gap:24px;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px;"
+        ),
+        # Warnings
+        warnings,
+        # Items table
+        Div(
+            H4(f"Позиции ({len(result.items)} шт.)", style="margin:0 0 12px 0;font-size:15px;font-weight:600;"),
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Код ТН ВЭД", style=th), Th("SKU", style=th), Th("Описание", style=th),
+                        Th("Бренд", style=th), Th("Кол-во", style=th), Th("Ст-ть инвойса", style=th),
+                        Th("Там. ст-ть, руб.", style=th), Th("Пошлина, руб.", style=th),
+                        Th("Сбор, руб.", style=th), Th("НДС, руб.", style=th),
+                    )),
+                    Tbody(*items_rows) if items_rows else Tbody(
+                        Tr(Td("Нет позиций", colspan="10", style="text-align:center;padding:20px;color:#94a3b8;"))
+                    ),
+                    style="width:100%;border-collapse:collapse;"
+                ),
+                style="overflow-x:auto;"
+            ),
+            style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:16px;"
+        ),
+        # Confirm / Cancel buttons
+        Div(
+            Form(
+                btn("Сохранить декларацию", variant="primary", icon_name="save", type="submit"),
+                action="/customs/declarations/upload/confirm",
+                method="POST",
+                style="display:inline;"
+            ),
+            btn_link("Отмена", href="/customs/declarations/upload", variant="secondary", icon_name="x"),
+            style="display:flex;gap:12px;align-items:center;"
+        ),
+        session=session,
+        current_path="/customs/declarations"
+    )
+
+
+@rt("/customs/declarations/upload/confirm")
+def post(session):
+    """Save parsed GTD from temp file to database, then run deal matching."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    org_id = user["org_id"]
+    user_id = user["id"]
+
+    tmp_file = session.get("pending_gtd_tmp_file")
+    if not tmp_file:
+        return RedirectResponse("/customs/declarations/upload", status_code=303)
+
+    if not os.path.exists(tmp_file):
+        session.pop("pending_gtd_tmp_file", None)
+        session.pop("pending_gtd_filename", None)
+        return RedirectResponse("/customs/declarations/upload", status_code=303)
+
+    result = parse_gtd_xml(tmp_file)
+
+    # Read raw XML for storage
+    try:
+        with open(tmp_file, "rb") as f:
+            raw_bytes = f.read()
+        xml_text = raw_bytes.decode("windows-1251", errors="replace")
+    except Exception:
+        xml_text = ""
+
+    try:
+        declaration_id = save_declaration(result, org_id, xml_text, user_id)
+    except Exception as e:
+        error_str = str(e)
+        if "customs_declarations_regnum_organization_id" in error_str or "duplicate" in error_str.lower():
+            return page_layout("Ошибка",
+                Div(f"Декларация {result.regnum} уже загружена.", style="background:#fee2e2;border-left:4px solid #dc2626;border-radius:8px;padding:16px;font-size:14px;"),
+                btn_link("Назад", href="/customs/declarations", variant="secondary", icon_name="arrow-left"),
+                session=session
+            )
+        return page_layout("Ошибка",
+            Div(f"Ошибка сохранения: {error_str}", style="background:#fee2e2;border-left:4px solid #dc2626;border-radius:8px;padding:16px;font-size:14px;"),
+            btn_link("Назад", href="/customs/declarations/upload", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Clean up temp file and session
+    try:
+        os.unlink(tmp_file)
+    except Exception:
+        pass
+    session.pop("pending_gtd_tmp_file", None)
+    session.pop("pending_gtd_filename", None)
+
+    # Run matching (best-effort, non-blocking)
+    try:
+        matched_count = match_items_to_deals(declaration_id, org_id)
+    except Exception as e:
+        print(f"Warning: GTD matching failed (non-fatal): {e}")
+        matched_count = 0
+
+    return RedirectResponse(f"/customs/declarations?uploaded={result.regnum}&matched={matched_count}", status_code=303)
+
+
+@rt("/customs/declarations/{declaration_id}/items")
+def get(session, declaration_id: str):
+    """HTMX partial: return items table for a declaration (lazy-loaded on first expand)."""
+    redirect = require_login(session)
+    if redirect:
+        return Div("Требуется вход", style="color:#ef4444;padding:12px;")
+
+    if not user_has_any_role(session, ["customs", "admin", "finance"]):
+        return Div("Нет доступа", style="color:#ef4444;padding:12px;")
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    items = get_declaration_items(declaration_id, org_id)
+
+    if not items:
+        return Div("Позиции не найдены", style="padding:16px;color:#94a3b8;font-size:13px;")
+
+    sub_th = "padding:6px 10px;font-size:11px;font-weight:600;color:#64748b;background:#f8fafc;border-bottom:1px solid #e2e8f0;text-align:left;"
+    sub_td = "padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f8fafc;"
+
+    rows = []
+    for item in items:
+        match_cell = (
+            Td(A("Сделка", href=f"/finance/{item['deal_id']}", style="color:#3b82f6;font-size:11px;"),
+               style=sub_td)
+            if item.get("deal_id")
+            else Td(Span("—", style="color:#94a3b8;"), style=sub_td)
+        )
+        rows.append(Tr(
+            Td(f"{item.get('block_number', '')}.{item.get('item_number', '')}", style=sub_td),
+            Td(item.get("sku") or "—", style=sub_td),
+            Td((item.get("description") or "")[:50], style=sub_td),
+            Td(item.get("brand") or "—", style=sub_td),
+            Td(item.get("hs_code") or "—", style=sub_td),
+            Td(f"{float(item.get('quantity') or 0):,.2f} {item.get('unit') or ''}", style=sub_td),
+            Td(f"{float(item.get('invoice_cost') or 0):,.2f} {item.get('invoice_currency') or ''}", style=sub_td),
+            Td(f"{float(item.get('customs_value_rub') or 0):,.2f}", style=sub_td),
+            Td(f"{float(item.get('duty_amount_rub') or 0):,.2f}", style=sub_td),
+            Td(f"{float(item.get('fee_amount_rub') or 0):,.2f}", style=sub_td),
+            Td(f"{float(item.get('vat_amount_rub') or 0):,.2f}", style=sub_td),
+            match_cell,
+        ))
+
+    return Div(
+        Table(
+            Thead(Tr(
+                Th("Блок.поз.", style=sub_th), Th("SKU", style=sub_th),
+                Th("Описание", style=sub_th), Th("Бренд", style=sub_th),
+                Th("Код ТН ВЭД", style=sub_th), Th("Кол-во", style=sub_th),
+                Th("Ст-ть инвойса", style=sub_th), Th("Там. ст-ть, руб.", style=sub_th),
+                Th("Пошлина, руб.", style=sub_th), Th("Сбор, руб.", style=sub_th),
+                Th("НДС, руб.", style=sub_th), Th("Сделка", style=sub_th),
+            )),
+            Tbody(*rows),
+            style="width:100%;border-collapse:collapse;"
+        ),
+        style="padding:0 0 8px 0;overflow-x:auto;background:#fafbff;"
+    )
 
 
 # ============================================================================
