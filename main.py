@@ -2764,6 +2764,10 @@ def sidebar(session, current_path: str = ""):
     if is_admin or "procurement" in roles:
         registries_items.append({"icon": "building-2", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
+    # Calls journal - for sales and admin
+    if is_admin or any(r in roles for r in ["sales", "sales_manager", "top_manager"]):
+        registries_items.append({"icon": "phone", "label": "Журнал звонков", "href": "/calls", "roles": ["sales", "sales_manager", "top_manager", "admin"]})
+
     # Company registries - for admin (not training_manager)
     if is_real_admin:
         registries_items.append({"icon": "building", "label": "Юрлица", "href": "/companies", "roles": ["admin"]})
@@ -36196,26 +36200,32 @@ def get(customer_id: str, session, request, tab: str = "general"):
         )
 
     elif tab == "calls":
-        # Calls tab - placeholder
+        from services.call_service import get_calls_for_customer
+
+        calls = get_calls_for_customer(customer_id)
+
         tab_content = Div(
+            # Add call button + modal container
             Div(
-                icon("phone", size=48),
-                H3("Звонки", style="margin: 1rem 0 0.5rem; color: #e2e8f0;"),
-                P("Функционал находится в разработке", style="color: #64748b;"),
-                cls="flex flex-col items-center justify-center",
-                style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem; text-align: center; color: #94a3b8;"
+                btn("Внести звонок", variant="primary", icon_name="phone",
+                    hx_get=f"/customers/{customer_id}/calls/new-form",
+                    hx_target="#call-modal-container",
+                    hx_swap="innerHTML"),
+                Div(id="call-modal-container"),
+                style="margin-bottom:16px;"
             ),
-            cls="card",
-            style="background: linear-gradient(135deg, #2d2d44 0%, #1e1e2f 100%); border-radius: 0.75rem;"
+            # Call history list - reuse shared renderer
+            _render_calls_list(customer_id, calls),
+            style="padding:16px 0;"
         )
 
     elif tab == "meetings":
-        # Meetings tab - placeholder
+        # Meetings tab - redirects to calls tab
         tab_content = Div(
             Div(
                 icon("calendar", size=48),
                 H3("Встречи", style="margin: 1rem 0 0.5rem; color: #e2e8f0;"),
-                P("Функционал находится в разработке", style="color: #64748b;"),
+                P("Запланированные звонки смотрите во вкладке Звонки", style="color: #64748b;"),
                 cls="flex flex-col items-center justify-center",
                 style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem; text-align: center; color: #94a3b8;"
             ),
@@ -36265,6 +36275,410 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
         session=session
     )
+
+
+# ============================================================================
+# CALLS JOURNAL — Customer-scoped HTMX endpoints
+# ============================================================================
+
+def _render_calls_list(customer_id: str, calls: list) -> object:
+    """Render the #calls-list div fragment for HTMX swap."""
+    from services.call_service import CALL_TYPE_LABELS, CALL_CATEGORY_LABELS
+
+    rows = []
+    for c in calls:
+        type_label = CALL_TYPE_LABELS.get(c.call_type, c.call_type)
+        cat_label = CALL_CATEGORY_LABELS.get(c.call_category or "", "")
+
+        date_str = "—"
+        if c.call_type == "scheduled" and c.scheduled_date:
+            date_str = c.scheduled_date.strftime("%d.%m.%Y %H:%M")
+        elif c.created_at:
+            date_str = c.created_at.strftime("%d.%m.%Y %H:%M")
+
+        type_color = "#3b82f6" if c.call_type == "scheduled" else "#10b981"
+        type_bg = "#dbeafe" if c.call_type == "scheduled" else "#d1fae5"
+        type_badge = Span(type_label, style=f"background:{type_bg};color:{type_color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;")
+
+        cat_colors = {"cold": ("#6b7280", "#f1f5f9"), "warm": ("#f59e0b", "#fef3c7"), "incoming": ("#8b5cf6", "#ede9fe")}
+        c_fg, c_bg = cat_colors.get(c.call_category or "", ("#6b7280", "#f1f5f9"))
+        cat_badge = Span(cat_label, style=f"background:{c_bg};color:{c_fg};padding:2px 8px;border-radius:4px;font-size:11px;") if cat_label else ""
+
+        rows.append(Div(
+            Div(
+                Div(type_badge, cat_badge, style="display:flex;gap:6px;align-items:center;"),
+                Div(
+                    Button(icon("edit-2", size=14),
+                        hx_get=f"/customers/{customer_id}/calls/{c.id}/edit-form",
+                        hx_target="#call-modal-container",
+                        hx_swap="innerHTML",
+                        style="background:none;border:none;cursor:pointer;color:#64748b;padding:4px;"),
+                    Button(icon("trash-2", size=14),
+                        hx_delete=f"/customers/{customer_id}/calls/{c.id}",
+                        hx_target="#calls-list",
+                        hx_swap="outerHTML",
+                        hx_confirm="Удалить запись о звонке?",
+                        style="background:none;border:none;cursor:pointer;color:#ef4444;padding:4px;"),
+                    style="display:flex;gap:2px;"
+                ),
+                style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"
+            ),
+            Div(
+                Span(c.contact_name or "Не указан контакт", style="color:#64748b;font-size:12px;"),
+                Span(" · ", style="color:#cbd5e1;"),
+                Span(c.user_name or "—", style="color:#64748b;font-size:12px;"),
+                Span(" · ", style="color:#cbd5e1;"),
+                Span(date_str, style="color:#64748b;font-size:12px;"),
+            ),
+            P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:13px;color:#374151;"),
+            style="padding:12px 0;border-bottom:1px solid #e2e8f0;"
+        ))
+
+    return Div(
+        *rows if rows else [
+            Div(icon("phone-off", size=32, color="#cbd5e1"),
+                P("Звонков пока нет", style="color:#64748b;margin-top:8px;"),
+                style="text-align:center;padding:2rem;")
+        ],
+        id="calls-list",
+        style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:0 16px;"
+    )
+
+
+@rt("/customers/{customer_id}/calls/new-form")
+def get(session, customer_id: str):
+    """HTMX partial - 'Внести звонок' modal form."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return Div(P("Доступ запрещён"), style="color:red;")
+
+    supabase = get_supabase()
+    # Fetch contacts for this customer
+    try:
+        contacts_resp = supabase.table("customer_contacts") \
+            .select("id, name, position") \
+            .eq("customer_id", customer_id) \
+            .order("name") \
+            .execute()
+        contacts = contacts_resp.data or []
+    except Exception:
+        contacts = []
+
+    contact_options = [Option("Не указан", value="")] + [
+        Option(f"{c['name']}" + (f" ({c['position']})" if c.get('position') else ""), value=c['id'])
+        for c in contacts
+    ]
+
+    input_style = "width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"
+    select_style = "width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;"
+
+    form = Div(
+        Div(
+            Div(
+                H3("Внести звонок", style="margin:0;font-size:16px;font-weight:600;"),
+                Button("✕",
+                    onclick="document.getElementById('call-modal-container').innerHTML=''",
+                    style="background:none;border:none;font-size:1.2rem;cursor:pointer;padding:4px;"),
+                style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"
+            ),
+            Form(
+                # Type selector
+                Div(
+                    Label("Тип *", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(
+                        Option("Звонок", value="call", selected=True),
+                        Option("Запланировать звонок", value="scheduled"),
+                        name="call_type",
+                        id="call-type-select",
+                        style=select_style,
+                        onchange="document.getElementById('scheduled-date-row').style.display = this.value==='scheduled' ? 'block' : 'none';"
+                    ),
+                    style="margin-bottom:12px;"
+                ),
+                # Scheduled date (hidden initially)
+                Div(
+                    Label("Дата и время звонка *", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Input(name="scheduled_date", type="datetime-local", style=input_style),
+                    id="scheduled-date-row",
+                    style="margin-bottom:12px;display:none;"
+                ),
+                # Contact person
+                Div(
+                    Label("Контактное лицо", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(*contact_options, name="contact_person_id", style=select_style),
+                    Small(
+                        A("+ Добавить контакт", href=f"/customers/{customer_id}/contacts/new",
+                          style="color:#6366f1;font-size:12px;"),
+                    ),
+                    style="margin-bottom:12px;"
+                ),
+                # Category
+                Div(
+                    Label("Категория звонка", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(
+                        Option("Не указана", value=""),
+                        Option("Холодный", value="cold"),
+                        Option("Тёплый", value="warm"),
+                        Option("Входящий", value="incoming"),
+                        name="call_category",
+                        style=select_style,
+                    ),
+                    style="margin-bottom:12px;"
+                ),
+                # Comment
+                Div(
+                    Label("Комментарий / Суть звонка", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(name="comment", rows="3", placeholder="О чём был звонок...", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:12px;"
+                ),
+                # Customer needs
+                Div(
+                    Label("Потребление клиента / Зона ответственности контакта", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(name="customer_needs", rows="2", placeholder="Что интересует клиента...", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:12px;"
+                ),
+                # Meeting notes
+                Div(
+                    Label("Назначение встречи", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(name="meeting_notes", rows="2", placeholder="Договорённость о встрече...", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:16px;"
+                ),
+                Div(
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                    btn("Отмена", variant="ghost", type="button",
+                        onclick="document.getElementById('call-modal-container').innerHTML=''"),
+                    style="display:flex;gap:8px;"
+                ),
+                hx_post=f"/customers/{customer_id}/calls",
+                hx_target="#calls-list",
+                hx_swap="outerHTML",
+            ),
+            style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;"
+        ),
+        id="call-modal-overlay",
+        style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;"
+    )
+    return form
+
+
+@rt("/customers/{customer_id}/calls")
+def post(session, customer_id: str,
+         call_type: str = "call", call_category: str = "",
+         scheduled_date: str = "", contact_person_id: str = "",
+         comment: str = "", customer_needs: str = "", meeting_notes: str = ""):
+    """Create a new call record for a customer, return updated calls list."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return P("Доступ запрещён", style="color:red;")
+
+    user = session["user"]
+    user_id = user.get("id")
+    org_id = user.get("org_id")
+
+    from services.call_service import create_call, get_calls_for_customer
+
+    result = create_call(
+        organization_id=org_id,
+        customer_id=customer_id,
+        user_id=user_id,
+        call_type=call_type,
+        call_category=call_category or None,
+        scheduled_date=scheduled_date or None,
+        comment=comment or None,
+        customer_needs=customer_needs or None,
+        meeting_notes=meeting_notes or None,
+        contact_person_id=contact_person_id or None,
+    )
+
+    if result is None:
+        return P("Ошибка при сохранении звонка", style="color:red;")
+
+    # Return fresh calls list (replaces #calls-list)
+    calls = get_calls_for_customer(customer_id)
+    return _render_calls_list(customer_id, calls)
+
+
+@rt("/customers/{customer_id}/calls/{call_id}/edit-form")
+def get(session, customer_id: str, call_id: str):
+    """HTMX partial - edit call form."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return Div(P("Доступ запрещён"), style="color:red;")
+
+    from services.call_service import get_call
+    supabase = get_supabase()
+
+    call = get_call(call_id)
+    if not call:
+        return Div(P("Запись не найдена"), style="color:red;")
+
+    # Contacts
+    try:
+        contacts_resp = supabase.table("customer_contacts") \
+            .select("id, name, position") \
+            .eq("customer_id", customer_id) \
+            .order("name") \
+            .execute()
+        contacts = contacts_resp.data or []
+    except Exception:
+        contacts = []
+
+    contact_options = [Option("Не указан", value="")] + [
+        Option(f"{c['name']}" + (f" ({c['position']})" if c.get('position') else ""),
+               value=c['id'],
+               selected=(c['id'] == call.contact_person_id))
+        for c in contacts
+    ]
+
+    # Scheduled date formatted for datetime-local input
+    scheduled_val = ""
+    if call.scheduled_date:
+        scheduled_val = call.scheduled_date.strftime("%Y-%m-%dT%H:%M")
+
+    input_style = "width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;"
+    select_style = "width:100%;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#fff;"
+
+    form = Div(
+        Div(
+            Div(
+                H3("Редактировать звонок", style="margin:0;font-size:16px;font-weight:600;"),
+                Button("✕",
+                    onclick="document.getElementById('call-modal-container').innerHTML=''",
+                    style="background:none;border:none;font-size:1.2rem;cursor:pointer;padding:4px;"),
+                style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"
+            ),
+            Form(
+                Div(
+                    Label("Тип *", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(
+                        Option("Звонок", value="call", selected=(call.call_type == "call")),
+                        Option("Запланировать звонок", value="scheduled", selected=(call.call_type == "scheduled")),
+                        name="call_type",
+                        style=select_style,
+                        onchange="document.getElementById('edit-scheduled-date-row').style.display = this.value==='scheduled' ? 'block' : 'none';"
+                    ),
+                    style="margin-bottom:12px;"
+                ),
+                Div(
+                    Label("Дата и время звонка *", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Input(name="scheduled_date", type="datetime-local", value=scheduled_val, style=input_style),
+                    id="edit-scheduled-date-row",
+                    style=f"margin-bottom:12px;display:{'block' if call.call_type == 'scheduled' else 'none'};"
+                ),
+                Div(
+                    Label("Контактное лицо", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(*contact_options, name="contact_person_id", style=select_style),
+                    style="margin-bottom:12px;"
+                ),
+                Div(
+                    Label("Категория звонка", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Select(
+                        Option("Не указана", value="", selected=(not call.call_category)),
+                        Option("Холодный", value="cold", selected=(call.call_category == "cold")),
+                        Option("Тёплый", value="warm", selected=(call.call_category == "warm")),
+                        Option("Входящий", value="incoming", selected=(call.call_category == "incoming")),
+                        name="call_category",
+                        style=select_style,
+                    ),
+                    style="margin-bottom:12px;"
+                ),
+                Div(
+                    Label("Комментарий / Суть звонка", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(call.comment or "", name="comment", rows="3", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:12px;"
+                ),
+                Div(
+                    Label("Потребление клиента / Зона ответственности контакта", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(call.customer_needs or "", name="customer_needs", rows="2", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:12px;"
+                ),
+                Div(
+                    Label("Назначение встречи", style="display:block;font-size:13px;font-weight:500;margin-bottom:4px;"),
+                    Textarea(call.meeting_notes or "", name="meeting_notes", rows="2", style=f"{input_style} resize:vertical;"),
+                    style="margin-bottom:16px;"
+                ),
+                Div(
+                    btn("Сохранить", variant="primary", icon_name="check", type="submit"),
+                    btn("Отмена", variant="ghost", type="button",
+                        onclick="document.getElementById('call-modal-container').innerHTML=''"),
+                    style="display:flex;gap:8px;"
+                ),
+                hx_post=f"/customers/{customer_id}/calls/{call_id}/edit",
+                hx_target="#calls-list",
+                hx_swap="outerHTML",
+            ),
+            style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:24px;max-width:520px;width:90%;max-height:90vh;overflow-y:auto;"
+        ),
+        style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;"
+    )
+    return form
+
+
+@rt("/customers/{customer_id}/calls/{call_id}/edit")
+def post(session, customer_id: str, call_id: str,
+         call_type: str = "call", call_category: str = "",
+         scheduled_date: str = "", contact_person_id: str = "",
+         comment: str = "", customer_needs: str = "", meeting_notes: str = ""):
+    """Update a call record, return updated calls list."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return P("Доступ запрещён", style="color:red;")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.call_service import get_call, update_call, get_calls_for_customer
+
+    # Verify call belongs to user's organization (service uses service_role key, bypasses RLS)
+    call = get_call(call_id)
+    if not call or call.organization_id != org_id:
+        return P("Запись не найдена", style="color:red;")
+
+    update_call(
+        call_id=call_id,
+        call_type=call_type,
+        call_category=call_category,
+        scheduled_date=scheduled_date,
+        comment=comment,
+        customer_needs=customer_needs,
+        meeting_notes=meeting_notes,
+        contact_person_id=contact_person_id,
+    )
+
+    calls = get_calls_for_customer(customer_id)
+    return _render_calls_list(customer_id, calls)
+
+
+@rt("/customers/{customer_id}/calls/{call_id}")
+def delete(session, customer_id: str, call_id: str):
+    """Delete a call record, return updated calls list."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return P("Доступ запрещён", style="color:red;")
+
+    user = session["user"]
+    org_id = user.get("org_id")
+
+    from services.call_service import get_call, delete_call, get_calls_for_customer
+
+    # Verify call belongs to user's organization (service uses service_role key, bypasses RLS)
+    call = get_call(call_id)
+    if not call or call.organization_id != org_id:
+        return P("Запись не найдена", style="color:red;")
+
+    delete_call(call_id)
+    calls = get_calls_for_customer(customer_id)
+    return _render_calls_list(customer_id, calls)
 
 
 # ============================================================================
@@ -43945,6 +44359,158 @@ def post(session, ci_id: str):
     session["_ci_flash_type"] = "success"
     session["_ci_flash_text"] = "Инвойсы пересозданы"
     return RedirectResponse("/currency-invoices", status_code=303)
+
+
+# ============================================================================
+# CALLS REGISTRY
+# ============================================================================
+
+@rt("/calls")
+def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
+    """Calls journal registry page."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "sales", "sales_manager", "top_manager"]):
+        return page_layout("Access Denied",
+            Div(H1("Доступ запрещён"), P("Требуется роль: admin, sales или top_manager"), cls="card"),
+            session=session
+        )
+
+    user = session["user"]
+    org_id = user.get("org_id")
+    user_id = user.get("id")
+    roles = user.get("roles", [])
+    is_admin_or_top = any(r in roles for r in ["admin", "top_manager"])
+
+    from services.call_service import get_calls_registry, CALL_TYPE_LABELS, CALL_CATEGORY_LABELS
+
+    # Sales-only see only their own calls
+    effective_user_filter = user_filter if is_admin_or_top else user_id
+
+    calls = get_calls_registry(
+        org_id=org_id,
+        q=q,
+        user_id=effective_user_filter,
+        call_type=call_type,
+        limit=300,
+    )
+
+    th_style = "text-align:left;padding:12px 16px;background:#f8fafc;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;border-bottom:1px solid #e2e8f0;"
+    td_style = "padding:12px 16px;font-size:14px;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:top;"
+
+    rows = []
+    for c in calls:
+        type_label = CALL_TYPE_LABELS.get(c.call_type, c.call_type)
+        cat_label = CALL_CATEGORY_LABELS.get(c.call_category or "", "—")
+
+        type_color = "#3b82f6" if c.call_type == "scheduled" else "#10b981"
+        type_bg = "#dbeafe" if c.call_type == "scheduled" else "#d1fae5"
+        type_badge = Span(type_label, style=f"background:{type_bg};color:{type_color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;")
+
+        date_str = "—"
+        if c.call_type == "scheduled" and c.scheduled_date:
+            date_str = c.scheduled_date.strftime("%d.%m.%Y %H:%M")
+        elif c.created_at:
+            date_str = c.created_at.strftime("%d.%m.%Y")
+
+        comment_short = (c.comment or "")[:80] + ("..." if c.comment and len(c.comment) > 80 else "")
+
+        rows.append(Tr(
+            Td(type_badge, style=td_style),
+            Td(date_str, style=td_style),
+            Td(c.user_name or "—", style=td_style),
+            Td(
+                A(c.customer_name or "—",
+                  href=f"/customers/{c.customer_id}?tab=calls",
+                  style="color:#4a4aff;text-decoration:none;")
+                if c.customer_id else Span("—"),
+                style=td_style
+            ),
+            Td(c.contact_name or "—", style=td_style),
+            Td(cat_label, style=td_style),
+            Td(comment_short or "—", style=f"{td_style} color:#64748b;max-width:280px;"),
+        ))
+
+    input_style = "padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#f8fafc;"
+    select_style = "padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#f8fafc;"
+
+    type_options = [
+        Option("Все типы", value="", selected=(call_type == "")),
+        Option("Звонки", value="call", selected=(call_type == "call")),
+        Option("Запланированные", value="scheduled", selected=(call_type == "scheduled")),
+    ]
+
+    scheduled_count = sum(1 for c in calls if c.call_type == "scheduled")
+    call_count = sum(1 for c in calls if c.call_type == "call")
+
+    return page_layout("Журнал звонков",
+        Div(
+            Div(
+                icon("phone", size=24, color="#6366f1"),
+                Span("Журнал звонков", style="font-size:22px;font-weight:600;color:#1e293b;margin-left:10px;"),
+                Span(f"{len(calls)}", style="background:#e0e7ff;color:#4f46e5;font-size:12px;font-weight:600;padding:4px 10px;border-radius:12px;margin-left:12px;"),
+                style="display:flex;align-items:center;"
+            ),
+            style="background:linear-gradient(135deg,#fafbfc 0%,#f4f5f7 100%);border:1px solid #e2e8f0;border-radius:12px;padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.04);"
+        ),
+        # Stats
+        Div(
+            Div(Div(icon("phone", size=20, color="#10b981"), style="margin-bottom:8px;"),
+                Div(str(call_count), style="font-size:28px;font-weight:700;color:#1e293b;"),
+                Div("Звонков", style="font-size:12px;color:#64748b;text-transform:uppercase;"),
+                style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;text-align:center;"),
+            Div(Div(icon("calendar", size=20, color="#6366f1"), style="margin-bottom:8px;"),
+                Div(str(scheduled_count), style="font-size:28px;font-weight:700;color:#6366f1;"),
+                Div("Запланировано", style="font-size:12px;color:#64748b;text-transform:uppercase;"),
+                style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:20px;text-align:center;"),
+            style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px;"
+        ),
+        # Filters
+        Div(
+            Form(
+                Div(icon("search", size=16, color="#64748b"),
+                    Span("ФИЛЬТРЫ", style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;margin-left:8px;"),
+                    style="display:flex;align-items:center;margin-bottom:12px;"),
+                Div(
+                    Input(name="q", value=q, placeholder="Поиск по клиенту, контакту, комментарию...", style=f"{input_style} flex:3;"),
+                    Select(*type_options, name="call_type", style=f"{select_style} flex:1;"),
+                    btn("Поиск", variant="primary", icon_name="search", type="submit"),
+                    btn_link("Сбросить", href="/calls", variant="secondary", icon_name="x"),
+                    style="display:flex;gap:12px;align-items:center;"
+                ),
+                method="get", action="/calls"
+            ),
+            style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px 20px;margin-bottom:20px;"
+        ),
+        # Table
+        Div(
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Тип", style=th_style),
+                        Th("Дата", style=th_style),
+                        Th("МОП", style=th_style),
+                        Th("Клиент", style=th_style),
+                        Th("Контакт", style=th_style),
+                        Th("Категория", style=th_style),
+                        Th("Комментарий", style=th_style),
+                    )),
+                    Tbody(*rows) if rows else Tbody(Tr(Td(
+                        Div(icon("inbox", size=40, color="#cbd5e1"),
+                            Div("Звонков не найдено", style="font-size:16px;font-weight:500;color:#64748b;margin-top:12px;"),
+                            style="text-align:center;padding:40px 20px;"),
+                        colspan="7"
+                    ))),
+                    style="width:100%;border-collapse:collapse;"
+                ),
+                style="overflow-x:auto;"
+            ),
+            style="background:white;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);overflow:hidden;"
+        ),
+        session=session
+    )
 
 
 # ============================================================================
