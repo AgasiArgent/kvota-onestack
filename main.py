@@ -42297,13 +42297,15 @@ def _finance_currency_invoices_tab_content(deal_id):
     )
 
 
-def _logistics_expenses_total_el(grand_total_usd):
+def _logistics_expenses_total_el(grand_total_usd, oob=False):
     """Reusable total element with stable id for OOB swap."""
+    kwargs = {"id": "logistics-expenses-total", "style": "margin-top: 4px;"}
+    if oob:
+        kwargs["hx_swap_oob"] = "true"
     return Div(
         Span("Итого (USD): ", style="font-size: 13px; color: #64748b;"),
         Span(f"${float(grand_total_usd):,.2f}", style="font-size: 18px; font-weight: 700; color: #1e293b;"),
-        id="logistics-expenses-total",
-        style="margin-top: 4px;"
+        **kwargs
     )
 
 
@@ -42785,8 +42787,7 @@ def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "tran
 
     # Re-render the stage section + OOB total header update
     summary = get_deal_logistics_summary(deal_id)
-    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0))
-    total_oob.attrs["hx_swap_oob"] = "true"
+    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0), oob=True)
     return (_finance_logistics_expenses_stage_section(deal_id, stage_id, org_id), total_oob)
 
 
@@ -42828,8 +42829,7 @@ def delete(session, deal_id: str, expense_id: str):
     # Re-render the stage section + OOB total header update
     from services.logistics_expense_service import get_deal_logistics_summary as get_del_summary
     summary = get_del_summary(deal_id)
-    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0))
-    total_oob.attrs["hx_swap_oob"] = "true"
+    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0), oob=True)
     return (_finance_logistics_expenses_stage_section(deal_id, stage_id, org_id), total_oob)
 
 
