@@ -4,11 +4,11 @@
 -- Existing categories: customs_duty (2010), customs_fee (1010)
 -- New category: customs_vat (5010 - VAT from GTD)
 
-INSERT INTO kvota.plan_fact_categories (code, name, description, sort_order)
+INSERT INTO kvota.plan_fact_categories (code, name, is_income, sort_order)
 VALUES (
     'customs_vat',
     'Таможенный НДС',
-    'НДС при импорте (код платежа 5010 из ДТ)',
+    false,
     55  -- After customs_duty (50) and customs_fee
 )
 ON CONFLICT (code) DO NOTHING;
