@@ -23,7 +23,7 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 CALL_TYPE_LABELS = {
     "call": "Звонок",
-    "scheduled": "Запланировать звонок",
+    "scheduled": "Запланировано",
 }
 
 CALL_CATEGORY_LABELS = {

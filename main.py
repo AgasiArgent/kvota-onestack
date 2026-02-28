@@ -36296,8 +36296,8 @@ def _render_calls_list(customer_id: str, calls: list) -> object:
         elif c.created_at:
             date_str = c.created_at.strftime("%d.%m.%Y %H:%M")
 
-        type_color = "#3b82f6" if c.call_type == "scheduled" else "#10b981"
-        type_bg = "#dbeafe" if c.call_type == "scheduled" else "#d1fae5"
+        type_color = "#2563eb" if c.call_type == "scheduled" else "#10b981"
+        type_bg = "#bfdbfe" if c.call_type == "scheduled" else "#d1fae5"
         type_badge = Span(type_label, style=f"background:{type_bg};color:{type_color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;")
 
         cat_colors = {"cold": ("#6b7280", "#f1f5f9"), "warm": ("#f59e0b", "#fef3c7"), "incoming": ("#8b5cf6", "#ede9fe")}
@@ -36497,9 +36497,10 @@ def post(session, customer_id: str,
     if result is None:
         return P("Ошибка при сохранении звонка", style="color:red;")
 
-    # Return fresh calls list (replaces #calls-list)
+    # Return fresh calls list + OOB swap to close modal
     calls = get_calls_for_customer(customer_id)
-    return _render_calls_list(customer_id, calls)
+    return (_render_calls_list(customer_id, calls),
+            Div(id="call-modal-container", hx_swap_oob="true"))
 
 
 @rt("/customers/{customer_id}/calls/{call_id}/edit-form")
@@ -36654,7 +36655,8 @@ def post(session, customer_id: str, call_id: str,
     )
 
     calls = get_calls_for_customer(customer_id)
-    return _render_calls_list(customer_id, calls)
+    return (_render_calls_list(customer_id, calls),
+            Div(id="call-modal-container", hx_swap_oob="true"))
 
 
 @rt("/customers/{customer_id}/calls/{call_id}")
@@ -44405,8 +44407,8 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
         type_label = CALL_TYPE_LABELS.get(c.call_type, c.call_type)
         cat_label = CALL_CATEGORY_LABELS.get(c.call_category or "", "—")
 
-        type_color = "#3b82f6" if c.call_type == "scheduled" else "#10b981"
-        type_bg = "#dbeafe" if c.call_type == "scheduled" else "#d1fae5"
+        type_color = "#2563eb" if c.call_type == "scheduled" else "#10b981"
+        type_bg = "#bfdbfe" if c.call_type == "scheduled" else "#d1fae5"
         type_badge = Span(type_label, style=f"background:{type_bg};color:{type_color};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;")
 
         date_str = "—"
