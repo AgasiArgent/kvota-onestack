@@ -42300,12 +42300,33 @@ def _finance_logistics_expenses_tab_content(deal_id: str, org_id: str, session) 
     Groups expenses by route segment (logistics stage).
     Each segment card has an 'Добавить расход' button that loads an inline HTMX form.
     """
-    from services.logistics_service import get_stages_for_deal, STAGE_NAMES, stage_allows_expenses
+    from services.logistics_service import get_stages_for_deal, STAGE_NAMES, stage_allows_expenses, initialize_logistics_stages
     from services.logistics_expense_service import (
         get_expenses_for_deal, EXPENSE_SUBTYPE_LABELS, get_deal_logistics_summary
     )
 
     stages = get_stages_for_deal(deal_id)
+
+    # Auto-initialize stages if none exist (deals created before auto-init was added)
+    if not stages:
+        user = session.get("user", {})
+        user_id = user.get("id", "")
+        try:
+            stages = initialize_logistics_stages(deal_id, user_id)
+        except Exception:
+            pass
+
+    if not stages:
+        return Div(
+            Div(
+                icon("alert-circle", size=24, color="#f59e0b"),
+                H3("Этапы логистики не созданы", style="margin: 8px 0 4px; color: #1e293b;"),
+                P("Не удалось инициализировать этапы логистики для этой сделки.",
+                  style="color: #64748b; font-size: 13px;"),
+                style="text-align: center; padding: 40px;"
+            ),
+            style="background: white; border-radius: 10px; border: 1px solid #e2e8f0;"
+        )
     all_expenses = get_expenses_for_deal(deal_id)
 
     # Group expenses by stage_id for O(1) lookup
