@@ -8826,6 +8826,9 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         return redirect
 
     user = session["user"]
+    # Respect role impersonation for tab visibility and access control
+    impersonated_role = session.get("impersonated_role")
+    effective_roles = [impersonated_role] if impersonated_role else user.get("roles", [])
     supabase = get_supabase()
 
     # Get quote with customer
@@ -9048,7 +9051,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
     # Render finance tab content if requested
     if tab in ("finance_main", "plan_fact", "logistics_stages", "currency_invoices", "logistics_expenses") and deal:
-        user_roles = user.get("roles", [])
+        user_roles = effective_roles
         # Check role access for finance tabs
         finance_roles = ["finance", "admin", "top_manager"]
         if tab == "logistics_stages":
@@ -9066,7 +9069,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9078,7 +9081,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9101,7 +9104,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, user.get("roles", []), deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9151,7 +9154,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         )
         return page_layout(f"Quote {quote.get('idn_quote', '')}",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
-            quote_detail_tabs(quote_id, "summary", user.get("roles", []), deal=deal),
+            quote_detail_tabs(quote_id, "summary", effective_roles, deal=deal),
             summary_content,
             session=session
         )
@@ -9173,7 +9176,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         quote_header(quote, workflow_status, (customer or {}).get("name")),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "overview", user.get("roles", []), deal=deal),
+        quote_detail_tabs(quote_id, "overview", effective_roles, deal=deal),
 
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
@@ -42294,6 +42297,16 @@ def _finance_currency_invoices_tab_content(deal_id):
     )
 
 
+def _logistics_expenses_total_el(grand_total_usd):
+    """Reusable total element with stable id for OOB swap."""
+    return Div(
+        Span("Итого (USD): ", style="font-size: 13px; color: #64748b;"),
+        Span(f"${float(grand_total_usd):,.2f}", style="font-size: 18px; font-weight: 700; color: #1e293b;"),
+        id="logistics-expenses-total",
+        style="margin-top: 4px;"
+    )
+
+
 def _finance_logistics_expenses_tab_content(deal_id: str, org_id: str, session) -> object:
     """
     Render 'Расходы логистики' tab.
@@ -42347,11 +42360,7 @@ def _finance_logistics_expenses_tab_content(deal_id: str, org_id: str, session) 
             Span("ФАКТИЧЕСКИЕ РАСХОДЫ НА ЛОГИСТИКУ", style="margin-left: 6px;"),
             style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center;"
         ),
-        Div(
-            Span("Итого (USD): ", style="font-size: 13px; color: #64748b;"),
-            Span(f"${float(grand_total_usd):,.2f}", style="font-size: 18px; font-weight: 700; color: #1e293b;"),
-            style="margin-top: 4px;"
-        ),
+        _logistics_expenses_total_el(grand_total_usd),
         style="margin-bottom: 20px;"
     )
 
@@ -42726,7 +42735,7 @@ def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "tran
     user = session["user"]
     org_id = user.get("org_id", "")
 
-    from services.logistics_expense_service import create_expense, sync_plan_fact_for_stage
+    from services.logistics_expense_service import create_expense, sync_plan_fact_for_stage, get_deal_logistics_summary
     from services.logistics_service import get_stages_for_deal
     from decimal import Decimal
     from datetime import date as _date
@@ -42774,8 +42783,11 @@ def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "tran
                 sync_plan_fact_for_stage(deal_id, stage_id, s.stage_code, org_id)
                 break
 
-    # Re-render the stage section
-    return _finance_logistics_expenses_stage_section(deal_id, stage_id, org_id)
+    # Re-render the stage section + OOB total header update
+    summary = get_deal_logistics_summary(deal_id)
+    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0))
+    total_oob.attrs["hx_swap_oob"] = "true"
+    return (_finance_logistics_expenses_stage_section(deal_id, stage_id, org_id), total_oob)
 
 
 @rt("/finance/{deal_id}/logistics-expenses/{expense_id}")
@@ -42813,8 +42825,12 @@ def delete(session, deal_id: str, expense_id: str):
             sync_plan_fact_for_stage(deal_id, stage_id, s.stage_code, org_id)
             break
 
-    # Re-render the stage section
-    return _finance_logistics_expenses_stage_section(deal_id, stage_id, org_id)
+    # Re-render the stage section + OOB total header update
+    from services.logistics_expense_service import get_deal_logistics_summary as get_del_summary
+    summary = get_del_summary(deal_id)
+    total_oob = _logistics_expenses_total_el(summary.get("grand_total_usd", 0))
+    total_oob.attrs["hx_swap_oob"] = "true"
+    return (_finance_logistics_expenses_stage_section(deal_id, stage_id, org_id), total_oob)
 
 
 def _finance_logistics_expenses_stage_section(deal_id: str, stage_id: str, org_id: str):
