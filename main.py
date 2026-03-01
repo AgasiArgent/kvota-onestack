@@ -45737,10 +45737,26 @@ def get(session):
                         Div(
                             Label("Наценка по умолчанию (%)", style=label_style),
                             Input(name="default_markup_pct", type="number",
+                                  id="settings-markup",
                                   value=str(s.get("default_markup_pct", 10)),
-                                  step="0.1", style=input_style),
+                                  step="0.1", min="0", max="500", style=input_style,
+                                  oninput="settingsMarkupToMargin()"),
                             style=form_group_style
                         ),
+                        Div(
+                            Label("Маржа (%)", style=label_style),
+                            Input(type="number",
+                                  id="settings-margin",
+                                  value=str(round(float(s.get("default_markup_pct", 10)) / (100 + float(s.get("default_markup_pct", 10))) * 100, 2)),
+                                  step="0.1", min="0", max="99.9", style=input_style,
+                                  oninput="settingsMarginToMarkup()"),
+                            Small("Рассчитывается автоматически из наценки",
+                                  style="color: #94a3b8; font-size: 12px;"),
+                            style=form_group_style
+                        ),
+                        style=grid_2col_style
+                    ),
+                    Div(
                         Div(
                             Label("Аванс по умолчанию (%)", style=label_style),
                             Input(name="default_advance_pct", type="number",
@@ -45748,9 +45764,6 @@ def get(session):
                                   step="1", style=input_style),
                             style=form_group_style
                         ),
-                        style=grid_2col_style
-                    ),
-                    Div(
                         Div(
                             Label("Срок оплаты (к.д.)", style=label_style),
                             Input(name="default_payment_days", type="number",
@@ -45758,6 +45771,9 @@ def get(session):
                                   step="1", style=input_style),
                             style=form_group_style
                         ),
+                        style=grid_2col_style
+                    ),
+                    Div(
                         Div(
                             Label("Срок поставки по умолчанию (к.д.)", style=label_style),
                             Input(name="default_delivery_days", type="number",
@@ -45811,6 +45827,19 @@ def get(session):
             btn_link("Назад к настройкам", href="/settings", variant="secondary", icon_name="arrow-left"),
             style="margin-top: 8px;"
         ),
+
+        # Markup ↔ Margin bidirectional sync script
+        Script("""
+            function settingsMarkupToMargin() {
+                var m = parseFloat(document.getElementById('settings-markup').value) || 0;
+                document.getElementById('settings-margin').value = (m / (100 + m) * 100).toFixed(2);
+            }
+            function settingsMarginToMarkup() {
+                var mg = parseFloat(document.getElementById('settings-margin').value) || 0;
+                if (mg >= 100) mg = 99.9;
+                document.getElementById('settings-markup').value = (mg / (100 - mg) * 100).toFixed(2);
+            }
+        """),
 
         session=session,
         current_path="/settings/phmb"
@@ -46227,7 +46256,17 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
             Div(
                 Label("Наценка %", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
                 Input(name="phmb_markup_pct", type="number", value=str(markup_pct),
-                      min="0", max="100", step="0.5", style=input_style),
+                      id="quote-markup",
+                      min="0", max="500", step="0.5", style=input_style,
+                      oninput="quoteMarkupToMargin()"),
+            ),
+            Div(
+                Label("Маржа %", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                Input(type="number",
+                      id="quote-margin",
+                      value=str(round(markup_pct / (100 + markup_pct) * 100, 2)),
+                      min="0", max="99.9", step="0.5", style=input_style,
+                      oninput="quoteMarginToMarkup()"),
             ),
             Div(
                 Label("Срок оплаты (к.д.)", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
@@ -46361,6 +46400,17 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
         search_bar,
         items_table,
         footer,
+        Script("""
+            function quoteMarkupToMargin() {
+                var m = parseFloat(document.getElementById('quote-markup').value) || 0;
+                document.getElementById('quote-margin').value = (m / (100 + m) * 100).toFixed(2);
+            }
+            function quoteMarginToMarkup() {
+                var mg = parseFloat(document.getElementById('quote-margin').value) || 0;
+                if (mg >= 100) mg = 99.9;
+                document.getElementById('quote-markup').value = (mg / (100 - mg) * 100).toFixed(2);
+            }
+        """),
     )
 
 
