@@ -45832,11 +45832,14 @@ def get(session):
         Script("""
             function settingsMarkupToMargin() {
                 var m = parseFloat(document.getElementById('settings-markup').value) || 0;
+                if (m < 0) m = 0;
                 document.getElementById('settings-margin').value = (m / (100 + m) * 100).toFixed(2);
             }
             function settingsMarginToMarkup() {
-                var mg = parseFloat(document.getElementById('settings-margin').value) || 0;
-                if (mg >= 100) mg = 99.9;
+                var el = document.getElementById('settings-margin');
+                var mg = parseFloat(el.value) || 0;
+                if (mg >= 99.9) { mg = 99.9; el.value = '99.9'; }
+                if (mg < 0) { mg = 0; el.value = '0'; }
                 document.getElementById('settings-markup').value = (mg / (100 - mg) * 100).toFixed(2);
             }
         """),
@@ -46403,11 +46406,14 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
         Script("""
             function quoteMarkupToMargin() {
                 var m = parseFloat(document.getElementById('quote-markup').value) || 0;
+                if (m < 0) m = 0;
                 document.getElementById('quote-margin').value = (m / (100 + m) * 100).toFixed(2);
             }
             function quoteMarginToMarkup() {
-                var mg = parseFloat(document.getElementById('quote-margin').value) || 0;
-                if (mg >= 100) mg = 99.9;
+                var el = document.getElementById('quote-margin');
+                var mg = parseFloat(el.value) || 0;
+                if (mg >= 99.9) { mg = 99.9; el.value = '99.9'; }
+                if (mg < 0) { mg = 0; el.value = '0'; }
                 document.getElementById('quote-markup').value = (mg / (100 - mg) * 100).toFixed(2);
             }
         """),
