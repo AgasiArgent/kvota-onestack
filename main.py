@@ -2771,6 +2771,10 @@ def sidebar(session, current_path: str = ""):
     if is_admin or "procurement" in roles:
         registries_items.append({"icon": "building-2", "label": "Поставщики", "href": "/suppliers", "roles": ["procurement", "admin"]})
 
+    # PHMB Procurement Queue - for procurement + admin
+    if is_admin or "procurement" in roles:
+        registries_items.append({"icon": "clipboard-list", "label": "Очередь PHMB", "href": "/phmb/procurement", "roles": ["procurement", "admin"]})
+
     # Customs declarations registry - for customs, finance, admin
     if is_admin or any(r in roles for r in ["customs", "finance"]):
         registries_items.append({"icon": "file-text", "label": "Таможенные декларации", "href": "/customs/declarations", "roles": ["customs", "finance", "admin"]})
@@ -45647,6 +45651,10 @@ def get(session):
         .execute()
     discounts = discounts_result.data or []
 
+    # Get brand groups
+    from services.phmb_price_service import get_brand_groups
+    brand_groups = get_brand_groups(org_id)
+
     # Get price list stats
     price_count_result = sb.table("phmb_price_list") \
         .select("id", count="exact") \
@@ -45819,6 +45827,90 @@ def get(session):
                 ),
                 style="overflow-x: auto;"
             ),
+            style=form_card_style
+        ),
+
+        # Brand groups section
+        Div(
+            Div(icon("layers", size=14), " Группы брендов (очередь закупок)", style=section_header_style),
+            P("Группы используются для фильтрации очереди закупок PHMB. Позиции распределяются по группам автоматически.",
+              style="color: #64748b; font-size: 13px; margin-bottom: 16px;"),
+
+            # Brand groups table
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Название", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                        Th("Бренды", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                        Th("Тип", style="padding: 10px 14px; text-align: center; font-size: 12px; color: #64748b; font-weight: 600;"),
+                        Th("", style="width: 40px;"),
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(bg.get("name", ""), style="padding: 10px 14px; font-size: 14px; font-weight: 500;"),
+                            Td(", ".join(bg.get("brand_patterns", [])) or "—",
+                               style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
+                            Td(
+                                Span("Все остальные", style="background: #dbeafe; color: #2563eb; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+                                if bg.get("is_catchall") else
+                                Span("По брендам", style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 4px; font-size: 11px;"),
+                                style="padding: 10px 14px; text-align: center;"
+                            ),
+                            Td(
+                                Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
+                                       hx_delete=f'/api/phmb/brand-groups/{bg["id"]}',
+                                       hx_target="closest tr",
+                                       hx_swap="outerHTML",
+                                       hx_confirm="Удалить группу?"),
+                                style="padding: 10px 14px; text-align: center;"
+                            ),
+                            id=f'brand-group-{bg["id"]}'
+                        ) for bg in brand_groups
+                        ] if brand_groups else [Tr(Td("Нет групп брендов. Добавьте первую группу.", colspan="4",
+                                                      style="padding: 20px; text-align: center; color: #94a3b8;"))]
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="overflow-x: auto; margin-bottom: 20px;"
+            ),
+
+            # Add brand group form
+            Div(
+                Div(icon("plus", size=14), " Добавить группу", style="font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;"),
+                Form(
+                    Div(
+                        Div(
+                            Label("Название группы *", style=label_style),
+                            Input(name="name", type="text", placeholder="Например: Grundfos", required=True, style=input_style),
+                            style=form_group_style
+                        ),
+                        Div(
+                            Label("Бренды (через запятую)", style=label_style),
+                            Textarea(name="brand_patterns", placeholder="Grundfos, Wilo, DAB", rows="2",
+                                     style="padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; width: 100%; box-sizing: border-box; resize: vertical;"),
+                            Small("Бренды для автоматического распределения позиций в эту группу",
+                                  style="color: #94a3b8; font-size: 12px;"),
+                            style=form_group_style
+                        ),
+                        style=grid_2col_style
+                    ),
+                    Div(
+                        Label(
+                            Input(name="is_catchall", type="checkbox", value="true",
+                                  style="margin-right: 6px;"),
+                            "Группа «все остальные» (ловит бренды без явного совпадения)",
+                            style="font-size: 13px; color: #475569; display: flex; align-items: center; cursor: pointer;"
+                        ),
+                        style="margin-bottom: 16px;"
+                    ),
+                    Button(icon("plus", size=14), " Добавить", type="submit",
+                           style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px;"),
+                    method="post",
+                    action="/api/phmb/brand-groups"
+                ),
+                style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;"
+            ),
+
             style=form_card_style
         ),
 
@@ -46039,7 +46131,7 @@ def post(session, price_list_id: str = "", discount_pct: float = 0, quote_id: st
             Td(added.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
             Td(added.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
             Td(
-                Input(type="number", name=f'qty_{added["id"]}', value="1", min="1",
+                Input(type="number", name="quantity", value="1", min="1",
                       style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
                       hx_post=f'/api/phmb/update-qty/{added["id"]}',
                       hx_trigger="change",
@@ -46069,21 +46161,13 @@ def post(session, price_list_id: str = "", discount_pct: float = 0, quote_id: st
 # --- PHMB Update Item Quantity ---
 
 @rt("/api/phmb/update-qty/{item_id}")
-def post(session, item_id: str, **kwargs):
+def post(session, item_id: str, quantity: int = 1):
     """Update quantity for a PHMB quote item."""
     redirect = require_login(session)
     if redirect:
         return Response("Unauthorized", status_code=401)
 
-    # Extract quantity from form data (key is qty_{item_id})
-    qty = 1
-    for key, val in kwargs.items():
-        if key.startswith("qty_"):
-            try:
-                qty = max(1, int(val))
-            except (ValueError, TypeError):
-                qty = 1
-
+    qty = max(1, quantity)
     sb = get_supabase()
     sb.table("phmb_quote_items").update({"quantity": qty}).eq("id", item_id).execute()
     return Response(status_code=204)
@@ -46234,8 +46318,11 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
     org_id = user["org_id"]
     sb = get_supabase()
 
-    from services.phmb_price_service import get_phmb_settings, get_phmb_items
+    from services.phmb_price_service import get_phmb_settings, get_phmb_items, ensure_queue_entries
     from services.cbr_rates_service import get_today_cny_usd_rate
+
+    # Backfill queue entries for unpriced items (lazy, never raises)
+    ensure_queue_entries(quote_id, org_id)
 
     settings = get_phmb_settings(org_id)
     items = get_phmb_items(quote_id)
@@ -46312,8 +46399,8 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
     total_usd = 0
     total_vat_usd = 0
     for item in items:
-        list_price = float(item.get("list_price_rmb", 0))
-        disc = float(item.get("discount_pct", 0))
+        list_price = float(item.get("list_price_rmb") or 0)
+        disc = float(item.get("discount_pct") or 0)
         eff_price = list_price * (1 - disc / 100) if disc > 0 else list_price
         qty = int(item.get("quantity", 1))
         total_item = float(item.get("total_price_usd") or 0) * qty
@@ -46322,22 +46409,30 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
         total_vat_usd += total_item_vat
 
         calculated = item.get("cogs_usd") is not None
+        is_unpriced = not item.get("list_price_rmb")
+
+        # Price cell: show "В очереди" badge for unpriced items, otherwise show price
+        price_cell_content = (
+            Span("В очереди", style="background: #dbeafe; color: #2563eb; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+            if is_unpriced else
+            f'¥{eff_price:,.2f}'
+        )
 
         item_rows.append(Tr(
             Td(item.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
             Td(item.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
             Td(item.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
             Td(
-                Input(type="number", name=f'qty_{item["id"]}', value=str(qty), min="1",
+                Input(type="number", name="quantity", value=str(qty), min="1",
                       style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
                       hx_post=f'/api/phmb/update-qty/{item["id"]}',
                       hx_trigger="change",
                       hx_swap="none"),
                 style="padding: 10px 14px;"
             ),
-            Td(f'¥{eff_price:,.2f}', style="padding: 10px 14px; font-size: 13px; text-align: right;"),
+            Td(price_cell_content, style="padding: 10px 14px; font-size: 13px; text-align: right;"),
             Td(f'{disc}%' if disc > 0 else "—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
-            Td(f'${float(item.get("total_price_usd", 0)):,.2f}' if calculated else "—",
+            Td(f'${float(item.get("total_price_usd") or 0):,.2f}' if calculated else "—",
                style=f'padding: 10px 14px; font-size: 13px; text-align: right; font-weight: 500; color: {"#059669" if calculated else "#94a3b8"};'),
             Td(
                 Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
@@ -46398,9 +46493,53 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
         style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"
     )
 
+    # Collapsible custom item form
+    custom_item_form = Div(
+        Details(
+            Summary("Добавить позицию вручную",
+                    style="cursor: pointer; font-size: 13px; font-weight: 600; color: #475569; padding: 8px 0;"),
+            Form(
+                Div(
+                    Div(
+                        Label("Бренд", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Input(name="brand", type="text", placeholder="Grundfos",
+                              style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;"),
+                    ),
+                    Div(
+                        Label("Артикул", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Input(name="cat_number", type="text", placeholder="96402154",
+                              style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;"),
+                    ),
+                    Div(
+                        Label("Наименование *", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Input(name="product_name", type="text", placeholder="Название товара", required=True,
+                              style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box;"),
+                    ),
+                    Div(
+                        Label("Кол-во", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                        Input(name="quantity", type="number", value="1", min="1",
+                              style="padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; width: 80px; text-align: center;"),
+                    ),
+                    Div(
+                        Button(icon("plus", size=14), " Добавить", type="submit",
+                               style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 4px; margin-top: 18px;"),
+                    ),
+                    style="display: flex; gap: 12px; align-items: start; flex-wrap: wrap; margin-top: 12px;"
+                ),
+                Hidden(name="quote_id", value=quote_id),
+                hx_post="/api/phmb/add-custom-item",
+                hx_target="#phmb-items-table",
+                hx_swap="beforeend",
+            ),
+            style="margin-top: 4px;"
+        ),
+        style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 16px; margin-bottom: 20px;"
+    )
+
     return Div(
         settings_bar,
         search_bar,
+        custom_item_form,
         items_table,
         footer,
         Script("""
@@ -46418,6 +46557,378 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
             }
         """),
     )
+
+
+# --- PHMB Procurement Queue ---
+
+def _render_queue_row(qi: dict) -> 'Tr':
+    """Render a single procurement queue table row."""
+    quote_item = (qi.get("phmb_quote_items") or {})
+    quote_data = (qi.get("quotes") or {})
+    quote_idn = quote_data.get("idn", "—")
+    quote_id = qi.get("quote_id", "")
+    brand = qi.get("brand", "")
+    cat_number = quote_item.get("cat_number", "")
+    product_name = (quote_item.get("product_name", "") or "")[:50]
+    qty = int(quote_item.get("quantity", 1))
+    status = qi.get("status", "new")
+    queue_item_id = qi["id"]
+
+    # Status badge
+    if status == "new":
+        status_badge = Span("Новый", style="background: #dbeafe; color: #2563eb; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+    elif status == "requested":
+        status_badge = Span("Запрошено", style="background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+    elif status == "priced":
+        priced_val = float(qi.get("priced_rmb") or 0)
+        status_badge = Span(f"¥{priced_val:,.2f}", style="background: #d1fae5; color: #059669; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;")
+    else:
+        status_badge = Span(status, style="background: #f1f5f9; color: #64748b; padding: 2px 8px; border-radius: 4px; font-size: 11px;")
+
+    td_style = "padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9;"
+
+    # Actions: status change buttons + price input
+    if status == "new":
+        actions = Button("Запросить", type="button",
+                         hx_post=f"/api/phmb/queue/status/{queue_item_id}",
+                         hx_vals='{"new_status": "requested"}',
+                         hx_target="closest tr",
+                         hx_swap="outerHTML",
+                         style="padding: 4px 10px; background: #f59e0b; color: white; border: none; border-radius: 4px; font-size: 11px; cursor: pointer;")
+    elif status == "requested":
+        actions = Div(
+            Input(type="number", name="priced_rmb", placeholder="Цена ¥", step="0.01", min="0.01",
+                  id=f"price-input-{queue_item_id}",
+                  style="width: 80px; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; margin-right: 4px;"),
+            Button("Установить", type="button",
+                   onclick=f"var v=document.getElementById('price-input-{queue_item_id}').value;if(v>0)htmx.ajax('POST','/api/phmb/queue/status/{queue_item_id}',{{values:{{new_status:'priced',priced_rmb:v}},target:this.closest('tr'),swap:'outerHTML'}})",
+                   style="padding: 4px 10px; background: #059669; color: white; border: none; border-radius: 4px; font-size: 11px; cursor: pointer;"),
+            style="display: flex; align-items: center; gap: 4px;"
+        )
+    else:
+        actions = Span("—", style="color: #94a3b8;")
+
+    return Tr(
+        Td(A(quote_idn, href=f"/quotes/{quote_id}?tab=phmb", style="color: #3b82f6; text-decoration: none; font-weight: 500;"), style=td_style),
+        Td(brand, style=f"{td_style} color: #64748b;"),
+        Td(cat_number, style=f"{td_style} font-weight: 500;"),
+        Td(product_name, style=td_style),
+        Td(str(qty), style=f"{td_style} text-align: center;"),
+        Td(status_badge, style=f"{td_style} text-align: center;"),
+        Td(actions, style=td_style),
+        id=f"queue-item-{queue_item_id}"
+    )
+
+
+@rt("/phmb/procurement")
+def get(session, brand_group_id: str = "", status: str = "", partial: str = ""):
+    """PHMB Procurement Queue registry page with filter chips."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return RedirectResponse("/unauthorized", status_code=303)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    from services.phmb_price_service import get_brand_groups, get_procurement_queue
+
+    # Fetch brand groups for filter chips
+    brand_groups = get_brand_groups(org_id)
+
+    # Fetch queue items with optional filters
+    queue_items = get_procurement_queue(
+        org_id,
+        brand_group_id=brand_group_id or None,
+        status=status or None,
+    )
+
+    # Build table rows
+    rows = [_render_queue_row(qi) for qi in queue_items]
+
+    # If partial request (HTMX filter chip click), return only tbody rows
+    if partial:
+        if not rows:
+            return Tr(Td("Очередь пуста — все позиции имеют цены", colspan="7",
+                         style="padding: 40px; text-align: center; color: #94a3b8; font-size: 14px;"),
+                      id="queue-empty-state")
+        return tuple(rows)
+
+    # Build brand group filter chips
+    bg_chip_style_active = "padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #3b82f6; color: white;"
+    bg_chip_style = "padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #e2e8f0; background: white; color: #475569;"
+
+    brand_group_chips = [
+        Button("Все",
+               hx_get=f"/phmb/procurement?status={status}&partial=true",
+               hx_target="#queue-table-body",
+               hx_swap="innerHTML",
+               hx_push_url=f"/phmb/procurement?status={status}",
+               style=bg_chip_style_active if not brand_group_id else bg_chip_style)
+    ]
+    for bg in brand_groups:
+        is_active = (brand_group_id == bg["id"])
+        brand_group_chips.append(
+            Button(bg.get("name", ""),
+                   hx_get=f"/phmb/procurement?brand_group_id={bg['id']}&status={status}&partial=true",
+                   hx_target="#queue-table-body",
+                   hx_swap="innerHTML",
+                   hx_push_url=f"/phmb/procurement?brand_group_id={bg['id']}&status={status}",
+                   style=bg_chip_style_active if is_active else bg_chip_style)
+        )
+
+    # Status filter chips
+    status_options = [
+        ("", "Все"),
+        ("new", "Новые"),
+        ("requested", "Запрошено"),
+        ("priced", "С ценой"),
+    ]
+    status_chips = []
+    for s_val, s_label in status_options:
+        is_active = (status == s_val)
+        status_chips.append(
+            Button(s_label,
+                   hx_get=f"/phmb/procurement?brand_group_id={brand_group_id}&status={s_val}&partial=true",
+                   hx_target="#queue-table-body",
+                   hx_swap="innerHTML",
+                   hx_push_url=f"/phmb/procurement?brand_group_id={brand_group_id}&status={s_val}",
+                   style=bg_chip_style_active if is_active else bg_chip_style)
+        )
+
+    th_style = "padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+
+    return page_layout(
+        "Очередь PHMB — Закупки",
+
+        # Header
+        Div(
+            Div(
+                icon("clipboard-list", size=24, color="#3b82f6"),
+                Span("Очередь закупок PHMB", style="font-size: 22px; font-weight: 600; color: #1e293b; margin-left: 10px;"),
+                Span(str(len(queue_items)), style="background: #dbeafe; color: #2563eb; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; margin-left: 12px;"),
+                style="display: flex; align-items: center; flex: 1;"
+            ),
+            style="display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px;"
+        ),
+
+        # Brand group filter chips
+        Div(
+            Span("Группа: ", style="font-size: 12px; color: #64748b; font-weight: 600; margin-right: 8px;"),
+            *brand_group_chips,
+            style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;"
+        ) if brand_groups else Div(),
+
+        # Status filter chips
+        Div(
+            Span("Статус: ", style="font-size: 12px; color: #64748b; font-weight: 600; margin-right: 8px;"),
+            *status_chips,
+            style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;"
+        ),
+
+        # Queue table
+        Div(
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("КП", style=th_style),
+                        Th("Бренд", style=th_style),
+                        Th("Артикул", style=th_style),
+                        Th("Наименование", style=th_style),
+                        Th("Кол-во", style=f"{th_style} text-align: center;"),
+                        Th("Статус", style=f"{th_style} text-align: center;"),
+                        Th("Действия", style=th_style),
+                    )),
+                    Tbody(
+                        *rows,
+                        id="queue-table-body"
+                    ) if rows else Tbody(
+                        Tr(Td("Очередь пуста — все позиции имеют цены", colspan="7",
+                               style="text-align: center; padding: 40px; color: #94a3b8; font-size: 14px;"),
+                           id="queue-empty-state"),
+                        id="queue-table-body"
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="overflow-x: auto;"
+            ),
+            style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+        ),
+
+        session=session,
+        current_path="/phmb/procurement"
+    )
+
+
+@rt("/api/phmb/queue/status/{queue_item_id}")
+def post(session, queue_item_id: str, new_status: str = "", priced_rmb: float = 0):
+    """Change status of a queue item. If priced, also writes back to quote item."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    if not user_has_any_role(session, ["procurement", "admin"]):
+        return Response("Forbidden", status_code=403)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    from services.phmb_price_service import price_queue_item, update_queue_item_status
+
+    if new_status == "priced" and priced_rmb > 0:
+        price_queue_item(org_id, queue_item_id, priced_rmb)
+    else:
+        update_queue_item_status(queue_item_id, new_status, priced_rmb if priced_rmb > 0 else None)
+
+    # Re-fetch the updated item with FK joins for rendering
+    sb = get_supabase()
+    result = (
+        sb.table("phmb_procurement_queue")
+        .select("*, phmb_quote_items!quote_item_id(*), quotes!quote_id(*)")
+        .eq("id", queue_item_id)
+        .execute()
+    )
+    if result.data:
+        return _render_queue_row(result.data[0])
+
+    return Response(status_code=200)
+
+
+@rt("/api/phmb/add-custom-item")
+def post(session, quote_id: str = "", brand: str = "", cat_number: str = "",
+         product_name: str = "", quantity: int = 1):
+    """Add a custom (unpriced) item to a PHMB quote and enqueue it."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    if not quote_id or not product_name:
+        return Response("Missing quote_id or product_name", status_code=400)
+
+    user = session["user"]
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    from services.phmb_price_service import enqueue_phmb_item, get_brand_groups
+
+    # Insert into phmb_quote_items with list_price_rmb=None (unpriced)
+    new_item = {
+        "quote_id": quote_id,
+        "phmb_price_list_id": None,
+        "cat_number": cat_number.strip(),
+        "product_name": product_name.strip(),
+        "brand": brand.strip(),
+        "quantity": max(1, quantity),
+        "list_price_rmb": None,
+    }
+
+    insert_result = sb.table("phmb_quote_items").insert(new_item).execute()
+
+    if not insert_result.data:
+        return Response("Failed to add item", status_code=500)
+
+    added = insert_result.data[0]
+
+    # Enqueue for procurement
+    groups = get_brand_groups(org_id)
+    enqueue_phmb_item(
+        org_id=org_id,
+        quote_item_id=added["id"],
+        quote_id=quote_id,
+        brand=brand.strip(),
+        groups=groups,
+    )
+
+    # Return new row + OOB hide empty state
+    return (
+        Tr(
+            Td(added.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
+            Td(added.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
+            Td(added.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
+            Td(
+                Input(type="number", name="quantity", value=str(max(1, quantity)), min="1",
+                      style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
+                      hx_post=f'/api/phmb/update-qty/{added["id"]}',
+                      hx_trigger="change",
+                      hx_swap="none"),
+                style="padding: 10px 14px;"
+            ),
+            Td(Span("В очереди", style="background: #dbeafe; color: #2563eb; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600;"),
+               style="padding: 10px 14px; font-size: 13px; text-align: right;"),
+            Td("—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
+            Td("—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #94a3b8;"),
+            Td(
+                Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
+                       hx_delete=f'/api/phmb/delete-item/{added["id"]}',
+                       hx_target="closest tr",
+                       hx_swap="outerHTML"),
+                style="padding: 10px 14px; text-align: center;"
+            ),
+            id=f'phmb-item-{added["id"]}'
+        ),
+        # OOB: hide empty state placeholder
+        Tr(Td("Добавьте позиции через поиск выше", colspan="8",
+               style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;"),
+           id="phmb-empty-state", hx_swap_oob="true", style="display: none;"),
+    )
+
+
+@rt("/api/phmb/brand-groups")
+def post(session, name: str = "", brand_patterns: str = "", is_catchall: str = ""):
+    """Create a new brand group (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin"]):
+        return RedirectResponse("/settings/phmb", status_code=303)
+
+    if not name.strip():
+        return RedirectResponse("/settings/phmb", status_code=303)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    from services.phmb_price_service import upsert_brand_group, get_brand_groups
+
+    # Parse brand patterns from comma-separated string
+    patterns = [p.strip() for p in brand_patterns.split(",") if p.strip()] if brand_patterns else []
+
+    # Determine sort order (append to end)
+    existing_groups = get_brand_groups(org_id)
+    max_sort = max((g.get("sort_order", 0) for g in existing_groups), default=0)
+
+    upsert_brand_group(
+        org_id=org_id,
+        group_id=None,
+        name=name.strip(),
+        brand_patterns=patterns,
+        is_catchall=bool(is_catchall),
+        sort_order=max_sort + 1,
+    )
+
+    return RedirectResponse("/settings/phmb", status_code=303)
+
+
+@rt("/api/phmb/brand-groups/{group_id}")
+def delete(session, group_id: str):
+    """Delete a brand group (admin only)."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    if not user_has_any_role(session, ["admin"]):
+        return Response("Forbidden", status_code=403)
+
+    user = session["user"]
+    org_id = user["org_id"]
+
+    from services.phmb_price_service import delete_brand_group
+    delete_brand_group(group_id, org_id)
+
+    return Response(status_code=200)
 
 
 # ============================================================================
