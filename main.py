@@ -46000,28 +46000,37 @@ def post(session, price_list_id: str = "", discount_pct: float = 0, quote_id: st
     disc = float(added.get("discount_pct", 0))
     eff_price = list_price * (1 - disc / 100) if disc > 0 else list_price
 
-    return Tr(
-        Td(added.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
-        Td(added.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
-        Td(added.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
-        Td(
-            Input(type="number", name=f'qty_{added["id"]}', value="1", min="1",
-                  style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
-                  hx_post=f'/api/phmb/update-qty/{added["id"]}',
-                  hx_trigger="change",
-                  hx_swap="none"),
-            style="padding: 10px 14px;"
+    # Return new row + OOB swaps: hide empty state placeholder, clear search results
+    return (
+        Tr(
+            Td(added.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
+            Td(added.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
+            Td(added.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
+            Td(
+                Input(type="number", name=f'qty_{added["id"]}', value="1", min="1",
+                      style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
+                      hx_post=f'/api/phmb/update-qty/{added["id"]}',
+                      hx_trigger="change",
+                      hx_swap="none"),
+                style="padding: 10px 14px;"
+            ),
+            Td(f'¥{eff_price:,.2f}', style="padding: 10px 14px; font-size: 13px; text-align: right; color: #059669;"),
+            Td(f'{disc}%' if disc > 0 else "—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
+            Td(
+                Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
+                       hx_delete=f'/api/phmb/delete-item/{added["id"]}',
+                       hx_target="closest tr",
+                       hx_swap="outerHTML"),
+                style="padding: 10px 14px; text-align: center;"
+            ),
+            id=f'phmb-item-{added["id"]}'
         ),
-        Td(f'¥{eff_price:,.2f}', style="padding: 10px 14px; font-size: 13px; text-align: right; color: #059669;"),
-        Td(f'{disc}%' if disc > 0 else "—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
-        Td(
-            Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
-                   hx_delete=f'/api/phmb/delete-item/{added["id"]}',
-                   hx_target="closest tr",
-                   hx_swap="outerHTML"),
-            style="padding: 10px 14px; text-align: center;"
-        ),
-        id=f'phmb-item-{added["id"]}'
+        # OOB: hide empty state placeholder
+        Tr(Td("Добавьте позиции через поиск выше", colspan="8",
+               style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;"),
+           id="phmb-empty-state", hx_swap_oob="true", style="display: none;"),
+        # OOB: clear search results after adding
+        Div(id="phmb-search-results", hx_swap_oob="innerHTML"),
     )
 
 
@@ -46058,7 +46067,21 @@ def delete(session, item_id: str):
         return Response("Unauthorized", status_code=401)
 
     sb = get_supabase()
+
+    # Get quote_id before deleting (to check remaining count)
+    item_result = sb.table("phmb_quote_items").select("quote_id").eq("id", item_id).execute()
+    quote_id = item_result.data[0]["quote_id"] if item_result.data else None
+
     sb.table("phmb_quote_items").delete().eq("id", item_id).execute()
+
+    # If no items remain, show empty state placeholder via OOB swap
+    if quote_id:
+        remaining = sb.table("phmb_quote_items").select("id", count="exact").eq("quote_id", quote_id).execute()
+        if remaining.count == 0:
+            return Tr(Td("Добавьте позиции через поиск выше", colspan="8",
+                         style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;"),
+                       id="phmb-empty-state", hx_swap_oob="true", style="")
+
     return Response(status_code=200)
 
 
@@ -46296,9 +46319,12 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
                 Th("Итого USD", style="padding: 10px 14px; text-align: right; font-size: 12px; color: #64748b; font-weight: 600;"),
                 Th("", style="width: 40px;"),
             )),
-            Tbody(*item_rows, id="phmb-items-table") if item_rows else Tbody(
+            Tbody(
+                *item_rows,
                 Tr(Td("Добавьте позиции через поиск выше", colspan="8",
-                       style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;")),
+                       style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;"),
+                   id="phmb-empty-state",
+                   style="display: none;" if item_rows else ""),
                 id="phmb-items-table"
             ),
             style="width: 100%; border-collapse: collapse;"
@@ -46306,7 +46332,7 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
         style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;"
     )
 
-    # Totals + Calculate button
+    # Totals + Calculate button (always shown — handler handles empty items gracefully)
     footer = Div(
         Div(
             Div(
@@ -46325,7 +46351,8 @@ def phmb_tab_content(quote_id: str, quote: dict, session: dict):
                    style="padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
             method="post",
             action=f"/quotes/{quote_id}/phmb-calculate"
-        ) if items else Div(),
+        ),
+        id="phmb-footer",
         style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"
     )
 
