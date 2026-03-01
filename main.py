@@ -46145,7 +46145,7 @@ def post(session, quote_id: str):
         "advance_pct": float(quote.get("phmb_advance_pct") or settings.get("default_advance_pct", 0)),
         "markup_pct": float(quote.get("phmb_markup_pct") or settings.get("default_markup_pct", 10)),
         "payment_days": int(quote.get("phmb_payment_days") or settings.get("default_payment_days", 30)),
-        "cny_usd_rate": float(cny_usd_rate),
+        "cny_to_usd_rate": float(cny_usd_rate),
     }
 
     # Calculate
