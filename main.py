@@ -16492,14 +16492,11 @@ def get(session):
                           style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;"),
                         style="flex: 1;"
                     ),
-                    Form(
-                        Button(
-                            f'{"Выключить" if get_phmb_mode_enabled(user_id) else "Включить"}',
-                            type="submit",
-                            style=f'padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; '
-                                  f'{"background: #ef4444; color: white;" if get_phmb_mode_enabled(user_id) else "background: #059669; color: white;"}'
-                        ),
-                        method="post", action="/profile/phmb-toggle"
+                    Button(
+                        f'{"Выключить" if get_phmb_mode_enabled(user_id) else "Включить"}',
+                        hx_post="/profile/phmb-toggle",
+                        style=f'padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; '
+                              f'{"background: #ef4444; color: white;" if get_phmb_mode_enabled(user_id) else "background: #059669; color: white;"}'
                     ),
                     style="display: flex; align-items: center; gap: 16px;"
                 ),
@@ -45612,7 +45609,8 @@ def post(session):
     # Update session cache
     session["phmb_mode"] = new_value
 
-    return RedirectResponse("/profile", status_code=303)
+    from starlette.responses import Response
+    return Response(headers={"HX-Redirect": "/profile"}, status_code=200)
 
 
 # --- PHMB Admin Settings ---
