@@ -8456,6 +8456,9 @@ def post(session,
         quote_num = (count_result.count or 0) + 1
         idn_quote = f"Q-{datetime.now().strftime('%Y%m')}-{quote_num:04d}"
 
+        # Check if user has PHMB mode enabled
+        user_phmb_mode = get_phmb_mode_enabled(user["id"])
+
         insert_data = {
             "idn_quote": idn_quote,
             "title": "Новый КП",
@@ -8469,6 +8472,7 @@ def post(session,
             "delivery_city": delivery_city.strip() if delivery_city else None,
             "delivery_country": delivery_country.strip() if delivery_country else None,
             "delivery_method": delivery_method if delivery_method else None,
+            "is_phmb": user_phmb_mode,
         }
 
         result = supabase.table("quotes").insert(insert_data).execute()
@@ -8858,6 +8862,18 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
     quote = result.data[0]
     customer = quote.get("customers", {})
+    _is_phmb = bool(quote.get("is_phmb"))
+
+    # PHMB tab — render PHMB content and return early
+    if tab == "phmb" and _is_phmb:
+        phmb_content = phmb_tab_content(quote_id, quote, session)
+        workflow_status = quote.get("workflow_state", "draft")
+        return page_layout(f"Quote {quote.get('idn_quote', '')} — PHMB",
+            quote_header(quote, workflow_status, (customer or {}).get("name")),
+            quote_detail_tabs(quote_id, "phmb", user.get("roles", []), is_phmb=True),
+            Div(phmb_content, id="tab-content", style="margin-top: 20px;"),
+            session=session
+        )
 
     # Get customers for dropdown (for inline editing)
     customers_result = supabase.table("customers") \
@@ -9080,7 +9096,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9092,7 +9108,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9115,7 +9131,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9165,7 +9181,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         )
         return page_layout(f"Quote {quote.get('idn_quote', '')}",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
-            quote_detail_tabs(quote_id, "summary", effective_roles, deal=deal),
+            quote_detail_tabs(quote_id, "summary", effective_roles, deal=deal, is_phmb=_is_phmb),
             summary_content,
             session=session
         )
@@ -9187,7 +9203,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         quote_header(quote, workflow_status, (customer or {}).get("name")),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "overview", effective_roles, deal=deal),
+        quote_detail_tabs(quote_id, "overview", effective_roles, deal=deal, is_phmb=_is_phmb),
 
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
@@ -15289,6 +15305,16 @@ def get(session):
             style=form_card_style
         ),
 
+        # PHMB mode settings link
+        Div(
+            Div(icon("package", size=14), " Режим PHMB", style=section_header_style),
+            P("Настройки прайс-листового режима расчёта: накладные расходы, скидки по брендам, значения по умолчанию.",
+              style="color: #64748b; margin: 0 0 16px 0; font-size: 14px;"),
+            A(icon("settings", size=14), " Настройки PHMB", href="/settings/phmb",
+              style="padding: 10px 20px; background: #059669; color: white; border-radius: 6px; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"),
+            style=form_card_style
+        ),
+
         session=session
     )
 
@@ -16002,7 +16028,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
 
 
 
-def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None):
+def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None, is_phmb: bool = False):
     """
     Create role-based tab navigation for quote detail pages.
 
@@ -16083,6 +16109,16 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             "roles": None,  # All users with quote access
         },
     ]
+
+    # PHMB tab — only shown when quote is in PHMB mode
+    if is_phmb:
+        tabs_config.insert(2, {
+            "id": "phmb",
+            "label": "PHMB",
+            "icon": "package",
+            "href": f"/quotes/{quote_id}?tab=phmb",
+            "roles": None,
+        })
 
     # Finance tabs — only shown when a deal exists for this quote
     if deal is not None:
@@ -16438,6 +16474,34 @@ def get(session):
                         style="flex: 1;"
                     ),
                     style="display: flex; gap: 16px;"
+                ),
+                style=section_card_style
+            ),
+
+            # Section 3b: PHMB Mode Toggle
+            Div(
+                Div(
+                    icon("package", size=16, color="#64748b"),
+                    Span(" РЕЖИМ PHMB", style="font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 6px;"),
+                    style=section_header_style
+                ),
+                Div(
+                    Div(
+                        Span("Режим прайс-листа (PHMB)", style="font-size: 14px; font-weight: 500; color: #1e293b;"),
+                        P("Переключает создание КП в режим поиска по прайс-листу с упрощённым расчётом.",
+                          style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;"),
+                        style="flex: 1;"
+                    ),
+                    Form(
+                        Button(
+                            f'{"Выключить" if get_phmb_mode_enabled(user_id) else "Включить"}',
+                            type="submit",
+                            style=f'padding: 8px 20px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; '
+                                  f'{"background: #ef4444; color: white;" if get_phmb_mode_enabled(user_id) else "background: #059669; color: white;"}'
+                        ),
+                        method="post", action="/profile/phmb-toggle"
+                    ),
+                    style="display: flex; align-items: center; gap: 16px;"
                 ),
                 style=section_card_style
             ),
@@ -45500,6 +45564,777 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
             style="background:white;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.04);overflow:hidden;"
         ),
         session=session
+    )
+
+
+# ============================================================================
+# PHMB MODE — Price-list based workflow with simplified calculation
+# ============================================================================
+
+def get_phmb_mode_enabled(user_id: str) -> bool:
+    """Check if user has PHMB mode enabled via user_settings."""
+    sb = get_supabase()
+    result = sb.table("user_settings") \
+        .select("setting_value") \
+        .eq("user_id", user_id) \
+        .eq("setting_key", "phmb_mode_enabled") \
+        .execute()
+    if result.data:
+        val = result.data[0].get("setting_value")
+        if isinstance(val, dict):
+            return val.get("enabled", False)
+        return bool(val)
+    return False
+
+
+# --- PHMB User Toggle (on profile page) ---
+
+@rt("/profile/phmb-toggle")
+def post(session):
+    """Toggle PHMB mode for the current user."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+
+    current = get_phmb_mode_enabled(user_id)
+    new_value = not current
+
+    sb = get_supabase()
+    sb.table("user_settings").upsert({
+        "user_id": user_id,
+        "setting_key": "phmb_mode_enabled",
+        "setting_value": {"enabled": new_value},
+    }, on_conflict="user_id,setting_key").execute()
+
+    # Update session cache
+    session["phmb_mode"] = new_value
+
+    return RedirectResponse("/profile", status_code=303)
+
+
+# --- PHMB Admin Settings ---
+
+@rt("/settings/phmb")
+def get(session):
+    """Admin page for PHMB overhead settings and brand-type discounts."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Настройки PHMB доступны только администраторам."),
+            session=session
+        )
+
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    # Get PHMB settings (or defaults)
+    settings_result = sb.table("phmb_settings").select("*").eq("org_id", org_id).execute()
+    s = settings_result.data[0] if settings_result.data else {}
+
+    # Get brand-type discounts
+    discounts_result = sb.table("phmb_brand_type_discounts") \
+        .select("*") \
+        .eq("org_id", org_id) \
+        .order("brand") \
+        .execute()
+    discounts = discounts_result.data or []
+
+    # Get price list stats
+    price_count_result = sb.table("phmb_price_list") \
+        .select("id", count="exact") \
+        .eq("org_id", org_id) \
+        .execute()
+    price_count = price_count_result.count or 0
+
+    # Styles
+    section_header_style = "font-size: 11px; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;"
+    form_card_style = "background: white; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 24px; margin-bottom: 20px;"
+    input_style = "padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc; width: 100%; box-sizing: border-box;"
+    label_style = "display: block; font-size: 13px; color: #475569; margin-bottom: 6px; font-weight: 500;"
+    form_group_style = "margin-bottom: 16px;"
+    grid_2col_style = "display: grid; grid-template-columns: 1fr 1fr; gap: 20px;"
+
+    return page_layout("Настройки PHMB",
+        # Header
+        Div(
+            H1("Настройки режима PHMB",
+               style="margin: 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
+            P(f"Прайс-лист: {price_count:,} позиций | Скидки: {len(discounts)} правил",
+              style="margin: 8px 0 0 0; font-size: 14px; color: #64748b;"),
+            cls="card-elevated"
+        ),
+
+        # Overhead settings form
+        Form(
+            Div(
+                Div(icon("calculator", size=14), " Накладные расходы", style=section_header_style),
+                Div(
+                    Div(
+                        Label("Логистика на паллет (USD)", style=label_style),
+                        Input(name="logistics_price_per_pallet", type="number",
+                              value=str(s.get("logistics_price_per_pallet", 1800)),
+                              step="0.01", style=input_style),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Базовая цена паллета (USD)", style=label_style),
+                        Input(name="base_price_per_pallet", type="number",
+                              value=str(s.get("base_price_per_pallet", 50000)),
+                              step="0.01", style=input_style),
+                        Small("Общий знаменатель для логистики и таможенного оформления",
+                              style="color: #94a3b8; font-size: 12px;"),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
+                ),
+                Div(
+                    Div(
+                        Label("Курсовое страхование (%)", style=label_style),
+                        Input(name="exchange_rate_insurance_pct", type="number",
+                              value=str(s.get("exchange_rate_insurance_pct", 3.0)),
+                              step="0.1", style=input_style),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Финансовый транзит (%)", style=label_style),
+                        Input(name="financial_transit_pct", type="number",
+                              value=str(s.get("financial_transit_pct", 2.0)),
+                              step="0.1", style=input_style),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
+                ),
+                Div(
+                    Div(
+                        Label("Таможенное оформление (USD)", style=label_style),
+                        Input(name="customs_handling_cost", type="number",
+                              value=str(s.get("customs_handling_cost", 800)),
+                              step="0.01", style=input_style),
+                        style=form_group_style
+                    ),
+                    Div(
+                        Label("Таможенное страхование (%)", style=label_style),
+                        Input(name="customs_insurance_pct", type="number",
+                              value=str(s.get("customs_insurance_pct", 5.0)),
+                              step="0.1", style=input_style),
+                        Small("Используется когда пошлина неизвестна",
+                              style="color: #94a3b8; font-size: 12px;"),
+                        style=form_group_style
+                    ),
+                    style=grid_2col_style
+                ),
+                Div(
+                    Div(icon("settings", size=14), " Значения по умолчанию", style=section_header_style),
+                    Div(
+                        Div(
+                            Label("Наценка по умолчанию (%)", style=label_style),
+                            Input(name="default_markup_pct", type="number",
+                                  value=str(s.get("default_markup_pct", 10)),
+                                  step="0.1", style=input_style),
+                            style=form_group_style
+                        ),
+                        Div(
+                            Label("Аванс по умолчанию (%)", style=label_style),
+                            Input(name="default_advance_pct", type="number",
+                                  value=str(s.get("default_advance_pct", 0)),
+                                  step="1", style=input_style),
+                            style=form_group_style
+                        ),
+                        style=grid_2col_style
+                    ),
+                    Div(
+                        Div(
+                            Label("Срок оплаты (к.д.)", style=label_style),
+                            Input(name="default_payment_days", type="number",
+                                  value=str(s.get("default_payment_days", 30)),
+                                  step="1", style=input_style),
+                            style=form_group_style
+                        ),
+                        Div(
+                            Label("Срок поставки по умолчанию (к.д.)", style=label_style),
+                            Input(name="default_delivery_days", type="number",
+                                  value=str(s.get("default_delivery_days", 90)),
+                                  step="1", style=input_style),
+                            style=form_group_style
+                        ),
+                        style=grid_2col_style
+                    ),
+                ),
+                Button(icon("check", size=14), " Сохранить настройки", type="submit",
+                       style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+                style=form_card_style
+            ),
+            method="post",
+            action="/settings/phmb"
+        ),
+
+        # Brand-type discounts table
+        Div(
+            Div(icon("percent", size=14), " Скидки по брендам и типам", style=section_header_style),
+            P("Скидки применяются при расчёте: если скидка > 0%, прайс-листная цена уменьшается на этот процент.",
+              style="color: #64748b; font-size: 13px; margin-bottom: 16px;"),
+
+            # Discount table
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Бренд", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                        Th("Тип (classification)", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                        Th("Скидка %", style="padding: 10px 14px; text-align: right; font-size: 12px; color: #64748b; font-weight: 600;"),
+                    )),
+                    Tbody(
+                        *[Tr(
+                            Td(d.get("brand", ""), style="padding: 10px 14px; font-size: 14px;"),
+                            Td(d.get("product_classification", "—"), style="padding: 10px 14px; font-size: 14px; color: #64748b;"),
+                            Td(f'{d.get("discount_pct", 0)}%', style="padding: 10px 14px; text-align: right; font-size: 14px; font-weight: 600;"),
+                        ) for d in discounts
+                        ] if discounts else [Tr(Td("Нет скидок. Загрузите прайс-лист для автоматического создания.", colspan="3",
+                                                   style="padding: 20px; text-align: center; color: #94a3b8;"))]
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="overflow-x: auto;"
+            ),
+            style=form_card_style
+        ),
+
+        # Navigation
+        Div(
+            btn_link("Назад к настройкам", href="/settings", variant="secondary", icon_name="arrow-left"),
+            style="margin-top: 8px;"
+        ),
+
+        session=session,
+        current_path="/settings/phmb"
+    )
+
+
+@rt("/settings/phmb")
+def post(session,
+         logistics_price_per_pallet: float = 1800,
+         base_price_per_pallet: float = 50000,
+         exchange_rate_insurance_pct: float = 3.0,
+         financial_transit_pct: float = 2.0,
+         customs_handling_cost: float = 800,
+         customs_insurance_pct: float = 5.0,
+         default_markup_pct: float = 10.0,
+         default_advance_pct: float = 0,
+         default_payment_days: int = 30,
+         default_delivery_days: int = 90):
+    """Save PHMB overhead settings."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    if "admin" not in user.get("roles", []):
+        return RedirectResponse("/settings", status_code=303)
+
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    sb.table("phmb_settings").upsert({
+        "org_id": org_id,
+        "logistics_price_per_pallet": logistics_price_per_pallet,
+        "base_price_per_pallet": base_price_per_pallet,
+        "exchange_rate_insurance_pct": exchange_rate_insurance_pct,
+        "financial_transit_pct": financial_transit_pct,
+        "customs_handling_cost": customs_handling_cost,
+        "customs_insurance_pct": customs_insurance_pct,
+        "default_markup_pct": default_markup_pct,
+        "default_advance_pct": default_advance_pct,
+        "default_payment_days": default_payment_days,
+        "default_delivery_days": default_delivery_days,
+    }, on_conflict="org_id").execute()
+
+    return RedirectResponse("/settings/phmb", status_code=303)
+
+
+# --- PHMB Price List Search API ---
+
+@rt("/api/phmb/search")
+def get(session, q: str = "", limit: int = 20, quote_id: str = ""):
+    """Search PHMB price list by article or product name. Returns HTMX autocomplete results."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    if not q or len(q) < 2:
+        return Div(
+            P("Введите минимум 2 символа для поиска", style="color: #94a3b8; padding: 12px; font-size: 13px;"),
+            id="phmb-search-results"
+        )
+
+    user = session["user"]
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    result = sb.table("phmb_price_list") \
+        .select("id, cat_number, product_name, brand, product_classification, list_price_rmb, hs_code, duty_pct, delivery_days, additional_fee_usd") \
+        .eq("org_id", org_id) \
+        .or_(f"cat_number.ilike.%{q}%,product_name.ilike.%{q}%") \
+        .limit(limit) \
+        .execute()
+
+    items = result.data or []
+
+    if not items:
+        return Div(
+            P(f'Ничего не найдено по запросу "{q}"', style="color: #94a3b8; padding: 12px; font-size: 13px;"),
+            id="phmb-search-results"
+        )
+
+    # Look up discounts for found items
+    brands_types = set()
+    for item in items:
+        brands_types.add((item.get("brand", ""), item.get("product_classification", "")))
+
+    discount_map = {}
+    if brands_types:
+        disc_result = sb.table("phmb_brand_type_discounts") \
+            .select("brand, product_classification, discount_pct") \
+            .eq("org_id", org_id) \
+            .execute()
+        for d in (disc_result.data or []):
+            key = (d.get("brand", ""), d.get("product_classification", ""))
+            discount_map[key] = d.get("discount_pct", 0)
+
+    rows = []
+    for item in items:
+        disc_key = (item.get("brand", ""), item.get("product_classification", ""))
+        discount = discount_map.get(disc_key, 0)
+        list_price = float(item.get("list_price_rmb", 0))
+        if discount > 0:
+            eff_price = list_price * (1 - discount / 100)
+            price_display = f'¥{eff_price:,.2f} (скидка {discount}%)'
+        else:
+            price_display = f'¥{list_price:,.2f}'
+
+        rows.append(
+            Div(
+                Div(
+                    Span(item.get("cat_number", ""), style="font-weight: 600; font-size: 14px; color: #1e293b;"),
+                    Span(f' — {item.get("brand", "")}', style="color: #64748b; font-size: 13px;"),
+                    Span(f' [{item.get("product_classification", "")}]', style="color: #94a3b8; font-size: 12px;") if item.get("product_classification") else "",
+                    style="margin-bottom: 2px;"
+                ),
+                Div(
+                    Span(item.get("product_name", "")[:80], style="font-size: 13px; color: #475569;"),
+                    style="margin-bottom: 4px;"
+                ),
+                Div(
+                    Span(price_display, style="font-size: 13px; font-weight: 500; color: #059669;"),
+                    Span(f' | {item.get("delivery_days", "—")} к.д.', style="font-size: 12px; color: #94a3b8; margin-left: 8px;"),
+                ),
+                style="padding: 10px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer;",
+                cls="phmb-search-item",
+                hx_post=f'/api/phmb/add-item',
+                hx_vals=f'{{"price_list_id": "{item.get("id")}", "discount_pct": "{discount}", "quote_id": "{quote_id}"}}',
+                hx_target="#phmb-items-table",
+                hx_swap="beforeend",
+            )
+        )
+
+    return Div(*rows, id="phmb-search-results", style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;")
+
+
+# --- PHMB Add Item to Quote ---
+
+@rt("/api/phmb/add-item")
+def post(session, price_list_id: str = "", discount_pct: float = 0, quote_id: str = ""):
+    """Add a price list item to a PHMB quote."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    if not price_list_id or not quote_id:
+        return Response("Missing price_list_id or quote_id", status_code=400)
+
+    user = session["user"]
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    # Fetch price list item
+    item_result = sb.table("phmb_price_list") \
+        .select("*") \
+        .eq("id", price_list_id) \
+        .eq("org_id", org_id) \
+        .execute()
+
+    if not item_result.data:
+        return Response("Item not found", status_code=404)
+
+    item = item_result.data[0]
+
+    # Insert into phmb_quote_items
+    new_item = {
+        "quote_id": quote_id,
+        "phmb_price_list_id": price_list_id,
+        "cat_number": item.get("cat_number", ""),
+        "product_name": item.get("product_name", ""),
+        "brand": item.get("brand", ""),
+        "product_classification": item.get("product_classification", ""),
+        "quantity": 1,
+        "list_price_rmb": item.get("list_price_rmb", 0),
+        "discount_pct": discount_pct,
+        "hs_code": item.get("hs_code"),
+        "duty_pct": item.get("duty_pct"),
+        "delivery_days": item.get("delivery_days"),
+    }
+
+    insert_result = sb.table("phmb_quote_items").insert(new_item).execute()
+
+    if not insert_result.data:
+        return Response("Failed to add item", status_code=500)
+
+    added = insert_result.data[0]
+    list_price = float(added.get("list_price_rmb", 0))
+    disc = float(added.get("discount_pct", 0))
+    eff_price = list_price * (1 - disc / 100) if disc > 0 else list_price
+
+    return Tr(
+        Td(added.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
+        Td(added.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
+        Td(added.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
+        Td(
+            Input(type="number", name=f'qty_{added["id"]}', value="1", min="1",
+                  style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
+                  hx_post=f'/api/phmb/update-qty/{added["id"]}',
+                  hx_trigger="change",
+                  hx_swap="none"),
+            style="padding: 10px 14px;"
+        ),
+        Td(f'¥{eff_price:,.2f}', style="padding: 10px 14px; font-size: 13px; text-align: right; color: #059669;"),
+        Td(f'{disc}%' if disc > 0 else "—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
+        Td(
+            Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
+                   hx_delete=f'/api/phmb/delete-item/{added["id"]}',
+                   hx_target="closest tr",
+                   hx_swap="outerHTML"),
+            style="padding: 10px 14px; text-align: center;"
+        ),
+        id=f'phmb-item-{added["id"]}'
+    )
+
+
+# --- PHMB Update Item Quantity ---
+
+@rt("/api/phmb/update-qty/{item_id}")
+def post(session, item_id: str, **kwargs):
+    """Update quantity for a PHMB quote item."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    # Extract quantity from form data (key is qty_{item_id})
+    qty = 1
+    for key, val in kwargs.items():
+        if key.startswith("qty_"):
+            try:
+                qty = max(1, int(val))
+            except (ValueError, TypeError):
+                qty = 1
+
+    sb = get_supabase()
+    sb.table("phmb_quote_items").update({"quantity": qty}).eq("id", item_id).execute()
+    return Response(status_code=204)
+
+
+# --- PHMB Delete Item ---
+
+@rt("/api/phmb/delete-item/{item_id}")
+def delete(session, item_id: str):
+    """Delete a PHMB quote item."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    sb = get_supabase()
+    sb.table("phmb_quote_items").delete().eq("id", item_id).execute()
+    return Response(status_code=200)
+
+
+# --- PHMB Quote Settings (advance, markup, payment days) ---
+
+@rt("/quotes/{quote_id}/phmb-settings")
+def post(session, quote_id: str,
+         phmb_advance_pct: float = 0,
+         phmb_markup_pct: float = 10,
+         phmb_payment_days: int = 30):
+    """Update PHMB-specific quote settings."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    sb = get_supabase()
+    sb.table("quotes").update({
+        "phmb_advance_pct": phmb_advance_pct,
+        "phmb_markup_pct": phmb_markup_pct,
+        "phmb_payment_days": phmb_payment_days,
+    }).eq("id", quote_id).execute()
+
+    return RedirectResponse(f"/quotes/{quote_id}?tab=phmb", status_code=303)
+
+
+# --- PHMB Calculate ---
+
+@rt("/quotes/{quote_id}/phmb-calculate")
+def post(session, quote_id: str):
+    """Run PHMB calculation for all items in the quote."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    from services.phmb_calculator import calculate_phmb_quote
+    from services.phmb_price_service import get_phmb_settings, get_phmb_items
+    from services.cbr_rates_service import get_today_cny_usd_rate
+    from datetime import date
+    from decimal import Decimal
+
+    user = session["user"]
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    # Get quote
+    quote_result = sb.table("quotes").select("*").eq("id", quote_id).execute()
+    if not quote_result.data:
+        return Response("Quote not found", status_code=404)
+    quote = quote_result.data[0]
+
+    # Get PHMB settings
+    settings = get_phmb_settings(org_id)
+    if not settings:
+        return page_layout("Ошибка",
+            Div(
+                H2("Настройки PHMB не найдены"),
+                P("Администратор должен настроить параметры PHMB в разделе Настройки."),
+                btn_link("Настройки PHMB", href="/settings/phmb", variant="primary", icon_name="settings"),
+                style="text-align: center; padding: 40px;"
+            ),
+            session=session
+        )
+
+    # Get items
+    items = get_phmb_items(quote_id)
+    if not items:
+        return RedirectResponse(f"/quotes/{quote_id}?tab=phmb&error=no_items", status_code=303)
+
+    # Get CNY/USD rate from CBR
+    cny_usd_rate = get_today_cny_usd_rate()
+    if not cny_usd_rate:
+        return page_layout("Ошибка",
+            Div(
+                H2("Не удалось получить курс CNY/USD"),
+                P("Курс ЦБ РФ недоступен. Попробуйте позже."),
+                btn_link("Назад", href=f"/quotes/{quote_id}?tab=phmb", variant="secondary", icon_name="arrow-left"),
+                style="text-align: center; padding: 40px;"
+            ),
+            session=session
+        )
+
+    # Build calculation params
+    quote_params = {
+        "advance_pct": float(quote.get("phmb_advance_pct") or settings.get("default_advance_pct", 0)),
+        "markup_pct": float(quote.get("phmb_markup_pct") or settings.get("default_markup_pct", 10)),
+        "payment_days": int(quote.get("phmb_payment_days") or settings.get("default_payment_days", 30)),
+        "cny_usd_rate": float(cny_usd_rate),
+    }
+
+    # Calculate
+    result = calculate_phmb_quote(items, settings, quote_params)
+
+    # Update items with calculated values
+    for calc_item in result["items"]:
+        sb.table("phmb_quote_items").update({
+            "exw_price_usd": float(calc_item["exw_price_usd"]),
+            "cogs_usd": float(calc_item["cogs_usd"]),
+            "financial_cost_usd": float(calc_item["financial_cost_usd"]),
+            "total_price_usd": float(calc_item["total_price_usd"]),
+            "total_price_with_vat_usd": float(calc_item["total_price_with_vat_usd"]),
+        }).eq("id", calc_item["id"]).execute()
+
+    # Update quote totals
+    totals = result["totals"]
+    sb.table("quotes").update({
+        "subtotal_usd": float(totals["total_price_usd"]),
+        "total_amount_usd": float(totals["total_price_with_vat_usd"]),
+    }).eq("id", quote_id).execute()
+
+    return RedirectResponse(f"/quotes/{quote_id}?tab=phmb&calculated=1", status_code=303)
+
+
+# --- PHMB Tab on Quote Detail ---
+
+def phmb_tab_content(quote_id: str, quote: dict, session: dict):
+    """Render PHMB tab content for a quote detail page."""
+    user = session["user"]
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    from services.phmb_price_service import get_phmb_settings, get_phmb_items
+    from services.cbr_rates_service import get_today_cny_usd_rate
+
+    settings = get_phmb_settings(org_id)
+    items = get_phmb_items(quote_id)
+    cny_usd_rate = get_today_cny_usd_rate()
+
+    # Quote-level PHMB settings
+    advance_pct = float(quote.get("phmb_advance_pct") or (settings or {}).get("default_advance_pct", 0))
+    markup_pct = float(quote.get("phmb_markup_pct") or (settings or {}).get("default_markup_pct", 10))
+    payment_days = int(quote.get("phmb_payment_days") or (settings or {}).get("default_payment_days", 30))
+
+    input_style = "padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; width: 80px; text-align: center;"
+
+    # Settings bar
+    settings_bar = Form(
+        Div(
+            Div(
+                Label("Аванс %", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                Input(name="phmb_advance_pct", type="number", value=str(advance_pct),
+                      min="0", max="100", step="5", style=input_style),
+            ),
+            Div(
+                Label("Наценка %", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                Input(name="phmb_markup_pct", type="number", value=str(markup_pct),
+                      min="0", max="100", step="0.5", style=input_style),
+            ),
+            Div(
+                Label("Срок оплаты (к.д.)", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                Input(name="phmb_payment_days", type="number", value=str(payment_days),
+                      min="0", max="365", step="1", style=input_style),
+            ),
+            Div(
+                Label("Курс CNY/USD (ЦБ)", style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px;"),
+                Span(f'{float(cny_usd_rate):.4f}' if cny_usd_rate else "Н/Д",
+                     style="font-size: 14px; font-weight: 600; color: #1e293b; padding: 8px 0; display: block;"),
+            ),
+            Button(icon("save", size=14), " Сохранить", type="submit",
+                   style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; align-self: end; display: flex; align-items: center; gap: 4px;"),
+            style="display: flex; gap: 20px; align-items: end; flex-wrap: wrap;"
+        ),
+        method="post",
+        action=f"/quotes/{quote_id}/phmb-settings",
+        style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px 20px; margin-bottom: 20px;"
+    )
+
+    # Search bar
+    search_bar = Div(
+        Div(
+            icon("search", size=16, color="#94a3b8"),
+            Input(type="text", name="q", placeholder="Поиск по артикулу или названию...",
+                  hx_get="/api/phmb/search",
+                  hx_trigger="keyup changed delay:300ms",
+                  hx_target="#phmb-search-results",
+                  hx_include="[name='q']",
+                  hx_vals=f'{{"quote_id": "{quote_id}"}}',
+                  style="border: none; outline: none; font-size: 14px; flex: 1; padding: 10px; background: transparent;"),
+            style="display: flex; align-items: center; gap: 8px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 12px;"
+        ),
+        Div(id="phmb-search-results"),
+        style="margin-bottom: 20px;"
+    )
+
+    # Items table
+    item_rows = []
+    total_usd = 0
+    total_vat_usd = 0
+    for item in items:
+        list_price = float(item.get("list_price_rmb", 0))
+        disc = float(item.get("discount_pct", 0))
+        eff_price = list_price * (1 - disc / 100) if disc > 0 else list_price
+        qty = int(item.get("quantity", 1))
+        total_item = float(item.get("total_price_usd") or 0) * qty
+        total_item_vat = float(item.get("total_price_with_vat_usd") or 0) * qty
+        total_usd += total_item
+        total_vat_usd += total_item_vat
+
+        calculated = item.get("cogs_usd") is not None
+
+        item_rows.append(Tr(
+            Td(item.get("cat_number", ""), style="padding: 10px 14px; font-size: 13px; font-weight: 500;"),
+            Td(item.get("product_name", "")[:50], style="padding: 10px 14px; font-size: 13px;"),
+            Td(item.get("brand", ""), style="padding: 10px 14px; font-size: 13px; color: #64748b;"),
+            Td(
+                Input(type="number", name=f'qty_{item["id"]}', value=str(qty), min="1",
+                      style="width: 60px; padding: 6px; border: 1px solid #e2e8f0; border-radius: 4px; text-align: center;",
+                      hx_post=f'/api/phmb/update-qty/{item["id"]}',
+                      hx_trigger="change",
+                      hx_swap="none"),
+                style="padding: 10px 14px;"
+            ),
+            Td(f'¥{eff_price:,.2f}', style="padding: 10px 14px; font-size: 13px; text-align: right;"),
+            Td(f'{disc}%' if disc > 0 else "—", style="padding: 10px 14px; font-size: 13px; text-align: right; color: #64748b;"),
+            Td(f'${float(item.get("total_price_usd", 0)):,.2f}' if calculated else "—",
+               style=f'padding: 10px 14px; font-size: 13px; text-align: right; font-weight: 500; color: {"#059669" if calculated else "#94a3b8"};'),
+            Td(
+                Button("✕", style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 16px;",
+                       hx_delete=f'/api/phmb/delete-item/{item["id"]}',
+                       hx_target="closest tr",
+                       hx_swap="outerHTML"),
+                style="padding: 10px 14px; text-align: center;"
+            ),
+            id=f'phmb-item-{item["id"]}'
+        ))
+
+    items_table = Div(
+        Table(
+            Thead(Tr(
+                Th("Артикул", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Наименование", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Бренд", style="padding: 10px 14px; text-align: left; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Кол-во", style="padding: 10px 14px; text-align: center; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Цена RMB", style="padding: 10px 14px; text-align: right; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Скидка", style="padding: 10px 14px; text-align: right; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("Итого USD", style="padding: 10px 14px; text-align: right; font-size: 12px; color: #64748b; font-weight: 600;"),
+                Th("", style="width: 40px;"),
+            )),
+            Tbody(*item_rows, id="phmb-items-table") if item_rows else Tbody(
+                Tr(Td("Добавьте позиции через поиск выше", colspan="8",
+                       style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;")),
+                id="phmb-items-table"
+            ),
+            style="width: 100%; border-collapse: collapse;"
+        ),
+        style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;"
+    )
+
+    # Totals + Calculate button
+    footer = Div(
+        Div(
+            Div(
+                Span("Итого без НДС: ", style="color: #64748b; font-size: 14px;"),
+                Span(f'${total_usd:,.2f}', style="font-size: 18px; font-weight: 600; color: #1e293b;"),
+                style="margin-right: 24px;"
+            ),
+            Div(
+                Span("Итого с НДС: ", style="color: #64748b; font-size: 14px;"),
+                Span(f'${total_vat_usd:,.2f}', style="font-size: 18px; font-weight: 600; color: #059669;"),
+            ),
+            style="display: flex; align-items: center;"
+        ) if total_usd > 0 else Div(),
+        Form(
+            Button(icon("calculator", size=14), " Рассчитать PHMB", type="submit",
+                   style="padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
+            method="post",
+            action=f"/quotes/{quote_id}/phmb-calculate"
+        ) if items else Div(),
+        style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;"
+    )
+
+    return Div(
+        settings_bar,
+        search_bar,
+        items_table,
+        footer,
     )
 
 
