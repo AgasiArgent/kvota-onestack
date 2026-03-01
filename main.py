@@ -16568,6 +16568,33 @@ def post(session, full_name: str, phone: str = "", date_of_birth: str = "",
             session=session)
 
 
+@rt("/profile/phmb-toggle")
+def post(session):
+    """Toggle PHMB mode for the current user."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user["id"]
+
+    current = get_phmb_mode_enabled(user_id)
+    new_value = not current
+
+    sb = get_supabase()
+    sb.table("user_settings").upsert({
+        "user_id": user_id,
+        "setting_key": "phmb_mode_enabled",
+        "setting_value": {"enabled": new_value},
+    }, on_conflict="user_id,setting_key").execute()
+
+    # Update session cache
+    session["phmb_mode"] = new_value
+
+    from starlette.responses import Response
+    return Response(headers={"HX-Redirect": "/profile"}, status_code=200)
+
+
 @rt("/profile/{user_id}")
 def post(session, user_id: str, full_name: str, phone: str = "", date_of_birth: str = "",
          position: str = "", hire_date: str = "", department_id: str = "",
@@ -45584,33 +45611,7 @@ def get_phmb_mode_enabled(user_id: str) -> bool:
     return False
 
 
-# --- PHMB User Toggle (on profile page) ---
-
-@rt("/profile/phmb-toggle")
-def post(session):
-    """Toggle PHMB mode for the current user."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-    user_id = user["id"]
-
-    current = get_phmb_mode_enabled(user_id)
-    new_value = not current
-
-    sb = get_supabase()
-    sb.table("user_settings").upsert({
-        "user_id": user_id,
-        "setting_key": "phmb_mode_enabled",
-        "setting_value": {"enabled": new_value},
-    }, on_conflict="user_id,setting_key").execute()
-
-    # Update session cache
-    session["phmb_mode"] = new_value
-
-    from starlette.responses import Response
-    return Response(headers={"HX-Redirect": "/profile"}, status_code=200)
+# --- PHMB User Toggle: route moved before /profile/{user_id} to avoid param capture ---
 
 
 # --- PHMB Admin Settings ---
