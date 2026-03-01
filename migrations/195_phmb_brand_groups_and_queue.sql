@@ -62,6 +62,6 @@ ALTER TABLE kvota.phmb_quote_items ALTER COLUMN list_price_rmb DROP NOT NULL;
 -- 4. Track migration
 -- =============================================================================
 
-INSERT INTO kvota.migrations (id, name, applied_at)
+INSERT INTO kvota.migrations (id, filename, applied_at)
 VALUES (195, '195_phmb_brand_groups_and_queue', now())
 ON CONFLICT (id) DO NOTHING;
