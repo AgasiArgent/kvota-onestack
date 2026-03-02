@@ -2912,11 +2912,19 @@ def sidebar(session, current_path: str = ""):
                 Div(initials, cls="sidebar-user-avatar"),
                 Div(
                     Div(email, cls="sidebar-user-email"),
-                    Div("Выйти", cls="sidebar-user-logout"),
+                    Div("Профиль", cls="sidebar-user-logout", style="color: #3b82f6;"),
                     cls="sidebar-user-info"
                 ),
-                href="/logout",
+                href="/profile",
                 cls="sidebar-user"
+            ),
+            A(
+                icon("log-out", size=16),
+                Span("Выйти", cls="sidebar-item-text", style="font-size: 12px; color: #94a3b8;"),
+                href="/logout",
+                cls="sidebar-item",
+                style="padding: 4px 12px; gap: 8px; opacity: 0.7;",
+                title="Выйти из системы"
             ),
             cls="sidebar-footer"
         ),
