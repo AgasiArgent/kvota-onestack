@@ -10631,8 +10631,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
             function deleteQuote() {{
                 fetch('/quotes/{quote_id}/cancel', {{
-                    method: 'POST',
-                    headers: {{ 'Content-Type': 'application/json' }}
+                    method: 'POST'
                 }})
                 .then(r => r.json())
                 .then(data => {{
@@ -17893,8 +17892,7 @@ def get(quote_id: str, session):
                             return;
                         }}
                         return fetch('/api/procurement/' + quoteId + '/complete', {{
-                            method: 'POST',
-                            headers: {{ 'Content-Type': 'application/json' }}
+                            method: 'POST'
                         }});
                     }})
                     .then(function(r) {{ if (r) return r.json(); }})
