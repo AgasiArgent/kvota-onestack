@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Dict, Any, List, Optional
 import os
 import json
+import html as html_mod
 from starlette.responses import JSONResponse
 from dotenv import load_dotenv
 
@@ -16043,7 +16044,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
 
 
 
-def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None, is_phmb: bool = False):
+def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None, is_phmb: bool = False, chat_unread: int = 0):
     """
     Create role-based tab navigation for quote detail pages.
 
@@ -16121,6 +16122,13 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             "label": "Документы",
             "icon": "folder",
             "href": f"/quotes/{quote_id}/documents",
+            "roles": None,  # All users with quote access
+        },
+        {
+            "id": "chat",
+            "label": f"Чат ({chat_unread})" if chat_unread > 0 else "Чат",
+            "icon": "message-circle",
+            "href": f"/quotes/{quote_id}/chat",
             "roles": None,  # All users with quote access
         },
     ]
@@ -46939,6 +46947,274 @@ def delete(session, group_id: str):
     delete_brand_group(group_id, org_id)
 
     return Response(status_code=200)
+
+
+# ============================================================================
+# QUOTE CHAT TAB (Comments)
+# ============================================================================
+
+def _render_comment_bubble(comment, current_user_id):
+    """Render a single chat message bubble."""
+    is_own = comment.get("user_id") == current_user_id
+    author_name = comment.get("author_name", "Unknown")
+    body_raw = comment.get("body", "")
+    created_at = comment.get("created_at", "")
+
+    # HTML-escape body BEFORE applying @mention highlighting
+    body_escaped = html_mod.escape(body_raw)
+
+    # Highlight @mentions in the escaped body
+    import re
+    body_html = re.sub(
+        r'(@\w+)',
+        r'<span style="color: #3b82f6; font-weight: 600;">\1</span>',
+        body_escaped
+    )
+
+    # Format timestamp
+    time_display = ""
+    if created_at:
+        try:
+            dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            time_display = dt.strftime("%H:%M")
+        except Exception:
+            time_display = created_at[:16]
+
+    # Bubble alignment and style
+    if is_own:
+        bubble_style = """
+            background: #dbeafe; border-radius: 12px 12px 4px 12px;
+            padding: 0.75rem 1rem; max-width: 75%; margin-left: auto;
+            margin-bottom: 0.5rem;
+        """
+        name_style = "font-size: 0.75rem; font-weight: 600; color: #2563eb; margin-bottom: 0.25rem;"
+    else:
+        bubble_style = """
+            background: #f3f4f6; border-radius: 12px 12px 12px 4px;
+            padding: 0.75rem 1rem; max-width: 75%;
+            margin-bottom: 0.5rem;
+        """
+        name_style = "font-size: 0.75rem; font-weight: 600; color: #6b7280; margin-bottom: 0.25rem;"
+
+    return Div(
+        Div(author_name, style=name_style),
+        Div(NotStr(body_html), style="font-size: 0.9rem; line-height: 1.4; color: #1f2937;"),
+        Div(time_display, style="font-size: 0.7rem; color: #9ca3af; text-align: right; margin-top: 0.25rem;"),
+        style=bubble_style,
+        cls="chat-bubble"
+    )
+
+
+def _render_chat_tab(quote_id, comments, org_users, current_user_id):
+    """Render the full chat tab content with messages, input form, and @mention dropdown."""
+
+    # Messages area
+    message_elements = []
+    for comment in comments:
+        message_elements.append(_render_comment_bubble(comment, current_user_id))
+
+    if not message_elements:
+        message_elements.append(
+            Div(
+                icon("message-circle", size=48, color="#d1d5db"),
+                P("Нет сообщений", style="color: #9ca3af; margin-top: 0.5rem;"),
+                P("Напишите первое сообщение в чат КП", style="color: #d1d5db; font-size: 0.85rem;"),
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem;"
+            )
+        )
+
+    messages_area = Div(
+        *message_elements,
+        id="chat-messages",
+        style="flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; min-height: 300px; max-height: 500px;"
+    )
+
+    # Input form
+    input_form = Form(
+        Div(
+            Textarea(
+                name="body",
+                placeholder="Написать сообщение...",
+                id="chat-input",
+                rows="2",
+                style="flex: 1; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; font-size: 0.9rem; resize: none; outline: none;",
+            ),
+            Input(type="hidden", name="mentions_json", id="mentions-json-input", value=""),
+            Button(
+                icon("send", size=18),
+                type="submit",
+                style="background: #3b82f6; color: white; border: none; border-radius: 8px; padding: 0.5rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;",
+            ),
+            style="display: flex; gap: 0.5rem; align-items: flex-end;"
+        ),
+        hx_post=f"/quotes/{quote_id}/comments",
+        hx_target="#chat-messages",
+        hx_swap="beforeend",
+        hx_on__after_request="this.querySelector('#chat-input').value = ''; this.querySelector('#mentions-json-input').value = ''; document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;",
+        style="padding: 1rem; border-top: 1px solid #e5e7eb;",
+    )
+
+    # Chat container
+    return Div(
+        Div(
+            H3(
+                icon("message-circle", size=20),
+                " Чат по КП",
+                style="display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.1rem;"
+            ),
+            style="padding: 1rem; border-bottom: 1px solid #e5e7eb;"
+        ),
+        messages_area,
+        input_form,
+        Script(f"""
+            // Auto-scroll to bottom on page load
+            (function() {{
+                var el = document.getElementById('chat-messages');
+                if (el) el.scrollTop = el.scrollHeight;
+            }})();
+        """),
+        cls="card",
+        style="display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem;"
+    )
+
+
+@rt("/quotes/{quote_id}/chat")
+def get(quote_id: str, session):
+    """View chat tab for a quote."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    org_id = user["org_id"]
+    user_id = user["id"]
+    user_roles = get_session_user_roles(session)
+
+    supabase = get_supabase()
+
+    # Get quote details
+    quote_result = supabase.table("quotes") \
+        .select("id, idn_quote, customer_id, status, workflow_status, customers!customer_id(name)") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return page_layout("КП не найдено",
+            H1("КП не найдено"),
+            Div("Запрошенное КП не существует или у вас нет доступа.", cls="card"),
+            A("← К списку КП", href="/quotes"),
+            session=session
+        )
+
+    quote = quote_result.data[0]
+    quote_number = quote.get("idn_quote") or quote_id[:8]
+    workflow_status = quote.get("workflow_status") or quote.get("status", "draft")
+
+    # Get customer name
+    customer_name = (quote.get("customers") or {}).get("name", "—")
+
+    # Import and use comment service
+    from services.comment_service import get_comments_for_quote, mark_as_read, get_org_users_for_mentions
+
+    # Mark as read when user opens chat
+    mark_as_read(quote_id=quote_id, user_id=user_id)
+
+    # Fetch comments and org users
+    comments = get_comments_for_quote(quote_id)
+    org_users = get_org_users_for_mentions(org_id)
+
+    return page_layout(
+        f"Чат КП {quote_number}",
+
+        # Persistent header
+        quote_header(quote, workflow_status, customer_name),
+
+        # Role-based tabs -- chat_unread=0 because we just marked as read
+        quote_detail_tabs(quote_id, "chat", user_roles, chat_unread=0),
+
+        # Chat content
+        _render_chat_tab(quote_id, comments, org_users, user_id),
+
+        # Back button
+        Div(
+            A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
+              style="display: inline-flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); text-decoration: none;"),
+            style="margin-top: 2rem;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/quotes/{quote_id}/comments")
+def post(session, quote_id: str, body: str = "", mentions_json: str = ""):
+    """Post a new comment to a quote's chat."""
+    redirect = require_login(session)
+    if redirect:
+        return Response("Unauthorized", status_code=401)
+
+    user = session["user"]
+    org_id = user["org_id"]
+    user_id = user["id"]
+
+    # Validate body not empty
+    if not body or not body.strip():
+        return Response(status_code=204)
+
+    # Verify quote belongs to org
+    supabase = get_supabase()
+    quote_result = supabase.table("quotes") \
+        .select("id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+
+    if not quote_result.data:
+        return Response("Quote not found", status_code=404)
+
+    # Parse mentions
+    mentions = []
+    if mentions_json:
+        try:
+            mentions = json.loads(mentions_json)
+            if not isinstance(mentions, list):
+                mentions = []
+        except (json.JSONDecodeError, TypeError):
+            mentions = []
+
+    # Create comment
+    from services.comment_service import create_comment
+    created = create_comment(
+        quote_id=quote_id,
+        user_id=user_id,
+        body=body.strip(),
+        mentions=mentions,
+    )
+
+    if not created:
+        return Response("Error creating comment", status_code=500)
+
+    # Enrich the created comment for rendering
+    try:
+        profile_result = supabase.table("user_profiles") \
+            .select("full_name") \
+            .eq("user_id", user_id) \
+            .execute()
+        author_name = (profile_result.data[0].get("full_name") if profile_result.data else None) or user_id[:8]
+    except Exception:
+        author_name = user_id[:8]
+
+    created["author_name"] = author_name
+    created["user_id"] = user_id
+
+    # Render the new bubble
+    bubble = _render_comment_bubble(created, user_id)
+
+    # OOB badge update (reset to "Чат" since this user just posted)
+    badge = Span("Чат", id="chat-tab-badge", hx_swap_oob="true")
+
+    return Div(bubble, badge)
 
 
 # ============================================================================
