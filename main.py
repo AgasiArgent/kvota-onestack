@@ -4656,6 +4656,14 @@ def post(email: str, password: str, session):
             if org_id:
                 user_roles = get_user_role_codes(response.user.id, org_id)
 
+            # training_manager is a super-role for demos — grant all permissions
+            if "training_manager" in user_roles:
+                all_roles = ["admin", "sales", "procurement", "logistics", "customs",
+                             "quote_controller", "spec_controller", "finance",
+                             "top_manager", "head_of_sales", "head_of_procurement",
+                             "head_of_logistics", "training_manager"]
+                user_roles = list(set(user_roles + all_roles))
+
             session["user"] = {
                 "id": response.user.id,
                 "email": response.user.email,
