@@ -10672,14 +10672,16 @@ async def post(quote_id: str, session, request):
     checklist_data = None
     try:
         body = await request.body()
+        print(f"[SUBMIT-PROCUREMENT] quote_id={quote_id}, body_len={len(body) if body else 0}, roles={user_roles}")
         if body:
             data = json.loads(body)
             checklist_data = data.get("checklist")
-    except (json.JSONDecodeError, Exception):
-        pass
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"[SUBMIT-PROCUREMENT] JSON parse error: {e}, body={body[:200] if body else 'empty'}")
 
     # Validate checklist is present and has required field
     if not checklist_data or not checklist_data.get("equipment_description", "").strip():
+        print(f"[SUBMIT-PROCUREMENT] Checklist validation failed: checklist_data={checklist_data}")
         return JSONResponse({"error": "Заполните контрольный список перед передачей в закупки"}, status_code=400)
 
     # Save checklist to quotes table
@@ -10712,8 +10714,10 @@ async def post(quote_id: str, session, request):
     )
 
     if result.success:
+        print(f"[SUBMIT-PROCUREMENT] SUCCESS quote_id={quote_id}")
         return JSONResponse({"redirect": f"/quotes/{quote_id}"})
     else:
+        print(f"[SUBMIT-PROCUREMENT] TRANSITION FAILED: {result.error_message}")
         return JSONResponse({"error": f"Ошибка перехода: {result.error_message}"}, status_code=400)
 
 
