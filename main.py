@@ -47019,6 +47019,7 @@ def _render_chat_tab(quote_id, comments, org_users, current_user_id):
                 icon("message-circle", size=48, color="#d1d5db"),
                 P("Нет сообщений", style="color: #9ca3af; margin-top: 0.5rem;"),
                 P("Напишите первое сообщение в чат КП", style="color: #d1d5db; font-size: 0.85rem;"),
+                id="chat-empty-state",
                 style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem;"
             )
         )
@@ -47211,10 +47212,10 @@ def post(session, quote_id: str, body: str = "", mentions_json: str = ""):
     # Render the new bubble
     bubble = _render_comment_bubble(created, user_id)
 
-    # OOB badge update (reset to "Чат" since this user just posted)
-    badge = Span("Чат", id="chat-tab-badge", hx_swap_oob="true")
+    # OOB: remove empty state placeholder when first message is sent
+    empty_state_remove = Div(id="chat-empty-state", hx_swap_oob="outerHTML", style="display:none;")
 
-    return Div(bubble, badge)
+    return Div(bubble, empty_state_remove)
 
 
 # ============================================================================
