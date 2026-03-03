@@ -1122,12 +1122,7 @@ def is_auto_transition(
 # =============================================================================
 
 from .database import get_supabase
-from .route_logistics_assignment_service import get_logistics_manager_for_locations
-from collections import Counter
 from datetime import datetime, timezone
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -2140,126 +2135,6 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
         }
 
 
-def assign_logistics_user_to_quote(quote_id: str) -> Dict:
-    """
-    Auto-assign a logistics manager to a quote based on supplier countries.
-
-    This function:
-    1. Fetches the quote (organization_id, delivery_city)
-    2. Fetches quote_items (supplier_country from each item)
-    3. Collects unique, non-empty supplier countries
-    4. For each country, calls get_logistics_manager_for_locations()
-    5. Picks the manager that appears most (majority vote weighted by item count)
-    6. Updates quotes.assigned_logistics_user to that user_id
-
-    Args:
-        quote_id: UUID of the quote
-
-    Returns:
-        Dict with:
-        - success: bool
-        - assigned_user_id: str or None
-        - countries_checked: list of country strings checked
-        - error_message: str or None
-    """
-    supabase = get_supabase()
-
-    try:
-        # Get quote info
-        quote_response = supabase.table("quotes") \
-            .select("organization_id, delivery_city") \
-            .eq("id", quote_id) \
-            .single() \
-            .execute()
-
-        if not quote_response.data:
-            return {
-                "success": False,
-                "assigned_user_id": None,
-                "countries_checked": [],
-                "error_message": f"Quote not found: {quote_id}",
-            }
-
-        org_id = quote_response.data.get("organization_id")
-        delivery_city = quote_response.data.get("delivery_city")
-
-        if not org_id:
-            return {
-                "success": False,
-                "assigned_user_id": None,
-                "countries_checked": [],
-                "error_message": "Quote has no organization_id",
-            }
-
-        # Get quote items with supplier_country
-        items_response = supabase.table("quote_items") \
-            .select("supplier_country") \
-            .eq("quote_id", quote_id) \
-            .execute()
-
-        items = items_response.data or []
-
-        # Collect valid supplier countries (strip whitespace, skip empty/null)
-        item_countries = []
-        for item in items:
-            raw = item.get("supplier_country")
-            if raw and raw.strip():
-                item_countries.append(raw.strip())
-
-        # Get unique countries (preserving insertion order)
-        unique_countries = list(dict.fromkeys(item_countries))
-
-        if not unique_countries:
-            return {
-                "success": True,
-                "assigned_user_id": None,
-                "countries_checked": [],
-                "error_message": None,
-            }
-
-        # For each unique country, call routing service to find manager
-        country_to_manager = {}
-        for country in unique_countries:
-            manager_id = get_logistics_manager_for_locations(
-                organization_id=org_id,
-                origin_country=country,
-                destination_city=delivery_city,
-            )
-            country_to_manager[country] = manager_id
-
-        # Weight managers by number of items from each country
-        manager_votes = Counter(
-            country_to_manager[c]
-            for c in item_countries
-            if country_to_manager.get(c)
-        )
-
-        # Pick the manager with the most items (majority vote)
-        assigned_user_id = manager_votes.most_common(1)[0][0] if manager_votes else None
-
-        # Update quote with the assigned logistics user
-        if assigned_user_id:
-            supabase.table("quotes") \
-                .update({"assigned_logistics_user": assigned_user_id}) \
-                .eq("id", quote_id) \
-                .execute()
-
-        return {
-            "success": True,
-            "assigned_user_id": assigned_user_id,
-            "countries_checked": unique_countries,
-            "error_message": None,
-        }
-
-    except Exception as e:
-        return {
-            "success": False,
-            "assigned_user_id": None,
-            "countries_checked": [],
-            "error_message": str(e),
-        }
-
-
 def transition_to_pending_procurement(
     quote_id: str,
     actor_id: str,
@@ -2728,14 +2603,6 @@ def complete_procurement(
         transition_id = log_response.data[0].get("id") if log_response.data else None
     except Exception:
         transition_id = None  # Non-critical, continue
-
-    # Best-effort: auto-assign logistics manager based on supplier countries
-    try:
-        result = assign_logistics_user_to_quote(quote_id)
-        if not result.get("success"):
-            logger.warning(f"Logistics auto-assignment failed for quote {quote_id}: {result.get('error_message')}")
-    except Exception as e:
-        logger.warning(f"Logistics auto-assignment failed for quote {quote_id}: {e}")
 
     return TransitionResult(
         success=True,
