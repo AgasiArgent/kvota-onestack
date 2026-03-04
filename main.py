@@ -44937,8 +44937,8 @@ def get(session, ci_id: str):
         Button(
             icon("refresh-cw", size=14, color="#475569"),
             " Пересоздать из источника",
-            hx_post=f"/currency-invoices/{ci_id}/regenerate",
-            hx_confirm="Все ручные изменения будут потеряны. Пересоздать?",
+            onclick=f"if(confirm('Все ручные изменения будут потеряны. Пересоздать?')){{var f=document.createElement('form');f.method='POST';f.action='/currency-invoices/{ci_id}/regenerate';document.body.appendChild(f);f.submit();}}",
+            type="button",
             style=btn_secondary_style
         )
     )

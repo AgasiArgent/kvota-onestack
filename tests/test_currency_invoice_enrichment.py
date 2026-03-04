@@ -412,8 +412,8 @@ class TestGenerateCurrencyInvoicesEnriched:
                 "contract_date": "2026-01-15",
                 "seller_entity_type": "buyer_company",
                 "seller_entity_id": "bc-eu-1",
-                "buyer_entity_type": None,  # intermediary TBD
-                "buyer_entity_id": None,
+                "buyer_entity_type": "seller_company",
+                "buyer_entity_id": "sc-ru-1",
                 "currency": "EUR",
                 "is_active": True,
             },
