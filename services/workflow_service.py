@@ -1123,6 +1123,11 @@ def is_auto_transition(
 
 from .database import get_supabase
 from datetime import datetime, timezone
+from collections import Counter, defaultdict
+import services.route_logistics_assignment_service as route_logistics_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -2135,6 +2140,154 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
         }
 
 
+def _logistics_assignment_result(
+    success: bool,
+    assigned_invoices: list = None,
+    unmatched_invoice_ids: list = None,
+    quote_level_user_id: str = None,
+    error_message: str = None,
+) -> Dict:
+    """Build a standardised return dict for assign_logistics_to_invoices."""
+    return {
+        "success": success,
+        "assigned_invoices": assigned_invoices or [],
+        "unmatched_invoice_ids": unmatched_invoice_ids or [],
+        "quote_level_user_id": quote_level_user_id,
+        "error_message": error_message,
+    }
+
+
+def assign_logistics_to_invoices(quote_id: str) -> Dict:
+    """
+    Auto-assign logistics managers to procurement invoices based on pickup_country.
+
+    This function:
+    1. Fetches the quote (organization_id, delivery_city)
+    2. Fetches all invoices for the quote (id, pickup_country)
+    3. For each unique pickup_country, calls
+       get_logistics_manager_for_locations(org_id, pickup_country, delivery_city)
+       (results are cached per country to avoid redundant RPC calls)
+    4. Batch-updates invoices grouped by assigned user_id
+    5. Uses Counter for majority vote across assigned invoices to set
+       quotes.assigned_logistics_user
+
+    Args:
+        quote_id: UUID of the quote
+
+    Returns:
+        Dict with:
+        - success: bool
+        - assigned_invoices: list of {invoice_id, pickup_country, user_id}
+        - unmatched_invoice_ids: list of invoice IDs without assignments
+        - quote_level_user_id: str or None (majority vote winner)
+        - error_message: str or None
+    """
+    supabase = get_supabase()
+
+    try:
+        # Fetch quote info
+        try:
+            quote_response = supabase.table("quotes") \
+                .select("id, organization_id, delivery_city") \
+                .eq("id", quote_id) \
+                .single() \
+                .execute()
+        except Exception:
+            return _logistics_assignment_result(
+                success=False,
+                error_message=f"Quote not found: {quote_id}",
+            )
+
+        quote = quote_response.data
+        if not quote or not isinstance(quote, dict):
+            return _logistics_assignment_result(
+                success=False,
+                error_message=f"Quote not found: {quote_id}",
+            )
+
+        org_id = quote.get("organization_id")
+        delivery_city = quote.get("delivery_city")
+
+        # Fetch all invoices for this quote
+        invoices_response = supabase.table("invoices") \
+            .select("id, pickup_country") \
+            .eq("quote_id", quote_id) \
+            .execute()
+
+        invoices = invoices_response.data or []
+
+        if not invoices:
+            return _logistics_assignment_result(success=True)
+
+        assigned_invoices = []
+        unmatched_invoice_ids = []
+
+        # Cache route lookups by pickup_country to avoid redundant RPC calls
+        country_to_user: Dict[str, Optional[str]] = {}
+
+        for invoice in invoices:
+            invoice_id = invoice.get("id")
+            pickup_country = (invoice.get("pickup_country") or "").strip()
+
+            if not pickup_country:
+                unmatched_invoice_ids.append(invoice_id)
+                continue
+
+            # Lookup with memoisation per country
+            if pickup_country not in country_to_user:
+                country_to_user[pickup_country] = \
+                    route_logistics_service.get_logistics_manager_for_locations(
+                        org_id, pickup_country, delivery_city
+                    )
+
+            user_id = country_to_user[pickup_country]
+
+            if user_id:
+                assigned_invoices.append({
+                    "invoice_id": invoice_id,
+                    "pickup_country": pickup_country,
+                    "user_id": user_id,
+                })
+            else:
+                unmatched_invoice_ids.append(invoice_id)
+
+        # Batch-update invoices grouped by user_id (one UPDATE per distinct user)
+        if assigned_invoices:
+            user_to_invoice_ids: Dict[str, list] = defaultdict(list)
+            for inv in assigned_invoices:
+                user_to_invoice_ids[inv["user_id"]].append(inv["invoice_id"])
+
+            for user_id, invoice_ids in user_to_invoice_ids.items():
+                supabase.table("invoices") \
+                    .update({"assigned_logistics_user": user_id}) \
+                    .in_("id", invoice_ids) \
+                    .execute()
+
+        # Majority vote for quote-level assignment
+        quote_level_user_id = None
+        if assigned_invoices:
+            user_counts = Counter(inv["user_id"] for inv in assigned_invoices)
+            quote_level_user_id = user_counts.most_common(1)[0][0]
+
+            supabase.table("quotes") \
+                .update({"assigned_logistics_user": quote_level_user_id}) \
+                .eq("id", quote_id) \
+                .execute()
+
+        return _logistics_assignment_result(
+            success=True,
+            assigned_invoices=assigned_invoices,
+            unmatched_invoice_ids=unmatched_invoice_ids,
+            quote_level_user_id=quote_level_user_id,
+        )
+
+    except Exception as e:
+        return _logistics_assignment_result(
+            success=False,
+            error_message=str(e),
+        )
+
+
 def transition_to_pending_procurement(
     quote_id: str,
     actor_id: str,
@@ -2603,6 +2756,15 @@ def complete_procurement(
         transition_id = log_response.data[0].get("id") if log_response.data else None
     except Exception:
         transition_id = None  # Non-critical, continue
+
+    # Best-effort: auto-assign logistics managers to invoices
+    try:
+        assign_logistics_to_invoices(quote_id)
+    except Exception as e:
+        logger.warning(
+            "Failed to auto-assign logistics to invoices for quote %s: %s",
+            quote_id, str(e)
+        )
 
     return TransitionResult(
         success=True,
