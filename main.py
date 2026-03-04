@@ -14556,6 +14556,9 @@ def get(quote_id: str, session):
         # Document chain section (grouped by stage)
         _render_document_chain_section(quote_id),
 
+        # Currency invoices section (verified/exported only, hidden if no deal)
+        _render_currency_invoices_section(quote_id, supabase),
+
         # Back button
         Div(
             A(icon("arrow-left", size=16), " К обзору КП", href=f"/quotes/{quote_id}",
@@ -14697,6 +14700,88 @@ def _render_document_chain_section(quote_id: str):
             *stage_cards,
             style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;"
         ),
+    )
+
+
+def _render_currency_invoices_section(quote_id: str, supabase):
+    """
+    Render 'Валютные инвойсы' section for quote documents tab.
+    Only shows invoices with status 'verified' or 'exported'.
+    Returns empty string if no deal exists for this quote.
+    """
+    # Check if a deal exists for this quote
+    try:
+        deal_resp = supabase.table("deals").select("id").eq("quote_id", quote_id).execute()
+        deals = deal_resp.data or []
+    except Exception as e:
+        print(f"Error checking deals for quote {quote_id}: {e}")
+        return ""
+
+    if not deals:
+        return ""
+
+    deal_ids = [d["id"] for d in deals]
+
+    # Fetch approved currency invoices for these deals
+    try:
+        ci_resp = supabase.table("currency_invoices").select(
+            "id, invoice_number, segment, total_amount, currency, status, generated_at"
+        ).in_("deal_id", deal_ids).in_("status", ["verified", "exported"]).order("generated_at", desc=True).execute()
+        approved_cis = ci_resp.data or []
+    except Exception as e:
+        print(f"Error fetching approved currency invoices for quote {quote_id}: {e}")
+        approved_cis = []
+
+    # Build cards
+    if approved_cis:
+        cards = []
+        for ci in approved_cis:
+            total = float(ci.get("total_amount", 0) or 0)
+            cards.append(
+                A(
+                    Div(
+                        Div(
+                            _ci_segment_badge(ci.get("segment", "")),
+                            _ci_status_badge(ci.get("status", "")),
+                            style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;"
+                        ),
+                        Div(
+                            ci.get("invoice_number", "—"),
+                            style="font-size: 14px; font-weight: 600; color: #1e293b; margin-bottom: 4px;"
+                        ),
+                        Div(
+                            f"{total:,.2f} {ci.get('currency', '')}",
+                            style="font-size: 13px; color: #64748b;"
+                        ),
+                    ),
+                    href=f"/currency-invoices/{ci['id']}",
+                    style="display: block; background: white; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; text-decoration: none; transition: box-shadow 0.15s;",
+                    onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)'",
+                    onmouseout="this.style.boxShadow='none'"
+                )
+            )
+        content = Div(*cards, style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;")
+    else:
+        content = Div(
+            Span("Нет утверждённых валютных инвойсов",
+                 style="font-size: 13px; color: #94a3b8; font-style: italic;"),
+            style="padding: 16px 0;"
+        )
+
+    count_badge = Span(
+        str(len(approved_cis)),
+        style="background: #8b5cf620; color: #8b5cf6; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;"
+    ) if approved_cis else ""
+
+    return Div(
+        Hr(style="margin: 2rem 0; border: none; border-top: 1px solid #e2e8f0;"),
+        H3(
+            icon("receipt", size=20),
+            " Валютные инвойсы",
+            count_badge,
+            style="display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; font-size: 1.1rem; color: #1e293b;"
+        ),
+        content,
     )
 
 
@@ -44501,7 +44586,7 @@ def _ci_current_entity_value(entity_type, entity_id):
 
 @rt("/currency-invoices")
 def get(session):
-    """Currency invoices registry page - lists all currency invoices across all deals."""
+    """Currency invoices registry — grouped by quote (IDN)."""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -44516,72 +44601,149 @@ def get(session):
     user = session["user"]
     org_id = user.get("org_id", "")
 
-    # Fetch all currency invoices with deal info
+    # Fetch all deals with quote info (to show quotes even with 0 invoices)
+    try:
+        deals_resp = supabase.table("deals").select(
+            "id, deal_number, quote_id, "
+            "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
+        ).eq("organization_id", org_id).execute()
+        all_deals = deals_resp.data or []
+    except Exception as e:
+        print(f"Error fetching deals for currency invoices registry: {e}")
+        all_deals = []
+
+    # Fetch all currency invoices
     try:
         ci_resp = supabase.table("currency_invoices").select(
-            "*, deals!deal_id(deal_number, specification_id)"
-        ).eq("organization_id", org_id).order("created_at", desc=True).execute()
-        currency_invoices = ci_resp.data or []
+            "*, deals!deal_id(deal_number)"
+        ).eq("organization_id", org_id).order("generated_at", desc=True).execute()
+        all_cis = ci_resp.data or []
     except Exception as e:
-        print(f"Error fetching currency invoices registry: {e}")
-        currency_invoices = []
+        print(f"Error fetching currency invoices: {e}")
+        all_cis = []
 
-    # Resolve company names for each invoice
-    for ci in currency_invoices:
+    # Resolve company names
+    for ci in all_cis:
         ci["seller_name"] = _resolve_company_name(supabase, ci.get("seller_entity_type"), ci.get("seller_entity_id"))
         ci["buyer_name"] = _resolve_company_name(supabase, ci.get("buyer_entity_type"), ci.get("buyer_entity_id"))
+
+    # Build deal_map: deal_id → {quote_id, idn_quote, customer_name}
+    deal_map = {}
+    for deal in all_deals:
+        q = (deal.get("quotes") or {})
+        deal_map[deal["id"]] = {
+            "quote_id": deal.get("quote_id", ""),
+            "idn_quote": q.get("idn_quote") or f"#{str(deal.get('quote_id', ''))[:8]}",
+            "customer_name": (q.get("customers") or {}).get("name", "—"),
+        }
+
+    # Group invoices by quote_id
+    ci_by_quote = {}
+    for ci in all_cis:
+        deal_id = ci.get("deal_id", "")
+        deal_info = deal_map.get(deal_id, {})
+        quote_id = deal_info.get("quote_id", "")
+        if quote_id:
+            ci_by_quote.setdefault(quote_id, []).append(ci)
+
+    # Build ordered list of quote groups (all quotes with deals)
+    quote_groups = []
+    seen_quote_ids = set()
+    for deal in all_deals:
+        q_id = deal.get("quote_id", "")
+        if not q_id or q_id in seen_quote_ids:
+            continue
+        seen_quote_ids.add(q_id)
+        info = deal_map.get(deal["id"], {})
+        cis = ci_by_quote.get(q_id, [])
+        latest_date = max((ci.get("generated_at") or "" for ci in cis), default="") if cis else ""
+        quote_groups.append({
+            "quote_id": q_id,
+            "idn_quote": info.get("idn_quote", "—"),
+            "customer_name": info.get("customer_name", "—"),
+            "cis": cis,
+            "latest_date": latest_date,
+        })
+
+    # Sort: groups with invoices first (latest date DESC), then groups without
+    groups_with = sorted([g for g in quote_groups if g["latest_date"]], key=lambda g: g["latest_date"], reverse=True)
+    groups_without = [g for g in quote_groups if not g["latest_date"]]
+    quote_groups = groups_with + groups_without
 
     # Styles
     table_header_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
     cell_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
 
-    if currency_invoices:
+    if quote_groups:
         rows = []
-        for ci in currency_invoices:
-            total_amount = float(ci.get("total_amount", 0) or 0)
-            deal_info = (ci.get("deals") or {})
-            deal_number = deal_info.get("deal_number", "—")
-            deal_id = ci.get("deal_id", "")
+        for group in quote_groups:
+            cis = group["cis"]
+            total_for_group = sum(float(ci.get("total_amount", 0) or 0) for ci in cis)
+            ci_count = len(cis)
 
-            # Format date
-            display_date = "—"
-            generated_at = ci.get("generated_at", "")
-            if generated_at:
-                try:
-                    from datetime import datetime as dt_cls
-                    if "T" in str(generated_at):
-                        dt_obj = dt_cls.fromisoformat(str(generated_at).replace("Z", "+00:00"))
-                        display_date = dt_obj.strftime("%d.%m.%Y")
-                    else:
-                        display_date = str(generated_at)[:10]
-                except Exception:
-                    display_date = str(generated_at)[:10]
+            # Quote group header row
+            header_content = Div(
+                A(group["idn_quote"],
+                  href=f"/quotes/{group['quote_id']}",
+                  style="color: #3b82f6; text-decoration: none; font-weight: 700; font-size: 14px;"),
+                Span(f" — {group['customer_name']}", style="color: #475569; font-weight: 500; margin-left: 4px;"),
+                Span(f" | {ci_count} инвойс(ов)", style="color: #64748b; margin-left: 8px; font-size: 13px;") if ci_count else "",
+                Span(f" | {total_for_group:,.2f}", style="color: #475569; margin-left: 8px; font-size: 13px; font-weight: 600;") if ci_count else "",
+                style="display: flex; align-items: center; flex-wrap: wrap;",
+            )
+            rows.append(
+                Tr(
+                    Td(header_content, colspan="8",
+                       style="background: #f1f5f9; padding: 10px 16px;"),
+                    cls="group-separator"
+                )
+            )
 
-            rows.append(Tr(
-                Td(display_date, style=f"{cell_style} color: #64748b; font-size: 13px;"),
-                Td(
-                    A(ci.get("invoice_number", "—"),
-                      href=f"/currency-invoices/{ci['id']}",
-                      style="color: #3b82f6; text-decoration: none; font-weight: 500;"),
-                    style=cell_style
-                ),
-                Td(
-                    _ci_segment_badge(ci.get("segment", "")),
-                    style=cell_style
-                ),
-                Td(ci.get("seller_name", "Не выбрана"), style=cell_style),
-                Td(ci.get("buyer_name", "Не выбрана"), style=cell_style),
-                Td(
-                    A(deal_number, href=f"/finance/{deal_id}", style="color: #3b82f6; text-decoration: none;") if deal_id else deal_number,
-                    style=cell_style
-                ),
-                Td(f"{total_amount:,.2f}", style=f"{cell_style} text-align: right; font-weight: 500;"),
-                Td(ci.get("currency", ""), style=cell_style),
-                Td(_ci_status_badge(ci.get("status", "draft")), style=cell_style),
-                style="transition: background-color 0.15s ease;",
-                onmouseover="this.style.backgroundColor='#f8fafc'",
-                onmouseout="this.style.backgroundColor='transparent'"
-            ))
+            if cis:
+                # Sort within group: EURTR first, then TRRU
+                segment_order = {"EURTR": 0, "TRRU": 1}
+                cis_sorted = sorted(cis, key=lambda c: segment_order.get(c.get("segment", ""), 2))
+
+                for ci in cis_sorted:
+                    total_amount = float(ci.get("total_amount", 0) or 0)
+
+                    # Format date
+                    display_date = "—"
+                    generated_at = ci.get("generated_at", "")
+                    if generated_at:
+                        try:
+                            from datetime import datetime as dt_cls
+                            if "T" in str(generated_at):
+                                dt_obj = dt_cls.fromisoformat(str(generated_at).replace("Z", "+00:00"))
+                                display_date = dt_obj.strftime("%d.%m.%Y")
+                            else:
+                                display_date = str(generated_at)[:10]
+                        except Exception:
+                            display_date = str(generated_at)[:10]
+
+                    rows.append(Tr(
+                        Td(display_date, style=f"{cell_style} color: #64748b; font-size: 13px;"),
+                        Td(
+                            A(ci.get("invoice_number", "—"),
+                              href=f"/currency-invoices/{ci['id']}",
+                              style="color: #3b82f6; text-decoration: none; font-weight: 500;"),
+                            style=cell_style
+                        ),
+                        Td(_ci_segment_badge(ci.get("segment", "")), style=cell_style),
+                        Td(ci.get("seller_name", "Не выбрана"), style=cell_style),
+                        Td(ci.get("buyer_name", "Не выбрана"), style=cell_style),
+                        Td(f"{total_amount:,.2f}", style=f"{cell_style} text-align: right; font-weight: 500;"),
+                        Td(ci.get("currency", ""), style=cell_style),
+                        Td(_ci_status_badge(ci.get("status", "draft")), style=cell_style),
+                        style="transition: background-color 0.15s ease;",
+                        onmouseover="this.style.backgroundColor='#f8fafc'",
+                        onmouseout="this.style.backgroundColor='transparent'"
+                    ))
+            else:
+                rows.append(
+                    Tr(Td("Нет валютных инвойсов", colspan="8",
+                           style="padding: 12px 16px; color: #94a3b8; font-size: 13px; font-style: italic; text-align: center;"))
+                )
 
         invoices_table = Table(
             Thead(
@@ -44591,7 +44753,6 @@ def get(session):
                     Th("Сегмент", style=table_header_style),
                     Th("Продавец", style=table_header_style),
                     Th("Покупатель", style=table_header_style),
-                    Th("Сделка", style=table_header_style),
                     Th("Сумма", style=f"{table_header_style} text-align: right;"),
                     Th("Валюта", style=table_header_style),
                     Th("Статус", style=table_header_style),
@@ -44614,7 +44775,7 @@ def get(session):
         "Валютные инвойсы",
         Div(
             H1("Валютные инвойсы", style="font-size: 22px; font-weight: 700; color: #1e293b; margin: 0 0 8px 0;"),
-            P(f"Всего: {len(currency_invoices)} инвойс(ов)", style="color: #64748b; font-size: 14px; margin: 0;"),
+            P(f"КП со сделками: {len(quote_groups)}, инвойсов: {len(all_cis)}", style="color: #64748b; font-size: 14px; margin: 0;"),
             style="margin-bottom: 24px;"
         ),
         Div(
