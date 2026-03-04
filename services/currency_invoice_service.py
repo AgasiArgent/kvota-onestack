@@ -19,6 +19,79 @@ from decimal import Decimal
 from collections import defaultdict
 
 
+# ---------------------------------------------------------------------------
+# Payment & Delivery Terms Constants
+# ---------------------------------------------------------------------------
+
+PAYMENT_TERMS_EURTR = "Payment within 180 days from the date of invoice"
+PAYMENT_TERMS_TRRU = "100% prepayment before shipment"
+DELIVERY_TERMS_TRRU = "DAP destination point, according to the contract"
+
+
+# ---------------------------------------------------------------------------
+# Contract & Bank Account Lookup (pure functions, no DB)
+# ---------------------------------------------------------------------------
+
+def lookup_contract(
+    contracts: list[dict],
+    seller_entity_type: str | None,
+    seller_entity_id: str | None,
+    buyer_entity_type: str | None,
+    buyer_entity_id: str | None,
+    currency: str,
+) -> dict | None:
+    """Find a matching active contract from a list.
+
+    Match on all five fields: seller_entity_type, seller_entity_id,
+    buyer_entity_type, buyer_entity_id, currency.
+    Only returns contracts where is_active is True.
+
+    Returns:
+        Matching contract dict or None.
+    """
+    for c in contracts:
+        if not c.get("is_active"):
+            continue
+        if (
+            c.get("seller_entity_type") == seller_entity_type
+            and c.get("seller_entity_id") == seller_entity_id
+            and c.get("buyer_entity_type") == buyer_entity_type
+            and c.get("buyer_entity_id") == buyer_entity_id
+            and c.get("currency") == currency
+        ):
+            return c
+    return None
+
+
+def pick_bank_account(
+    bank_accounts: list[dict],
+    entity_type: str,
+    entity_id: str,
+    currency: str,
+) -> dict | None:
+    """Select a bank account matching entity + currency.
+
+    Prefers accounts with is_default=True. Falls back to any matching account.
+
+    Returns:
+        Matching bank account dict or None.
+    """
+    matching = [
+        ba for ba in bank_accounts
+        if ba.get("entity_type") == entity_type
+        and ba.get("entity_id") == entity_id
+        and ba.get("currency") == currency
+        and ba.get("is_active", True)
+    ]
+    if not matching:
+        return None
+    # Prefer default
+    for ba in matching:
+        if ba.get("is_default"):
+            return ba
+    return matching[0]
+
+
 def calculate_segment_price(
     base_price: Decimal,
     segment: str,
@@ -130,6 +203,8 @@ def generate_currency_invoices(
     seller_company: dict,
     organization_id: str,
     markup_percent: Decimal = Decimal("2.0"),
+    contracts: list[dict] | None = None,
+    bank_accounts: list[dict] | None = None,
 ) -> list[dict]:
     """Generate currency invoice dicts from deal items (pure logic, no DB).
 
@@ -148,6 +223,8 @@ def generate_currency_invoices(
         seller_company: Seller company dict with 'id', 'name', 'entity_type'.
         organization_id: Organization UUID.
         markup_percent: Markup percentage per segment (default 2.0%).
+        contracts: Optional list of contract dicts for enrichment lookup.
+        bank_accounts: Optional list of bank account dicts for enrichment lookup.
 
     Returns:
         List of invoice dicts ready for DB insertion.
@@ -254,6 +331,48 @@ def generate_currency_invoices(
             "items": trru_items,
         }
         invoices.append(trru_invoice)
+
+    # --- Enrichment: contracts, bank accounts, payment/delivery terms ---
+    enrich = contracts is not None or bank_accounts is not None
+    if enrich:
+        for inv in invoices:
+            segment = inv.get("segment", "")
+
+            # Contract lookup
+            if contracts is not None:
+                matched_contract = lookup_contract(
+                    contracts=contracts,
+                    seller_entity_type=inv.get("seller_entity_type"),
+                    seller_entity_id=inv.get("seller_entity_id"),
+                    buyer_entity_type=inv.get("buyer_entity_type"),
+                    buyer_entity_id=inv.get("buyer_entity_id"),
+                    currency=inv.get("currency", ""),
+                )
+                inv["contract_number"] = matched_contract["contract_number"] if matched_contract else None
+                inv["contract_date"] = matched_contract["contract_date"] if matched_contract else None
+            else:
+                inv["contract_number"] = None
+                inv["contract_date"] = None
+
+            # Bank account lookup (for the seller entity)
+            if bank_accounts is not None:
+                matched_account = pick_bank_account(
+                    bank_accounts=bank_accounts,
+                    entity_type=inv.get("seller_entity_type") or "",
+                    entity_id=inv.get("seller_entity_id") or "",
+                    currency=inv.get("currency", ""),
+                )
+                inv["seller_bank_account_id"] = matched_account["id"] if matched_account else None
+            else:
+                inv["seller_bank_account_id"] = None
+
+            # Payment and delivery terms based on segment
+            if segment == "EURTR":
+                inv["payment_terms"] = PAYMENT_TERMS_EURTR
+                inv["delivery_terms"] = None
+            elif segment == "TRRU":
+                inv["payment_terms"] = PAYMENT_TERMS_TRRU
+                inv["delivery_terms"] = DELIVERY_TERMS_TRRU
 
     return invoices
 
