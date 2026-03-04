@@ -1129,6 +1129,38 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# ISO country code → Russian name mapping for route matching.
+# Routing rules use Russian names (e.g. "Китай-*"), but invoices store ISO codes (e.g. "CN").
+_COUNTRY_CODE_TO_RUSSIAN = {
+    "CN": "Китай", "TW": "Тайвань", "JP": "Япония", "MY": "Малайзия",
+    "TR": "Турция", "DE": "Германия", "BE": "Бельгия", "IT": "Италия",
+    "FR": "Франция", "US": "США", "KR": "Южная Корея", "IN": "Индия",
+    "TH": "Таиланд", "VN": "Вьетнам", "ID": "Индонезия", "AE": "ОАЭ",
+    "GB": "Великобритания", "ES": "Испания", "PL": "Польша", "CZ": "Чехия",
+}
+# Also map common English names that might appear in data
+_ENGLISH_TO_RUSSIAN = {
+    "china": "Китай", "turkey": "Турция", "germany": "Германия",
+    "belgium": "Бельгия", "taiwan": "Тайвань", "japan": "Япония",
+    "malaysia": "Малайзия", "italy": "Италия", "france": "Франция",
+}
+
+
+def _normalize_country_to_russian(country: str) -> str:
+    """Translate ISO code or English name to Russian for route matching."""
+    if not country:
+        return country
+    # Try ISO code lookup (uppercase)
+    russian = _COUNTRY_CODE_TO_RUSSIAN.get(country.upper())
+    if russian:
+        return russian
+    # Try English name lookup (lowercase)
+    russian = _ENGLISH_TO_RUSSIAN.get(country.lower())
+    if russian:
+        return russian
+    # Already Russian or unknown — return as-is (catch-all will handle)
+    return country
+
 
 @dataclass
 class TransitionResult:
@@ -2233,11 +2265,14 @@ def assign_logistics_to_invoices(quote_id: str) -> Dict:
                 unmatched_invoice_ids.append(invoice_id)
                 continue
 
+            # Translate ISO/English country to Russian for route matching
+            route_country = _normalize_country_to_russian(pickup_country)
+
             # Lookup with memoisation per country
             if pickup_country not in country_to_user:
                 country_to_user[pickup_country] = \
                     route_logistics_service.get_logistics_manager_for_locations(
-                        org_id, pickup_country, delivery_city
+                        org_id, route_country, delivery_city
                     )
 
             user_id = country_to_user[pickup_country]
