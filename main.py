@@ -26743,6 +26743,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                         ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
                         if bc_lookup and ci_seller_company.get("id"):
+                            ci_contracts, ci_bank_accounts = _fetch_enrichment_data(supabase, org_id)
                             ci_invoices = generate_currency_invoices(
                                 deal_id=str(new_deal_id),
                                 quote_idn=ci_quote_idn,
@@ -26750,6 +26751,8 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                                 buyer_companies=bc_lookup,
                                 seller_company=ci_seller_company,
                                 organization_id=org_id,
+                                contracts=ci_contracts,
+                                bank_accounts=ci_bank_accounts,
                             )
                             if ci_invoices:
                                 save_currency_invoices(supabase, ci_invoices)
@@ -27409,6 +27412,7 @@ def post(session, spec_id: str):
             ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
             if bc_lookup and ci_seller_company.get("id"):
+                ci_contracts, ci_bank_accounts = _fetch_enrichment_data(supabase, org_id)
                 ci_invoices = generate_currency_invoices(
                     deal_id=str(deal_id),
                     quote_idn=ci_quote_idn,
@@ -27416,6 +27420,8 @@ def post(session, spec_id: str):
                     buyer_companies=bc_lookup,
                     seller_company=ci_seller_company,
                     organization_id=org_id,
+                    contracts=ci_contracts,
+                    bank_accounts=ci_bank_accounts,
                 )
                 if ci_invoices:
                     save_currency_invoices(supabase, ci_invoices)
@@ -42474,6 +42480,34 @@ def _fetch_items_with_buyer_companies(supabase, quote_id):
     return items, bc_lookup
 
 
+def _fetch_enrichment_data(supabase, org_id):
+    """Fetch active currency contracts and bank accounts for an organization.
+
+    Used to enrich currency invoice generation with contract/bank details.
+    Returns (contracts_list, bank_accounts_list). On failure returns ([], [])
+    so that invoice generation can proceed without enrichment.
+    """
+    try:
+        contracts_resp = supabase.table("currency_contracts").select("*").eq(
+            "organization_id", org_id
+        ).eq("is_active", True).execute()
+        contracts = contracts_resp.data or []
+    except Exception as e:
+        print(f"Warning: could not fetch currency_contracts for org {org_id}: {e}")
+        contracts = []
+
+    try:
+        bank_accounts_resp = supabase.table("bank_accounts").select("*").eq(
+            "organization_id", org_id
+        ).eq("is_active", True).execute()
+        bank_accounts = bank_accounts_resp.data or []
+    except Exception as e:
+        print(f"Warning: could not fetch bank_accounts for org {org_id}: {e}")
+        bank_accounts = []
+
+    return contracts, bank_accounts
+
+
 def _finance_fetch_deal_data(deal_id, org_id, user_roles):
     """
     Fetch deal and plan-fact data needed for finance tabs on quote detail page.
@@ -43604,6 +43638,7 @@ def post(session, deal_id: str):
         ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
         if bc_lookup and ci_seller_company.get("id"):
+            ci_contracts, ci_bank_accounts = _fetch_enrichment_data(supabase, org_id)
             ci_invoices = generate_currency_invoices(
                 deal_id=str(deal_id),
                 quote_idn=ci_quote_idn,
@@ -43611,6 +43646,8 @@ def post(session, deal_id: str):
                 buyer_companies=bc_lookup,
                 seller_company=ci_seller_company,
                 organization_id=org_id,
+                contracts=ci_contracts,
+                bank_accounts=ci_bank_accounts,
             )
             if ci_invoices:
                 save_currency_invoices(supabase, ci_invoices)
@@ -45429,6 +45466,7 @@ def post(session, ci_id: str):
         ci_quote_idn = ci_quote_data.get("idn_quote", "")
 
         if bc_lookup and ci_seller_company.get("id"):
+            ci_contracts, ci_bank_accounts = _fetch_enrichment_data(supabase, org_id)
             new_invoices = generate_currency_invoices(
                 deal_id=str(deal_id),
                 quote_idn=ci_quote_idn,
@@ -45436,6 +45474,8 @@ def post(session, ci_id: str):
                 buyer_companies=bc_lookup,
                 seller_company=ci_seller_company,
                 organization_id=org_id,
+                contracts=ci_contracts,
+                bank_accounts=ci_bank_accounts,
             )
             if new_invoices:
                 saved = save_currency_invoices(supabase, new_invoices)
