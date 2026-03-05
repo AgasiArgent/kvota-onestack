@@ -4686,6 +4686,9 @@ def post(email: str, password: str, session):
 
     except Exception as e:
         error_msg = str(e)
+        import traceback
+        print(f"LOGIN ERROR for {email}: {error_msg}")
+        traceback.print_exc()
         if "Invalid login credentials" in error_msg:
             error_msg = "Неверный email или пароль"
 
