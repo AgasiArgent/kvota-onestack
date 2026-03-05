@@ -8499,38 +8499,59 @@ def post(session,
     supabase = get_supabase()
 
     try:
-        # Generate quote number
-        count_result = supabase.table("quotes") \
-            .select("id", count="exact") \
-            .eq("organization_id", user["org_id"]) \
-            .execute()
-
-        quote_num = (count_result.count or 0) + 1
-        idn_quote = f"Q-{datetime.now().strftime('%Y%m')}-{quote_num:04d}"
-
         # Check if user has PHMB mode enabled
         user_phmb_mode = get_phmb_mode_enabled(user["id"])
 
-        insert_data = {
-            "idn_quote": idn_quote,
-            "title": "Новый КП",
-            "customer_id": customer_id,
-            "organization_id": user["org_id"],
-            "currency": "RUB",
-            "delivery_terms": "DDP",
-            "status": "draft",
-            "created_by": user["id"],
-            "seller_company_id": seller_company_id if seller_company_id else None,
-            "delivery_city": delivery_city.strip() if delivery_city else None,
-            "delivery_country": delivery_country.strip() if delivery_country else None,
-            "delivery_method": delivery_method if delivery_method else None,
-            "is_phmb": user_phmb_mode,
-        }
+        # Generate IDN and insert with retry for concurrent creation
+        max_retries = 3
+        for attempt in range(max_retries):
+            # Find max IDN for current month, increment
+            month_prefix = f"Q-{datetime.now().strftime('%Y%m')}-"
+            existing_result = supabase.table("quotes") \
+                .select("idn_quote") \
+                .eq("organization_id", user["org_id"]) \
+                .like("idn_quote", f"{month_prefix}%") \
+                .order("idn_quote", desc=True) \
+                .limit(1) \
+                .execute()
 
-        result = supabase.table("quotes").insert(insert_data).execute()
-        new_quote = result.data[0]
+            if existing_result.data and existing_result.data[0].get("idn_quote"):
+                last_idn = existing_result.data[0]["idn_quote"]
+                try:
+                    last_num = int(last_idn.split("-")[-1])
+                except (ValueError, IndexError):
+                    last_num = 0
+                quote_num = last_num + 1
+            else:
+                quote_num = 1
 
-        return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
+            idn_quote = f"{month_prefix}{quote_num:04d}"
+
+            insert_data = {
+                "idn_quote": idn_quote,
+                "title": "Новый КП",
+                "customer_id": customer_id,
+                "organization_id": user["org_id"],
+                "currency": "RUB",
+                "delivery_terms": "DDP",
+                "status": "draft",
+                "created_by": user["id"],
+                "seller_company_id": seller_company_id if seller_company_id else None,
+                "delivery_city": delivery_city.strip() if delivery_city else None,
+                "delivery_country": delivery_country.strip() if delivery_country else None,
+                "delivery_method": delivery_method if delivery_method else None,
+                "is_phmb": user_phmb_mode,
+            }
+
+            try:
+                result = supabase.table("quotes").insert(insert_data).execute()
+                new_quote = result.data[0]
+                return RedirectResponse(f"/quotes/{new_quote['id']}", status_code=303)
+            except Exception as insert_err:
+                if "23505" in str(insert_err) and attempt < max_retries - 1:
+                    # Duplicate key — retry with next number
+                    continue
+                raise
 
     except Exception as e:
         return page_layout("Ошибка",
