@@ -45056,7 +45056,7 @@ def get(session, ci_id: str):
         session.pop("_ci_flash_text", None)
 
     # Action buttons
-    btn_base_style = "padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;"
+    btn_base_style = "padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; width: auto;"
     btn_primary_style = f"{btn_base_style} background: #3b82f6; color: white;"
     btn_success_style = f"{btn_base_style} background: #16a34a; color: white;"
     btn_secondary_style = f"{btn_base_style} background: #f1f5f9; color: #475569; border: 1px solid #d1d5db;"
