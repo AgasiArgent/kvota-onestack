@@ -2041,14 +2041,15 @@ def get_procurement_users_for_quote(quote_id: str) -> Dict[str, str]:
 
 def assign_procurement_users_to_quote(quote_id: str) -> Dict:
     """
-    Auto-assign procurement users to a quote based on brands.
+    Auto-assign procurement users to a quote using a priority cascade:
 
-    This function:
-    1. Gets all brands from quote_items
-    2. Looks up procurement managers for each brand
-    3. Assigns users to individual quote_items
-    4. Collects unique user IDs for quote-level assignment
-    5. Updates quote.assigned_procurement_users array
+    1. Sales Group (highest priority) — if the quote's sales manager belongs to
+       a sales_group, and there's a routing rule mapping that sales_group to a
+       procurement user, ALL items get assigned to that user.
+    2. Brand (fallback) — if no sales group match, fall back to brand_assignments
+       logic (per-item assignment by brand).
+
+    PHMB quotes (is_phmb=True) are excluded — they use a separate flow.
 
     Args:
         quote_id: UUID of the quote
@@ -2066,12 +2067,15 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
         >>> if result["success"]:
         ...     print(f"Assigned {len(result['assigned_users'])} procurement managers")
     """
+    # Lazy import to avoid circular dependencies
+    from services.route_procurement_assignment_service import get_procurement_user_for_group
+
     supabase = get_supabase()
 
     try:
-        # Get quote info
+        # Step 1: Fetch quote (org_id, created_by, is_phmb)
         quote_response = supabase.table("quotes") \
-            .select("id, organization_id") \
+            .select("id, organization_id, is_phmb, created_by") \
             .eq("id", quote_id) \
             .single() \
             .execute()
@@ -2086,8 +2090,20 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
             }
 
         org_id = quote_response.data.get("organization_id")
+        is_phmb = bool(quote_response.data.get("is_phmb"))
+        created_by = quote_response.data.get("created_by")
 
-        # Get quote items with their brands
+        # Step 2: Guard — PHMB quotes return early
+        if is_phmb:
+            return {
+                "success": True,
+                "error_message": None,
+                "assigned_users": [],
+                "assigned_items": 0,
+                "unassigned_brands": []
+            }
+
+        # Step 3: Fetch quote items
         items_response = supabase.table("quote_items") \
             .select("id, brand") \
             .eq("quote_id", quote_id) \
@@ -2102,7 +2118,53 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
                 "unassigned_brands": []
             }
 
-        # Get all brand assignments for this org
+        # Step 4: Priority 1 — Sales group lookup
+        group_procurement_user = None
+        if created_by:
+            try:
+                profile_response = supabase.table("user_profiles") \
+                    .select("sales_group_id") \
+                    .eq("user_id", created_by) \
+                    .single() \
+                    .execute()
+
+                sales_group_id = None
+                if profile_response.data:
+                    sales_group_id = profile_response.data.get("sales_group_id")
+
+                if sales_group_id:
+                    group_procurement_user = get_procurement_user_for_group(org_id, sales_group_id)
+            except Exception:
+                # If profile lookup fails, fall through to brand routing
+                pass
+
+        if group_procurement_user:
+            # Sales group match: assign ALL items to this procurement user (single batch update)
+            assigned_items_count = len(items_response.data)
+
+            supabase.table("quote_items") \
+                .update({
+                    "assigned_procurement_user": group_procurement_user,
+                    "procurement_status": "pending"
+                }) \
+                .eq("quote_id", quote_id) \
+                .execute()
+
+            assigned_users_list = [group_procurement_user]
+            supabase.table("quotes") \
+                .update({"assigned_procurement_users": assigned_users_list}) \
+                .eq("id", quote_id) \
+                .execute()
+
+            return {
+                "success": True,
+                "error_message": None,
+                "assigned_users": assigned_users_list,
+                "assigned_items": assigned_items_count,
+                "unassigned_brands": []
+            }
+
+        # Step 5: Priority 2 — Brand routing fallback
         assignments_response = supabase.table("brand_assignments") \
             .select("brand, user_id") \
             .eq("organization_id", org_id) \
@@ -2113,7 +2175,7 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
         if assignments_response.data:
             for a in assignments_response.data:
                 brand = (a.get("brand") or "").strip().lower()
-                if brand:  # Only add non-empty brands
+                if brand:
                     brand_to_user[brand] = a.get("user_id")
 
         # Assign users to items and collect stats
@@ -2131,7 +2193,6 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
             user_id = brand_to_user.get(brand.lower())
 
             if user_id:
-                # Update the item with assigned procurement user
                 supabase.table("quote_items") \
                     .update({
                         "assigned_procurement_user": user_id,

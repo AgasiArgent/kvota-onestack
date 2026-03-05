@@ -5841,7 +5841,15 @@ def _dashboard_procurement_content(user_id: str, org_id: str, supabase, status_f
 
 
 def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
-    """Inner implementation of procurement content (extracted for error handling)."""
+    """Inner implementation of procurement content (extracted for error handling).
+
+    Visibility logic (routing cascade):
+    1. Admin users see ALL non-PHMB quotes
+    2. Regular procurement users see quotes where:
+       a) They are in assigned_procurement_users array (sales_group routing), OR
+       b) Quote items match their brand assignments (brand routing fallback)
+    PHMB quotes (is_phmb=true) are excluded from all procurement views.
+    """
     # Check if user is admin - bypass brand filtering
     is_admin = roles and "admin" in roles
 
@@ -5851,8 +5859,23 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
 
     quotes_with_details = []
 
-    # Admin sees all, regular users need assigned brands
-    if is_admin or my_brands:
+    # Step 1: For non-admin users, get quote IDs where user is in assigned_procurement_users
+    # This covers sales_group routing (and any future routing methods that write to this array)
+    assigned_quote_ids = set()
+    if not is_admin:
+        try:
+            assigned_result = supabase.table("quotes") \
+                .select("id") \
+                .eq("organization_id", org_id) \
+                .contains("assigned_procurement_users", [user_id]) \
+                .neq("is_phmb", True) \
+                .execute()
+            assigned_quote_ids = set(q["id"] for q in (assigned_result.data or []))
+        except Exception as e:
+            print(f"Warning: Could not query assigned_procurement_users: {e}")
+
+    # Step 2: Brand-based filtering (existing logic) + admin bypass
+    if is_admin or my_brands or assigned_quote_ids:
         # Query quote_items with my brands
         items_result = supabase.table("quote_items") \
             .select("id, quote_id, brand, procurement_status, quantity, product_name") \
@@ -5862,8 +5885,10 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
         if is_admin:
             my_items = items_result.data or []
         else:
+            # Include items from brand-matched quotes AND from assigned quotes
             my_items = [item for item in (items_result.data or [])
-                        if (item.get("brand") or "").lower() in my_brands_lower]
+                        if (item.get("brand") or "").lower() in my_brands_lower
+                        or item.get("quote_id") in assigned_quote_ids]
 
         # Group items by quote_id
         items_by_quote = {}
@@ -5873,16 +5898,21 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
                 items_by_quote[qid] = []
             items_by_quote[qid].append(item)
 
-        quote_ids_with_my_brands = list(items_by_quote.keys())
+        # Union: brand-matched quote IDs + assigned quote IDs
+        all_visible_quote_ids = list(set(items_by_quote.keys()) | assigned_quote_ids)
 
-        if quote_ids_with_my_brands:
-            # Get full quote data for those quotes
-            quotes_result = supabase.table("quotes") \
+        if all_visible_quote_ids:
+            # Get full quote data for those quotes, excluding PHMB
+            quotes_query = supabase.table("quotes") \
                 .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at") \
                 .eq("organization_id", org_id) \
-                .in_("id", quote_ids_with_my_brands) \
-                .order("created_at", desc=True) \
-                .execute()
+                .in_("id", all_visible_quote_ids) \
+                .order("created_at", desc=True)
+
+            # Exclude PHMB quotes
+            quotes_query = quotes_query.neq("is_phmb", True)
+
+            quotes_result = quotes_query.execute()
 
             # Enrich quotes with item details
             for q in (quotes_result.data or []):
@@ -31088,7 +31118,8 @@ def get(session):
         # Navigation
         Div(
             btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
-            btn_link("Назначение брендов", href="/admin/brands", variant="primary", icon_name="arrow-right"),
+            btn_link("Назначение брендов", href="/admin/brands", variant="secondary", icon_name="tag"),
+            btn_link("Маршрутизация закупок", href="/admin/procurement-groups", variant="primary", icon_name="git-branch"),
             style="margin-top: 24px; display: flex; gap: 12px;"
         ),
     )
@@ -32653,6 +32684,668 @@ def post(assignment_id: str, session):
             H1(icon("x-circle", size=28), " Ошибка удаления", cls="page-header"),
             P("Не удалось удалить назначение. Попробуйте ещё раз."),
             btn_link("Назад к списку", href="/admin/brands", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+
+# ============================================================================
+# ADMIN: PROCUREMENT GROUP ROUTING
+# Маршрутизация закупок: группа продаж → менеджер по закупкам
+# ============================================================================
+
+@rt("/admin/procurement-groups")
+def get(session):
+    """Admin page for procurement group routing assignments.
+
+    Maps sales groups to procurement users. When a quote is created by a
+    sales manager in a sales group, all items are routed to the assigned
+    procurement user.
+    """
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    org_id = user["org_id"]
+
+    from services.route_procurement_assignment_service import get_all_with_details
+    from services.user_profile_service import get_sales_groups, get_organization_users
+    from services.role_service import get_users_by_role
+
+    # Get all assignments with joined group names
+    assignments_with_details = get_all_with_details(org_id)
+
+    # Get all sales groups
+    all_groups = get_sales_groups(org_id)
+
+    # Get all org users for display names
+    org_users = get_organization_users(org_id)
+    user_name_map = {u["id"]: u.get("full_name") or u.get("email", u["id"][:8] + "...") for u in org_users}
+
+    # Find assigned group IDs
+    assigned_group_ids = set(a["sales_group_id"] for a in assignments_with_details)
+
+    # Find unassigned groups
+    unassigned_groups = [g for g in all_groups if g["id"] not in assigned_group_ids]
+
+    # Count procurement users (single query via role_service)
+    procurement_role_users = get_users_by_role(org_id, "procurement")
+    procurement_user_count = len(procurement_role_users)
+
+    # Table styles
+    th_style = "padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; background: #f8fafc; border-bottom: 2px solid #e2e8f0;"
+    td_style = "padding: 12px 16px; font-size: 14px; color: #1e293b; border-bottom: 1px solid #f1f5f9;"
+
+    # Build assignment table rows
+    assignment_rows = []
+    for a in assignments_with_details:
+        user_display = user_name_map.get(a["user_id"], a["user_id"][:8] + "...")
+        group_name = a.get("sales_group_name") or a["sales_group_id"][:8] + "..."
+        created_at = ""
+        if a.get("created_at"):
+            try:
+                dt = datetime.fromisoformat(a["created_at"].replace("Z", "+00:00"))
+                created_at = dt.strftime("%Y-%m-%d")
+            except Exception:
+                created_at = str(a["created_at"])[:10]
+
+        assignment_rows.append(Tr(
+            Td(Span(group_name, style="font-weight: 600; color: #3b82f6;"), style=td_style),
+            Td(user_display, style=td_style),
+            Td(created_at or "-", style=td_style),
+            Td(
+                Div(
+                    btn_link("Изменить", href=f"/admin/procurement-groups/{a['id']}/edit", variant="secondary", size="sm"),
+                    Form(
+                        btn("Удалить", variant="danger", size="sm", type="submit"),
+                        method="POST",
+                        action=f"/admin/procurement-groups/{a['id']}/delete",
+                        style="display: inline;"
+                    ),
+                    style="display: flex; align-items: center; gap: 8px;"
+                ),
+                style=td_style
+            )
+        ))
+
+    # Build unassigned groups list
+    unassigned_items = []
+    for group in unassigned_groups:
+        unassigned_items.append(
+            Div(
+                Span(group["name"], style="font-weight: 600; color: #1e293b; margin-right: 12px;"),
+                btn_link("Назначить", href=f"/admin/procurement-groups/new?group_id={group['id']}", variant="secondary", size="sm"),
+                style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 6px; background: white; border-radius: 8px; border: 1px solid #e2e8f0;"
+            )
+        )
+
+    return page_layout("Маршрутизация закупок",
+        # Header card
+        Div(
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К администрированию",
+                href="/admin",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
+            ),
+            Div(
+                Div(
+                    Div(
+                        icon("git-branch", size=28, color="#3b82f6"),
+                        style="width: 48px; height: 48px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                    ),
+                    Div(
+                        H1("Маршрутизация закупок", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                        P("Назначение групп продаж менеджерам по закупкам", style="margin: 0; color: #64748b; font-size: 14px;"),
+                        style="flex: 1;"
+                    ),
+                    style="display: flex; align-items: center; flex: 1;"
+                ),
+                btn_link("Добавить назначение", href="/admin/procurement-groups/new", variant="success", icon_name="plus"),
+                style="display: flex; align-items: center; justify-content: space-between;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
+        ),
+
+        # Stats grid
+        Div(
+            Div(
+                Span(str(len(assignments_with_details)), style="font-size: 28px; font-weight: 700; color: #10b981; display: block;"),
+                Span("Назначено групп", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            Div(
+                Span(str(len(unassigned_groups)), style="font-size: 28px; font-weight: 700; color: #f59e0b; display: block;"),
+                Span("Без назначения", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            Div(
+                Span(str(procurement_user_count), style="font-size: 28px; font-weight: 700; color: #3b82f6; display: block;"),
+                Span("Менеджеров закупок", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            Div(
+                Span(str(len(all_groups)), style="font-size: 28px; font-weight: 700; color: #8b5cf6; display: block;"),
+                Span("Всего групп продаж", style="font-size: 12px; color: #64748b;"),
+                style="text-align: center; padding: 20px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+            style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;"
+        ),
+
+        # Unassigned groups section
+        Div(
+            Div(
+                icon("alert-circle", size=14, color="#d97706"),
+                Span("ГРУППЫ БЕЗ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #d97706; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center;"
+            ),
+            Div(
+                *unassigned_items if unassigned_items else [
+                    Div(
+                        icon("check-circle", size=16, color="#10b981"),
+                        Span(" Все группы продаж назначены менеджерам", style="color: #10b981; font-size: 14px; margin-left: 8px;"),
+                        style="display: flex; align-items: center;"
+                    )
+                ],
+                style="max-height: 200px; overflow-y: auto;"
+            ),
+            style=f"background: {'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)' if unassigned_items else 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)'}; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; border: 1px solid {'#fcd34d' if unassigned_items else '#86efac'};"
+        ) if all_groups else None,
+
+        # Current assignments table
+        Div(
+            Div(
+                icon("list", size=14, color="#64748b"),
+                Span("ТЕКУЩИЕ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; display: flex; align-items: center;"
+            ),
+            Div(
+                Table(
+                    Thead(Tr(
+                        Th("Группа продаж", style=th_style),
+                        Th("Менеджер по закупкам", style=th_style),
+                        Th("Дата назначения", style=th_style),
+                        Th("Действия", style=th_style)
+                    )),
+                    Tbody(*assignment_rows) if assignment_rows else Tbody(
+                        Tr(Td(
+                            Div(
+                                icon("inbox", size=32, color="#94a3b8"),
+                                P("Нет назначений", style="color: #64748b; margin: 8px 0 0 0;"),
+                                style="text-align: center; padding: 32px;"
+                            ),
+                            colspan="4"
+                        ))
+                    ),
+                    style="width: 100%; border-collapse: collapse;"
+                ),
+                style="background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;"
+            ),
+        ),
+
+        # Help card: cascade priority
+        Div(
+            Div(
+                icon("info", size=14, color="#3b82f6"),
+                Span("КАК РАБОТАЕТ МАРШРУТИЗАЦИЯ", style="margin-left: 6px;"),
+                style="font-size: 11px; font-weight: 600; color: #3b82f6; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center;"
+            ),
+            Div(
+                P("1. Группа продаж (высший приоритет) - если менеджер продаж состоит в группе, все позиции КП направляются назначенному закупщику", style="margin: 0 0 8px 0; font-size: 13px; color: #475569;"),
+                P("2. Бренд (запасной вариант) - если нет назначения по группе, позиции направляются по назначению брендов", style="margin: 0 0 8px 0; font-size: 13px; color: #475569;"),
+                P("3. ПХМБ-КП исключены из маршрутизации", style="margin: 0; font-size: 13px; color: #94a3b8;"),
+            ),
+            style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 12px; padding: 16px 20px; margin-top: 24px; border: 1px solid #93c5fd;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/procurement-groups/new")
+def get(session, group_id: str = None):
+    """Form to create new procurement group routing assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    org_id = user["org_id"]
+    from services.user_profile_service import get_sales_groups, get_organization_users
+    from services.role_service import get_users_by_role
+
+    # Get all sales groups
+    all_groups = get_sales_groups(org_id)
+
+    # Build group options
+    group_options = [
+        Option(g["name"], value=g["id"], selected=(g["id"] == group_id))
+        for g in all_groups
+    ]
+
+    # Get procurement users (single query via role_service)
+    org_users = get_organization_users(org_id)
+    user_name_map = {u["id"]: u.get("full_name") or u.get("email", u["id"][:8] + "...") for u in org_users}
+
+    procurement_role_users = get_users_by_role(org_id, "procurement")
+    procurement_users = [
+        {"user_id": u["user_id"], "display": user_name_map.get(u["user_id"], u["user_id"][:8] + "...")}
+        for u in procurement_role_users
+    ]
+
+    # Build user options
+    user_options = [
+        Option(u["display"], value=u["user_id"])
+        for u in procurement_users
+    ]
+
+    # Form styles
+    label_style = "display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;"
+    select_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+
+    return page_layout("Новое назначение группы",
+        # Header card
+        Div(
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К маршрутизации закупок",
+                href="/admin/procurement-groups",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
+            ),
+            Div(
+                Div(
+                    icon("plus-circle", size=28, color="#10b981"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Новое назначение", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    P("Назначьте группу продаж менеджеру по закупкам", style="margin: 0; color: #64748b; font-size: 14px;"),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
+        ),
+
+        # Form card
+        Div(
+            Form(
+                Div(
+                    icon("git-branch", size=14, color="#64748b"),
+                    Span("ДАННЫЕ НАЗНАЧЕНИЯ", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center;"
+                ),
+
+                # Sales group select
+                Div(
+                    Label("Группа продаж *", fr="sales_group_id", style=label_style),
+                    Select(
+                        Option("-- Выберите группу --", value="", disabled=True, selected=(not group_id)),
+                        *group_options,
+                        name="sales_group_id",
+                        id="sales_group_id",
+                        required=True,
+                        style=select_style
+                    ) if group_options else Div(
+                        Div(
+                            icon("alert-triangle", size=16, color="#ef4444"),
+                            Span(" Нет групп продаж", style="color: #ef4444; font-size: 14px; margin-left: 8px;"),
+                            style="display: flex; align-items: center; margin-bottom: 8px;"
+                        ),
+                        P("Сначала создайте группы продаж в настройках.", style="color: #64748b; font-size: 13px; margin: 0;"),
+                        style="padding: 16px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;"
+                    ),
+                    style="margin-bottom: 16px;"
+                ),
+
+                # Procurement user select
+                Div(
+                    Label("Менеджер по закупкам *", fr="user_id", style=label_style),
+                    Select(
+                        Option("-- Выберите менеджера --", value="", disabled=True, selected=True),
+                        *user_options,
+                        name="user_id",
+                        id="user_id",
+                        required=True,
+                        style=select_style
+                    ) if user_options else Div(
+                        Div(
+                            icon("alert-triangle", size=16, color="#ef4444"),
+                            Span(" Нет пользователей с ролью 'procurement'", style="color: #ef4444; font-size: 14px; margin-left: 8px;"),
+                            style="display: flex; align-items: center; margin-bottom: 8px;"
+                        ),
+                        P("Сначала назначьте роль менеджера по закупкам на ",
+                          A("странице пользователей", href="/admin", style="color: #3b82f6; text-decoration: underline;"), ".",
+                          style="color: #64748b; font-size: 13px; margin: 0;"),
+                        style="padding: 16px; background: #fef2f2; border-radius: 8px; border: 1px solid #fecaca;"
+                    ),
+                    style="margin-bottom: 20px;"
+                ),
+
+                # Submit button
+                Div(
+                    btn("Создать назначение", variant="success", icon_name="plus", type="submit"),
+                    btn_link("Отмена", href="/admin/procurement-groups", variant="secondary"),
+                    style="display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid #e2e8f0;"
+                ) if (group_options and user_options) else None,
+
+                method="POST",
+                action="/admin/procurement-groups/new"
+            ),
+            style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; max-width: 500px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/procurement-groups/new")
+def post(session, sales_group_id: str, user_id: str):
+    """Create new procurement group routing assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    org_id = admin_user["org_id"]
+    admin_id = admin_user["id"]
+
+    from services.route_procurement_assignment_service import create_assignment, get_assignment_by_group
+    from services.role_service import get_users_by_role
+
+    # Validate user_id belongs to this org's procurement users
+    valid_user_ids = {u["user_id"] for u in get_users_by_role(org_id, "procurement")}
+    if user_id not in valid_user_ids:
+        return page_layout("Ошибка",
+            H1(icon("alert-triangle", size=28), " Недопустимый пользователь", cls="page-header"),
+            P("Выбранный пользователь не является менеджером по закупкам в вашей организации."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Check if group is already assigned
+    existing = get_assignment_by_group(org_id, sales_group_id)
+    if existing:
+        return page_layout("Ошибка",
+            H1(icon("alert-triangle", size=28), " Группа уже назначена", cls="page-header"),
+            P("Эта группа продаж уже назначена менеджеру по закупкам."),
+            P("Используйте функцию редактирования для изменения назначения."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Create the assignment
+    result = create_assignment(
+        organization_id=org_id,
+        sales_group_id=sales_group_id,
+        user_id=user_id,
+        created_by=admin_id
+    )
+
+    if result:
+        return RedirectResponse(url="/admin/procurement-groups", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            H1(icon("x-circle", size=28), " Ошибка создания", cls="page-header"),
+            P("Не удалось создать назначение. Попробуйте ещё раз."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+
+@rt("/admin/procurement-groups/{assignment_id}/edit")
+def get(assignment_id: str, session):
+    """Edit form for procurement group routing assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    roles = user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    from services.route_procurement_assignment_service import get_assignment
+    from services.user_profile_service import get_sales_groups, get_organization_users
+    from services.role_service import get_users_by_role
+
+    org_id = user["org_id"]
+
+    assignment = get_assignment(assignment_id)
+    if not assignment or assignment.organization_id != org_id:
+        return page_layout("Не найдено",
+            H1("Назначение не найдено"),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Get sales group name
+    all_groups = get_sales_groups(org_id)
+    group_name_map = {g["id"]: g["name"] for g in all_groups}
+    current_group_name = group_name_map.get(assignment.sales_group_id, assignment.sales_group_id[:8] + "...")
+
+    # Get procurement users (single query via role_service)
+    org_users = get_organization_users(org_id)
+    user_name_map = {u["id"]: u.get("full_name") or u.get("email", u["id"][:8] + "...") for u in org_users}
+
+    procurement_role_users = get_users_by_role(org_id, "procurement")
+    procurement_users = [
+        {"user_id": u["user_id"], "display": user_name_map.get(u["user_id"], u["user_id"][:8] + "...")}
+        for u in procurement_role_users
+    ]
+
+    # Build user options with current selected
+    user_options = [
+        Option(u["display"], value=u["user_id"], selected=(u["user_id"] == assignment.user_id))
+        for u in procurement_users
+    ]
+
+    # Form styles
+    label_style = "display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px;"
+    select_style = "width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; background: #f8fafc;"
+
+    current_user_display = user_name_map.get(assignment.user_id, assignment.user_id[:8] + "...")
+
+    return page_layout("Редактирование назначения",
+        # Header card
+        Div(
+            A(
+                Span(icon("arrow-left", size=14), style="margin-right: 6px;"),
+                "К маршрутизации закупок",
+                href="/admin/procurement-groups",
+                style="color: #64748b; text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; margin-bottom: 16px;"
+            ),
+            Div(
+                Div(
+                    icon("edit-3", size=28, color="#f59e0b"),
+                    style="width: 48px; height: 48px; background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 16px;"
+                ),
+                Div(
+                    H1("Редактирование назначения", style="margin: 0 0 4px 0; font-size: 1.5rem; font-weight: 600; color: #1e293b;"),
+                    Div(
+                        Span("Группа: ", style="color: #64748b; font-size: 14px;"),
+                        Span(current_group_name, style="color: #3b82f6; font-size: 14px; font-weight: 600;"),
+                    ),
+                    style="flex: 1;"
+                ),
+                style="display: flex; align-items: center;"
+            ),
+            style="background: linear-gradient(135deg, #fafbfc 0%, #f1f5f9 100%); border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e2e8f0;"
+        ),
+
+        # Form card
+        Div(
+            Form(
+                Div(
+                    icon("user", size=14, color="#64748b"),
+                    Span("ИЗМЕНИТЬ МЕНЕДЖЕРА", style="margin-left: 6px;"),
+                    style="font-size: 11px; font-weight: 600; color: #64748b; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center;"
+                ),
+
+                # Current assignment info
+                Div(
+                    Span("Текущий менеджер: ", style="color: #64748b; font-size: 13px;"),
+                    Span(current_user_display, style="color: #1e293b; font-weight: 500; font-size: 13px;"),
+                    style="padding: 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 16px;"
+                ),
+
+                # Manager select
+                Div(
+                    Label("Новый менеджер по закупкам *", fr="user_id", style=label_style),
+                    Select(
+                        *user_options,
+                        name="user_id",
+                        id="user_id",
+                        required=True,
+                        style=select_style
+                    ) if user_options else P("Нет менеджеров с ролью procurement", style="color: #ef4444; font-size: 14px;"),
+                    style="margin-bottom: 20px;"
+                ),
+
+                # Submit button
+                Div(
+                    btn("Сохранить изменения", variant="primary", icon_name="check", type="submit"),
+                    btn_link("Отмена", href="/admin/procurement-groups", variant="secondary"),
+                    style="display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid #e2e8f0;"
+                ) if user_options else None,
+
+                method="POST",
+                action=f"/admin/procurement-groups/{assignment_id}/edit"
+            ),
+            style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; max-width: 500px;"
+        ),
+
+        session=session
+    )
+
+
+@rt("/admin/procurement-groups/{assignment_id}/edit")
+def post(assignment_id: str, session, user_id: str):
+    """Update procurement group routing assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    from services.route_procurement_assignment_service import update_assignment, get_assignment
+    from services.role_service import get_users_by_role
+
+    org_id = admin_user["org_id"]
+    assignment = get_assignment(assignment_id)
+    if not assignment or assignment.organization_id != org_id:
+        return page_layout("Не найдено",
+            H1("Назначение не найдено"),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    # Validate user_id belongs to this org's procurement users
+    valid_user_ids = {u["user_id"] for u in get_users_by_role(org_id, "procurement")}
+    if user_id not in valid_user_ids:
+        return page_layout("Ошибка",
+            H1(icon("alert-triangle", size=28), " Недопустимый пользователь", cls="page-header"),
+            P("Выбранный пользователь не является менеджером по закупкам в вашей организации."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    result = update_assignment(assignment_id, user_id)
+
+    if result:
+        return RedirectResponse(url="/admin/procurement-groups", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            H1(icon("x-circle", size=28), " Ошибка обновления", cls="page-header"),
+            P("Не удалось обновить назначение. Попробуйте ещё раз."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+
+@rt("/admin/procurement-groups/{assignment_id}/delete")
+def post(assignment_id: str, session):
+    """Delete procurement group routing assignment."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    admin_user = session["user"]
+    roles = admin_user.get("roles", [])
+
+    if "admin" not in roles:
+        return page_layout("Доступ запрещён",
+            H1("Доступ запрещён"),
+            P("Эта страница доступна только администраторам."),
+            btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    from services.route_procurement_assignment_service import get_assignment, delete_assignment
+
+    org_id = admin_user["org_id"]
+    assignment = get_assignment(assignment_id)
+    if not assignment or assignment.organization_id != org_id:
+        return page_layout("Не найдено",
+            H1("Назначение не найдено"),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
+            session=session
+        )
+
+    result = delete_assignment(assignment_id)
+
+    if result:
+        return RedirectResponse(url="/admin/procurement-groups", status_code=303)
+    else:
+        return page_layout("Ошибка",
+            H1(icon("x-circle", size=28), " Ошибка удаления", cls="page-header"),
+            P("Не удалось удалить назначение. Попробуйте ещё раз."),
+            btn_link("Назад к списку", href="/admin/procurement-groups", variant="secondary", icon_name="arrow-left"),
             session=session
         )
 
