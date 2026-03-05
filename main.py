@@ -2808,6 +2808,7 @@ def sidebar(session, current_path: str = ""):
         admin_items = [
             {"icon": "user", "label": "Пользователи", "href": "/admin", "roles": ["admin"]},
             {"icon": "message-square", "label": "Обращения", "href": _feedback_href, "roles": ["admin"]},
+            {"icon": "git-branch", "label": "Маршрутизация закупок", "href": "/admin/procurement-groups", "roles": ["admin"]},
             {"icon": "settings", "label": "Настройки", "href": "/settings", "roles": ["admin"]},
         ]
         menu_sections.append({"title": "Администрирование", "items": admin_items})
