@@ -26,6 +26,7 @@ Usage:
 
 import os
 import logging
+from datetime import datetime
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
@@ -1821,8 +1822,8 @@ def record_notification(
             "title": title,
             "message": message,
             "channel": channel,
-            "sent": sent,
-            "read": False
+            "status": "sent" if sent else "failed",
+            "sent_at": datetime.utcnow().isoformat() if sent else None,
         }
 
         if quote_id:
