@@ -8617,9 +8617,11 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     # Totals (prefer quote-currency columns, fallback to total_amount)
     total_amount = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
     total_profit = float(quote.get("profit_quote_currency") or 0)
+    total_cogs = float(quote.get("cogs_quote_currency") or 0)
 
-    # Margin percentage calculation
+    # Margin = profit/revenue, Markup = profit/COGS
     margin_pct = (total_profit / total_amount) * 100 if total_amount > 0 else 0
+    markup_pct = (total_profit / total_cogs) * 100 if total_cogs > 0 else 0
 
     # Payment terms
     payment_terms = quote.get("payment_terms") or "—"
@@ -8788,11 +8790,12 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
         style=card_style
     )
 
-    # --- Block VI: ИТОГО (2-column grid: total, profit, count, margin) ---
+    # --- Block VI: ИТОГО (3-column grid: total, profit, count, margin, markup) ---
     total_amount_display = f"{total_amount:,.2f} {currency_symbol}" if total_amount is not None else "—"
     total_profit_display = f"{total_profit:,.2f} {currency_symbol}" if total_profit is not None else "—"
     items_count = len(items)
     margin_display = f"{margin_pct:.1f}%"
+    markup_display = f"{markup_pct:.1f}%" if total_cogs > 0 else "—"
 
     card_6 = Div(
         _card_header("dollar-sign", "ИТОГО"),
@@ -8802,20 +8805,25 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
                 Div(total_amount_display, style="color: #374151; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
             ),
             Div(
-                Div("Количество позиций", style=label_style),
-                Div(f"{items_count} шт", style=value_style),
-            ),
-            Div(
                 Div(f"Общий профит ({currency})", style=label_style),
                 Div(total_profit_display,
                     style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
             ),
             Div(
-                Div("Маржа %", style=label_style),
+                Div("Количество позиций", style=label_style),
+                Div(f"{items_count} шт", style=value_style),
+            ),
+            Div(
+                Div("Маржа % (профит/выручка)", style=label_style),
                 Div(margin_display,
                     style=f"color: {'#10b981' if margin_pct > 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
             ),
-            style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;"
+            Div(
+                Div("Наценка % (профит/себест.)", style=label_style),
+                Div(markup_display,
+                    style=f"color: {'#10b981' if markup_pct > 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+            ),
+            style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;"
         ),
         cls="card",
         style=card_style
@@ -9273,13 +9281,16 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     # Precompute ИТОГО block values
     _itogo_total = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
     _itogo_profit = float(quote.get("profit_quote_currency") or 0)
+    _itogo_cogs = float(quote.get("cogs_quote_currency") or 0)
     _itogo_currency = quote.get("currency", "RUB")
     _itogo_items_count = len(items)
     _itogo_margin = (_itogo_profit / _itogo_total * 100) if _itogo_total > 0 else 0
+    _itogo_markup = (_itogo_profit / _itogo_cogs * 100) if _itogo_cogs > 0 else 0
     _itogo_total_display = format_money(_itogo_total, _itogo_currency) if _itogo_total > 0 else "—"
     _itogo_profit_display = format_money(_itogo_profit, _itogo_currency) if _itogo_profit != 0 else "—"
     _itogo_profit_color = "#16a34a" if _itogo_profit > 0 else "#dc2626" if _itogo_profit < 0 else "#64748b"
     _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_total > 0 else "—"
+    _itogo_markup_display = f"{_itogo_markup:.1f}%" if _itogo_cogs > 0 else "—"
     _itogo_margin_color = "#16a34a" if _itogo_profit > 0 else "#64748b"
 
     return page_layout(f"Quote {quote.get('idn_quote', '')}",
@@ -9586,11 +9597,16 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                         style="text-align: center; padding: 0.5rem;"
                     ),
                     Div(
-                        Div("Маржа", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div("Маржа (профит/выр.)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
                         Div(_itogo_margin_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_margin_color};"),
                         style="text-align: center; padding: 0.5rem;"
                     ),
-                    style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;"
+                    Div(
+                        Div("Наценка (профит/себ.)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div(_itogo_markup_display, style=f"font-size: 1.1rem; font-weight: 600; color: {'#16a34a' if _itogo_markup > 0 else '#64748b'};"),
+                        style="text-align: center; padding: 0.5rem;"
+                    ),
+                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;"
                 ),
                 cls="card",
                 style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
@@ -14081,6 +14097,7 @@ def post(
             # Quote-currency totals (for display on summary tab)
             "total_quote_currency": float(total_with_vat),
             "profit_quote_currency": float(total_profit),
+            "cogs_quote_currency": float(total_cogs),
             # USD analytics columns
             "exchange_rate_to_usd": float(exchange_rate_to_usd),
             "subtotal_usd": float(subtotal_usd),
@@ -14387,7 +14404,7 @@ def post(
                     cls="stat-card"
                 ),
                 Div(
-                    Div("Средняя маржа", style="font-size: 0.875rem; color: #666;"),
+                    Div("Средняя наценка", style="font-size: 0.875rem; color: #666;"),
                     Div(f"{avg_margin:.1f}%", cls="stat-value"),
                     cls="stat-card"
                 ),
@@ -22734,7 +22751,7 @@ def build_calc_table(items_data: list, summary_data: dict, columns: list, curren
                style="text-align: right; white-space: nowrap;",
                title=f"{col} - {col_info.get('group', '')}")
         )
-    header_cells.append(Th("Маржа %", style="text-align: right; white-space: nowrap;"))
+    header_cells.append(Th("Наценка %", style="text-align: right; white-space: nowrap;"))
 
     # Build data rows
     data_rows = []
