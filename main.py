@@ -18543,7 +18543,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
 
     # Verify quote belongs to user's organization
     quote_result = supabase.table("quotes") \
-        .select("id") \
+        .select("id, idn_quote, created_by, customers!customer_id(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
@@ -18551,6 +18551,12 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
 
     if not quote_result.data:
         return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
+
+    # Extract quote details for notification
+    quote_data = quote_result.data
+    quote_idn = quote_data.get("idn_quote", "N/A")
+    quote_creator_id = quote_data.get("created_by")
+    customer_name = (quote_data.get("customers") or {}).get("name", "N/A")
 
     # Get invoice from invoices (procurement workflow)
     invoice_result = supabase.table("invoices") \
@@ -18685,6 +18691,42 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
                 # Log but don't fail - invoice was completed successfully
                 print(f"Auto-transition failed: {workflow_err}")
                 logistics_warning = f"Не удалось перевести КП на следующий этап: {workflow_err}"
+
+        # Send Telegram notification to quote creator
+        try:
+            if quote_creator_id and quote_creator_id != user_id:
+                # Compute item counts for the notification
+                total_invoice_count = len(invoices_data)
+                completed_invoice_count = len(completed_invoice_ids)
+                unavailable_count = sum(
+                    1 for item in items_data if item.get("is_unavailable", False)
+                )
+                # Get actor name
+                actor_name = "Закупщик"
+                try:
+                    actor_resp = supabase.table("organization_members") \
+                        .select("full_name") \
+                        .eq("user_id", user_id) \
+                        .execute()
+                    if actor_resp.data and actor_resp.data[0].get("full_name"):
+                        actor_name = actor_resp.data[0]["full_name"]
+                except Exception:
+                    pass
+                invoice_number = invoice.get("invoice_number", "N/A")
+                await send_procurement_invoice_complete_notification(
+                    user_id=quote_creator_id,
+                    quote_id=quote_id,
+                    quote_idn=quote_idn,
+                    customer_name=customer_name,
+                    invoice_number=invoice_number,
+                    completed_count=completed_invoice_count,
+                    total_count=total_invoice_count,
+                    unavailable_count=unavailable_count,
+                    actor_name=actor_name,
+                )
+        except Exception as notif_err:
+            # Log but don't fail - invoice was completed successfully
+            print(f"Notification failed: {notif_err}")
 
         response_data = {
             "success": True,
@@ -25526,6 +25568,8 @@ from services.telegram_service import (
     handle_reject_callback,
     # Feature #63 imports
     notify_creator_of_return,
+    # Procurement invoice complete notification
+    send_procurement_invoice_complete_notification,
     # Bug report imports
     send_admin_bug_report,
     send_admin_bug_report_with_photo,

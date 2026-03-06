@@ -802,6 +802,9 @@ from .telegram_service import (
     ReturnedForRevisionNotification,
     send_returned_for_revision_notification,
     notify_creator_of_return,
+    # Procurement invoice complete notification
+    ProcurementInvoiceCompleteNotification,
+    send_procurement_invoice_complete_notification,
 )
 
 __all__ = [
@@ -968,6 +971,9 @@ __all__ = [
     "ReturnedForRevisionNotification",
     "send_returned_for_revision_notification",
     "notify_creator_of_return",
+    # Procurement invoice complete notification
+    "ProcurementInvoiceCompleteNotification",
+    "send_procurement_invoice_complete_notification",
     # Approval service (Feature #64)
     "Approval",
     "create_approval",

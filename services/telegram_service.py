@@ -102,6 +102,7 @@ class NotificationType(Enum):
     COMMENT_ADDED = "comment_added"
     DEADLINE_REMINDER = "deadline_reminder"
     SYSTEM_MESSAGE = "system_message"
+    PROCUREMENT_INVOICE_COMPLETE = "procurement_invoice_complete"
 
 
 @dataclass
@@ -176,6 +177,18 @@ NOTIFICATION_TEMPLATES = {
 [Открыть в системе]({quote_url})
 """,
 
+    NotificationType.PROCUREMENT_INVOICE_COMPLETE: """
+📦 *Закупка: инвойс завершён*
+
+КП: {quote_idn}
+Клиент: {customer_name}
+Инвойс: {invoice_number}
+Статус: {status_line}
+Закупщик: {actor_name}
+{unavailable_section}
+[Открыть в системе]({quote_url})
+""",
+
     NotificationType.SYSTEM_MESSAGE: """
 ℹ️ *Системное уведомление*
 
@@ -225,6 +238,9 @@ def format_notification(
         "emoji": "📋",
         "decision": "",
         "comment_section": "",
+        "invoice_number": "N/A",
+        "status_line": "",
+        "unavailable_section": "",
     }
     defaults.update(kwargs)
 
@@ -3414,6 +3430,166 @@ async def notify_creator_of_return(
             "success": False,
             "error": str(e)
         }
+
+
+# ============================================================================
+# Procurement Invoice Complete Notification
+# ============================================================================
+
+@dataclass
+class ProcurementInvoiceCompleteNotification:
+    """Data for procurement_invoice_complete notification."""
+    quote_id: str
+    quote_idn: str
+    customer_name: str
+    invoice_number: str
+    completed_count: int
+    total_count: int
+    unavailable_count: int
+    actor_name: str  # Procurement user who completed the invoice
+
+
+async def send_procurement_invoice_complete_notification(
+    user_id: Optional[str],
+    quote_id: str,
+    quote_idn: str,
+    customer_name: str,
+    invoice_number: str,
+    completed_count: int,
+    total_count: int,
+    unavailable_count: int,
+    actor_name: str
+) -> Dict[str, Any]:
+    """Send notification to quote creator when procurement completes an invoice.
+
+    Args:
+        user_id: UUID of the quote creator to notify (may be None)
+        quote_id: UUID of the quote
+        quote_idn: Quote identifier (e.g., "КП-2026-001")
+        customer_name: Customer name
+        invoice_number: Invoice number (e.g., "INV-001")
+        completed_count: Number of invoices completed so far
+        total_count: Total number of invoices
+        unavailable_count: Number of unavailable items
+        actor_name: Name of the procurement user who completed the invoice
+
+    Returns:
+        Dict with:
+        - success: bool
+        - telegram_sent: bool
+        - skipped: bool (if user_id is None)
+        - notification_id: str
+        - error: str (if any)
+
+    Example:
+        >>> result = await send_procurement_invoice_complete_notification(
+        ...     user_id="creator-uuid",
+        ...     quote_id="quote-uuid",
+        ...     quote_idn="КП-2026-001",
+        ...     customer_name="ООО Компания",
+        ...     invoice_number="INV-001",
+        ...     completed_count=2,
+        ...     total_count=3,
+        ...     unavailable_count=0,
+        ...     actor_name="Закупщик И.И."
+        ... )
+    """
+    # Guard: if user_id is None, skip notification entirely
+    if not user_id:
+        logger.info("No quote creator user_id provided - skipping procurement invoice notification")
+        return {
+            "success": True,
+            "telegram_sent": False,
+            "skipped": True,
+        }
+
+    # Build notification content
+    title = "Закупка: инвойс завершён"
+    quote_url = f"{APP_BASE_URL}/quotes/{quote_id}"
+
+    # Build status line based on completion progress
+    if completed_count >= total_count:
+        status_line = "Закупка полностью завершена"
+    else:
+        status_line = f"Оценено {completed_count} из {total_count}"
+
+    # Build unavailable section (only if there are unavailable items)
+    unavailable_section = f"⚠️ Недоступных позиций: {unavailable_count}\n" if unavailable_count > 0 else ""
+
+    # Format Telegram message using the standard template
+    telegram_message = format_notification(
+        NotificationType.PROCUREMENT_INVOICE_COMPLETE,
+        quote_idn=quote_idn,
+        customer_name=customer_name,
+        invoice_number=invoice_number,
+        status_line=status_line,
+        actor_name=actor_name,
+        unavailable_section=unavailable_section,
+        quote_url=quote_url,
+    )
+
+    # Build database message for record_notification
+    db_message_parts = [
+        f"{quote_idn} - {customer_name}",
+        f"Инвойс: {invoice_number}",
+        f"Оценено {completed_count} из {total_count}",
+        f"Закупщик: {actor_name}",
+    ]
+    if completed_count >= total_count:
+        db_message_parts.append("Закупка полностью завершена")
+    if unavailable_count > 0:
+        db_message_parts.append(f"Недоступных позиций: {unavailable_count}")
+
+    db_message = "\n".join(db_message_parts)
+
+    # Try to send via Telegram
+    telegram_sent = False
+    telegram_error = None
+    telegram_id = await get_user_telegram_id(user_id)
+
+    if telegram_id:
+        try:
+            message_id = await send_notification(
+                telegram_id=telegram_id,
+                notification_type=NotificationType.PROCUREMENT_INVOICE_COMPLETE,
+                quote_id=quote_id,
+                include_open_button=True,
+                quote_idn=quote_idn,
+                customer_name=customer_name,
+                invoice_number=invoice_number,
+                status_line=status_line,
+                actor_name=actor_name,
+                unavailable_section=unavailable_section,
+            )
+            telegram_sent = message_id is not None
+            if not telegram_sent:
+                telegram_error = "Failed to send message"
+        except Exception as e:
+            telegram_error = str(e)
+            logger.error(f"Error sending procurement invoice notification to {user_id}: {e}")
+    else:
+        telegram_error = "User has no linked Telegram account"
+        logger.info(f"User {user_id} has no linked Telegram - notification will be in-app only")
+
+    # Record the notification in the database
+    notification_id = record_notification(
+        user_id=user_id,
+        notification_type="procurement_invoice_complete",
+        title=title,
+        message=db_message,
+        channel="telegram" if telegram_sent else "in_app",
+        quote_id=quote_id,
+        sent=telegram_sent,
+        error_message=telegram_error if not telegram_sent else None
+    )
+
+    return {
+        "success": True,
+        "telegram_sent": telegram_sent,
+        "notification_id": notification_id,
+        "telegram_id": telegram_id,
+        "error": telegram_error,
+    }
 
 
 # ============================================================================
