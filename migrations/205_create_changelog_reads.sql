@@ -25,6 +25,6 @@ CREATE POLICY changelog_reads_update_policy
     USING (user_id = auth.uid());
 
 -- Track migration
-INSERT INTO kvota.migrations (id, name, applied_at)
+INSERT INTO kvota.migrations (id, filename, applied_at)
 VALUES (205, '205_create_changelog_reads', now())
 ON CONFLICT (id) DO NOTHING;
