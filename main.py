@@ -2732,6 +2732,15 @@ def sidebar(session, current_path: str = ""):
         except Exception:
             pending_approvals_count = 0
 
+    # Get changelog unread count for badge (all users)
+    changelog_unread_count = 0
+    if user_id:
+        try:
+            from services.changelog_service import count_unread_entries
+            changelog_unread_count = count_unread_entries(user_id)
+        except Exception:
+            changelog_unread_count = 0
+
     # Define menu structure with role requirements
     menu_sections = []
 
@@ -2739,6 +2748,7 @@ def sidebar(session, current_path: str = ""):
     main_items = [
         {"icon": "inbox", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
         {"icon": "play-circle", "label": "Обучение", "href": "/training", "roles": None},  # All users - training videos
+        {"icon": "newspaper", "label": "Обновления", "href": "/changelog", "roles": None, "badge": changelog_unread_count if changelog_unread_count > 0 else None},
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
@@ -18052,7 +18062,11 @@ def get(quote_id: str, session):
                     .then(function(data) {{
                         if (!data) return;
                         if (data.success) {{
-                            alert('Закупка завершена!');
+                            var msg = 'Закупка завершена!';
+                            if (data.warning) {{
+                                msg += '\\n\\n⚠️ ' + data.warning;
+                            }}
+                            alert(msg);
                             location.href = '/tasks';
                         }} else {{
                             alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
@@ -18105,7 +18119,11 @@ def get(quote_id: str, session):
                     .then(function(data) {{
                         if (!data) return;
                         if (data.success) {{
-                            alert('Инвойс завершён и передан в логистику/таможню!');
+                            var msg = 'Инвойс завершён и передан в логистику/таможню!';
+                            if (data.warning) {{
+                                msg += '\\n\\n⚠️ ' + data.warning;
+                            }}
+                            alert(msg);
                             location.reload();
                         }} else {{
                             alert('Ошибка: ' + (data.error || 'Неизвестная ошибка'));
@@ -18346,6 +18364,11 @@ async def api_create_invoice(quote_id: str, session, request):
                 )
                 if error:
                     print(f"Warning: Failed to upload invoice document: {error}")
+                    # Invoice was created but file upload failed — inform the user
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Инвойс создан, но не удалось загрузить файл. Проверьте формат (PDF, JPG, PNG, WebP) и размер (до 50 МБ). Вы можете загрузить файл позже через редактирование инвойса."
+                    }, status_code=400)
 
         # Return success JSON
         return JSONResponse({"success": True, "invoice_id": invoice_id})
@@ -18443,8 +18466,12 @@ async def api_update_invoice(quote_id: str, session, request):
                 )
                 if error:
                     print(f"Warning: Failed to upload invoice document: {error}")
+                    return JSONResponse({
+                        "success": False,
+                        "error": "Данные инвойса сохранены, но не удалось загрузить файл. Проверьте формат (PDF, JPG, PNG, WebP) и размер (до 50 МБ)."
+                    }, status_code=400)
 
-        return await render_invoices_list(quote_id, org_id, session)
+        return JSONResponse({"success": True})
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -18541,9 +18568,17 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
     if invoice.get("status") != "pending_procurement":
         return JSONResponse({"success": False, "error": "Invoice is not in procurement stage"}, status_code=400)
 
+    # Validate pickup_country on the invoice before completing
+    invoice_pickup_country = (invoice.get("pickup_country") or "").strip()
+    if not invoice_pickup_country:
+        return JSONResponse({
+            "success": False,
+            "error": "Укажите страну отгрузки для инвойса перед завершением. Без страны отгрузки невозможно назначить логиста."
+        }, status_code=400)
+
     # Get items in this invoice
     items_result = supabase.table("quote_items") \
-        .select("id, purchase_price_original, production_time_days, is_unavailable") \
+        .select("id, product_name, purchase_price_original, production_time_days, is_unavailable") \
         .eq("invoice_id", invoice_id) \
         .eq("quote_id", quote_id) \
         .execute()
@@ -18554,22 +18589,35 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         return JSONResponse({"success": False, "error": "Invoice has no items"}, status_code=400)
 
     # Validate: all items must have (price > 0 AND production_time > 0) OR be marked unavailable
-    invalid_items = []
+    items_without_price = []
+    items_without_time = []
     for item in items:
         is_unavailable = item.get("is_unavailable", False)
         if is_unavailable:
             continue  # Unavailable items are OK
 
+        item_name = item.get("product_name") or item.get("id", "?")
         has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
         has_time = item.get("production_time_days") and int(item.get("production_time_days", 0)) > 0
 
-        if not has_price or not has_time:
-            invalid_items.append(item["id"])
+        if not has_price:
+            items_without_price.append(item_name)
+        if not has_time:
+            items_without_time.append(item_name)
 
-    if invalid_items:
+    if items_without_price or items_without_time:
+        error_parts = []
+        if items_without_price:
+            names = ", ".join(items_without_price[:5])
+            suffix = f" и ещё {len(items_without_price) - 5}" if len(items_without_price) > 5 else ""
+            error_parts.append(f"Без цены ({len(items_without_price)}): {names}{suffix}")
+        if items_without_time:
+            names = ", ".join(items_without_time[:5])
+            suffix = f" и ещё {len(items_without_time) - 5}" if len(items_without_time) > 5 else ""
+            error_parts.append(f"Без срока производства ({len(items_without_time)}): {names}{suffix}")
         return JSONResponse({
             "success": False,
-            "error": f"Не все позиции заполнены. {len(invalid_items)} поз. без цены или срока производства (и не отмечены как недоступные)."
+            "error": "Не все позиции заполнены. " + ". ".join(error_parts) + "."
         }, status_code=400)
 
     try:
@@ -18622,21 +18670,30 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         ) if items_data else False
 
         workflow_transitioned = False
+        logistics_warning = None
         if all_items_ready:
             # All items are in completed invoices - transition quote workflow
             try:
                 user_roles = user.get("roles", [])
                 result = complete_procurement(quote_id, user_id, user_roles)
                 workflow_transitioned = result.success if result else False
+                # Surface logistics assignment warnings (even on success)
+                if result and result.error_message:
+                    logistics_warning = result.error_message
             except Exception as workflow_err:
                 # Log but don't fail - invoice was completed successfully
                 print(f"Auto-transition failed: {workflow_err}")
+                logistics_warning = f"Не удалось перевести КП на следующий этап: {workflow_err}"
 
-        return JSONResponse({
+        response_data = {
             "success": True,
             "new_status": "pending_logistics",
-            "workflow_transitioned": workflow_transitioned
-        })
+            "workflow_transitioned": workflow_transitioned,
+        }
+        if logistics_warning:
+            response_data["warning"] = logistics_warning
+
+        return JSONResponse(response_data)
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -18939,11 +18996,16 @@ async def api_complete_procurement(quote_id: str, session):
             actor_roles=user_roles
         )
 
-        return JSONResponse({
+        response_data = {
             "success": True,
             "completed_items": len(my_item_ids),
             "workflow_transitioned": completion_result.success if completion_result else False
-        })
+        }
+        # Surface logistics assignment warnings to the user
+        if completion_result and completion_result.error_message:
+            response_data["warning"] = completion_result.error_message
+
+        return JSONResponse(response_data)
 
     except Exception as e:
         import logging
@@ -48140,6 +48202,150 @@ def post(session, quote_id: str, body: str = "", mentions_json: str = ""):
     empty_state_remove = Div(id="chat-empty-state", hx_swap_oob="outerHTML", style="display:none;")
 
     return Div(bubble, empty_state_remove)
+
+
+# ============================================================================
+# CHANGELOG PAGE
+# ============================================================================
+
+@rt("/changelog")
+def get(session):
+    """Changelog page - timeline of product updates."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+
+    from services.changelog_service import get_all_entries, mark_as_read, render_entry_html, format_date_russian_human
+
+    entries = get_all_entries()
+
+    # Mark all entries as read for this user
+    if user_id and entries:
+        try:
+            mark_as_read(user_id)
+        except Exception:
+            pass  # Non-critical, don't break the page
+
+    # Build timeline UI
+    if not entries:
+        content = Div(
+            Div(
+                icon("newspaper", size=48, color="#94a3b8"),
+                P("Записей ещё нет", style="margin-top: 12px; color: var(--text-secondary); font-size: 1rem;"),
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center;"
+            ),
+            style="max-width: 800px; margin: 0 auto;"
+        )
+    else:
+        timeline_items = []
+        for entry in entries:
+            body_html = render_entry_html(entry)
+            date_label = format_date_russian_human(entry["date"])
+
+            # Version badge (optional)
+            version_badge = None
+            version = entry.get("version")
+            if version:
+                version_badge = Span(
+                    version,
+                    style="background: #ede9fe; color: #6366f1; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 10px; margin-left: 8px;"
+                )
+
+            # Category badge
+            category = entry.get("category", "update")
+            category_colors = {
+                "feature": ("#dcfce7", "#16a34a"),
+                "fix": ("#fef3c7", "#d97706"),
+                "update": ("#dbeafe", "#2563eb"),
+                "improvement": ("#ede9fe", "#7c3aed"),
+            }
+            cat_bg, cat_fg = category_colors.get(category, ("#f1f5f9", "#475569"))
+            category_labels = {
+                "feature": "Новое",
+                "fix": "Исправление",
+                "update": "Обновление",
+                "improvement": "Улучшение",
+            }
+            cat_label = category_labels.get(category, category.capitalize())
+
+            timeline_items.append(
+                Div(
+                    # Left: date
+                    Div(
+                        Span(date_label, style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;"),
+                        style="width: 120px; flex-shrink: 0; text-align: right; padding-top: 18px;"
+                    ),
+                    # Center: timeline dot + line
+                    Div(
+                        Div(style="width: 12px; height: 12px; background: #6366f1; border-radius: 50%; border: 3px solid #ede9fe; position: relative; z-index: 1;"),
+                        style="width: 12px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; position: relative; margin: 0 16px;"
+                    ),
+                    # Right: card
+                    Div(
+                        Div(
+                            Div(
+                                Span(cat_label, style=f"background: {cat_bg}; color: {cat_fg}; font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;"),
+                                version_badge if version_badge else None,
+                                style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;"
+                            ),
+                            H3(entry["title"], style="margin: 0 0 10px; font-size: 1rem; font-weight: 600; color: var(--text-primary);"),
+                            Div(NotStr(body_html), cls="changelog-body"),
+                            cls="changelog-entry-inner"
+                        ),
+                        style="flex: 1; min-width: 0; padding-bottom: 24px;"
+                    ),
+                    style="display: flex; align-items: flex-start;"
+                )
+            )
+
+        # Timeline vertical line via pseudo-element style
+        content = Div(
+            # Page header
+            Div(
+                H1("Обновления", style="margin: 0; font-size: 1.5rem;"),
+                P("История изменений и улучшений системы",
+                  style="margin: 4px 0 0; color: var(--text-secondary); font-size: 0.875rem;"),
+                style="margin-bottom: 1.5rem;"
+            ),
+            # Timeline container
+            Div(
+                *timeline_items,
+                style="position: relative;"
+            ),
+            # Styles for changelog body and timeline
+            Style("""
+                .changelog-body h2 {
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    color: var(--text-secondary);
+                    margin: 12px 0 6px;
+                }
+                .changelog-body ul {
+                    margin: 0 0 10px 0;
+                    padding-left: 18px;
+                }
+                .changelog-body li {
+                    font-size: 0.875rem;
+                    color: var(--text-primary);
+                    margin-bottom: 3px;
+                    line-height: 1.5;
+                }
+                .changelog-entry-inner {
+                    background: var(--card-bg, #fff);
+                    border: 1px solid var(--border-color, #e2e8f0);
+                    border-radius: 10px;
+                    padding: 16px 20px;
+                }
+            """),
+            style="max-width: 800px; margin: 0 auto;"
+        )
+
+    return page_layout("Обновления", content, session=session, current_path="/changelog")
 
 
 # ============================================================================
