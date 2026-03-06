@@ -37921,7 +37921,10 @@ def _render_calls_list(customer_id: str, calls: list) -> object:
                 Span(" · ", style="color:#cbd5e1;"),
                 Span(date_str, style="color:#64748b;font-size:12px;"),
             ),
-            P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:13px;color:#374151;"),
+            Details(
+                Summary((c.comment or "")[:150] + "…", style="cursor:pointer;font-size:14px;color:#374151;list-style:revert;margin:6px 0 0;"),
+                P(c.comment, style="margin:4px 0 0;font-size:14px;color:#374151;white-space:pre-wrap;"),
+            ) if c.comment and len(c.comment) > 150 else P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:14px;color:#374151;"),
             style="padding:12px 0;border-bottom:1px solid #e2e8f0;"
         ))
 
@@ -46614,7 +46617,15 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
         elif c.created_at:
             date_str = c.created_at.strftime("%d.%m.%Y")
 
-        comment_short = (c.comment or "")[:80] + ("..." if c.comment and len(c.comment) > 80 else "")
+        comment_text = c.comment or ""
+        if len(comment_text) > 80:
+            comment_cell = Details(
+                Summary(comment_text[:80] + "…", style="cursor:pointer;color:#64748b;list-style:revert;"),
+                P(comment_text, style="margin:6px 0 0;color:#374151;white-space:pre-wrap;"),
+                style="max-width:280px;"
+            )
+        else:
+            comment_cell = Span(comment_text or "—", style="color:#64748b;")
 
         rows.append(Tr(
             Td(type_badge, style=td_style),
@@ -46629,7 +46640,7 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
             ),
             Td(c.contact_name or "—", style=td_style),
             Td(cat_label, style=td_style),
-            Td(comment_short or "—", style=f"{td_style} color:#64748b;max-width:280px;"),
+            Td(comment_cell, style=f"{td_style} max-width:280px;"),
         ))
 
     input_style = "padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;font-size:14px;background:#f8fafc;"
