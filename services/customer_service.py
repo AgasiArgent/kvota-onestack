@@ -1275,7 +1275,7 @@ def get_customer_stats(organization_id: str, manager_id: str = None) -> Dict[str
         supabase = _get_supabase()
 
         # Get all customers (filtered by manager if specified)
-        query = supabase.table("customers").select("id, is_active, inn")\
+        query = supabase.table("customers").select("id, status, inn")\
             .eq("organization_id", organization_id)
         if manager_id:
             query = query.eq("manager_id", manager_id)
@@ -1292,7 +1292,7 @@ def get_customer_stats(organization_id: str, manager_id: str = None) -> Dict[str
             }
 
         total = len(result.data)
-        active = sum(1 for row in result.data if row.get("is_active", True))
+        active = sum(1 for row in result.data if row.get("status") == "active")
         inactive = total - active
         with_inn = sum(1 for row in result.data if row.get("inn"))
 
@@ -1900,6 +1900,7 @@ def get_customer_requested_items(customer_id: str) -> List[Dict[str, Any]]:
                 "times_requested": data["times_requested"],
                 "total_quantity": data["total_quantity"],
                 "last_price": data["last_price"],
+                "last_currency": data["last_currency"],
                 "last_requested_at": data["last_requested_at"],
                 "brands": list(data["brands"]),
                 "quotes": data["quotes"],
