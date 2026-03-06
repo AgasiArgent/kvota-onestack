@@ -2771,9 +2771,9 @@ def sidebar(session, current_path: str = ""):
     # === REGISTRIES SECTION (reference data) ===
     registries_items = []
 
-    # Customers - for sales roles
-    if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
-        registries_items.append({"icon": "users", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin"]})
+    # Customers - for sales roles, heads, and admins
+    if is_admin or any(r in roles for r in ["sales", "sales_manager", "top_manager", "head_of_sales"]):
+        registries_items.append({"icon": "users", "label": "Клиенты", "href": "/customers", "roles": ["sales", "sales_manager", "admin", "top_manager", "head_of_sales"]})
 
     # Quotes registry - visible to ALL authenticated roles
     registries_items.append({"icon": "file-text", "label": "Коммерческие предложения", "href": "/quotes", "roles": None})
@@ -36637,13 +36637,13 @@ def get(session, q: str = "", status: str = ""):
     if redirect:
         return redirect
 
-    # Check permissions - sales, admin, or top_manager can view customers
-    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+    # Check permissions - sales, admin, top_manager, or head_of_sales can view customers
+    if not user_has_any_role(session, ["admin", "sales", "top_manager", "head_of_sales"]):
         return page_layout("Access Denied",
             Div(
                 H1("⛔ Доступ запрещён"),
                 P("У вас нет прав для просмотра справочника клиентов."),
-                P("Требуется одна из ролей: admin, sales, top_manager"),
+                P("Требуется одна из ролей: admin, sales, top_manager, head_of_sales"),
                 btn_link("На главную", href="/dashboard", variant="secondary", icon_name="arrow-left"),
                 cls="card"
             ),
@@ -36660,8 +36660,8 @@ def get(session, q: str = "", status: str = ""):
         get_contacts_for_customer, count_contacts
     )
 
-    # Sales-only users see only their own customers
-    is_sales_only = not user_has_any_role(session, ["admin", "top_manager"])
+    # Sales-only users see only their own customers; heads/admins see all
+    is_sales_only = not user_has_any_role(session, ["admin", "top_manager", "head_of_sales"])
     manager_filter = user_id if is_sales_only else None
 
     # Get customers based on filters
@@ -36686,8 +36686,8 @@ def get(session, q: str = "", status: str = ""):
                 limit=100
             )
 
-        # Get stats for summary
-        stats = get_customer_stats(organization_id=org_id)
+        # Get stats for summary (filtered by manager for sales-only users)
+        stats = get_customer_stats(organization_id=org_id, manager_id=manager_filter)
 
         # Fetch contacts for each customer for preview
         customer_contacts_map = {}
@@ -36912,8 +36912,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
     if redirect:
         return redirect
 
-    # Check permissions - sales, admin, or top_manager can view customers
-    if not user_has_any_role(session, ["admin", "sales", "top_manager"]):
+    # Check permissions - sales, admin, top_manager, or head_of_sales can view customers
+    if not user_has_any_role(session, ["admin", "sales", "top_manager", "head_of_sales"]):
         return page_layout("Access Denied",
             Div("У вас нет прав для просмотра данной страницы.", cls="alert alert-error"),
             session=session
@@ -37302,7 +37302,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Div(
                         Div(
                             H3(icon("clipboard", size=18), " Спецификации", style="margin: 0; color: #374151; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;"),
-                            Span(f"Всего: {stats['specifications_count']} • Сумма: {stats['specifications_sum']:,.0f} ₽", style="color: #6b7280; font-size: 0.75rem;"),
+                            Span(f"Всего: {stats['specifications_count']}" + (f" • Сумма: {stats['specifications_sum']:,.0f}" if stats['specifications_sum'] else ""), style="color: #6b7280; font-size: 0.75rem;"),
                             style="display: flex; flex-direction: column; gap: 0.25rem;"
                         ),
                         A("Все →", href=f"/customers/{customer_id}?tab=specifications",

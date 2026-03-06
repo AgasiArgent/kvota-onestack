@@ -1254,12 +1254,13 @@ def delete_all_contacts(customer_id: str) -> bool:
 # UTILITY FUNCTIONS
 # =============================================================================
 
-def get_customer_stats(organization_id: str) -> Dict[str, Any]:
+def get_customer_stats(organization_id: str, manager_id: str = None) -> Dict[str, Any]:
     """
-    Get customer statistics for an organization.
+    Get customer statistics for an organization, optionally filtered by manager.
 
     Args:
         organization_id: Organization UUID
+        manager_id: If provided, only count customers managed by this user
 
     Returns:
         Dict with statistics:
@@ -1273,10 +1274,12 @@ def get_customer_stats(organization_id: str) -> Dict[str, Any]:
     try:
         supabase = _get_supabase()
 
-        # Get all customers
-        result = supabase.table("customers").select("id, is_active, inn")\
-            .eq("organization_id", organization_id)\
-            .execute()
+        # Get all customers (filtered by manager if specified)
+        query = supabase.table("customers").select("id, is_active, inn")\
+            .eq("organization_id", organization_id)
+        if manager_id:
+            query = query.eq("manager_id", manager_id)
+        result = query.execute()
 
         if not result.data:
             return {
