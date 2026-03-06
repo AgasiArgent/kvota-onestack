@@ -18295,10 +18295,10 @@ async def api_create_invoice(quote_id: str, session, request):
         item_ids = []
 
     if not supplier_id or not buyer_company_id:
-        return JSONResponse({"success": False, "error": "Supplier and buyer company are required"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Укажите поставщика и компанию-покупателя"}, status_code=400)
 
     if not pickup_country:
-        return JSONResponse({"success": False, "error": "Pickup country is required"}, status_code=400)
+        return JSONResponse({"success": False, "error": "Укажите страну отгрузки для инвойса"}, status_code=400)
 
     if not total_weight_kg:
         return JSONResponse({"success": False, "error": "Total weight is required"}, status_code=400)

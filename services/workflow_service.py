@@ -1169,7 +1169,7 @@ class TransitionResult:
 
     Attributes:
         success: Whether the transition was successful
-        error_message: Error message if failed, None if success
+        error_message: Error message if failed, or advisory warning if success
         quote_id: The quote ID that was transitioned
         from_status: Previous status
         to_status: New status
@@ -2854,17 +2854,41 @@ def complete_procurement(
         transition_id = None  # Non-critical, continue
 
     # Best-effort: auto-assign logistics managers to invoices
+    logistics_warning = None
     try:
-        assign_logistics_to_invoices(quote_id)
+        assignment_result = assign_logistics_to_invoices(quote_id)
+        if assignment_result and not assignment_result.get("success"):
+            logistics_warning = assignment_result.get("error_message") or "Не удалось назначить логистов на инвойсы"
+            logger.warning(
+                "Logistics assignment failed for quote %s: %s",
+                quote_id, logistics_warning
+            )
+        elif assignment_result and assignment_result.get("unmatched_invoice_ids"):
+            unmatched_count = len(assignment_result["unmatched_invoice_ids"])
+            logistics_warning = (
+                f"Логисты назначены не на все инвойсы: {unmatched_count} инвойс(ов) "
+                f"без назначения (проверьте страну отгрузки и маршруты логистики)"
+            )
+            logger.info(
+                "Logistics assignment partial for quote %s: %d unmatched invoices",
+                quote_id, unmatched_count
+            )
     except Exception as e:
+        logistics_warning = f"Ошибка при назначении логистов: {str(e)}"
         logger.warning(
             "Failed to auto-assign logistics to invoices for quote %s: %s",
             quote_id, str(e)
         )
 
+    # Build an informational warning message if logistics had issues
+    # The transition itself succeeded — the warning is advisory
+    result_error = None
+    if logistics_warning:
+        result_error = f"Закупки завершены, но: {logistics_warning}"
+
     return TransitionResult(
         success=True,
-        error_message=None,
+        error_message=result_error,
         quote_id=quote_id,
         from_status=current_status,
         to_status=WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
