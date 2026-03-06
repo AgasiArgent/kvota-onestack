@@ -8336,7 +8336,8 @@ async def post(inn: str = "", no_inn: str = "", session=None):
     supabase = get_supabase()
 
     customer_data = {
-        "organization_id": user["org_id"]
+        "organization_id": user["org_id"],
+        "manager_id": user["id"],
     }
 
     if no_inn or not inn.strip():
@@ -36950,6 +36951,26 @@ def get(customer_id: str, session, request, tab: str = "general"):
         # Get statistics
         stats = get_customer_statistics(customer_id)
 
+        # Get raw customer data for manager_id
+        supabase = get_supabase()
+        raw_customer = supabase.table("customers").select("manager_id").eq("id", customer_id).limit(1).execute()
+        current_manager_id = raw_customer.data[0].get("manager_id") if raw_customer.data else None
+
+        # Look up manager name
+        current_manager_name = "Не назначен"
+        if current_manager_id:
+            mgr_profile = supabase.table("user_profiles").select("full_name").eq("user_id", current_manager_id).limit(1).execute()
+            if mgr_profile.data:
+                current_manager_name = mgr_profile.data[0].get("full_name") or "—"
+
+        # Get all org users for manager dropdown (for admin/top_manager/head_of_sales)
+        user = session["user"]
+        org_users = []
+        can_change_manager = user_has_any_role(session, ["admin", "top_manager", "head_of_sales"])
+        if can_change_manager:
+            org_users_result = supabase.table("user_profiles").select("user_id, full_name").eq("organization_id", user["org_id"]).order("full_name").execute()
+            org_users = org_users_result.data if org_users_result.data else []
+
         # Get latest quotes and specifications (for summary)
         all_quotes = get_customer_quotes(customer_id)
         all_specs = get_customer_specifications(customer_id)
@@ -37055,11 +37076,12 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 except:
                     s_date = "—"
             spec_idn = s.get("idn") or (s.get("quotes") or {}).get("idn_quote") or f"#{s['id'][:8]}"
+            spec_currency = (s.get("quotes") or {}).get("currency", "RUB")
             specs_rows.append(
                 Tr(
                     Td(A(spec_idn, href=f"/specifications/{s['id']}", style="font-weight: 500;")),
-                    Td(f"{s.get('total_sum', 0):,.0f} ₽", style="text-align: right;"),
-                    Td(f"{s.get('total_profit', 0):,.0f} ₽", style="text-align: right; color: #10b981;"),
+                    Td(format_money(s.get('total_sum'), spec_currency), style="text-align: right;"),
+                    Td(format_money(s.get('total_profit'), spec_currency), style="text-align: right; color: #10b981;"),
                     Td(s_date),
                     Td(render_status_badge(s.get("status"))),
                 )
@@ -37157,6 +37179,25 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Div(
                             Div("Источник", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
                             _render_field_display(customer_id, "order_source", customer.order_source or ""),
+                        ),
+                        Div(
+                            Div("Менеджер", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
+                            Div(
+                                Select(
+                                    Option("Не назначен", value=""),
+                                    *[Option(u.get("full_name", "—"), value=u["user_id"], selected=(u["user_id"] == current_manager_id)) for u in org_users],
+                                    name="manager_id",
+                                    hx_put=f"/customers/{customer_id}/manager",
+                                    hx_target=f"#manager-status-{customer_id}",
+                                    hx_swap="innerHTML",
+                                    style="font-size: 0.8rem; padding: 0.25rem 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; background: white; width: 100%; max-width: 200px;"
+                                ),
+                                Span(id=f"manager-status-{customer_id}", style="margin-left: 0.5rem; font-size: 0.8rem;"),
+                                style="display: flex; align-items: center; padding: 0.25rem 0;"
+                            ) if can_change_manager else Div(
+                                current_manager_name,
+                                style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"
+                            ),
                         ),
                         style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
                     ),
@@ -37849,6 +37890,34 @@ def _render_calls_list(customer_id: str, calls: list) -> object:
         id="calls-list",
         style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:0 16px;"
     )
+
+
+@rt("/customers/{customer_id}/manager")
+def put(customer_id: str, session, manager_id: str = ""):
+    """Update customer manager."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    if not user_has_any_role(session, ["admin", "top_manager", "head_of_sales"]):
+        return Span("Нет прав", style="color: red;")
+
+    user = session["user"]
+    supabase = get_supabase()
+    try:
+        supabase.table("customers").update({"manager_id": manager_id or None}).eq("id", customer_id).eq("organization_id", user["org_id"]).execute()
+
+        # Get updated manager name
+        manager_name = "Не назначен"
+        if manager_id:
+            profile = supabase.table("user_profiles").select("full_name").eq("user_id", manager_id).limit(1).execute()
+            if profile.data:
+                manager_name = profile.data[0].get("full_name", "—")
+
+        return Span(f"OK {manager_name}", style="color: #16a34a; font-weight: 500;")
+    except Exception as e:
+        print(f"Error updating customer manager: {e}")
+        return Span("Ошибка сохранения", style="color: red;")
 
 
 @rt("/customers/{customer_id}/calls/new-form")

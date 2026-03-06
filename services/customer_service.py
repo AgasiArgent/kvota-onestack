@@ -485,7 +485,7 @@ def get_all_customers(
     Args:
         organization_id: Organization UUID
         is_active: Filter by active status (None = all)
-        manager_id: If provided, only return customers created by this user
+        manager_id: If provided, only return customers managed by this user
         limit: Maximum number of results
         offset: Pagination offset
 
@@ -503,7 +503,7 @@ def get_all_customers(
             query = query.eq("is_active", is_active)
 
         if manager_id is not None:
-            query = query.eq("created_by", manager_id)
+            query = query.eq("manager_id", manager_id)
 
         result = query.range(offset, offset + limit - 1).execute()
 
@@ -579,7 +579,7 @@ def search_customers(
         organization_id: Organization UUID
         query: Search query (matches name or inn)
         is_active: Filter by active status
-        manager_id: If provided, only return customers created by this user
+        manager_id: If provided, only return customers managed by this user
         limit: Maximum number of results
 
     Returns:
@@ -601,7 +601,7 @@ def search_customers(
             base_query = base_query.eq("is_active", is_active)
 
         if manager_id is not None:
-            base_query = base_query.eq("created_by", manager_id)
+            base_query = base_query.eq("manager_id", manager_id)
 
         result = base_query.ilike("name", search_pattern)\
             .order("name")\
@@ -620,7 +620,7 @@ def search_customers(
                 inn_query = inn_query.eq("is_active", is_active)
 
             if manager_id is not None:
-                inn_query = inn_query.eq("created_by", manager_id)
+                inn_query = inn_query.eq("manager_id", manager_id)
 
             inn_result = inn_query.limit(limit - len(customers)).execute()
 
