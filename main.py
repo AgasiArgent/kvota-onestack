@@ -37942,6 +37942,17 @@ def _render_calls_list(customer_id: str, calls: list) -> object:
                 Summary((c.comment or "")[:150] + "…", style="cursor:pointer;font-size:14px;color:#374151;list-style:revert;margin:6px 0 0;"),
                 P(c.comment, style="margin:4px 0 0;font-size:14px;color:#374151;white-space:pre-wrap;"),
             ) if c.comment and len(c.comment) > 150 else P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:14px;color:#374151;"),
+            Div(
+                Div(
+                    Span("Потребление / Зона: ", style="color:#64748b;font-size:12px;font-weight:500;"),
+                    Span(c.customer_needs, style="font-size:13px;color:#374151;"),
+                ) if c.customer_needs else None,
+                Div(
+                    Span("Назначение встречи: ", style="color:#64748b;font-size:12px;font-weight:500;"),
+                    Span(c.meeting_notes, style="font-size:13px;color:#374151;"),
+                ) if c.meeting_notes else None,
+                style="margin-top:4px;display:flex;flex-direction:column;gap:2px;"
+            ) if (c.customer_needs or c.meeting_notes) else None,
             style="padding:12px 0;border-bottom:1px solid #e2e8f0;"
         ))
 
@@ -46635,11 +46646,19 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
             date_str = c.created_at.strftime("%d.%m.%Y")
 
         comment_text = c.comment or ""
-        if len(comment_text) > 80:
+        _extra_fields = []
+        if c.customer_needs:
+            _extra_fields.append(Div(Span("Потребление / Зона: ", style="font-weight:500;color:#64748b;"), c.customer_needs, style="font-size:12px;color:#374151;margin-top:4px;"))
+        if c.meeting_notes:
+            _extra_fields.append(Div(Span("Назначение встречи: ", style="font-weight:500;color:#64748b;"), c.meeting_notes, style="font-size:12px;color:#374151;margin-top:2px;"))
+
+        if len(comment_text) > 80 or _extra_fields:
+            summary_text = comment_text[:80] + ("…" if len(comment_text) > 80 else "")
             comment_cell = Details(
-                Summary(comment_text[:80] + "…", style="cursor:pointer;color:#64748b;list-style:revert;"),
-                P(comment_text, style="margin:6px 0 0;color:#374151;white-space:pre-wrap;"),
-                style="max-width:280px;"
+                Summary(summary_text or "—", style="cursor:pointer;color:#64748b;list-style:revert;"),
+                P(comment_text, style="margin:6px 0 0;color:#374151;white-space:pre-wrap;") if len(comment_text) > 80 else None,
+                *_extra_fields,
+                style="max-width:320px;"
             )
         else:
             comment_cell = Span(comment_text or "—", style="color:#64748b;")
