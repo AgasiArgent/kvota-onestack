@@ -19689,7 +19689,7 @@ def get(session, quote_id: str):
     invoices_with_items = []
     for invoice in invoices:
         items_result = supabase.table("quote_items") \
-            .select("id, brand, product_name, quantity, purchase_price_original, purchase_currency, supplier_country") \
+            .select("id, brand, product_name, quantity, purchase_price_original, purchase_currency, supplier_country, weight_kg, volume_m3") \
             .eq("invoice_id", invoice["id"]) \
             .execute()
 
@@ -19998,6 +19998,8 @@ def get(session, quote_id: str):
                         Div(
                             *[Div(
                                 Span(f"{item.get('brand', '—')} — {item.get('product_name', '—')[:30]}", style="flex: 1; color: #475569;"),
+                                Span(f"{item.get('weight_kg', 0) or 0} кг", style="color: #64748b; margin-right: 8px;") if item.get('weight_kg') else None,
+                                Span(f"{item.get('volume_m3', 0) or 0} м³", style="color: #64748b; margin-right: 8px;") if item.get('volume_m3') else None,
                                 Span(
                                     f"{item.get('purchase_price_original', 0)} {item.get('purchase_currency', '')}",
                                     style="color: #059669; font-weight: 500; margin-right: 8px;"
