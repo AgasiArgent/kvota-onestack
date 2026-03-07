@@ -17069,7 +17069,7 @@ def get(quote_id: str, session):
             'quantity': item.get('quantity', 1),
             'price': item.get('purchase_price_original') if item.get('purchase_price_original') is not None else '',
             'production_time': item.get('production_time_days') if item.get('production_time_days') is not None else '',
-            'weight_kg': item.get('weight_kg') if item.get('weight_kg') is not None else '',
+            'weight_kg': item.get('weight_in_kg') if item.get('weight_in_kg') is not None else '',
             'volume_m3': item.get('volume_m3') if item.get('volume_m3') is not None else '',
             'price_includes_vat': item.get('price_includes_vat', False),
             'is_unavailable': item.get('is_unavailable', False),
@@ -19058,9 +19058,9 @@ async def api_bulk_update_items(quote_id: str, session, request):
             if "is_unavailable" in item:
                 update_data["is_unavailable"] = bool(item["is_unavailable"])
 
-            # Support weight_kg field
+            # Support weight_in_kg field (JS sends as weight_kg)
             if "weight_kg" in item:
-                update_data["weight_kg"] = float(item["weight_kg"]) if item["weight_kg"] is not None else None
+                update_data["weight_in_kg"] = float(item["weight_kg"]) if item["weight_kg"] is not None else None
 
             # Support volume_m3 field
             if "volume_m3" in item:
@@ -19796,7 +19796,7 @@ def get(session, quote_id: str):
     invoices_with_items = []
     for invoice in invoices:
         items_result = supabase.table("quote_items") \
-            .select("id, brand, product_name, quantity, purchase_price_original, purchase_currency, supplier_country, weight_kg, volume_m3") \
+            .select("id, brand, product_name, quantity, purchase_price_original, purchase_currency, supplier_country, weight_in_kg, volume_m3") \
             .eq("invoice_id", invoice["id"]) \
             .execute()
 
@@ -20118,7 +20118,7 @@ def get(session, quote_id: str):
                         Div(
                             *[Div(
                                 Span(f"{item.get('brand', '—')} — {item.get('product_name', '—')[:30]}", style="flex: 1; color: #475569;"),
-                                Span(f"{item.get('weight_kg', 0) or 0} кг", style="color: #64748b; margin-right: 8px;") if item.get('weight_kg') else None,
+                                Span(f"{item.get('weight_in_kg', 0) or 0} кг", style="color: #64748b; margin-right: 8px;") if item.get('weight_in_kg') else None,
                                 Span(f"{item.get('volume_m3', 0) or 0} м³", style="color: #64748b; margin-right: 8px;") if item.get('volume_m3') else None,
                                 Span(
                                     f"{item.get('purchase_price_original', 0)} {item.get('purchase_currency', '')}",
