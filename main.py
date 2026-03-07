@@ -17069,6 +17069,8 @@ def get(quote_id: str, session):
             'quantity': item.get('quantity', 1),
             'price': item.get('purchase_price_original') if item.get('purchase_price_original') is not None else '',
             'production_time': item.get('production_time_days') if item.get('production_time_days') is not None else '',
+            'weight_kg': item.get('weight_kg') if item.get('weight_kg') is not None else '',
+            'volume_m3': item.get('volume_m3') if item.get('volume_m3') is not None else '',
             'price_includes_vat': item.get('price_includes_vat', False),
             'is_unavailable': item.get('is_unavailable', False),
             'invoice_id': item.get('invoice_id') or '',
@@ -17103,6 +17105,11 @@ def get(quote_id: str, session):
             'currency_symbol': currency_symbols.get(inv.get('currency', 'USD'), inv.get('currency', '')),
             'total_weight_kg': inv.get('total_weight_kg'),
             'total_volume_m3': inv.get('total_volume_m3'),
+            'height_m': inv.get('height_m'),
+            'length_m': inv.get('length_m'),
+            'width_m': inv.get('width_m'),
+            'package_count': inv.get('package_count'),
+            'procurement_notes': inv.get('procurement_notes', ''),
             'pickup_location_id': inv.get('pickup_location_id'),
             'has_document': doc is not None,
             'document_id': doc.id if doc else None,
@@ -17230,6 +17237,14 @@ def get(quote_id: str, session):
                 Span(f"Σ {total_sum:,.2f} {currency_sym}", style="font-weight: 500; color: #1e40af;") if total_sum > 0 else None,
                 style="font-size: 0.75rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;"
             ),
+
+            # Dimensions and package count
+            Div(
+                Span(f"{inv.get('height_m')} \u00d7 {inv.get('length_m')} \u00d7 {inv.get('width_m')} м",
+                     style="color: #64748b; font-size: 0.75rem;") if (inv.get('height_m') and inv.get('length_m') and inv.get('width_m')) else None,
+                Span(f"  \u2022  {inv.get('package_count')} мест", style="color: #64748b; font-size: 0.75rem;") if inv.get('package_count') else None,
+                style="display: flex; align-items: center; gap: 4px; margin-top: 0.25rem;"
+            ) if (inv.get('height_m') or inv.get('package_count')) else None,
 
             # Collapsible invoice details section (hidden by default)
             Div(
@@ -17642,12 +17657,44 @@ def get(quote_id: str, session):
                         cls="mb-4"
                     ),
 
-                    # Volume
+                    # Dimensions - H x L x W
                     Div(
-                        Label("Габариты, м³", cls="block mb-2 font-medium"),
-                        Input(type="number", name="total_volume_m3", id="edit-invoice-volume", step="0.0001", min="0",
-                              placeholder="2.5",
+                        Label("Габариты (м): высота \u00d7 длина \u00d7 ширина", cls="block mb-2 font-medium"),
+                        Div(
+                            Input(type="number", name="height_m", id="edit-invoice-height", step="0.01", min="0",
+                                  placeholder="В", cls="w-full p-2 border border-gray-300 rounded-md",
+                                  oninput="updateVolumeCalc()"),
+                            Span("\u00d7", style="padding: 0 4px; color: #94a3b8;"),
+                            Input(type="number", name="length_m", id="edit-invoice-length", step="0.01", min="0",
+                                  placeholder="Д", cls="w-full p-2 border border-gray-300 rounded-md",
+                                  oninput="updateVolumeCalc()"),
+                            Span("\u00d7", style="padding: 0 4px; color: #94a3b8;"),
+                            Input(type="number", name="width_m", id="edit-invoice-width", step="0.01", min="0",
+                                  placeholder="Ш", cls="w-full p-2 border border-gray-300 rounded-md",
+                                  oninput="updateVolumeCalc()"),
+                            cls="flex items-center gap-1"
+                        ),
+                        Div(id="edit-invoice-volume-calc", style="font-size: 12px; color: #64748b; margin-top: 4px;"),
+                        cls="mb-4"
+                    ),
+
+                    # Package count
+                    Div(
+                        Label("Количество мест", cls="block mb-2 font-medium"),
+                        Input(type="number", name="package_count", id="edit-invoice-packages", step="1", min="0",
+                              placeholder="кол-во коробок/паллет",
                               cls="w-full p-2 border border-gray-300 rounded-md"),
+                        cls="mb-4"
+                    ),
+
+                    # Procurement notes
+                    Div(
+                        Label("Комментарий для логистики/таможни", cls="block mb-2 font-medium"),
+                        Textarea(name="procurement_notes", id="edit-invoice-notes",
+                                 placeholder="Хрупкий груз, особые условия хранения...",
+                                 rows="3",
+                                 cls="w-full p-2 border border-gray-300 rounded-md",
+                                 style="resize: vertical;"),
                         cls="mb-4"
                     ),
 
@@ -17870,7 +17917,13 @@ def get(quote_id: str, session):
                 document.getElementById('edit-invoice-number').value = inv.invoice_number || '';
                 document.getElementById('edit-invoice-currency').value = inv.currency || 'USD';
                 document.getElementById('edit-invoice-weight').value = inv.total_weight_kg || '';
-                document.getElementById('edit-invoice-volume').value = inv.total_volume_m3 || '';
+                document.getElementById('edit-invoice-height').value = inv.height_m || '';
+                document.getElementById('edit-invoice-length').value = inv.length_m || '';
+                document.getElementById('edit-invoice-width').value = inv.width_m || '';
+                document.getElementById('edit-invoice-packages').value = inv.package_count || '';
+                document.getElementById('edit-invoice-notes').value = inv.procurement_notes || '';
+                // Auto-calc volume display
+                updateVolumeCalc();
 
                 // Show/hide current document info
                 var docCurrentEl = document.getElementById('edit-invoice-doc-current');
@@ -17890,6 +17943,18 @@ def get(quote_id: str, session):
                 selectedInvoiceId = invoiceId;
                 document.getElementById('edit-invoice-backdrop').style.display = 'block';
                 document.getElementById('edit-invoice-modal-box').style.display = 'block';
+            }};
+
+            window.updateVolumeCalc = function() {{
+                var h = parseFloat(document.getElementById('edit-invoice-height').value) || 0;
+                var l = parseFloat(document.getElementById('edit-invoice-length').value) || 0;
+                var w = parseFloat(document.getElementById('edit-invoice-width').value) || 0;
+                var el = document.getElementById('edit-invoice-volume-calc');
+                if (h > 0 && l > 0 && w > 0) {{
+                    el.textContent = 'Объём: ' + (h * l * w).toFixed(4) + ' м³';
+                }} else {{
+                    el.textContent = '';
+                }}
             }};
 
             window.closeEditInvoiceModal = function() {{
@@ -18037,6 +18102,8 @@ def get(quote_id: str, session):
                             id: row.id,
                             purchase_price_original: row.price !== '' && row.price != null ? parseFloat(row.price) : null,
                             production_time_days: row.production_time !== '' && row.production_time != null ? parseInt(row.production_time) : null,
+                            weight_kg: row.weight_kg !== '' && row.weight_kg != null ? parseFloat(row.weight_kg) : null,
+                            volume_m3: row.volume_m3 !== '' && row.volume_m3 != null ? parseFloat(row.volume_m3) : null,
                             price_includes_vat: row.price_includes_vat || false,
                             is_unavailable: row.is_unavailable || false
                         }});
@@ -18196,6 +18263,8 @@ def get(quote_id: str, session):
                     {{data: 'quantity', type: 'numeric', readOnly: true, width: 50}},
                     {{data: 'price', type: 'numeric', width: 80, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
                     {{data: 'production_time', type: 'numeric', width: 50, readOnly: !canEdit}},
+                    {{data: 'weight_kg', type: 'numeric', width: 70, readOnly: !canEdit, numericFormat: {{pattern: '0.000'}}}},
+                    {{data: 'volume_m3', type: 'numeric', width: 70, readOnly: !canEdit, numericFormat: {{pattern: '0.0000'}}}},
                     {{data: 'price_includes_vat', type: 'checkbox', width: 50, readOnly: !canEdit}},
                     {{data: 'is_unavailable', type: 'checkbox', width: 50, readOnly: !canEdit,
                       renderer: function(instance, td, row, col, prop, value) {{
@@ -18225,7 +18294,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'НДС', 'Н/Д', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Вес кг', 'Объём м³', 'НДС', 'Н/Д', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -18443,6 +18512,36 @@ async def api_update_invoice(quote_id: str, session, request):
     total_volume_m3 = form.get("total_volume_m3")
     if total_volume_m3 is not None:
         update_data["total_volume_m3"] = float(total_volume_m3) if total_volume_m3 else None
+
+    # Dimensions
+    height_m = form.get("height_m")
+    if height_m is not None:
+        update_data["height_m"] = float(height_m) if height_m else None
+
+    length_m = form.get("length_m")
+    if length_m is not None:
+        update_data["length_m"] = float(length_m) if length_m else None
+
+    width_m = form.get("width_m")
+    if width_m is not None:
+        update_data["width_m"] = float(width_m) if width_m else None
+
+    # Auto-calculate volume from dimensions (reuse already-converted values)
+    h = update_data.get("height_m")
+    l = update_data.get("length_m")
+    w = update_data.get("width_m")
+    if h and l and w:
+        update_data["total_volume_m3"] = h * l * w
+
+    # Package count
+    package_count = form.get("package_count")
+    if package_count is not None:
+        update_data["package_count"] = int(package_count) if package_count else None
+
+    # Procurement notes
+    procurement_notes = form.get("procurement_notes")
+    if procurement_notes is not None:
+        update_data["procurement_notes"] = procurement_notes.strip() or None
 
     # Handle file upload if provided
     invoice_file = form.get("invoice_file")
@@ -18958,6 +19057,14 @@ async def api_bulk_update_items(quote_id: str, session, request):
             # Support is_unavailable checkbox
             if "is_unavailable" in item:
                 update_data["is_unavailable"] = bool(item["is_unavailable"])
+
+            # Support weight_kg field
+            if "weight_kg" in item:
+                update_data["weight_kg"] = float(item["weight_kg"]) if item["weight_kg"] is not None else None
+
+            # Support volume_m3 field
+            if "volume_m3" in item:
+                update_data["volume_m3"] = float(item["volume_m3"]) if item["volume_m3"] is not None else None
 
             # Note: supplier_country is now set at invoice level, not per-item
 
@@ -19992,6 +20099,19 @@ def get(session, quote_id: str):
                         ),
                         style="display: flex; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0;"
                     ),
+                    # Dimensions and package count from procurement
+                    Div(
+                        Span(f"Габариты: {invoice.get('height_m')} \u00d7 {invoice.get('length_m')} \u00d7 {invoice.get('width_m')} м",
+                             style="color: #64748b; font-size: 12px;") if (invoice.get('height_m') and invoice.get('length_m') and invoice.get('width_m')) else None,
+                        Span(f"  \u2022  {invoice.get('package_count')} мест", style="color: #64748b; font-size: 12px;") if invoice.get('package_count') else None,
+                        style="display: flex; align-items: center; gap: 8px; padding: 4px 0;"
+                    ) if (invoice.get('height_m') or invoice.get('package_count')) else None,
+                    # Procurement notes
+                    Div(
+                        icon("info", size=14, color="#f59e0b"),
+                        Span(f" {invoice.get('procurement_notes')}", style="color: #64748b; font-size: 12px;"),
+                        style="display: flex; align-items: start; gap: 4px; padding: 6px 8px; background: #fefce8; border-radius: 6px; margin-top: 4px;"
+                    ) if invoice.get('procurement_notes') else None,
                     # Items list (always visible)
                     Div(
                         Div("ТОВАРЫ ДЛЯ ЛОГИСТИКИ", style="font-size: 10px; color: #94a3b8; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px;"),
@@ -21211,6 +21331,14 @@ def get(session, quote_id: str, error: str = ""):
 
     items = items_result.data or []
 
+    # Fetch invoices for procurement notes display
+    invoices_result = supabase.table("invoices") \
+        .select("id, invoice_number, procurement_notes") \
+        .eq("quote_id", quote_id) \
+        .execute()
+    customs_invoices = invoices_result.data or []
+    procurement_notes_list = [inv for inv in customs_invoices if inv.get("procurement_notes")]
+
     # Load calculation variables (for quote-level costs)
     calc_vars_result = supabase.table("quote_calculation_variables") \
         .select("variables") \
@@ -21811,6 +21939,21 @@ def get(session, quote_id: str, error: str = ""):
             P("Заполните код ТН ВЭД и пошлину в таблице. Нажмите 'Сохранить данные' для сохранения. Можно копировать из Excel.", style="margin: 0; font-size: 13px; color: #1e40af;"),
             style="background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-radius: 12px; border: 1px solid #93c5fd; padding: 16px; margin-bottom: 12px;"
         ) if is_editable else None,
+
+        # Procurement notes for customs
+        Div(
+            Div(
+                icon("info", size=16, color="#f59e0b"),
+                Span(" Комментарии от закупок", style="font-weight: 600; color: #92400e; margin-left: 4px;"),
+                style="display: flex; align-items: center; margin-bottom: 8px;"
+            ),
+            *[Div(
+                Span(f"Инвойс {inv.get('invoice_number', '\u2014')}: ", style="font-weight: 500; color: #475569;"),
+                Span(inv.get('procurement_notes', ''), style="color: #64748b;"),
+                style="padding: 4px 0; font-size: 13px; border-bottom: 1px solid #fef3c7;"
+            ) for inv in procurement_notes_list],
+            style="background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;"
+        ) if procurement_notes_list else None,
 
         # Items table (Handsontable - explicit save on button click)
         item_customs_section,
