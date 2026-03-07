@@ -451,7 +451,9 @@ class TestBulkUpdateValidation:
             # Should handle these fields
             assert 'purchase_price_original' in func_body
             assert 'production_time_days' in func_body
-            assert 'supplier_country' in func_body
+            # supplier_country is now set at invoice level, not per-item
+            assert 'weight_in_kg' in func_body
+            assert 'volume_m3' in func_body
 
 
 # ============================================================================
