@@ -271,9 +271,6 @@ def create_seller_company(
             insert_data["general_director_name"] = general_director_name
         if general_director_position:
             insert_data["general_director_position"] = general_director_position
-        if created_by:
-            insert_data["created_by"] = created_by
-
         result = supabase.table("seller_companies").insert(insert_data).execute()
 
         if result.data and len(result.data) > 0:
