@@ -461,7 +461,7 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
         product_rows += f"""
         <tr>
             <td style="text-align: center;">{i}</td>
-            <td>{escape(str(item.get('idn_sku') or '-'))}</td>
+            <td>{escape(str(item.get('supplier_sku') or item.get('idn_sku') or '-'))}</td>
             <td>{escape(str(item.get('product_code', '-')))}</td>
             <td>{escape(str(item.get('product_name', '')))}</td>
             <td>{escape(str(item.get('brand', '-')))}</td>

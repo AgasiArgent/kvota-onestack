@@ -362,7 +362,7 @@ def generate_contract_spec_docx(spec_id: str, org_id: str) -> bytes:
         row = table.add_row()
         row_data = [
             str(idx),
-            str(item.get('idn_sku') or '-'),
+            str(item.get('supplier_sku') or item.get('idn_sku') or '-'),
             str(item.get('product_code', '-')),
             str(item.get('product_name', '')),
             str(item.get('brand', '-')),

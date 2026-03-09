@@ -17177,6 +17177,8 @@ def get(quote_id: str, session):
             'brand': item.get('brand', ''),
             'product_name': item.get('product_name', ''),
             'product_code': item.get('product_code', ''),
+            'idn_sku': item.get('idn_sku', ''),
+            'supplier_sku': item.get('supplier_sku', ''),
             'quantity': item.get('quantity', 1),
             'price': item.get('purchase_price_original') if item.get('purchase_price_original') is not None else '',
             'production_time': item.get('production_time_days') if item.get('production_time_days') is not None else '',
@@ -17282,8 +17284,21 @@ def get(quote_id: str, session):
             item_name = item.get("product_name") or "—"
             item_qty = item.get("quantity", 0) or 0
             item_price = item.get("purchase_price_original", 0) or 0
+            item_sku = item.get("product_code") or ""
+            item_supplier_sku = item.get("supplier_sku") or ""
+            item_idn_sku = item.get("idn_sku") or ""
+            # Show SKU replacement badge when supplier_sku differs from idn_sku
+            sku_cell_content = []
+            if item_sku:
+                sku_cell_content.append(Span(item_sku, style="font-family: monospace;"))
+            if item_supplier_sku and item_supplier_sku != item_idn_sku:
+                sku_cell_content.append(
+                    Span(f" → {item_supplier_sku}",
+                         style="font-family: monospace; color: #b45309; background: #fffbeb; padding: 0 4px; border-radius: 3px; font-weight: 600; font-size: 0.7rem;")
+                )
             invoice_items_table.append(
                 Tr(
+                    Td(*sku_cell_content if sku_cell_content else ["—"], style="padding: 0.25rem 0.5rem; font-size: 0.8rem; border-bottom: 1px solid #f1f5f9;"),
                     Td(item_name, style="padding: 0.25rem 0.5rem; font-size: 0.8rem; border-bottom: 1px solid #f1f5f9;"),
                     Td(str(item_qty), style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: center; border-bottom: 1px solid #f1f5f9;"),
                     Td(f"{item_price:,.2f} {currency_sym}", style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-align: right; border-bottom: 1px solid #f1f5f9;"),
@@ -17362,12 +17377,13 @@ def get(quote_id: str, session):
                 Table(
                     Thead(
                         Tr(
+                            Th("Артикул", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: left; border-bottom: 2px solid #e2e8f0;"),
                             Th("Наименование", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: left; border-bottom: 2px solid #e2e8f0;"),
                             Th("Кол-во", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: center; border-bottom: 2px solid #e2e8f0;"),
                             Th("Цена", style="padding: 0.25rem 0.5rem; font-size: 0.75rem; color: #64748b; text-align: right; border-bottom: 2px solid #e2e8f0;"),
                         )
                     ),
-                    Tbody(*invoice_items_table) if invoice_items_table else Tbody(Tr(Td("Нет позиций", colspan="3", style="padding: 0.5rem; text-align: center; color: #94a3b8; font-size: 0.8rem;"))),
+                    Tbody(*invoice_items_table) if invoice_items_table else Tbody(Tr(Td("Нет позиций", colspan="4", style="padding: 0.5rem; text-align: center; color: #94a3b8; font-size: 0.8rem;"))),
                     style="width: 100%; border-collapse: collapse;"
                 ),
                 id=f"invoice-details-{inv['id']}",
@@ -18228,7 +18244,8 @@ def get(quote_id: str, session):
                             weight_kg: row.weight_kg !== '' && row.weight_kg != null ? parseFloat(row.weight_kg) : null,
                             volume_m3: row.volume_m3 !== '' && row.volume_m3 != null ? parseFloat(row.volume_m3) : null,
                             price_includes_vat: row.price_includes_vat || false,
-                            is_unavailable: row.is_unavailable || false
+                            is_unavailable: row.is_unavailable || false,
+                            supplier_sku: row.supplier_sku || null
                         }});
                     }}
                 }}
@@ -18382,10 +18399,34 @@ def get(quote_id: str, session):
                     {{data: 'selected', type: 'checkbox', width: 40, readOnly: !canEdit}},
                     {{data: 'brand', type: 'text', readOnly: true, width: 100}},
                     {{data: 'product_code', type: 'text', readOnly: true, width: 100}},
+                    {{data: 'idn_sku', type: 'text', readOnly: true, width: 100,
+                      renderer: function(instance, td, row, col, prop, value) {{
+                          Handsontable.renderers.TextRenderer.apply(this, arguments);
+                          td.style.fontFamily = 'monospace';
+                          td.style.fontSize = '0.8rem';
+                          td.style.color = '#6b7280';
+                          td.style.backgroundColor = '#f9fafb';
+                          return td;
+                      }}
+                    }},
+                    {{data: 'supplier_sku', type: 'text', width: 120, readOnly: !canEdit,
+                      renderer: function(instance, td, row, col, prop, value) {{
+                          Handsontable.renderers.TextRenderer.apply(this, arguments);
+                          td.style.fontFamily = 'monospace';
+                          td.style.fontSize = '0.8rem';
+                          var idnSku = instance.getDataAtRowProp(row, 'idn_sku');
+                          if (value && value !== '' && value !== idnSku) {{
+                              td.style.backgroundColor = '#fffbeb';
+                              td.style.color = '#b45309';
+                              td.style.fontWeight = '600';
+                          }}
+                          return td;
+                      }}
+                    }},
                     {{data: 'product_name', type: 'text', readOnly: true, width: 200}},
                     {{data: 'quantity', type: 'numeric', readOnly: true, width: 50}},
                     {{data: 'price', type: 'numeric', width: 80, readOnly: !canEdit, numericFormat: {{pattern: '0.00'}}}},
-                    {{data: 'production_time', type: 'numeric', width: 50, readOnly: !canEdit}},
+                    {{data: 'production_time', type: 'numeric', width: 90, readOnly: !canEdit}},
                     {{data: 'weight_kg', type: 'numeric', width: 70, readOnly: !canEdit, numericFormat: {{pattern: '0.000'}}}},
                     {{data: 'volume_m3', type: 'numeric', width: 70, readOnly: !canEdit, numericFormat: {{pattern: '0.0000'}}}},
                     {{data: 'price_includes_vat', type: 'checkbox', width: 50, readOnly: !canEdit}},
@@ -18417,7 +18458,7 @@ def get(quote_id: str, session):
                 hot = new Handsontable(container, {{
                     licenseKey: 'non-commercial-and-evaluation',
                     data: itemsData,
-                    colHeaders: ['☐', 'Бренд', 'Артикул', 'Наименование', 'Кол-во', 'Цена', 'Дни', 'Вес кг', 'Объём м³', 'НДС', 'Н/Д', 'Инвойс'],
+                    colHeaders: ['☐', 'Бренд', 'Артикул', 'IDN-SKU', 'Артикул поставщика', 'Наименование', 'Кол-во', 'Цена', 'Готовность к отгрузке, дней', 'Вес кг', 'Объём м³', 'НДС', 'Н/Д', 'Инвойс'],
                     columns: columns,
                     rowHeaders: true,
                     stretchH: 'all',
@@ -19188,6 +19229,10 @@ async def api_bulk_update_items(quote_id: str, session, request):
             # Support volume_m3 field
             if "volume_m3" in item:
                 update_data["volume_m3"] = float(item["volume_m3"]) if item["volume_m3"] is not None else None
+
+            # Support supplier_sku field (alternative SKU offered by supplier)
+            if "supplier_sku" in item:
+                update_data["supplier_sku"] = item["supplier_sku"] if item["supplier_sku"] else None
 
             # Note: supplier_country is now set at invoice level, not per-item
 

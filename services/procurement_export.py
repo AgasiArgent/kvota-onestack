@@ -62,7 +62,7 @@ def create_procurement_excel(
     row = 1
 
     # ==================== HEADER SECTION ====================
-    ws.merge_cells(f'A{row}:H{row}')
+    ws.merge_cells(f'A{row}:K{row}')
     ws[f'A{row}'] = "ЗАПРОС НА ОЦЕНКУ ПОЗИЦИЙ"
     ws[f'A{row}'].font = Font(bold=True, size=14)
     ws[f'A{row}'].alignment = Alignment(horizontal='center')
@@ -85,7 +85,7 @@ def create_procurement_excel(
     row += 1
 
     # Instructions
-    ws.merge_cells(f'A{row}:H{row}')
+    ws.merge_cells(f'A{row}:K{row}')
     ws[f'A{row}'] = "Пожалуйста, заполните колонки: Цена поставщика, Наличие, Срок производства"
     ws[f'A{row}'].font = Font(italic=True, color="666666")
     row += 2
@@ -96,6 +96,7 @@ def create_procurement_excel(
         "№",
         "Бренд",
         "Артикул",
+        "Артикул поставщика",
         "Наименование",
         "Кол-во",
         "Ед.",
@@ -131,7 +132,7 @@ def create_procurement_excel(
         brand_items = items_by_brand[brand]
 
         # Brand subheader
-        ws.merge_cells(f'A{row}:J{row}')
+        ws.merge_cells(f'A{row}:K{row}')
         ws[f'A{row}'] = f"▸ {brand} ({len(brand_items)} позиций)"
         ws[f'A{row}'].font = Font(bold=True, size=11)
         ws[f'A{row}'].fill = SUBHEADER_FILL
@@ -144,6 +145,7 @@ def create_procurement_excel(
                 item_num,
                 brand,
                 item.get("product_code", ""),
+                item.get("supplier_sku", ""),
                 item.get("name", item.get("product_name", "")),
                 item.get("quantity", 1),
                 item.get("unit", "шт."),
@@ -158,16 +160,14 @@ def create_procurement_excel(
                 cell.value = value
                 cell.border = THIN_BORDER
 
-                # Alignment
-                if col in [1, 5, 7, 9]:  # Numbers
-                    cell.alignment = Alignment(horizontal='center')
-                elif col in [6, 8]:  # Short text
+                # Alignment: center for №, Кол-во, Ед., and supplier-fill columns
+                if col in [1, 6, 7, 8, 9, 10]:
                     cell.alignment = Alignment(horizontal='center')
                 else:
                     cell.alignment = Alignment(horizontal='left')
 
                 # Highlight columns for supplier to fill
-                if col in [7, 8, 9, 10]:
+                if col in [8, 9, 10, 11]:
                     cell.fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
 
             item_num += 1
@@ -177,17 +177,17 @@ def create_procurement_excel(
 
     # ==================== FOOTER ====================
     row += 1
-    ws.merge_cells(f'A{row}:J{row}')
+    ws.merge_cells(f'A{row}:K{row}')
     ws[f'A{row}'] = f"Всего позиций: {len(items)}"
     ws[f'A{row}'].font = Font(bold=True)
     row += 2
 
-    ws.merge_cells(f'A{row}:J{row}')
+    ws.merge_cells(f'A{row}:K{row}')
     ws[f'A{row}'] = "Заполненный файл отправьте обратно менеджеру по закупкам."
     ws[f'A{row}'].font = Font(italic=True, color="666666")
 
     # ==================== COLUMN WIDTHS ====================
-    column_widths = [5, 15, 20, 40, 8, 8, 15, 12, 12, 25]
+    column_widths = [5, 15, 20, 20, 40, 8, 8, 15, 12, 12, 25]
     for col, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col)].width = width
 
