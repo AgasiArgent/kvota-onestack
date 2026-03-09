@@ -34242,7 +34242,6 @@ def customer_search_dropdown(
             const input = document.getElementById('input-cust-search');
             const datalist = document.getElementById('datalist-cust-search');
             const hidden = document.getElementById('hidden-cust-search');
-            const btn = document.getElementById('btn-create-quote');
             const contactsSection = document.getElementById('contact-person-section');
 
             if (!input || !datalist || !hidden) return;
@@ -34251,7 +34250,10 @@ def customer_search_dropdown(
             var selectedId = hidden.value || '';
             var selectedLabel = input.value || '';
 
+            function getBtn() { return document.getElementById('btn-create-quote'); }
+
             function syncValue() {
+                const btn = getBtn();
                 const option = Array.from(datalist.options).find(opt => opt.value === input.value);
                 const newId = option ? (option.getAttribute('data-id') || '') : '';
 
@@ -34291,8 +34293,10 @@ def customer_search_dropdown(
 
             input.addEventListener('input', syncValue);
             input.addEventListener('change', syncValue);
-            // Initial sync — enable button if pre-selected
-            if (selectedId && btn) btn.disabled = false;
+            // Initial sync — enable button if pre-selected (deferred since btn may not exist yet)
+            if (selectedId) {
+                setTimeout(function() { var b = getBtn(); if (b) b.disabled = false; }, 0);
+            }
         })();
     """)
 
