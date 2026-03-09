@@ -5103,9 +5103,12 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     sections = []
 
     # For sales users, get their assigned customer IDs for filtering
-    is_sales_only = bool(roles) and set(roles).issubset({"sales", "sales_manager"})
+    # Filter applies when user has sales role but NOT admin/top_manager/head_of_sales (full visibility)
+    has_sales_role = any(r in roles for r in ["sales", "sales_manager"])
+    has_full_visibility = any(r in roles for r in ["admin", "top_manager", "head_of_sales"])
+    needs_sales_filter = has_sales_role and not has_full_visibility
     my_customer_ids = None
-    if is_sales_only:
+    if needs_sales_filter:
         my_customers = supabase.table("customers").select("id") \
             .eq("organization_id", org_id).eq("manager_id", user_id).execute()
         my_customer_ids = [c["id"] for c in (my_customers.data or [])]
@@ -8075,8 +8078,10 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
 
     user = session["user"]
     roles = get_effective_roles(session)
-    # is_sales_only: user has sales/sales_manager but no other privileged role
-    is_sales_only = bool(roles) and set(roles).issubset({"sales", "sales_manager"})
+    # is_sales_only: user has sales role but NOT admin/top_manager/head_of_sales (full visibility)
+    has_sales_role = any(r in roles for r in ["sales", "sales_manager"])
+    has_full_visibility = any(r in roles for r in ["admin", "top_manager", "head_of_sales"])
+    is_sales_only = has_sales_role and not has_full_visibility
 
     supabase = get_supabase()
 

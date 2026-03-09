@@ -355,75 +355,45 @@ class TestSalesOnlyDetection:
     def test_sales_only_excludes_admin(self, main_source):
         """
         is_sales_only must be False when user has admin role (even with sales).
-        The issubset({"sales", "sales_manager"}) pattern ensures that any role
-        outside this set (like admin) makes is_sales_only False.
+        has_full_visibility includes admin, so is_sales_only = False.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        sales_only_match = re.search(r'is_sales_only\s*=\s*(.+)', route_body)
-        assert sales_only_match, "Cannot find is_sales_only assignment"
-        # Context around the assignment
-        sales_only_context = route_body[
-            max(0, sales_only_match.start() - 300):sales_only_match.end() + 300
-        ]
-        # The issubset pattern with {"sales", "sales_manager"} inherently excludes admin:
-        # set(["sales", "admin"]).issubset({"sales", "sales_manager"}) == False
-        assert "issubset" in sales_only_context, (
-            "is_sales_only definition does not use issubset pattern. "
-            "Expected: set(roles).issubset({\"sales\", \"sales_manager\"}) which "
-            "inherently excludes admin (and all other non-sales roles)."
+        assert re.search(r'has_full_visibility', route_body), (
+            "GET /quotes handler missing has_full_visibility check."
         )
-        assert '"sales_manager"' in sales_only_context or "'sales_manager'" in sales_only_context, (
-            "is_sales_only issubset does not include 'sales_manager' in the allowed set."
+        assert re.search(r'"admin"', route_body), (
+            "has_full_visibility must include 'admin' role."
         )
 
     def test_sales_only_excludes_procurement(self, main_source):
         """
-        is_sales_only must be False for procurement users.
-        Procurement sees all quotes, not filtered by created_by.
-        The issubset({"sales", "sales_manager"}) pattern ensures "procurement"
-        is not in the allowed set, so a procurement user is never sales_only.
+        Sales+procurement dual-role user: is_sales_only should be True
+        (procurement doesn't grant full visibility, so customer filter applies).
+        Only admin/top_manager/head_of_sales bypass the filter.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        sales_only_match = re.search(r'is_sales_only\s*=\s*(.+)', route_body)
-        assert sales_only_match, "Cannot find is_sales_only assignment"
-        sales_only_context = route_body[
-            max(0, sales_only_match.start() - 300):sales_only_match.end() + 300
-        ]
-        # The issubset pattern with only "sales" and "sales_manager" inherently
-        # excludes procurement: set(["procurement"]).issubset({"sales", "sales_manager"}) == False
-        assert "issubset" in sales_only_context, (
-            "is_sales_only definition does not use issubset pattern. "
-            "Expected: set(roles).issubset({\"sales\", \"sales_manager\"}) which "
-            "inherently excludes procurement."
+        assert re.search(r'has_sales_role\s*=', route_body), (
+            "GET /quotes handler missing has_sales_role variable."
         )
-        assert ('"sales"' in sales_only_context or "'sales'" in sales_only_context), (
-            "is_sales_only issubset does not include 'sales' in the allowed set."
+        # Verify has_full_visibility does NOT include procurement
+        full_vis_match = re.search(r'has_full_visibility\s*=\s*(.+)', route_body)
+        assert full_vis_match, "Cannot find has_full_visibility assignment"
+        assert "procurement" not in full_vis_match.group(1), (
+            "has_full_visibility should NOT include 'procurement'. "
+            "Procurement users with sales role should still be filtered by customer-manager."
         )
 
     def test_sales_only_excludes_top_manager(self, main_source):
         """
         is_sales_only must be False for top_manager.
-        The issubset({"sales", "sales_manager"}) pattern ensures "top_manager"
-        is not in the allowed set, so a top_manager user is never sales_only.
+        has_full_visibility includes top_manager, bypassing customer filter.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        sales_only_match = re.search(r'is_sales_only\s*=\s*(.+)', route_body)
-        assert sales_only_match, "Cannot find is_sales_only assignment"
-        sales_only_context = route_body[
-            max(0, sales_only_match.start() - 300):sales_only_match.end() + 300
-        ]
-        # Verify the issubset pattern is used with the correct allowed set
-        assert "issubset" in sales_only_context, (
-            "is_sales_only definition does not use issubset pattern. "
-            "Expected: set(roles).issubset({\"sales\", \"sales_manager\"}) which "
-            "inherently excludes top_manager."
-        )
-        # Verify the allowed set contains exactly sales and sales_manager
-        assert ('"sales_manager"' in sales_only_context or "'sales_manager'" in sales_only_context), (
-            "is_sales_only issubset allowed set does not include 'sales_manager'."
+        assert re.search(r'"top_manager"', route_body), (
+            "has_full_visibility must include 'top_manager' role."
         )
 
     def test_created_by_filter_uses_is_sales_only(self, main_source):
@@ -739,31 +709,21 @@ class TestQuotesFilterEdgeCases:
     def test_dual_role_sales_admin_not_sales_only(self, main_source):
         """
         A user with both 'sales' and 'admin' roles should NOT be is_sales_only.
-        The issubset pattern handles this correctly:
-        set(["sales", "admin"]).issubset({"sales", "sales_manager"}) == False
-        because "admin" is not in the allowed set.
+        The has_full_visibility check excludes admin/top_manager/head_of_sales
+        from customer-manager filtering.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        sales_only_match = re.search(r'is_sales_only\s*=\s*(.+)', route_body)
-        assert sales_only_match, "Cannot find is_sales_only assignment"
-        assignment_context = route_body[
-            max(0, sales_only_match.start() - 100):sales_only_match.end() + 200
-        ]
-        # The issubset pattern ensures dual-role users (e.g. sales+admin) are NOT
-        # sales_only, because set(["sales", "admin"]) is NOT a subset of
-        # {"sales", "sales_manager"}
-        assert "issubset" in assignment_context, (
-            "is_sales_only does not use issubset pattern. "
-            "Expected: set(roles).issubset({\"sales\", \"sales_manager\"}) "
-            "which correctly handles dual-role users like sales+admin."
+        # Verify is_sales_only is defined by combining has_sales_role and has_full_visibility
+        assert re.search(r'has_sales_role', route_body), (
+            "GET /quotes handler missing 'has_sales_role' variable."
         )
-        # Verify the allowed set is exactly {"sales", "sales_manager"}
-        assert ('"sales"' in assignment_context or "'sales'" in assignment_context), (
-            "is_sales_only issubset allowed set missing 'sales'."
+        assert re.search(r'has_full_visibility', route_body), (
+            "GET /quotes handler missing 'has_full_visibility' variable. "
+            "Admin/top_manager/head_of_sales should bypass customer-manager filter."
         )
-        assert ('"sales_manager"' in assignment_context or "'sales_manager'" in assignment_context), (
-            "is_sales_only issubset allowed set missing 'sales_manager'."
+        assert re.search(r'is_sales_only\s*=\s*has_sales_role\s+and\s+not\s+has_full_visibility', route_body), (
+            "is_sales_only must combine has_sales_role and not has_full_visibility."
         )
 
     def test_manager_dropdown_populated_from_created_by(self, main_source):
