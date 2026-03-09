@@ -466,17 +466,24 @@ class TestSelectIncludesCreatedBy:
 
     def test_select_includes_created_by(self, main_source):
         """
-        The .select(...) call in GET /quotes must include 'created_by'.
+        The select string in GET /quotes must include 'created_by'.
+        Can be in a .select() call or a _select variable assignment.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        # Find the .select() call
-        select_match = re.search(r'\.select\(\s*["\']([^"\']+)["\']', route_body)
-        assert select_match, "Cannot find .select() call in GET /quotes handler"
-        select_string = select_match.group(1)
+        # Check for created_by in any select string (variable or inline)
+        # Look for _select = "..." variable assignment or .select("...") calls
+        select_var = re.search(r'_select\s*=\s*["\']([^"\']+)["\']', route_body)
+        select_inline = re.search(r'\.select\(\s*["\']([^"\']+)["\']', route_body)
+        select_string = ""
+        if select_var:
+            select_string = select_var.group(1)
+        elif select_inline:
+            select_string = select_inline.group(1)
+        assert select_string, "Cannot find select string in GET /quotes handler"
         assert "created_by" in select_string, (
-            f"The .select() string does not include 'created_by'. "
-            f"Found: .select(\"{select_string[:100]}...\"). "
+            f"The select string does not include 'created_by'. "
+            f"Found: \"{select_string[:100]}...\". "
             "created_by is needed for manager dropdown population and filtering."
         )
 
@@ -716,15 +723,17 @@ class TestQuotesFilterEdgeCases:
             "All users must still be scoped to their organization."
         )
 
-    def test_quotes_route_created_by_still_present(self, main_source):
+    def test_quotes_route_sales_filter_present(self, main_source):
         """
-        The created_by filter (.eq) must still be applied for sales-only users.
+        Sales-only users must be filtered — either by created_by or by customer manager_id.
         """
         route_body = _find_quotes_route_body(main_source)
         assert route_body, "Could not find GET /quotes route handler"
-        assert '.eq("created_by"' in route_body or ".eq('created_by'" in route_body, (
-            "GET /quotes handler does not apply .eq('created_by', ...) filter. "
-            "Sales-only users should only see their own quotes."
+        has_created_by = '.eq("created_by"' in route_body or ".eq('created_by'" in route_body
+        has_manager_filter = '.eq("manager_id"' in route_body or ".eq('manager_id'" in route_body
+        assert has_created_by or has_manager_filter, (
+            "GET /quotes handler does not filter for sales-only users. "
+            "Sales-only users should only see quotes for their assigned customers."
         )
 
     def test_dual_role_sales_admin_not_sales_only(self, main_source):

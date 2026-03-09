@@ -5711,20 +5711,29 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         quotes_result = quotes_query.execute()
         quotes = quotes_result.data or []
     else:
-        # Multi-query: find quotes where user is creator OR assigned in any department
-        q1 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
-            .eq("organization_id", org_id).eq("created_by", user_id).execute()
-        q2 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+        # Multi-query: find quotes for user's assigned customers OR assigned in any department
+        _qs = "id, status, workflow_status, total_amount"
+        # Get quotes for customers assigned to this user (sales managers)
+        my_customers = supabase.table("customers").select("id") \
+            .eq("organization_id", org_id).eq("manager_id", user_id).execute()
+        my_customer_ids = [c["id"] for c in (my_customers.data or [])]
+        q1_data = []
+        if my_customer_ids:
+            q1 = supabase.table("quotes").select(_qs) \
+                .eq("organization_id", org_id).in_("customer_id", my_customer_ids).execute()
+            q1_data = q1.data or []
+        # Also find quotes where user is assigned in any department
+        q2 = supabase.table("quotes").select(_qs) \
             .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]).execute()
-        q3 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+        q3 = supabase.table("quotes").select(_qs) \
             .eq("organization_id", org_id).eq("assigned_logistics_user", user_id).execute()
-        q4 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+        q4 = supabase.table("quotes").select(_qs) \
             .eq("organization_id", org_id).eq("assigned_customs_user", user_id).execute()
         # Merge and deduplicate by quote ID
         seen_ids = set()
         quotes = []
-        for result in [q1, q2, q3, q4]:
-            for q in (result.data or []):
+        for data in [q1_data, q2.data or [], q3.data or [], q4.data or []]:
+            for q in data:
                 if q["id"] not in seen_ids:
                     seen_ids.add(q["id"])
                     quotes.append(q)
@@ -5749,25 +5758,29 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         recent_result = recent_query.execute()
         recent_quotes = recent_result.data or []
     else:
-        # Multi-query for recent quotes: same assignment logic as stats
-        _select = "id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at"
-        rq1 = supabase.table("quotes").select(_select) \
-            .eq("organization_id", org_id).eq("created_by", user_id) \
-            .order("created_at", desc=True).limit(10).execute()
-        rq2 = supabase.table("quotes").select(_select) \
+        # Multi-query for recent quotes: customer-manager + department assignment
+        _rselect = "id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at"
+        # Reuse my_customer_ids from stats query above
+        rq1_data = []
+        if my_customer_ids:
+            rq1 = supabase.table("quotes").select(_rselect) \
+                .eq("organization_id", org_id).in_("customer_id", my_customer_ids) \
+                .order("created_at", desc=True).limit(10).execute()
+            rq1_data = rq1.data or []
+        rq2 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]) \
             .order("created_at", desc=True).limit(10).execute()
-        rq3 = supabase.table("quotes").select(_select) \
+        rq3 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).eq("assigned_logistics_user", user_id) \
             .order("created_at", desc=True).limit(10).execute()
-        rq4 = supabase.table("quotes").select(_select) \
+        rq4 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).eq("assigned_customs_user", user_id) \
             .order("created_at", desc=True).limit(10).execute()
         # Merge, deduplicate, sort by created_at, take top 5
         seen_ids = set()
         all_recent = []
-        for result in [rq1, rq2, rq3, rq4]:
-            for q in (result.data or []):
+        for data in [rq1_data, rq2.data or [], rq3.data or [], rq4.data or []]:
+            for q in data:
                 if q["id"] not in seen_ids:
                     seen_ids.add(q["id"])
                     all_recent.append(q)
@@ -8055,15 +8068,32 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
 
     supabase = get_supabase()
 
-    query = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, created_by, quote_versions!quote_versions_quote_id_fkey(version)") \
-        .eq("organization_id", user["org_id"]) \
-        .order("created_at", desc=True)
+    _select = "id, idn_quote, customer_id, customers!customer_id(name, id), workflow_status, total_amount, total_profit_usd, currency, created_at, created_by, quote_versions!quote_versions_quote_id_fkey(version)"
 
     if is_sales_only:
-        query = query.eq("created_by", user["id"])
+        # Sales users see quotes for their assigned customers only
+        my_customers = supabase.table("customers") \
+            .select("id") \
+            .eq("organization_id", user["org_id"]) \
+            .eq("manager_id", user["id"]) \
+            .execute()
+        my_customer_ids = [c["id"] for c in (my_customers.data or [])]
 
-    result = query.execute()
+        if my_customer_ids:
+            result = supabase.table("quotes") \
+                .select(_select) \
+                .eq("organization_id", user["org_id"]) \
+                .in_("customer_id", my_customer_ids) \
+                .order("created_at", desc=True) \
+                .execute()
+        else:
+            result = type('Result', (), {'data': []})()
+    else:
+        result = supabase.table("quotes") \
+            .select(_select) \
+            .eq("organization_id", user["org_id"]) \
+            .order("created_at", desc=True) \
+            .execute()
 
     quotes = result.data or []
 
