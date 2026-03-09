@@ -5102,6 +5102,14 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     """
     sections = []
 
+    # For sales users, get their assigned customer IDs for filtering
+    is_sales_only = bool(roles) and set(roles).issubset({"sales", "sales_manager"})
+    my_customer_ids = None
+    if is_sales_only:
+        my_customers = supabase.table("customers").select("id") \
+            .eq("organization_id", org_id).eq("manager_id", user_id).execute()
+        my_customer_ids = [c["id"] for c in (my_customers.data or [])]
+
     # -------------------------------------------------------------------------
     # TOP MANAGER / ADMIN: Pending Approvals
     # -------------------------------------------------------------------------
@@ -5493,15 +5501,17 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     # SALES: My quotes (pending sales review)
     # -------------------------------------------------------------------------
     if 'sales' in roles:
-        sales_result = supabase.table("quotes") \
+        sales_query = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), workflow_status, total_amount, currency") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "pending_sales_review") \
-            .order("updated_at", desc=True) \
-            .limit(5) \
-            .execute()
-
-        sales_quotes = sales_result.data or []
+            .eq("workflow_status", "pending_sales_review")
+        if my_customer_ids is not None:
+            sales_query = sales_query.in_("customer_id", my_customer_ids) if my_customer_ids else None
+        if sales_query:
+            sales_result = sales_query.order("updated_at", desc=True).limit(5).execute()
+            sales_quotes = sales_result.data or []
+        else:
+            sales_quotes = []
         sales_count = len(sales_quotes)
 
         if sales_count > 0:
@@ -5535,15 +5545,17 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
     # SALES: Approved quotes - need to send to client
     # -------------------------------------------------------------------------
     if 'sales' in roles:
-        approved_result = supabase.table("quotes") \
+        approved_query = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), total_amount, currency") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "approved") \
-            .order("updated_at", desc=True) \
-            .limit(5) \
-            .execute()
-
-        approved_quotes = approved_result.data or []
+            .eq("workflow_status", "approved")
+        if my_customer_ids is not None:
+            approved_query = approved_query.in_("customer_id", my_customer_ids) if my_customer_ids else None
+        if approved_query:
+            approved_result = approved_query.order("updated_at", desc=True).limit(5).execute()
+            approved_quotes = approved_result.data or []
+        else:
+            approved_quotes = []
         approved_count = len(approved_quotes)
 
         if approved_count > 0:
