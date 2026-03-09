@@ -8124,14 +8124,14 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
     stage_stats = _calculate_quotes_stage_stats(quotes)
 
     # --- Fetch dropdown data for filters ---
-    # Customers list for filter dropdown
+    # Customers list for filter dropdown (sales users see only their assigned customers)
     try:
-        customers_result = supabase.table("customers") \
+        cust_query = supabase.table("customers") \
             .select("id, name") \
-            .eq("organization_id", user["org_id"]) \
-            .order("name") \
-            .execute()
-        customers_list = customers_result.data or []
+            .eq("organization_id", user["org_id"])
+        if is_sales_only:
+            cust_query = cust_query.eq("manager_id", user["id"])
+        customers_list = cust_query.order("name").execute().data or []
     except Exception:
         customers_list = []
 
