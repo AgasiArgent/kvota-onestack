@@ -17443,6 +17443,18 @@ def get(quote_id: str, session):
         # Sales checklist info card (shows answers from sales team)
         _build_sales_checklist_card(quote.get("sales_checklist")),
 
+        # Sales notes (free-text comment from sales manager)
+        Div(
+            Div(
+                icon("message-square", size=16, color="#64748b"),
+                Span(" Примечания от продажника", style="font-weight: 600; font-size: 0.875rem; margin-left: 6px; color: #475569;"),
+                style="display: flex; align-items: center; margin-bottom: 8px;"
+            ),
+            P(quote.get("notes"), style="margin: 0; padding: 8px 12px; background: rgba(255,255,255,0.5); border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap; line-height: 1.5; color: #374151;"),
+            cls="card",
+            style="background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-left: 4px solid #94a3b8; margin-bottom: 1rem; padding: 1rem; border-radius: 10px;"
+        ) if quote.get("notes") else None,
+
         # Progress bar with gradient card
         Div(
             Div(
