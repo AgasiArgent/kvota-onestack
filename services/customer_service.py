@@ -489,7 +489,7 @@ def get_all_customers(
 
     Args:
         organization_id: Organization UUID
-        is_active: Filter by active status (None = all)
+        is_active: Filter by active status (None = all, maps to status column)
         manager_id: If provided, only return customers managed by this user
         limit: Maximum number of results
         offset: Pagination offset
@@ -504,8 +504,10 @@ def get_all_customers(
             .eq("organization_id", organization_id)\
             .order("name")
 
-        if is_active is not None:
-            query = query.eq("is_active", is_active)
+        if is_active is True:
+            query = query.eq("status", "active")
+        elif is_active is False:
+            query = query.neq("status", "active")
 
         if manager_id is not None:
             query = query.eq("manager_id", manager_id)
@@ -583,7 +585,7 @@ def search_customers(
     Args:
         organization_id: Organization UUID
         query: Search query (matches name or inn)
-        is_active: Filter by active status
+        is_active: Filter by active status (maps to status='active' column)
         manager_id: If provided, only return customers managed by this user
         limit: Maximum number of results
 
@@ -602,8 +604,10 @@ def search_customers(
         base_query = supabase.table("customers").select("*")\
             .eq("organization_id", organization_id)
 
-        if is_active is not None:
-            base_query = base_query.eq("is_active", is_active)
+        if is_active is True:
+            base_query = base_query.eq("status", "active")
+        elif is_active is False:
+            base_query = base_query.neq("status", "active")
 
         if manager_id is not None:
             base_query = base_query.eq("manager_id", manager_id)
@@ -621,8 +625,10 @@ def search_customers(
                 .eq("organization_id", organization_id)\
                 .ilike("inn", search_pattern)
 
-            if is_active is not None:
-                inn_query = inn_query.eq("is_active", is_active)
+            if is_active is True:
+                inn_query = inn_query.eq("status", "active")
+            elif is_active is False:
+                inn_query = inn_query.neq("status", "active")
 
             if manager_id is not None:
                 inn_query = inn_query.eq("manager_id", manager_id)

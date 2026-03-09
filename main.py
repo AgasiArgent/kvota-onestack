@@ -34250,6 +34250,8 @@ def customer_search_dropdown(
             function syncValue() {
                 const option = Array.from(datalist.options).find(opt => opt.value === input.value);
                 const newId = option ? (option.getAttribute('data-id') || '') : '';
+                // Don't clear pre-set value when datalist is empty (e.g., pre-selected via URL param)
+                if (!newId && hidden.value && datalist.options.length === 0) return;
                 const changed = hidden.value !== newId;
                 hidden.value = newId;
                 if (btn) btn.disabled = !newId;
@@ -34427,14 +34429,12 @@ def get(session, q: str = "", limit: int = 20):
             customers = search_customers(
                 organization_id=org_id,
                 query=q.strip(),
-                is_active=True,
                 manager_id=manager_id,
                 limit=min(limit, 50),
             )
         else:
             customers = get_all_customers(
                 organization_id=org_id,
-                is_active=True,
                 manager_id=manager_id,
                 limit=20,
             )
@@ -38583,7 +38583,10 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Div(
                         Span("Активен" if customer.is_active else "Неактивен",
                              style=f"display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; color: {'#16a34a' if customer.is_active else '#dc2626'}; background: {'#dcfce7' if customer.is_active else '#fee2e2'};"),
-                        # Inline editing available on detail page fields directly
+                        A(icon("file-plus", size=14), " Создать КП",
+                          href=f"/quotes/new?customer_id={customer_id}",
+                          cls="btn btn--primary",
+                          style="font-size: 13px; padding: 6px 14px;"),
                         style="display: flex; align-items: center; gap: 12px;"
                     ),
                     style="display: flex; justify-content: space-between; align-items: center;"
