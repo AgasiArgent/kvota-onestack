@@ -182,40 +182,29 @@ class TestGetQuotesNewRendersForm:
 class TestGetQuotesNewFormFields:
     """GET /quotes/new form must contain the correct fields."""
 
-    def test_form_has_customer_id_select(self):
-        """Form must contain a customer_id Select dropdown (required field)."""
+    def test_form_has_customer_search_dropdown(self):
+        """Form must use customer_search_dropdown() component for customer selection."""
         source = _read_main_source()
         handler = _get_handler_body(source, QUOTES_NEW_ROUTE, "get")
         assert handler is not None, "GET /quotes/new handler not found"
 
-        has_customer_select = (
-            'name="customer_id"' in handler
-            and "Select(" in handler
-        )
-        assert has_customer_select, (
-            "Form must have a Select element with name='customer_id'. "
+        has_customer_dropdown = "customer_search_dropdown(" in handler
+        assert has_customer_dropdown, (
+            "Form must use customer_search_dropdown() component. "
             "Customer is a required field for quote creation."
         )
 
-    def test_customer_field_is_required(self):
-        """The customer_id field must be marked as required."""
+    def test_customer_search_dropdown_has_hidden_customer_id(self):
+        """The customer_search_dropdown component must include a hidden customer_id input."""
         source = _read_main_source()
-        handler = _get_handler_body(source, QUOTES_NEW_ROUTE, "get")
-        assert handler is not None, "GET /quotes/new handler not found"
 
-        # Look for required=True near customer_id in the handler
-        # The Select for customer_id should have required=True
-        customer_section_start = handler.find('name="customer_id"')
-        assert customer_section_start >= 0, "customer_id field not found in handler"
-
-        # Check the surrounding ~500 chars for required attribute
-        section_start = max(0, customer_section_start - 300)
-        section_end = min(len(handler), customer_section_start + 200)
-        customer_section = handler[section_start:section_end]
-
-        has_required = "required=True" in customer_section or "required" in customer_section
-        assert has_required, (
-            "customer_id Select must have required=True. "
+        # Check the component function itself for the hidden input
+        has_hidden_input = (
+            'name="customer_id"' in source
+            and "customer_search_dropdown" in source
+        )
+        assert has_hidden_input, (
+            "customer_search_dropdown must include a hidden input with name='customer_id'. "
             "A quote without a customer makes no sense."
         )
 
@@ -490,19 +479,16 @@ class TestPostQuotesNewSecurity:
 class TestGetQuotesNewFetchesData:
     """GET /quotes/new must fetch customers and seller companies for dropdowns."""
 
-    def test_get_handler_fetches_customers(self):
-        """GET handler must fetch customers for the dropdown."""
+    def test_get_handler_uses_customer_search_dropdown(self):
+        """GET handler must use customer_search_dropdown for customer selection (HTMX-based search)."""
         source = _read_main_source()
         handler = _get_handler_body(source, QUOTES_NEW_ROUTE, "get")
         assert handler is not None, "GET /quotes/new handler not found"
 
-        has_customers_fetch = (
-            "get_all_customers" in handler
-            or ('table("customers")' in handler and ".select(" in handler)
-        )
-        assert has_customers_fetch, (
-            "GET /quotes/new must fetch customers for the dropdown. "
-            "Use get_all_customers from services.customer_service or direct query."
+        has_customer_component = "customer_search_dropdown(" in handler
+        assert has_customer_component, (
+            "GET /quotes/new must use customer_search_dropdown() component. "
+            "Customers are loaded via HTMX search endpoint, not fetched in GET handler."
         )
 
     def test_get_handler_fetches_seller_companies(self):
