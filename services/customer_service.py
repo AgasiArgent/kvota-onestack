@@ -312,6 +312,7 @@ def create_customer(
     general_director_position: Optional[str] = "Генеральный директор",
     warehouse_addresses: Optional[List[str]] = None,
     is_active: bool = True,
+    manager_id: Optional[str] = None,
 ) -> Optional[Customer]:
     """
     Create a new customer.
@@ -356,7 +357,7 @@ def create_customer(
     try:
         supabase = _get_supabase()
 
-        result = supabase.table("customers").insert({
+        insert_data = {
             "organization_id": organization_id,
             "name": name,
             "inn": inn,
@@ -369,7 +370,11 @@ def create_customer(
             "general_director_position": general_director_position,
             "warehouse_addresses": warehouse_addresses or [],
             "is_active": is_active,
-        }).execute()
+        }
+        if manager_id:
+            insert_data["manager_id"] = manager_id
+
+        result = supabase.table("customers").insert(insert_data).execute()
 
         if result.data and len(result.data) > 0:
             return _parse_customer(result.data[0])
@@ -649,6 +654,26 @@ def customer_exists(organization_id: str, inn: str) -> bool:
         True if customer exists, False otherwise
     """
     return get_customer_by_inn(organization_id, inn) is not None
+
+
+def customer_exists_globally(inn: str) -> bool:
+    """Check if INN exists across ALL organizations (for dedup on creation).
+
+    Uses service-role client to bypass RLS and check all orgs.
+
+    Args:
+        inn: INN to check
+
+    Returns:
+        True if a customer with this INN exists in any organization
+    """
+    try:
+        supabase = _get_supabase()
+        result = supabase.table("customers").select("id").eq("inn", inn).limit(1).execute()
+        return bool(result.data)
+    except Exception as e:
+        print(f"Error checking INN globally: {e}")
+        return False
 
 
 # =============================================================================
