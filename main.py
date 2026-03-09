@@ -34247,14 +34247,33 @@ def customer_search_dropdown(
 
             if (!input || !datalist || !hidden) return;
 
+            // Track last confirmed selection to survive datalist refreshes
+            var selectedId = hidden.value || '';
+            var selectedLabel = input.value || '';
+
             function syncValue() {
                 const option = Array.from(datalist.options).find(opt => opt.value === input.value);
                 const newId = option ? (option.getAttribute('data-id') || '') : '';
-                // Don't clear pre-set value when datalist is empty (e.g., pre-selected via URL param)
-                if (!newId && hidden.value && datalist.options.length === 0) return;
+
+                // If input text matches our last confirmed selection, keep it
+                // (HTMX may have refreshed the datalist with non-matching results)
+                if (!newId && selectedId && input.value === selectedLabel) {
+                    if (btn) btn.disabled = false;
+                    return;
+                }
+
                 const changed = hidden.value !== newId;
                 hidden.value = newId;
                 if (btn) btn.disabled = !newId;
+
+                if (newId) {
+                    selectedId = newId;
+                    selectedLabel = input.value;
+                } else {
+                    selectedId = '';
+                    selectedLabel = '';
+                }
+
                 if (newId && changed) {
                     htmx.ajax('GET', '/api/customers/' + newId + '/contacts', {
                         target: '#contact-person-section',
@@ -34272,7 +34291,8 @@ def customer_search_dropdown(
 
             input.addEventListener('input', syncValue);
             input.addEventListener('change', syncValue);
-            syncValue();
+            // Initial sync — enable button if pre-selected
+            if (selectedId && btn) btn.disabled = false;
         })();
     """)
 
