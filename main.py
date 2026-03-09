@@ -2753,9 +2753,9 @@ def sidebar(session, current_path: str = ""):
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
         main_items.append({"icon": "plus-circle", "label": "Новый КП", "href": "/quotes/new", "roles": ["sales", "sales_manager", "admin"]})
-    # Add "Обзор" (analytics) for admin/top_manager
-    if is_admin or "top_manager" in roles:
-        main_items.append({"icon": "bar-chart-3", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": ["admin", "top_manager"]})
+    # Add "Обзор" (analytics) for all department roles
+    if is_admin or any(r in roles for r in ["top_manager", "sales", "sales_manager", "head_of_sales", "procurement", "logistics", "head_of_logistics", "customs", "head_of_customs", "quote_controller", "spec_controller", "finance"]):
+        main_items.append({"icon": "bar-chart-3", "label": "Обзор", "href": "/dashboard?tab=overview", "roles": None})
     # Add "Согласования" (approvals workspace) for top_manager/admin with badge
     if is_admin or "top_manager" in roles:
         main_items.append({
@@ -4988,7 +4988,7 @@ DASHBOARD_TABS = [
         "id": "overview",
         "icon": "bar-chart-3",
         "label": "Обзор",
-        "roles": ["admin", "top_manager", "sales", "sales_manager", "head_of_sales"],  # Admin, top_manager, and sales roles see overview
+        "roles": ["admin", "top_manager", "sales", "sales_manager", "head_of_sales", "procurement", "logistics", "head_of_logistics", "customs", "head_of_customs", "quote_controller", "spec_controller", "finance"],
         "priority": 0,
     },
     {
@@ -5701,16 +5701,33 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     Used for admin and top_manager roles.
     """
     # Get overall quotes stats
-    is_admin = "admin" in roles or "top_manager" in roles
+    # Department heads see all quotes in the overview (they manage their teams)
+    is_admin = any(r in roles for r in ["admin", "top_manager", "head_of_sales", "head_of_procurement", "head_of_logistics", "head_of_customs"])
 
-    quotes_query = supabase.table("quotes") \
-        .select("id, status, workflow_status, total_amount") \
-        .eq("organization_id", org_id)
-    if not is_admin:
-        quotes_query = quotes_query.eq("created_by", user_id)
-    quotes_result = quotes_query.execute()
-
-    quotes = quotes_result.data or []
+    if is_admin:
+        quotes_query = supabase.table("quotes") \
+            .select("id, status, workflow_status, total_amount") \
+            .eq("organization_id", org_id)
+        quotes_result = quotes_query.execute()
+        quotes = quotes_result.data or []
+    else:
+        # Multi-query: find quotes where user is creator OR assigned in any department
+        q1 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+            .eq("organization_id", org_id).eq("created_by", user_id).execute()
+        q2 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+            .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]).execute()
+        q3 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+            .eq("organization_id", org_id).eq("assigned_logistics_user", user_id).execute()
+        q4 = supabase.table("quotes").select("id, status, workflow_status, total_amount") \
+            .eq("organization_id", org_id).eq("assigned_customs_user", user_id).execute()
+        # Merge and deduplicate by quote ID
+        seen_ids = set()
+        quotes = []
+        for result in [q1, q2, q3, q4]:
+            for q in (result.data or []):
+                if q["id"] not in seen_ids:
+                    seen_ids.add(q["id"])
+                    quotes.append(q)
 
     total_quotes = len(quotes)
     total_revenue = sum(
@@ -5723,16 +5740,39 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
                           ["draft", "approved", "deal", "rejected", "cancelled", None]])
 
     # Get recent quotes
-    recent_query = supabase.table("quotes") \
-        .select("id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .limit(5)
-    if not is_admin:
-        recent_query = recent_query.eq("created_by", user_id)
-    recent_result = recent_query.execute()
-
-    recent_quotes = recent_result.data or []
+    if is_admin:
+        recent_query = supabase.table("quotes") \
+            .select("id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at") \
+            .eq("organization_id", org_id) \
+            .order("created_at", desc=True) \
+            .limit(5)
+        recent_result = recent_query.execute()
+        recent_quotes = recent_result.data or []
+    else:
+        # Multi-query for recent quotes: same assignment logic as stats
+        _select = "id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at"
+        rq1 = supabase.table("quotes").select(_select) \
+            .eq("organization_id", org_id).eq("created_by", user_id) \
+            .order("created_at", desc=True).limit(10).execute()
+        rq2 = supabase.table("quotes").select(_select) \
+            .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]) \
+            .order("created_at", desc=True).limit(10).execute()
+        rq3 = supabase.table("quotes").select(_select) \
+            .eq("organization_id", org_id).eq("assigned_logistics_user", user_id) \
+            .order("created_at", desc=True).limit(10).execute()
+        rq4 = supabase.table("quotes").select(_select) \
+            .eq("organization_id", org_id).eq("assigned_customs_user", user_id) \
+            .order("created_at", desc=True).limit(10).execute()
+        # Merge, deduplicate, sort by created_at, take top 5
+        seen_ids = set()
+        all_recent = []
+        for result in [rq1, rq2, rq3, rq4]:
+            for q in (result.data or []):
+                if q["id"] not in seen_ids:
+                    seen_ids.add(q["id"])
+                    all_recent.append(q)
+        all_recent.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        recent_quotes = all_recent[:5]
 
     # Build role-specific task sections
     task_sections = _get_role_tasks_sections(user_id, org_id, roles, supabase)
@@ -6147,17 +6187,19 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
     ]
 
 
-def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
     """
     Logistics workspace tab content.
     Shows quotes in logistics stage.
     """
     # Get quotes for this organization
-    quotes_result = supabase.table("quotes") \
+    is_admin = roles and ("admin" in roles or "head_of_logistics" in roles)
+    quotes_query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_logistics_user") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
+        .eq("organization_id", org_id)
+    if not is_admin:
+        quotes_query = quotes_query.eq("assigned_logistics_user", user_id)
+    quotes_result = quotes_query.order("created_at", desc=True).execute()
 
     all_quotes = quotes_result.data or []
 
@@ -6351,16 +6393,18 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
     ]
 
 
-def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filter: str = None) -> list:
+def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filter: str = None, roles: list = None) -> list:
     """
     Customs workspace tab content.
     Shows quotes in customs stage.
     """
-    quotes_result = supabase.table("quotes") \
+    is_admin = roles and ("admin" in roles or "head_of_customs" in roles)
+    quotes_query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_customs_user") \
-        .eq("organization_id", org_id) \
-        .order("created_at", desc=True) \
-        .execute()
+        .eq("organization_id", org_id)
+    if not is_admin:
+        quotes_query = quotes_query.eq("assigned_customs_user", user_id)
+    quotes_result = quotes_query.order("created_at", desc=True).execute()
 
     all_quotes = quotes_result.data or []
 
@@ -7813,9 +7857,9 @@ def get(session, request, tab: str = None, status_filter: str = None, q: str = N
     elif tab == "procurement":
         content = _dashboard_procurement_content(user_id, org_id, supabase, status_filter, roles)
     elif tab == "logistics":
-        content = _dashboard_logistics_content(user_id, org_id, supabase, status_filter)
+        content = _dashboard_logistics_content(user_id, org_id, supabase, status_filter, roles)
     elif tab == "customs":
-        content = _dashboard_customs_content(user_id, org_id, supabase, status_filter)
+        content = _dashboard_customs_content(user_id, org_id, supabase, status_filter, roles)
     elif tab == "quote-control":
         content = _dashboard_quote_control_content(user_id, org_id, supabase, status_filter)
     elif tab == "spec-control":
@@ -8962,7 +9006,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         workflow_status = quote.get("workflow_state", "draft")
         return page_layout(f"Quote {quote.get('idn_quote', '')} — PHMB",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
-            quote_detail_tabs(quote_id, "phmb", user.get("roles", []), is_phmb=True),
+            quote_detail_tabs(quote_id, "phmb", user.get("roles", []), is_phmb=True, quote=quote, user_id=user["id"]),
             Div(phmb_content, id="tab-content", style="margin-top: 20px;"),
             session=session
         )
@@ -9188,7 +9232,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb, quote=quote, user_id=user["id"]),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9200,7 +9244,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb, quote=quote, user_id=user["id"]),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9223,7 +9267,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             modal_elements = _finance_payment_modal(deal_id)
             return page_layout(f"Quote {quote.get('idn_quote', '')}",
                 quote_header(quote, workflow_status, (customer or {}).get("name")),
-                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb),
+                quote_detail_tabs(quote_id, tab, effective_roles, deal=deal, is_phmb=_is_phmb, quote=quote, user_id=user["id"]),
                 Div(finance_content, id="tab-content", style="margin-top: 20px;"),
                 *modal_elements,
                 session=session
@@ -9273,7 +9317,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         )
         return page_layout(f"Quote {quote.get('idn_quote', '')}",
             quote_header(quote, workflow_status, (customer or {}).get("name")),
-            quote_detail_tabs(quote_id, "summary", effective_roles, deal=deal, is_phmb=_is_phmb),
+            quote_detail_tabs(quote_id, "summary", effective_roles, deal=deal, is_phmb=_is_phmb, quote=quote, user_id=user["id"]),
             summary_content,
             session=session
         )
@@ -9298,7 +9342,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         quote_header(quote, workflow_status, (customer or {}).get("name")),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "overview", effective_roles, deal=deal, is_phmb=_is_phmb),
+        quote_detail_tabs(quote_id, "overview", effective_roles, deal=deal, is_phmb=_is_phmb, quote=quote, user_id=user["id"]),
 
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
@@ -16217,7 +16261,7 @@ def workflow_transition_history(quote_id: str, limit: int = 20, collapsed: bool 
 
 
 
-def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None, is_phmb: bool = False, chat_unread: int = 0):
+def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=None, is_phmb: bool = False, chat_unread: int = 0, quote: dict = None, user_id: str = None):
     """
     Create role-based tab navigation for quote detail pages.
 
@@ -16363,6 +16407,26 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             visible_tabs.append(tab)
         elif any(r in user_roles for r in tab["roles"]):
             visible_tabs.append(tab)
+
+    # Filter by assignment for non-admin users
+    # Department heads and top_manager bypass assignment check for their department
+    if quote and user_id and "admin" not in user_roles and "top_manager" not in user_roles:
+        def is_assigned(tab_id):
+            if tab_id == "procurement":
+                if "head_of_procurement" in user_roles:
+                    return True
+                return user_id in (quote.get("assigned_procurement_users") or [])
+            elif tab_id == "logistics":
+                if "head_of_logistics" in user_roles:
+                    return True
+                return quote.get("assigned_logistics_user") == user_id
+            elif tab_id == "customs":
+                if "head_of_customs" in user_roles:
+                    return True
+                return quote.get("assigned_customs_user") == user_id
+            return True  # Other tabs not filtered by assignment
+
+        visible_tabs = [t for t in visible_tabs if is_assigned(t["id"])]
 
     # Build tab elements
     tab_elements = []
@@ -17309,7 +17373,7 @@ def get(quote_id: str, session):
         quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "procurement", user.get("roles", [])),
+        quote_detail_tabs(quote_id, "procurement", user.get("roles", []), quote=quote, user_id=user_id),
 
         # Workflow progress bar
         workflow_progress_bar(workflow_status),
@@ -20304,7 +20368,7 @@ def get(session, quote_id: str):
         quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "logistics", user.get("roles", [])),
+        quote_detail_tabs(quote_id, "logistics", user.get("roles", []), quote=quote, user_id=user_id),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
@@ -21861,7 +21925,7 @@ def get(session, quote_id: str, error: str = ""):
         quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "customs", user.get("roles", [])),
+        quote_detail_tabs(quote_id, "customs", user.get("roles", []), quote=quote, user_id=user_id),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
@@ -23010,7 +23074,7 @@ def get_cost_analysis(session, quote_id: str):
         return Redirect("/quotes", status_code=303)
 
     # Build tab navigation with cost_analysis as active tab
-    tabs = quote_detail_tabs(quote_id, "cost_analysis", user_roles)
+    tabs = quote_detail_tabs(quote_id, "cost_analysis", user_roles, quote=quote, user_id=user_id)
 
     # Fetch calculation results (phase_results per item)
     calc_results_resp = supabase.table("quote_calculation_results") \
@@ -24032,7 +24096,7 @@ def get(session, quote_id: str, preset: str = None):
         quote_header(quote, workflow_status, customer_name),
 
         # Role-based tabs for quote detail navigation
-        quote_detail_tabs(quote_id, "control", user.get("roles", [])),
+        quote_detail_tabs(quote_id, "control", user.get("roles", []), quote=quote, user_id=user_id),
 
         # Workflow progress bar (Feature #87)
         workflow_progress_bar(workflow_status),
