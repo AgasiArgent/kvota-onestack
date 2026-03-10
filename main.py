@@ -25736,10 +25736,12 @@ async def telegram_webhook(request):
                     logger.info(f"Details callback for quote {callback_data.quote_id}")
 
             elif result.update_type == "message":
-                # Regular text message — treat as verification attempt
+                # Regular text message — if unlinked, tell them; if linked, ignore
                 logger.info(f"Text message from {result.telegram_id}: {result.text}")
-                if result.text and result.telegram_id:
-                    await respond_to_command(result.telegram_id, "/start", [result.text.strip()], result.telegram_username)
+                if result.telegram_id:
+                    linked_user = get_user_telegram_id(result.telegram_id)
+                    if not linked_user:
+                        await respond_to_command(result.telegram_id, "/unlinked", [], result.telegram_username)
 
             logger.info(f"Webhook processed: {result.message}")
         else:

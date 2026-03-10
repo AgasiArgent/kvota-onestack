@@ -1213,26 +1213,27 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
     if command == "/status":
         return await handle_status_command(telegram_id)
 
+    # Handle unlinked users (plain text from unverified users)
+    if command == "/unlinked":
+        response_text = "Ваш аккаунт не привязан.\n\nОбратитесь к администратору или откройте OneStack → Уведомления → «Подключить Telegram»."
+        try:
+            await bot.send_message(chat_id=telegram_id, text=response_text)
+            return True
+        except TelegramError as e:
+            logger.error(f"Failed to send unlinked message: {e}")
+            return False
+
     # Other commands
     responses = {
         "/help": """📚 *Справка по боту OneStack*
 
 *Доступные команды:*
-• /start — Начало работы, привязка аккаунта
-• /status — Показать мои текущие задачи
-• /help — Показать эту справку
+• /start — Привязка аккаунта
+• /status — Мои текущие задачи
+• /help — Эта справка
 
 *Как привязать аккаунт:*
-1. Откройте OneStack в браузере
-2. Перейдите в Настройки → Telegram
-3. Нажмите "Получить код привязки"
-4. Отправьте код боту
-
-*Уведомления:*
-После привязки вы будете получать:
-• Уведомления о новых задачах
-• Запросы на согласование
-• Изменения статусов КП
+Откройте OneStack → Уведомления → нажмите «Подключить Telegram».
 
 По вопросам работы бота обратитесь к администратору.""",
     }
