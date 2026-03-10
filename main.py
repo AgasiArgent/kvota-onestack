@@ -3275,8 +3275,14 @@ function openAnnotationEditor() {
     // 0. Check html2canvas is loaded
     if (typeof html2canvas === 'undefined') {
         console.error('html2canvas not loaded');
+        var errMsg = document.createElement('div');
+        errMsg.textContent = 'Скриншот недоступен — загрузите файл вручную.';
+        errMsg.style.cssText = 'color:#dc2626;font-size:12px;margin-top:4px;';
         var btn = document.getElementById('feedback-add-screenshot-btn');
-        if (btn) btn.textContent = 'Скриншот недоступен';
+        if (btn && btn.parentNode) {
+            btn.parentNode.appendChild(errMsg);
+            setTimeout(function() { if (errMsg.parentNode) errMsg.remove(); }, 5000);
+        }
         return;
     }
 
@@ -3325,8 +3331,15 @@ function openAnnotationEditor() {
     }).catch(function(err) {
         console.error('html2canvas error:', err);
         document.getElementById('feedback-modal-box').style.display = 'block';
+        // Show temporary error toast, keep button unchanged for retry
+        var errMsg = document.createElement('div');
+        errMsg.textContent = 'Не удалось сделать скриншот. Попробуйте ещё раз или загрузите файл.';
+        errMsg.style.cssText = 'color:#dc2626;font-size:12px;margin-top:4px;';
         var btn = document.getElementById('feedback-add-screenshot-btn');
-        if (btn) btn.textContent = 'Ошибка скриншота — попробуйте ещё раз';
+        if (btn && btn.parentNode) {
+            btn.parentNode.appendChild(errMsg);
+            setTimeout(function() { if (errMsg.parentNode) errMsg.remove(); }, 5000);
+        }
     });
 }
 
