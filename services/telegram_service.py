@@ -944,23 +944,6 @@ def unlink_telegram_account(user_id: str) -> bool:
         return False
 
 
-def get_user_telegram_id(user_id: str) -> Optional[int]:
-    """Get telegram_id for a verified user. Returns None if not connected."""
-    try:
-        supabase = get_supabase()
-        if not supabase:
-            return None
-        response = supabase.table("telegram_users").select(
-            "telegram_id"
-        ).eq("user_id", user_id).eq("is_verified", True).limit(1).execute()
-        if response.data and response.data[0].get("telegram_id"):
-            return response.data[0]["telegram_id"]
-        return None
-    except Exception as e:
-        logger.error(f"Error getting telegram_id for user {user_id}: {e}")
-        return None
-
-
 async def send_feedback_resolved_notification(
     telegram_id: int,
     short_id: str,

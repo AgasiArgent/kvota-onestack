@@ -2749,7 +2749,7 @@ def sidebar(session, current_path: str = ""):
         {"icon": "inbox", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
         {"icon": "play-circle", "label": "Обучение", "href": "/training", "roles": None},  # All users - training videos
         {"icon": "newspaper", "label": "Обновления", "href": "/changelog", "roles": None, "badge": changelog_unread_count if changelog_unread_count > 0 else None},
-        {"icon": "send", "label": "Telegram", "href": "/telegram", "roles": None},
+        {"icon": "send", "label": "Уведомления", "href": "/telegram", "roles": None},
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
@@ -31786,7 +31786,7 @@ async def post_feedback_status(session, short_id: str, status: str = "new"):
         # Notify reporter via Telegram when resolved/closed
         if status in ("resolved", "closed") and feedback_record.get("user_id"):
             try:
-                reporter_tg_id = get_user_telegram_id(feedback_record["user_id"])
+                reporter_tg_id = await get_user_telegram_id(feedback_record["user_id"])
                 if reporter_tg_id:
                     await send_feedback_resolved_notification(
                         telegram_id=reporter_tg_id,
