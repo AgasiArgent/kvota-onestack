@@ -3219,6 +3219,28 @@ function closeFeedbackModal() {
     if (btn) btn.textContent = 'Добавить скриншот';
 }
 
+// Handle file upload for screenshot
+function handleScreenshotUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    if (!file.type.startsWith('image/')) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var dataUrl = e.target.result;
+        window._feedbackScreenshotData = dataUrl;
+        var thumb = document.getElementById('feedback-screenshot-thumb');
+        thumb.src = dataUrl;
+        thumb.style.display = 'block';
+        var hidden = document.getElementById('feedback-screenshot-data');
+        hidden.value = dataUrl;
+        var addBtn = document.getElementById('feedback-add-screenshot-btn');
+        if (addBtn) addBtn.textContent = 'Изменить скриншот';
+    };
+    reader.readAsDataURL(file);
+    // Reset input so same file can be re-selected
+    input.value = '';
+}
+
 // Show success toast after feedback submission
 function showFeedbackToast() {
     var toast = document.createElement('div');
@@ -3589,12 +3611,28 @@ def feedback_modal():
                 ),
                 # Screenshot section
                 Div(
-                    Button(
-                        "Добавить скриншот",
-                        id="feedback-add-screenshot-btn",
-                        type="button",
-                        cls="btn btn-sm btn-outline",
-                        onclick="openAnnotationEditor()"
+                    Div(
+                        Button(
+                            "Добавить скриншот",
+                            id="feedback-add-screenshot-btn",
+                            type="button",
+                            cls="btn btn-sm btn-outline",
+                            onclick="openAnnotationEditor()"
+                        ),
+                        Button(
+                            "Загрузить файл",
+                            type="button",
+                            cls="btn btn-sm btn-outline",
+                            onclick="document.getElementById('feedback-file-upload').click()"
+                        ),
+                        Input(
+                            type="file",
+                            id="feedback-file-upload",
+                            accept="image/*",
+                            style="display:none;",
+                            onchange="handleScreenshotUpload(this)"
+                        ),
+                        cls="flex gap-2"
                     ),
                     # Thumbnail preview (hidden until screenshot taken)
                     Img(
