@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "")
 TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL", "")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:5001")
 
@@ -941,6 +942,53 @@ def unlink_telegram_account(user_id: str) -> bool:
     except Exception as e:
         logger.error(f"Error unlinking Telegram for user {user_id}: {e}")
         return False
+
+
+def get_user_telegram_id(user_id: str) -> Optional[int]:
+    """Get telegram_id for a verified user. Returns None if not connected."""
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            return None
+        response = supabase.table("telegram_users").select(
+            "telegram_id"
+        ).eq("user_id", user_id).eq("is_verified", True).limit(1).execute()
+        if response.data and response.data[0].get("telegram_id"):
+            return response.data[0]["telegram_id"]
+        return None
+    except Exception as e:
+        logger.error(f"Error getting telegram_id for user {user_id}: {e}")
+        return None
+
+
+async def send_feedback_resolved_notification(
+    telegram_id: int,
+    short_id: str,
+    feedback_type: str,
+    description: str,
+    new_status: str
+) -> bool:
+    """Send notification to feedback reporter that their issue was resolved/closed."""
+    type_labels = {
+        "bug": "Ошибка",
+        "suggestion": "Предложение",
+        "question": "Вопрос",
+    }
+    status_labels = {
+        "resolved": "решено",
+        "closed": "закрыто",
+    }
+    type_label = type_labels.get(feedback_type, feedback_type)
+    status_label = status_labels.get(new_status, new_status)
+    excerpt = (description[:100] + "...") if len(description) > 100 else description
+
+    text = (
+        f"✅ Ваше обращение [{short_id}] {status_label}\n\n"
+        f"*Тип:* {type_label}\n"
+        f"*Описание:* {excerpt}"
+    )
+    result = await send_message(telegram_id, text)
+    return result is not None
 
 
 # ============================================================================

@@ -2749,6 +2749,7 @@ def sidebar(session, current_path: str = ""):
         {"icon": "inbox", "label": "Мои задачи", "href": "/tasks", "roles": None},  # All users - primary entry point
         {"icon": "play-circle", "label": "Обучение", "href": "/training", "roles": None},  # All users - training videos
         {"icon": "newspaper", "label": "Обновления", "href": "/changelog", "roles": None, "badge": changelog_unread_count if changelog_unread_count > 0 else None},
+        {"icon": "send", "label": "Telegram", "href": "/telegram", "roles": None},
     ]
     # Add "Новый КП" button for sales/admin
     if is_admin or any(r in roles for r in ["sales", "sales_manager"]):
@@ -25899,6 +25900,10 @@ from services.telegram_service import (
     # Bug report imports
     send_admin_bug_report,
     send_admin_bug_report_with_photo,
+    # Telegram connection page
+    get_user_telegram_id,
+    send_feedback_resolved_notification,
+    TELEGRAM_BOT_USERNAME,
 )
 
 from services.clickup_service import create_clickup_bug_task
@@ -31768,13 +31773,30 @@ async def post_feedback_status(session, short_id: str, status: str = "new"):
         clickup_msg = ""
         try:
             from services.clickup_service import update_clickup_task_status
-            result = supabase.table("user_feedback").select("clickup_task_id").eq("short_id", short_id).limit(1).execute()
-            task_id = (result.data[0] if result.data else {}).get("clickup_task_id")
+            result = supabase.table("user_feedback").select("clickup_task_id, user_id, feedback_type, description").eq("short_id", short_id).limit(1).execute()
+            feedback_record = result.data[0] if result.data else {}
+            task_id = feedback_record.get("clickup_task_id")
             if task_id:
                 synced = await update_clickup_task_status(task_id, status)
                 clickup_msg = " (ClickUp обновлён)" if synced else " (ClickUp: ошибка синхронизации)"
         except Exception as ce:
             logger.warning(f"ClickUp sync failed for {short_id}: {ce}")
+            feedback_record = {}
+
+        # Notify reporter via Telegram when resolved/closed
+        if status in ("resolved", "closed") and feedback_record.get("user_id"):
+            try:
+                reporter_tg_id = get_user_telegram_id(feedback_record["user_id"])
+                if reporter_tg_id:
+                    await send_feedback_resolved_notification(
+                        telegram_id=reporter_tg_id,
+                        short_id=short_id,
+                        feedback_type=feedback_record.get("feedback_type", ""),
+                        description=feedback_record.get("description", ""),
+                        new_status=status
+                    )
+            except Exception as te:
+                logger.warning(f"Telegram notification failed for feedback {short_id}: {te}")
 
         status_label, _ = STATUS_LABELS.get(status, ("—", ""))
         return Span(f"Сохранено: {status_label}{clickup_msg}", cls="text-success text-sm")
@@ -49259,6 +49281,194 @@ def get(session):
         )
 
     return page_layout("Обновления", content, session=session, current_path="/changelog")
+
+
+# ============================================================================
+# TELEGRAM CONNECTION PAGE
+# ============================================================================
+
+def _telegram_status_fragment(status):
+    """Render the connection status fragment for HTMX updates."""
+    if status.is_verified:
+        verified_date = ""
+        if status.verified_at:
+            try:
+                dt = datetime.fromisoformat(status.verified_at.replace("Z", "+00:00"))
+                verified_date = dt.strftime("%d.%m.%Y %H:%M")
+            except Exception:
+                verified_date = status.verified_at
+        return Div(
+            Div(
+                Div(
+                    I(data_lucide="check-circle", style="width:20px;height:20px;color:var(--success-color);"),
+                    Span("Подключён", style="font-weight:600;color:var(--success-color);font-size:1.1rem;"),
+                    style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"
+                ),
+                P(f"Telegram: @{status.telegram_username}" if status.telegram_username else "Telegram подключён",
+                  style="margin:0 0 4px;"),
+                P(f"Подключён: {verified_date}", style="margin:0;color:var(--text-secondary);font-size:0.875rem;") if verified_date else "",
+                style="margin-bottom:16px;"
+            ),
+            Button(
+                I(data_lucide="unlink", style="width:16px;height:16px;"),
+                " Отключить",
+                hx_post="/telegram/disconnect",
+                hx_target="#telegram-status",
+                hx_swap="innerHTML",
+                hx_confirm="Отключить Telegram? Вы перестанете получать уведомления.",
+                cls="btn btn-outline-danger",
+                style="display:inline-flex;align-items:center;gap:6px;"
+            ),
+            id="telegram-status"
+        )
+    else:
+        return Div(
+            Div(
+                I(data_lucide="link-2-off", style="width:20px;height:20px;color:var(--text-secondary);"),
+                Span("Не подключён", style="font-weight:600;color:var(--text-secondary);font-size:1.1rem;"),
+                style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"
+            ),
+            P("Подключите Telegram, чтобы получать уведомления о задачах, согласованиях и статусах.",
+              style="margin:0 0 16px;color:var(--text-secondary);"),
+            Button(
+                I(data_lucide="zap", style="width:16px;height:16px;"),
+                " Подключить",
+                hx_post="/telegram/generate-code",
+                hx_target="#telegram-status",
+                hx_swap="innerHTML",
+                cls="btn btn-primary",
+                style="display:inline-flex;align-items:center;gap:6px;"
+            ),
+            id="telegram-status"
+        )
+
+
+@rt("/telegram")
+def get_telegram_page(session):
+    """Telegram connection management page."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+    status = get_user_telegram_status(user_id)
+
+    content = Div(
+        Div(
+            H1("Telegram", style="margin:0;font-size:1.5rem;"),
+            P("Управление подключением Telegram для уведомлений",
+              style="margin:4px 0 0;color:var(--text-secondary);font-size:0.875rem;"),
+            style="margin-bottom:1.5rem;"
+        ),
+        Div(
+            _telegram_status_fragment(status),
+            cls="card",
+            style="padding:24px;max-width:500px;"
+        ),
+        style="max-width:800px;margin:0 auto;"
+    )
+
+    return page_layout("Telegram", content, session=session, current_path="/telegram")
+
+
+@rt("/telegram/generate-code", methods=["POST"])
+def post_telegram_generate_code(session):
+    """Generate verification code for Telegram linking."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+
+    code = request_verification_code(user_id)
+    if not code:
+        # Already verified or error
+        status = get_user_telegram_status(user_id)
+        if status.is_verified:
+            return _telegram_status_fragment(status)
+        return Div(
+            P("Не удалось сгенерировать код. Попробуйте позже.", cls="text-error"),
+            id="telegram-status"
+        )
+
+    bot_username = TELEGRAM_BOT_USERNAME
+    deep_link = f"https://t.me/{bot_username}?start={code}" if bot_username else None
+
+    return Div(
+        Div(
+            I(data_lucide="key-round", style="width:20px;height:20px;color:var(--primary-color);"),
+            Span("Код подтверждения", style="font-weight:600;font-size:1.1rem;"),
+            style="display:flex;align-items:center;gap:8px;margin-bottom:16px;"
+        ),
+        # Code display
+        Div(
+            Span(code, style="font-size:2rem;font-weight:700;letter-spacing:0.3em;font-family:monospace;"),
+            style="text-align:center;padding:20px;background:var(--bg-secondary);border-radius:8px;margin-bottom:16px;"
+        ),
+        # Deep link
+        Div(
+            A(
+                I(data_lucide="external-link", style="width:16px;height:16px;"),
+                f" Открыть @{bot_username}",
+                href=deep_link,
+                target="_blank",
+                cls="btn btn-primary",
+                style="display:inline-flex;align-items:center;gap:6px;"
+            ),
+            style="text-align:center;margin-bottom:16px;"
+        ) if deep_link else "",
+        # Instructions
+        Div(
+            P("1. Откройте бота по ссылке выше (или найдите его в Telegram)", style="margin:0 0 4px;"),
+            P("2. Нажмите Start / Начать", style="margin:0 0 4px;"),
+            P("3. Код будет автоматически отправлен боту", style="margin:0 0 4px;") if deep_link else
+            P(f"3. Отправьте боту команду: /start {code}", style="margin:0 0 4px;"),
+            style="font-size:0.875rem;color:var(--text-secondary);margin-bottom:16px;"
+        ),
+        P("Код действителен 30 минут",
+          style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:16px;"),
+        # Check button
+        Button(
+            I(data_lucide="refresh-cw", style="width:16px;height:16px;"),
+            " Проверить подключение",
+            hx_get="/telegram/status",
+            hx_target="#telegram-status",
+            hx_swap="innerHTML",
+            cls="btn btn-outline-primary",
+            style="display:inline-flex;align-items:center;gap:6px;"
+        ),
+        id="telegram-status"
+    )
+
+
+@rt("/telegram/disconnect", methods=["POST"])
+def post_telegram_disconnect(session):
+    """Disconnect Telegram account."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+    unlink_telegram_account(user_id)
+
+    status = get_user_telegram_status(user_id)
+    return _telegram_status_fragment(status)
+
+
+@rt("/telegram/status")
+def get_telegram_status_check(session):
+    """HTMX endpoint to check current Telegram connection status."""
+    redirect = require_login(session)
+    if redirect:
+        return redirect
+
+    user = session["user"]
+    user_id = user.get("id")
+    status = get_user_telegram_status(user_id)
+    return _telegram_status_fragment(status)
 
 
 # ============================================================================
