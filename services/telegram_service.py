@@ -1405,9 +1405,9 @@ def get_user_tasks(user_id: str) -> Dict[str, Any]:
                 "error": "Database connection error"
             }
 
-        # Get user info
+        # Get user org membership
         user_response = supabase.table("organization_members").select(
-            "user_id, organization_id, profile:profiles(email, full_name)"
+            "user_id, organization_id"
         ).eq("user_id", user_id).execute()
 
         if not user_response.data or len(user_response.data) == 0:
@@ -1418,20 +1418,25 @@ def get_user_tasks(user_id: str) -> Dict[str, Any]:
 
         member_data = user_response.data[0]
         org_id = member_data.get("organization_id")
-        profile = member_data.get("profile", {})
-        user_name = profile.get("full_name") or profile.get("email", "Пользователь")
+
+        # Get user profile (separate table, no FK from organization_members)
+        profile_response = supabase.table("user_profiles").select(
+            "full_name"
+        ).eq("user_id", user_id).execute()
+        profile = profile_response.data[0] if profile_response.data else {}
+        user_name = profile.get("full_name", "Пользователь")
 
         # Get user roles
         roles_response = supabase.table("user_roles").select(
-            "role:roles(code, name)"
+            "role:roles(slug, name)"
         ).eq("user_id", user_id).eq("organization_id", org_id).execute()
 
         roles = []
         if roles_response.data:
             for r in roles_response.data:
-                role_info = r.get("role", {})
-                if role_info and role_info.get("code"):
-                    roles.append(role_info.get("code"))
+                role_info = (r.get("role") or {})
+                if role_info.get("slug"):
+                    roles.append(role_info.get("slug"))
 
         if not roles:
             return {
