@@ -15577,7 +15577,7 @@ def get(session):
             Div(icon("message-circle", size=14), " Telegram", style=section_header_style),
             P("Привяжите Telegram для получения уведомлений о задачах и согласованиях.",
               style="color: #64748b; margin: 0 0 16px 0; font-size: 14px;"),
-            A(icon("message-circle", size=14), " Настройки Telegram", href="/settings/telegram",
+            A(icon("message-circle", size=14), " Настройки Telegram", href="/telegram",
               style="padding: 10px 20px; background: #3b82f6; color: white; border-radius: 6px; font-size: 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;"),
             style=form_card_style
         ),
@@ -15645,276 +15645,18 @@ def post(rate_forex_risk: float, rate_fin_comm: float, rate_loan_interest_daily:
 
 
 # ============================================================================
-# TELEGRAM SETTINGS PAGE (Feature #56)
+# TELEGRAM SETTINGS PAGE — redirects to /telegram (consolidated)
 # ============================================================================
 
 @rt("/settings/telegram")
 def get(session):
-    """Telegram settings page for account linking.
-
-    Feature #56: UI генерации кода верификации
-
-    This page allows users to:
-    - See their current Telegram connection status
-    - Generate a verification code to link their Telegram account
-    - Unlink their Telegram account
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-
-    # Get current Telegram status
-    status = get_user_telegram_status(user["id"])
-
-    # Build status display
-    if status.is_verified:
-        # Account is linked and verified
-        status_card = Div(
-            Div(
-                Span(icon("check-circle", size=32), style="color: #22c55e;"),
-                H3("Telegram привязан", style="margin: 0.5rem 0;"),
-                cls="text-center"
-            ),
-            Table(
-                Tr(
-                    Td("Аккаунт:", style="font-weight: 500; padding: 0.5rem;"),
-                    Td(f"@{status.telegram_username}" if status.telegram_username else "—",
-                       style="padding: 0.5rem;")
-                ),
-                Tr(
-                    Td("Telegram ID:", style="font-weight: 500; padding: 0.5rem;"),
-                    Td(Code(str(status.telegram_id)) if status.telegram_id else "—",
-                       style="padding: 0.5rem;")
-                ),
-                Tr(
-                    Td("Привязан:", style="font-weight: 500; padding: 0.5rem;"),
-                    Td(status.verified_at[:10] if status.verified_at else "—",
-                       style="padding: 0.5rem;")
-                ),
-                style="width: 100%; margin: 1rem 0;"
-            ),
-            P(icon("bell", size=16), " Вы будете получать уведомления о задачах и согласованиях в Telegram.",
-              style="color: #166534; background: #dcfce7; padding: 0.75rem; border-radius: 8px; margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem;"),
-            Form(
-                btn("Отвязать Telegram", variant="danger", icon_name="unlink", type="submit", name="action", value="unlink"),
-                P("Внимание: после отвязки вы перестанете получать уведомления.",
-                  style="color: #666; font-size: 0.875rem; margin-top: 0.5rem;"),
-                method="post",
-                action="/settings/telegram",
-                style="margin-top: 1.5rem; text-align: center;"
-            ),
-            cls="card",
-            style="padding: 1.5rem; max-width: 400px; margin: 0 auto;"
-        )
-    elif status.verification_code:
-        # Has pending verification code
-        status_card = Div(
-            Div(
-                Span(icon("clock", size=32), style="color: #f59e0b;"),
-                H3("Ожидание верификации", style="margin: 0.5rem 0;"),
-                cls="text-center"
-            ),
-            Div(
-                P("Ваш код верификации:", style="margin-bottom: 0.5rem; color: #666;"),
-                Div(
-                    Code(status.verification_code,
-                         style="font-size: 2rem; letter-spacing: 0.3rem; padding: 0.75rem 1.5rem; background: #f3f4f6; border-radius: 8px; display: inline-block;"),
-                    style="text-align: center; margin: 1rem 0;"
-                ),
-                P(f"Код действителен до: {status.code_expires_at[:16].replace('T', ' ')}" if status.code_expires_at else "",
-                  style="color: #666; font-size: 0.875rem; text-align: center;"),
-                style="margin: 1rem 0;"
-            ),
-            Div(
-                H4(icon("smartphone", size=18), " Как привязать:", style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
-                Ol(
-                    Li("Откройте Telegram и найдите бота"),
-                    Li("Отправьте боту команду /start"),
-                    Li(f"Введите код: {status.verification_code}"),
-                    style="padding-left: 1.25rem; line-height: 1.8;"
-                ),
-                style="background: #f3f4f6; padding: 1rem; border-radius: 8px; margin-top: 1rem;"
-            ),
-            Form(
-                btn("Получить новый код", variant="primary", icon_name="refresh-cw", type="submit", name="action", value="new_code"),
-                method="post",
-                action="/settings/telegram",
-                style="margin-top: 1rem; text-align: center;"
-            ),
-            cls="card",
-            style="padding: 1.5rem; max-width: 400px; margin: 0 auto;"
-        )
-    else:
-        # Not linked, show button to get code
-        status_card = Div(
-            Div(
-                Span(icon("smartphone", size=32), style="color: #3b82f6;"),
-                H3("Telegram не привязан", style="margin: 0.5rem 0;"),
-                cls="text-center"
-            ),
-            P("Привяжите Telegram-аккаунт, чтобы получать уведомления о:",
-              style="margin: 1rem 0;"),
-            Ul(
-                Li(icon("bell", size=16), " Новых задачах на проверку", style="display: flex; align-items: center; gap: 0.5rem;"),
-                Li(icon("check-circle", size=16), " Согласованиях коммерческих предложений", style="display: flex; align-items: center; gap: 0.5rem;"),
-                Li(icon("file-text", size=16), " Изменениях статуса заявок", style="display: flex; align-items: center; gap: 0.5rem;"),
-                Li(icon("alert-triangle", size=16), " Возвратах на доработку", style="display: flex; align-items: center; gap: 0.5rem;"),
-                style="list-style: none; padding: 0; line-height: 1.8;"
-            ),
-            Form(
-                btn("Получить код привязки", variant="primary", icon_name="link", type="submit", name="action", value="new_code"),
-                method="post",
-                action="/settings/telegram",
-                style="margin-top: 1.5rem; text-align: center;"
-            ),
-            cls="card",
-            style="padding: 1.5rem; max-width: 400px; margin: 0 auto;"
-        )
-
-    # Design system styles
-    header_style = """
-        background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-        border-radius: 12px;
-        border: 1px solid #e2e8f0;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        padding: 20px 24px;
-        margin-bottom: 24px;
-    """
-
-    return page_layout("Настройки Telegram",
-        Div(
-            # Header card
-            Div(
-                Div(
-                    A(icon("arrow-left", size=16), " Назад к настройкам", href="/settings",
-                      style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
-                    style="margin-bottom: 12px;"
-                ),
-                H1("Привязка Telegram",
-                   style="margin: 0 0 8px 0; font-size: 24px; font-weight: 600; color: #1e293b;"),
-                P("Получайте уведомления и согласовывайте КП прямо в Telegram",
-                  style="margin: 0; font-size: 14px; color: #64748b;"),
-                style=header_style
-            ),
-            status_card,
-            style="max-width: 600px; margin: 0 auto;"
-        ),
-        session=session
-    )
-
+    """Redirect old settings/telegram URL to the canonical /telegram page."""
+    return RedirectResponse("/telegram", status_code=301)
 
 @rt("/settings/telegram")
-def post(action: str, session):
-    """Handle Telegram settings form submissions.
-
-    Actions:
-    - new_code: Generate a new verification code
-    - unlink: Remove the Telegram link
-    """
-    redirect = require_login(session)
-    if redirect:
-        return redirect
-
-    user = session["user"]
-
-    if action == "new_code":
-        # Request a new verification code
-        code = request_verification_code(user["id"])
-        if code:
-            return page_layout("Код создан",
-                Div(
-                    Div(
-                        Span(icon("check-circle", size=48), style="color: #16a34a;"),
-                        H2("Код верификации создан!", style="margin: 1rem 0;"),
-                        cls="text-center"
-                    ),
-                    Div(
-                        Code(code,
-                             style="font-size: 2.5rem; letter-spacing: 0.4rem; padding: 1rem 2rem; background: #dcfce7; border-radius: 8px; display: inline-block; color: #166534;"),
-                        style="text-align: center; margin: 1.5rem 0;"
-                    ),
-                    P("Код действителен 30 минут.",
-                      style="color: #666; text-align: center;"),
-                    Div(
-                        H4(icon("smartphone", size=18), " Следующие шаги:", style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;"),
-                        Ol(
-                            Li("Откройте Telegram"),
-                            Li("Найдите нашего бота"),
-                            Li(f"Отправьте команду: /start {code}"),
-                            Li("Готово! Аккаунт будет привязан автоматически."),
-                            style="padding-left: 1.25rem; line-height: 1.8;"
-                        ),
-                        style="background: #f3f4f6; padding: 1rem; border-radius: 8px; margin-top: 1.5rem;"
-                    ),
-                    A("← Назад к настройкам Telegram", href="/settings/telegram",
-                      style="display: block; text-align: center; margin-top: 1.5rem; color: #3b82f6;"),
-                    cls="card",
-                    style="padding: 2rem; max-width: 450px; margin: 0 auto;"
-                ),
-                session=session
-            )
-        else:
-            # Already verified or error
-            status = get_user_telegram_status(user["id"])
-            if status.is_verified:
-                return page_layout("Уже привязан",
-                    Div(
-                        Span(icon("info", size=32), style="color: #3b82f6;"),
-                        H2("Telegram уже привязан", style="margin: 0.5rem 0;"),
-                        P("Ваш аккаунт уже связан с Telegram. Если хотите привязать другой аккаунт, сначала отвяжите текущий.",
-                          style="color: #666;"),
-                        A("← Назад к настройкам Telegram", href="/settings/telegram",
-                          style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
-                        cls="card text-center",
-                        style="padding: 2rem; max-width: 400px; margin: 0 auto;"
-                    ),
-                    session=session
-                )
-            else:
-                return page_layout("Ошибка",
-                    Div(
-                        Div(icon("x-circle", size=18), " Не удалось создать код верификации. Попробуйте позже.",
-                            cls="alert alert-error"),
-                        A("← Назад", href="/settings/telegram",
-                          style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
-                    ),
-                    session=session
-                )
-
-    elif action == "unlink":
-        # Unlink Telegram account
-        success = unlink_telegram_account(user["id"])
-        if success:
-            return page_layout("Telegram отвязан",
-                Div(
-                    Div(
-                        Span(icon("check-circle", size=32), style="color: #22c55e;"),
-                        H2("Telegram успешно отвязан", style="margin: 0.5rem 0;"),
-                        P("Вы больше не будете получать уведомления в Telegram. Вы можете привязать аккаунт снова в любое время.",
-                          style="color: #666;"),
-                        A("← Назад к настройкам Telegram", href="/settings/telegram",
-                          style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
-                        cls="card text-center",
-                        style="padding: 2rem; max-width: 400px; margin: 0 auto;"
-                    ),
-                ),
-                session=session
-            )
-        else:
-            return page_layout("Ошибка",
-                Div(
-                    Div(icon("x-circle", size=18), " Не удалось отвязать Telegram. Попробуйте позже.",
-                        cls="alert alert-error"),
-                    A("← Назад", href="/settings/telegram",
-                      style="display: inline-block; margin-top: 1rem; color: #3b82f6;"),
-                ),
-                session=session
-            )
-
-    # Unknown action - redirect back
-    return RedirectResponse("/settings/telegram", status_code=303)
+def post(session):
+    """Redirect old settings/telegram POST to the canonical /telegram page."""
+    return RedirectResponse("/telegram", status_code=301)
 
 
 def _format_transition_timestamp(dt_str: str) -> str:
@@ -16700,7 +16442,7 @@ def get(session):
                     Div(
                         Span(tg_display, style=f"color: {'#10b981' if tg_linked else '#9ca3af'}; font-weight: 500;"),
                         Small(" (привязан)" if tg_linked else " (не привязан)", style="color: #64748b; margin-left: 4px;"),
-                        A(" → Настроить" if not tg_linked else " → Изменить", href="/settings/telegram", style="margin-left: 8px; font-size: 13px; color: #3b82f6;"),
+                        A(" → Настроить" if not tg_linked else " → Изменить", href="/telegram", style="margin-left: 8px; font-size: 13px; color: #3b82f6;"),
                         style="display: flex; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;"
                     ),
                 ),
