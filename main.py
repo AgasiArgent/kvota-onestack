@@ -178,7 +178,7 @@ APP_STYLES = """
     --accent: #3b82f6;
     --accent-hover: #2563eb;
     --accent-light: rgba(59, 130, 246, 0.1);
-    --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    --accent-gradient: #3b82f6;
 
     /* Borders (slate palette) */
     --border-color: #e2e8f0;
@@ -386,7 +386,7 @@ APP_STYLES = """
 .transition-opacity { transition: opacity 0.15s ease; }
 .transition-shadow { transition: box-shadow 0.15s ease; }
 
-html, body {
+html, body, h1, h2, h3, h4, h5, h6 {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -1423,7 +1423,7 @@ textarea {
 }
 
 .alert-info::before {
-    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+    background: #3b82f6;
 }
 
 .alert-warning {
@@ -4578,7 +4578,7 @@ def get(session):
         font-size: 15px;
         font-weight: 600;
         color: white;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        background: #3b82f6;
         border: none;
         border-radius: 10px;
         cursor: pointer;
@@ -4785,7 +4785,7 @@ def post(email: str, password: str, session):
             font-size: 15px;
             font-weight: 600;
             color: white;
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            background: #3b82f6;
             border: none;
             border-radius: 10px;
             cursor: pointer;
@@ -8265,7 +8265,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
     new_btn_style = (
         "display: inline-flex; align-items: center; gap: 8px;"
         "padding: 8px 16px; font-size: 13px; font-weight: 600;"
-        "color: white; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);"
+        "color: white; background: #3b82f6;"
         "border: none; border-radius: 8px; text-decoration: none;"
         "transition: background-color 0.15s ease; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);"
     )
@@ -34785,7 +34785,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
         font-size: 14px;
         font-weight: 600;
         color: white;
-        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        background: #3b82f6;
         border: none;
         border-radius: 8px;
         text-decoration: none;
@@ -44626,7 +44626,7 @@ def _finance_logistics_expenses_tab_content(deal_id: str, org_id: str, session) 
             hx_get=f"/finance/{deal_id}/logistics-expenses/new-form?stage_id={stage.id}",
             hx_target=f"#expense-form-{stage.id}",
             hx_swap="innerHTML",
-            style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
+            style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
         )
 
         # The section div gets id for HTMX targeting on delete + re-render
@@ -45107,7 +45107,7 @@ def _finance_logistics_expenses_stage_section(deal_id: str, stage_id: str, org_i
         hx_get=f"/finance/{deal_id}/logistics-expenses/new-form?stage_id={stage.id}",
         hx_target=f"#expense-form-{stage.id}",
         hx_swap="innerHTML",
-        style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
+        style="background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;"
     )
 
     return Div(
