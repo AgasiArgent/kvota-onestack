@@ -24,6 +24,7 @@ CLICKUP_BASE_URL = "https://api.clickup.com/api/v2"
 
 FEEDBACK_TYPE_LABELS = {
     "bug": "Bug",
+    "ux_ui": "UX/UI",
     "suggestion": "Suggestion",
     "question": "Question",
 }

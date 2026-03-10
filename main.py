@@ -3250,6 +3250,14 @@ ANNOTATION_EDITOR_JS = """
 window._feedbackScreenshotData = null;
 
 function openAnnotationEditor() {
+    // 0. Check html2canvas is loaded
+    if (typeof html2canvas === 'undefined') {
+        console.error('html2canvas not loaded');
+        var btn = document.getElementById('feedback-add-screenshot-btn');
+        if (btn) btn.textContent = 'Скриншот недоступен';
+        return;
+    }
+
     // 1. Hide the feedback modal
     document.getElementById('feedback-modal-box').style.display = 'none';
 
@@ -3295,7 +3303,8 @@ function openAnnotationEditor() {
     }).catch(function(err) {
         console.error('html2canvas error:', err);
         document.getElementById('feedback-modal-box').style.display = 'block';
-        alert('Failed to capture screenshot. Please try again.');
+        var btn = document.getElementById('feedback-add-screenshot-btn');
+        if (btn) btn.textContent = 'Ошибка скриншота — попробуйте ещё раз';
     });
 }
 
@@ -3559,6 +3568,7 @@ def feedback_modal():
                     Label("Тип обращения", cls="label"),
                     Select(
                         Option("Ошибка / Баг", value="bug"),
+                        Option("UX/UI", value="ux_ui"),
                         Option("Предложение", value="suggestion"),
                         Option("Вопрос", value="question"),
                         name="feedback_type",
@@ -31373,6 +31383,7 @@ STATUS_LABELS = {
 
 FEEDBACK_TYPE_LABELS_RU = {
     "bug": "Ошибка",
+    "ux_ui": "UX/UI",
     "suggestion": "Предложение",
     "question": "Вопрос",
 }

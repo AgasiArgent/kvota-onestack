@@ -3720,6 +3720,7 @@ async def send_admin_bug_report(
 
     type_emoji = {
         'bug': '🐛 Ошибка',
+        'ux_ui': '🎨 UX/UI',
         'suggestion': '💡 Предложение',
         'question': '❓ Вопрос'
     }
@@ -3820,6 +3821,7 @@ async def send_admin_bug_report_with_photo(
 
     type_emoji = {
         "bug": "Bug",
+        "ux_ui": "UX/UI",
         "suggestion": "Suggestion",
         "question": "Question",
     }
