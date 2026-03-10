@@ -264,20 +264,20 @@ APP_STYLES = """
     --bg-card-elevated: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
     --bg-card-success: linear-gradient(90deg, #f0fdf4 0%, #fafbfc 100%);
 
-    /* Badge Gradients */
-    --badge-pending: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-    --badge-active: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-    --badge-complete: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    --badge-purple: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
-    --badge-neutral: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-    --badge-error: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    /* Badge Colors (flat) */
+    --badge-pending: #fef3c7;
+    --badge-active: #d1fae5;
+    --badge-complete: #dbeafe;
+    --badge-purple: #ede9fe;
+    --badge-neutral: #f3f4f6;
+    --badge-error: #fee2e2;
 
     /* Subtle Shadows */
     --shadow-subtle: 0 1px 4px rgba(0,0,0,0.06);
     --shadow-card-v2: 0 2px 8px rgba(0,0,0,0.04);
 
     /* Transition */
-    --transition-smooth: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 /* Dark theme */
@@ -371,13 +371,13 @@ APP_STYLES = """
     --bg-card-elevated: linear-gradient(135deg, #2d2d44 0%, #252538 100%);
     --bg-card-success: linear-gradient(90deg, rgba(22, 163, 74, 0.15) 0%, #2d2d44 100%);
 
-    /* Badge Gradients (Dark Theme) */
-    --badge-pending: linear-gradient(135deg, rgba(217, 119, 6, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%);
-    --badge-active: linear-gradient(135deg, rgba(22, 163, 74, 0.25) 0%, rgba(22, 163, 74, 0.15) 100%);
-    --badge-complete: linear-gradient(135deg, rgba(37, 99, 235, 0.25) 0%, rgba(37, 99, 235, 0.15) 100%);
-    --badge-purple: linear-gradient(135deg, rgba(124, 58, 237, 0.25) 0%, rgba(124, 58, 237, 0.15) 100%);
-    --badge-neutral: linear-gradient(135deg, rgba(107, 114, 128, 0.25) 0%, rgba(107, 114, 128, 0.15) 100%);
-    --badge-error: linear-gradient(135deg, rgba(220, 38, 38, 0.25) 0%, rgba(220, 38, 38, 0.15) 100%);
+    /* Badge Colors (Dark Theme, flat) */
+    --badge-pending: rgba(217, 119, 6, 0.2);
+    --badge-active: rgba(22, 163, 74, 0.2);
+    --badge-complete: rgba(37, 99, 235, 0.2);
+    --badge-purple: rgba(124, 58, 237, 0.2);
+    --badge-neutral: rgba(107, 114, 128, 0.2);
+    --badge-error: rgba(220, 38, 38, 0.2);
 }
 
 /* ========== Global Enhancements ========== */
@@ -600,7 +600,6 @@ div[style*="max-width"][style*="margin"] {
     border-radius: 0.75rem !important;
     box-shadow: var(--card-shadow) !important;
     padding: 1.5rem !important;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     border: 1px solid var(--card-border) !important;
 }
 
@@ -613,7 +612,7 @@ button, [role="button"], .button, a[role="button"] {
     font-weight: 500;
     font-size: 0.875rem;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     border: none;
     display: inline-flex;
     align-items: center;
@@ -747,7 +746,7 @@ button.btn-sm:not(.btn),
     line-height: 1;
     white-space: nowrap;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     border: 1px solid transparent;
     text-decoration: none;
     background: none;
@@ -886,17 +885,7 @@ button.btn-sm:not(.btn),
     to { transform: rotate(360deg); }
 }
 
-/* ========== Enhanced Status Badges ========== */
-.status-badge {
-    display: inline-block;
-    padding: 0.375rem 0.875rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    letter-spacing: 0.025em;
-}
-
-/* Status colors — flat backgrounds, dark text for readability */
+/* ========== Status Colors — flat backgrounds, dark text ========== */
 .status-draft {
     background: #fef3c7;
     color: #92400e;
@@ -947,7 +936,6 @@ button.btn-sm:not(.btn),
     border-radius: 12px;
     box-shadow: var(--card-shadow);
     border: 1px solid var(--card-border);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* stat-card hover: subtle bg only, no lift */
@@ -978,7 +966,7 @@ table {
 }
 
 table tbody tr {
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease;
 }
 
 /* Zebra striping - alternating row colors */
@@ -1258,7 +1246,7 @@ tr.clickable-row:hover {
     border-radius: 6px;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.15s;
+    transition: background-color 0.15s ease, color 0.15s ease;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1343,7 +1331,7 @@ textarea {
     border: 1.5px solid var(--input-border);
     border-radius: 0.5rem;
     font-size: 0.9375rem;
-    transition: all 0.2s ease;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     background: var(--input-bg);
     color: var(--text-primary);
 }
@@ -1452,7 +1440,7 @@ textarea {
 a {
     color: var(--accent);
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition: color 0.15s ease;
     font-weight: 500;
 }
 
@@ -1691,7 +1679,7 @@ button.danger:not(.btn),
     border: 1px solid var(--border-color);
     border-bottom: none;
     position: relative;
-    transition: all 0.3s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
     cursor: pointer;
     margin-bottom: -1px;
 }
@@ -1705,8 +1693,6 @@ button.danger:not(.btn),
     background: var(--bg-card) !important;
     color: var(--accent) !important;
     font-weight: 600;
-    transform: translateY(-4px) scale(1.05);
-    box-shadow: 0 -4px 12px rgba(59, 130, 246, 0.15);
     border-color: var(--accent);
     z-index: 10;
 }
@@ -1755,7 +1741,6 @@ button.danger:not(.btn),
     border-radius: 0.75rem;
     border: 1px solid var(--card-border);
     box-shadow: var(--card-shadow);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -1770,11 +1755,7 @@ button.danger:not(.btn),
     background: var(--accent-gradient);
 }
 
-.stat:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--card-shadow-hover);
-    border-color: var(--accent);
-}
+/* stat:hover removed — cards are static containers */
 
 /* Note: stat-title, stat-value, stat-desc are defined earlier in stat-card section */
 
@@ -1791,7 +1772,7 @@ button.danger:not(.btn),
     background: var(--bg-sidebar);
     display: flex;
     flex-direction: column;
-    transition: all 0.3s ease;
+    transition: width 0.2s ease;
     position: fixed;
     left: 0;
     top: 0;
@@ -1850,7 +1831,7 @@ button.danger:not(.btn),
     justify-content: center;
     font-size: 0.9rem;
     color: var(--text-secondary) !important;
-    transition: all 0.2s;
+    transition: background-color 0.15s ease, color 0.15s ease;
     padding: 0 !important;
     box-shadow: none !important;
     transform: none !important;
@@ -1895,7 +1876,7 @@ button.danger:not(.btn),
     text-transform: uppercase;
     letter-spacing: 0.05em;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.15s ease, color 0.15s ease;
     user-select: none;
 }
 
@@ -1934,7 +1915,7 @@ button.danger:not(.btn),
     padding: 0.6rem 1rem;
     color: var(--text-secondary);
     text-decoration: none;
-    transition: all 0.2s;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     border-left: 3px solid transparent;
     cursor: pointer;
 }
@@ -2012,7 +1993,7 @@ button.danger:not(.btn),
     text-decoration: none;
     padding: 0.5rem;
     border-radius: 0.5rem;
-    transition: all 0.2s;
+    transition: background-color 0.15s ease;
 }
 
 .sidebar-user:hover {
@@ -2068,7 +2049,7 @@ button.theme-toggle.theme-toggle {
     border-radius: 0.375rem !important;
     color: var(--text-secondary) !important;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.15s ease, color 0.15s ease;
     box-shadow: none !important;
     transform: none !important;
 }
@@ -2156,7 +2137,6 @@ button.theme-toggle.theme-toggle:hover {
     text-transform: uppercase;
     letter-spacing: 0.03em;
     white-space: nowrap;
-    transition: var(--transition-smooth);
 }
 
 .status-badge-v2--pending {
@@ -2214,14 +2194,10 @@ button.theme-toggle.theme-toggle:hover {
     border-radius: 12px;
     border: 1px solid #e2e8f0;
     box-shadow: var(--shadow-card-v2);
-    transition: var(--transition-smooth);
     overflow: hidden;
 }
 
-.card-elevated:hover {
-    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-    transform: translateY(-2px);
-}
+/* card-elevated:hover removed — cards are static containers */
 
 .card-elevated-static {
     background: var(--bg-card-elevated);
@@ -2295,7 +2271,7 @@ button.theme-toggle.theme-toggle:hover {
 
 /* Body Rows */
 .table-enhanced tbody tr {
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease;
     border-bottom: 1px solid #f1f5f9;
 }
 
@@ -4590,7 +4566,7 @@ def get(session):
         border-radius: 8px;
         background: #f8fafc;
         color: #1e293b;
-        transition: all 0.2s ease;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
         box-sizing: border-box;
     """
 
@@ -4611,7 +4587,7 @@ def get(session):
         justify-content: center;
         gap: 8px;
         margin-top: 28px;
-        transition: all 0.2s ease;
+        transition: background-color 0.15s ease;
         box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
     """
 
@@ -4797,7 +4773,7 @@ def post(email: str, password: str, session):
             border-radius: 8px;
             background: #f8fafc;
             color: #1e293b;
-            transition: all 0.2s ease;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
             box-sizing: border-box;
         """
 
@@ -4818,7 +4794,7 @@ def post(email: str, password: str, session):
             justify-content: center;
             gap: 8px;
             margin-top: 28px;
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease;
             box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
         """
 
@@ -4973,7 +4949,7 @@ def get(session):
         border-radius: 10px;
         text-decoration: none;
         margin-top: 24px;
-        transition: all 0.2s ease;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     """
 
@@ -7594,7 +7570,7 @@ def _build_dashboard_tabs_nav(tabs: list, active_tab: str) -> Div:
         font-weight: 500;
         text-decoration: none;
         border-radius: 8px 8px 0 0;
-        transition: all 0.2s ease;
+        transition: background-color 0.15s ease, color 0.15s ease;
         border: 1px solid transparent;
         border-bottom: none;
         margin-bottom: -1px;
@@ -7974,7 +7950,7 @@ def version_badge(quote_id, current_ver, total_count):
         color: #0369a1;
         border: 1px solid #bae6fd;
         text-decoration: none;
-        transition: all 0.2s ease;
+        transition: background-color 0.15s ease, color 0.15s ease;
     """
     return A(
         f"v{current_ver}",
@@ -8291,7 +8267,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         "padding: 8px 16px; font-size: 13px; font-weight: 600;"
         "color: white; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);"
         "border: none; border-radius: 8px; text-decoration: none;"
-        "transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);"
+        "transition: background-color 0.15s ease; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);"
     )
 
     # Build summary stage cards
@@ -10117,7 +10093,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 color: #6b7280;
                 border-bottom: 2px solid transparent;
                 margin-bottom: -2px;
-                transition: all 0.2s;
+                transition: color 0.15s ease, border-color 0.15s ease;
             }
             .tab-btn:hover {
                 color: #374151;
@@ -16274,7 +16250,7 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
                 border-radius: 8px 8px 0 0;
                 font-size: 0.9rem;
                 text-decoration: none;
-                transition: all 0.2s;
+                transition: background-color 0.15s ease, color 0.15s ease;
             """
 
         tab_elements.append(
@@ -19969,7 +19945,7 @@ def get(session, quote_id: str):
             border: 1px solid #e2e8f0;
             border-radius: 6px;
             background: #f8fafc;
-            transition: all 0.2s;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
         """
         select_style = """
             width: 62px;
@@ -24945,7 +24921,7 @@ def get(session, quote_id: str):
                             Span(dept_desc, style="color: #64748b; font-size: 13px; margin-left: 26px; display: block; margin-top: 2px;"),
                             style="cursor: pointer; display: block;"
                         ),
-                        style="padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; background: #f8fafc; transition: all 0.15s ease;"
+                        style="padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 8px; background: #f8fafc;"
                     )
                     for dept_code, dept_label, dept_desc in department_options
                 ],
@@ -27959,7 +27935,7 @@ def get(session, tab: str = "workspace", status_filter: str = None, view: str = 
             font-weight: 500;
             text-decoration: none;
             border-radius: 8px 8px 0 0;
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease, color 0.15s ease;
             border: 1px solid transparent;
             border-bottom: none;
             margin-bottom: -1px;
@@ -28678,7 +28654,7 @@ def finance_erps_tab(session, user, org_id, view: str = "full", custom_groups: s
             color: #374151;
             font-size: 0.875rem;
             background: white;
-            transition: all 0.15s;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
         .view-btn:hover {
             background: #f3f4f6;
@@ -31155,7 +31131,7 @@ def get(session, tab: str = "seller_companies"):
                 font-weight: 500;
                 text-decoration: none;
                 border-radius: 8px 8px 0 0;
-                transition: all 0.2s ease;
+                transition: background-color 0.15s ease, color 0.15s ease;
                 border: 1px solid transparent;
                 border-bottom: none;
                 margin-bottom: -1px;
@@ -32095,7 +32071,7 @@ def get(user_id: str, session):
                     ),
                     style="display: flex; align-items: flex-start;"
                 ),
-                style=f"display: block; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; background: {card_bg}; border: 1px solid {card_border}; transition: all 0.15s ease;"
+                style=f"display: block; padding: 12px; margin-bottom: 8px; border-radius: 8px; cursor: pointer; background: {card_bg}; border: 1px solid {card_border};"
             )
         )
 
@@ -34813,7 +34789,7 @@ def get(session, q: str = "", country: str = "", status: str = ""):
         border: none;
         border-radius: 8px;
         text-decoration: none;
-        transition: all 0.2s ease;
+        transition: background-color 0.15s ease;
         box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);
     """
 
@@ -41702,7 +41678,6 @@ def _location_form(location=None, error=None, session=None):
         background: #f8fafc;
         margin-bottom: 12px;
         cursor: pointer;
-        transition: all 0.15s ease;
     """
 
     return page_layout(title,
@@ -43309,7 +43284,7 @@ def _quote_documents_section(
                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
                               style="display: none;"),
                         id="drop-zone",
-                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s ease, background-color 0.15s ease;"
                     ),
                     style="flex: 1; display: flex;"
                 ),
@@ -43574,7 +43549,7 @@ def _documents_section(entity_type: str, entity_id: str, session: dict, can_uplo
                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.zip,.rar,.7z,.txt,.csv",
                               style="display: none;"),
                         id="drop-zone",
-                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"
+                        style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 1rem; background: #fafafa; flex: 1; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s ease, background-color 0.15s ease;"
                     ),
                     style="flex: 1; display: flex;"
                 ),
@@ -45366,7 +45341,7 @@ def get(session):
                 color: var(--text-secondary, #64748b);
                 text-decoration: none;
                 border: 1px solid var(--border-color, #e2e8f0);
-                transition: all 0.15s ease;
+                transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
             }
             .training-tab:hover {
                 color: var(--text-primary);
@@ -45391,13 +45366,9 @@ def get(session):
                 overflow: hidden;
                 border: 1px solid var(--border-color, #e2e8f0);
                 background: var(--bg-card, #fff);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
                 animation: tvFadeIn 0.35s ease both;
             }
-            .tv-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-            }
+            /* tv-card:hover removed — cards are static containers */
             @keyframes tvFadeIn {
                 from { opacity: 0; transform: translateY(8px); }
                 to { opacity: 1; transform: translateY(0); }
@@ -45519,7 +45490,7 @@ def get(session):
                 background: var(--bg-secondary, #f8fafc);
                 color: var(--text-secondary);
                 cursor: pointer;
-                transition: all 0.15s;
+                transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
                 padding: 0;
             }
             .tv-icon-btn:hover {
@@ -45582,7 +45553,7 @@ def get(session):
                 cursor: pointer;
                 padding: 4px 8px;
                 border-radius: 6px;
-                transition: all 0.15s;
+                transition: color 0.15s ease, background-color 0.15s ease;
             }
             .tv-modal-close:hover {
                 color: #fff;
