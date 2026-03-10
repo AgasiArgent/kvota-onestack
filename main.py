@@ -34293,9 +34293,18 @@ def customer_search_dropdown(
 
             input.addEventListener('input', syncValue);
             input.addEventListener('change', syncValue);
-            // Initial sync — enable button if pre-selected (deferred since btn may not exist yet)
+            // Pre-selected: defer init until full DOM is rendered (btn doesn't exist yet)
             if (selectedId) {
-                setTimeout(function() { var b = getBtn(); if (b) b.disabled = false; }, 0);
+                document.addEventListener('DOMContentLoaded', function() {
+                    var b = getBtn();
+                    if (b) b.disabled = false;
+                    if (selectedId) {
+                        htmx.ajax('GET', '/api/customers/' + selectedId + '/contacts', {
+                            target: '#contact-person-section',
+                            swap: 'innerHTML'
+                        });
+                    }
+                });
             }
         })();
     """)
