@@ -142,7 +142,23 @@ WHERE r.slug IN ('admin', 'finance')  -- Always use r.slug in RLS
 
 ---
 
-**Last updated:** 2026-01-20
+## 🎨 Design System
+
+**Tokens:** `design-system.md` — READ before any UI work.
+**Styles:** `APP_STYLES` in `main.py` (line ~149) — all CSS variables.
+
+**Rules:**
+- Follow `design-system.md` for all colors, fonts, spacing, components
+- Font: Inter (not Manrope) — constrained type scale (11/12/14/16/18/20/24px)
+- Spacing: constrained scale (4/6/8/12/16/20/24/32/48px)
+- No `transition: all` — animate specific properties only
+- No `transform: translateY()` on hover — no card lift, no button bounce
+- No inline `style=` for colors/fonts/spacing — use CSS vars or classes
+- Use `.btn` BEM classes for buttons, not raw `<button>` styles
+
+---
+
+**Last updated:** 2026-03-10
 **Database schema:** kvota (51 tables)
 **VPS:** beget-kvota
 **Container:** kvota-onestack

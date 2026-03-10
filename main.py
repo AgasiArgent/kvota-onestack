@@ -156,7 +156,7 @@ APP_STYLES = """
 
     /* Sidebar/Nav */
     --bg-sidebar: #ffffff;
-    --bg-sidebar-hover: #f3f4f6;
+    --bg-sidebar-hover: #f1f5f9;
     --bg-sidebar-active: rgba(59, 130, 246, 0.1);
     --sidebar-border: #e5e7eb;
     --sidebar-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
@@ -164,14 +164,14 @@ APP_STYLES = """
     /* Cards */
     --bg-card: #ffffff;
     --bg-card-hover: #ffffff;
-    --card-border: #e5e7eb;
+    --card-border: #e2e8f0;
     --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
     --card-shadow-hover: 0 12px 24px rgba(59, 130, 246, 0.12);
 
-    /* Text colors */
-    --text-primary: #1f2937;
-    --text-secondary: #6b7280;
-    --text-muted: #9ca3af;
+    /* Text colors (slate palette) */
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
     --text-on-accent: #ffffff;
 
     /* Accent colors */
@@ -180,9 +180,9 @@ APP_STYLES = """
     --accent-light: rgba(59, 130, 246, 0.1);
     --accent-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
 
-    /* Borders */
-    --border-color: #e5e7eb;
-    --border-color-light: #f3f4f6;
+    /* Borders (slate palette) */
+    --border-color: #e2e8f0;
+    --border-color-light: #f1f5f9;
 
     /* Status colors */
     --status-success: #10b981;
@@ -191,20 +191,20 @@ APP_STYLES = """
     --status-info: #3b82f6;
 
     /* Table */
-    --table-header-bg: #f9fafb;
+    --table-header-bg: #f8fafc;
     --table-row-hover: rgba(59, 130, 246, 0.06);
     --table-stripe: rgba(59, 130, 246, 0.02);
 
     /* Forms */
     --input-bg: #ffffff;
-    --input-border: #d1d5db;
+    --input-border: #e2e8f0;
     --input-focus-border: #3b82f6;
     --input-focus-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 
     /* ========== Button System Variables ========== */
-    /* Primary (gray - main action) */
-    --btn-primary-bg: #6b7280;
-    --btn-primary-hover: #4b5563;
+    /* Primary (blue - main action) */
+    --btn-primary-bg: #3b82f6;
+    --btn-primary-hover: #2563eb;
     --btn-primary-text: white;
 
     /* Secondary (white + gray border) */
@@ -334,9 +334,9 @@ APP_STYLES = """
     --input-focus-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 
     /* ========== Button System Variables (Dark Theme) ========== */
-    /* Primary (gray - main action) */
-    --btn-primary-bg: #6b7280;
-    --btn-primary-hover: #9ca3af;
+    /* Primary (blue - main action) */
+    --btn-primary-bg: #3b82f6;
+    --btn-primary-hover: #60a5fa;
     --btn-primary-text: white;
 
     /* Secondary (dark + lighter border) */
@@ -381,12 +381,13 @@ APP_STYLES = """
 }
 
 /* ========== Global Enhancements ========== */
-* {
-    transition: all 0.2s ease-in-out;
-}
+/* Opt-in transitions only (no global * transition — performance) */
+.transition-colors { transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
+.transition-opacity { transition: opacity 0.15s ease; }
+.transition-shadow { transition: box-shadow 0.15s ease; }
 
 html, body {
-    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
@@ -582,7 +583,6 @@ nav a {
 nav a:hover {
     color: var(--accent);
     background: var(--accent-light);
-    transform: translateY(-2px);
 }
 
 nav strong {
@@ -604,14 +604,7 @@ div[style*="max-width"][style*="margin"] {
     border: 1px solid var(--card-border) !important;
 }
 
-.card:hover,
-[style*="border-left"]:hover,
-.stat-card:hover,
-div[style*="max-width"][style*="margin"]:hover {
-    transform: translateY(-4px) !important;
-    box-shadow: var(--card-shadow-hover) !important;
-    border-color: var(--accent) !important;
-}
+/* Cards are static containers — no hover lift or border glow */
 
 /* ========== Enhanced Buttons ========== */
 button, [role="button"], .button, a[role="button"] {
@@ -645,8 +638,7 @@ button:not(.secondary):not(.ghost):not(.sidebar-toggle-btn):not(.theme-toggle):n
 [role="button"]:not(.secondary):not(.ghost):not(.btn):hover,
 button[type="submit"]:not(.btn):hover,
 a[href*="/new"]:not(.sidebar-item):not(.btn):hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3) !important;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25) !important;
     background: var(--accent-hover) !important;
 }
 
@@ -663,8 +655,6 @@ button.secondary:not(.btn),
 button.secondary:not(.btn):hover,
 [role="button"].secondary:not(.btn):hover,
 .button.secondary:not(.btn):hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
     background: var(--accent-light);
 }
 
@@ -693,8 +683,7 @@ button.success:not(.btn),
 
 button.success:not(.btn):hover,
 [role="button"].success:not(.btn):hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
 }
 
 /* Danger button (legacy - exclude .btn) */
@@ -707,8 +696,7 @@ button.danger:not(.btn),
 
 button.danger:not(.btn):hover,
 [role="button"].danger:not(.btn):hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.35);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
 }
 
 /* Disabled state */
@@ -777,8 +765,7 @@ button.btn-sm:not(.btn),
 .btn.btn--primary:hover {
     background: var(--btn-primary-hover);
     border-color: var(--btn-primary-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(107, 114, 128, 0.25);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
 }
 
 /* Secondary - White/gray outline */
@@ -804,8 +791,7 @@ button.btn-sm:not(.btn),
     background: var(--btn-success-hover-bg);
     color: var(--btn-success-hover-text);
     border-color: var(--btn-success-hover-bg);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
 }
 
 /* Danger - White + red border, red fill on hover */
@@ -819,8 +805,7 @@ button.btn-sm:not(.btn),
     background: var(--btn-danger-hover-bg);
     color: var(--btn-danger-hover-text);
     border-color: var(--btn-danger-hover-bg);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
 }
 
 /* Ghost - Transparent, for toolbar actions */
@@ -908,50 +893,43 @@ button.btn-sm:not(.btn),
     border-radius: 0.5rem;
     font-size: 0.875rem;
     font-weight: 600;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
     letter-spacing: 0.025em;
-    transition: all 0.2s ease;
 }
 
-.status-badge:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
-}
-
-/* Status colors with gradients */
+/* Status colors — flat backgrounds, dark text for readability */
 .status-draft {
-    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-    color: #78350f;
+    background: #fef3c7;
+    color: #92400e;
 }
 
 .status-sent {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
+    background: #dbeafe;
+    color: #1e40af;
 }
 
 .status-approved {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
+    background: #d1fae5;
+    color: #065f46;
 }
 
 .status-rejected {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    color: white;
+    background: #fee2e2;
+    color: #991b1b;
 }
 
 .status-pending {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
+    background: #fef3c7;
+    color: #92400e;
 }
 
 .status-progress {
-    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
-    color: white;
+    background: #cffafe;
+    color: #155e75;
 }
 
 .status-cancelled {
-    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-    color: white;
+    background: #f3f4f6;
+    color: #4b5563;
 }
 
 /* ========== Enhanced Stats Cards ========== */
@@ -972,10 +950,7 @@ button.btn-sm:not(.btn),
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--card-shadow-hover);
-}
+/* stat-card hover: subtle bg only, no lift */
 
 .stat-value {
     font-size: 2rem;
@@ -3755,10 +3730,10 @@ def page_layout(title, *content, session=None, current_path: str = "", hide_nav:
             Title(f"{title} - Kvota"),
             Meta(charset="utf-8"),
             Meta(name="viewport", content="width=device-width, initial-scale=1"),
-            # Google Fonts - Manrope (modern, clean font)
+            # Google Fonts - Inter (optimized for screens, tabular numbers)
             Link(rel="preconnect", href="https://fonts.googleapis.com"),
             Link(rel="preconnect", href="https://fonts.gstatic.com", crossorigin=""),
-            Link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"),
+            Link(rel="stylesheet", href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"),
             # PicoCSS - Modern, semantic CSS framework
             Link(rel="stylesheet", href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css"),
             # DaisyUI + TailwindCSS - Component library
