@@ -944,6 +944,72 @@ def unlink_telegram_account(user_id: str) -> bool:
         return False
 
 
+def link_telegram_by_user_id(user_id: str, telegram_id: int, telegram_username: str = None) -> bool:
+    """Directly link a Telegram account to a user by user_id (no verification code needed).
+
+    Used when user clicks the deep link from the /telegram page.
+    The deep link embeds the user_id, so when the bot receives /start <user_id>,
+    it can directly link the accounts.
+
+    Args:
+        user_id: UUID of the system user
+        telegram_id: Telegram user ID
+        telegram_username: Optional Telegram username
+
+    Returns:
+        True if successfully linked, False otherwise
+    """
+    try:
+        supabase = get_supabase()
+        if not supabase:
+            logger.error("Cannot get service Supabase client")
+            return False
+
+        # Verify user exists in auth.users
+        user_check = supabase.table("organization_members").select("user_id").eq("user_id", user_id).eq("status", "active").execute()
+        if not user_check.data:
+            logger.warning(f"link_telegram_by_user_id: user {user_id} not found or not active")
+            return False
+
+        # Check if this telegram_id is already linked to another user
+        existing = supabase.table("telegram_users").select("user_id").eq("telegram_id", telegram_id).execute()
+        if existing.data and existing.data[0].get("user_id") != user_id:
+            logger.warning(f"Telegram {telegram_id} already linked to another user")
+            return False
+
+        # Upsert: insert or update telegram_users record
+        data = {
+            "user_id": user_id,
+            "telegram_id": telegram_id,
+            "telegram_username": telegram_username or "",
+            "is_verified": True,
+            "verified_at": "now()",
+            "verification_code": None,
+            "verification_code_expires_at": None,
+        }
+
+        # Try to update existing record for this user
+        existing_user = supabase.table("telegram_users").select("id").eq("user_id", user_id).execute()
+        if existing_user.data:
+            supabase.table("telegram_users").update({
+                "telegram_id": telegram_id,
+                "telegram_username": telegram_username or "",
+                "is_verified": True,
+                "verified_at": "now()",
+                "verification_code": None,
+                "verification_code_expires_at": None,
+            }).eq("user_id", user_id).execute()
+        else:
+            supabase.table("telegram_users").insert(data).execute()
+
+        logger.info(f"Directly linked Telegram {telegram_id} to user {user_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error linking Telegram by user_id: {e}")
+        return False
+
+
 async def send_feedback_resolved_notification(
     telegram_id: int,
     short_id: str,
@@ -1187,106 +1253,87 @@ async def respond_to_command(telegram_id: int, command: str, args: List[str] = N
 
 
 async def handle_start_command(telegram_id: int, args: List[str] = None, telegram_username: str = None) -> bool:
-    """Handle the /start command with greeting and verification instructions.
+    """Handle the /start command.
 
-    Feature #54: Команда /start (приветствие и инструкция по привязке)
-    Feature #55: Верификация аккаунта (account verification)
-
-    The /start command can be called in two ways:
-    1. /start - Shows welcome message and instructions
-    2. /start <code> - Attempts to verify account with the provided code
-
-    Args:
-        telegram_id: User's Telegram ID
-        args: Optional arguments (verification code)
-        telegram_username: Optional Telegram username (for storing during verification)
-
-    Returns:
-        True if message was sent successfully
+    Three modes:
+    1. /start <uuid> - Direct link via deep link from /telegram page (preferred)
+    2. /start <code> - Legacy verification code (6 chars)
+    3. /start - Welcome message with instructions
     """
+    import re
     bot = get_bot()
     if not bot:
         return False
 
     args = args or []
+    uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
 
-    # If a code is provided, attempt verification (Feature #55)
     if args:
-        code = args[0].strip().upper()
-        logger.info(f"Verification code received from {telegram_id}: {code}")
+        arg = args[0].strip()
 
-        # Call the verification function
-        verification_result = await verify_telegram_account(
-            verification_code=code,
-            telegram_id=telegram_id,
-            telegram_username=telegram_username
-        )
+        # Mode 1: UUID — direct link (from /telegram page deep link)
+        if uuid_pattern.match(arg):
+            user_id = arg
+            logger.info(f"Direct link from {telegram_id} with user_id {user_id}")
 
-        if verification_result.success:
-            # Success message
-            response_text = f"""✅ *Аккаунт успешно привязан!*
+            success = link_telegram_by_user_id(user_id, telegram_id, telegram_username)
+            if success:
+                response_text = """✅ *Аккаунт успешно привязан!*
 
-Ваш Telegram аккаунт теперь связан с системой OneStack.
+Теперь вы будете получать уведомления в Telegram:
+• Новые задачи
+• Согласования КП
+• Изменения статусов
 
-*Что будет дальше:*
-• Вы будете получать уведомления о новых задачах
-• Сможете согласовывать КП прямо в этом чате
-• Будете в курсе изменений статусов
+📋 /status — ваши задачи
+📚 /help — справка"""
+            else:
+                response_text = """❌ *Не удалось привязать аккаунт*
 
-━━━━━━━━━━━━━━━━━━━━━━
+Возможные причины:
+• Ссылка устарела — откройте новую на странице Telegram в OneStack
+• Этот Telegram уже привязан к другому аккаунту
 
-📋 Используйте /status для просмотра ваших задач
-📚 Используйте /help для справки"""
+Откройте OneStack → Уведомления → нажмите кнопку «Подключить»."""
+
+        # Mode 2: Legacy verification code (6 chars alphanumeric)
         else:
-            # Error message with specific reason
-            error_msg = verification_result.message
-            response_text = f"""❌ *Не удалось привязать аккаунт*
+            code = arg.upper()
+            logger.info(f"Verification code received from {telegram_id}: {code}")
+
+            verification_result = await verify_telegram_account(
+                verification_code=code,
+                telegram_id=telegram_id,
+                telegram_username=telegram_username
+            )
+
+            if verification_result.success:
+                response_text = """✅ *Аккаунт успешно привязан!*
+
+Теперь вы будете получать уведомления в Telegram:
+• Новые задачи
+• Согласования КП
+• Изменения статусов
+
+📋 /status — ваши задачи
+📚 /help — справка"""
+            else:
+                error_msg = verification_result.message
+                response_text = f"""❌ *Не удалось привязать аккаунт*
 
 {error_msg}
 
-━━━━━━━━━━━━━━━━━━━━━━
-
-*Возможные причины:*
-• Код неверный или устарел (действует 15 минут)
-• Этот Telegram уже привязан к другому пользователю
-• Код уже был использован
-
-*Что делать:*
-1. Откройте OneStack в браузере
-2. Перейдите в Настройки → Telegram
-3. Нажмите "Получить новый код"
-4. Отправьте новый код боту"""
+Откройте OneStack → Уведомления → нажмите кнопку «Подключить»."""
     else:
-        # Standard greeting without code
+        # Mode 3: No args — welcome message
         response_text = """👋 *Добро пожаловать в OneStack Bot!*
 
-Этот бот поможет вам:
-• Получать уведомления о новых задачах
-• Согласовывать КП прямо в Telegram
-• Отслеживать статусы ваших заявок
+Этот бот отправляет уведомления о задачах и согласованиях.
 
-━━━━━━━━━━━━━━━━━━━━━━
+*Как подключить:*
+Откройте OneStack → Уведомления → нажмите «Подключить Telegram».
 
-*Как привязать аккаунт:*
-
-1️⃣ Откройте OneStack в браузере
-   → Войдите в свой аккаунт
-
-2️⃣ Перейдите в Настройки
-   → Раздел "Telegram"
-
-3️⃣ Нажмите "Получить код привязки"
-   → Скопируйте 6-значный код
-
-4️⃣ Отправьте код этому боту
-   → Или нажмите кнопку в системе
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-💡 *Подсказка:* Код действует 15 минут.
-Если код устарел, получите новый.
-
-📚 Используйте /help для справки."""
+📚 /help — справка"""
 
     try:
         await bot.send_message(
@@ -1294,7 +1341,7 @@ async def handle_start_command(telegram_id: int, args: List[str] = None, telegra
             text=response_text,
             parse_mode="Markdown"
         )
-        logger.info(f"Sent /start response to {telegram_id}" + (" (with code)" if args else ""))
+        logger.info(f"Sent /start response to {telegram_id}" + (f" (arg: {args[0][:8]}...)" if args else ""))
         return True
     except TelegramError as e:
         logger.error(f"Failed to send /start response: {e}")

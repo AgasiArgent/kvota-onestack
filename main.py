@@ -25736,8 +25736,10 @@ async def telegram_webhook(request):
                     logger.info(f"Details callback for quote {callback_data.quote_id}")
 
             elif result.update_type == "message":
-                # Regular text message (not a command)
+                # Regular text message — treat as verification attempt
                 logger.info(f"Text message from {result.telegram_id}: {result.text}")
+                if result.text and result.telegram_id:
+                    await respond_to_command(result.telegram_id, "/start", [result.text.strip()], result.telegram_username)
 
             logger.info(f"Webhook processed: {result.message}")
         else:
@@ -49029,7 +49031,7 @@ def get(session):
 # TELEGRAM CONNECTION PAGE
 # ============================================================================
 
-def _telegram_status_fragment(status):
+def _telegram_status_fragment(status, user_id=None):
     """Render the connection status fragment for HTMX updates."""
     if status.is_verified:
         verified_date = ""
@@ -49064,6 +49066,10 @@ def _telegram_status_fragment(status):
             id="telegram-status"
         )
     else:
+        # Build deep link with user_id for one-click connection
+        bot_username = TELEGRAM_BOT_USERNAME
+        deep_link = f"https://t.me/{bot_username}?start={user_id}" if bot_username and user_id else None
+
         return Div(
             Div(
                 I(data_lucide="link-2-off", style="width:20px;height:20px;color:var(--text-secondary);"),
@@ -49072,14 +49078,25 @@ def _telegram_status_fragment(status):
             ),
             P("Подключите Telegram, чтобы получать уведомления о задачах, согласованиях и статусах.",
               style="margin:0 0 16px;color:var(--text-secondary);"),
-            Button(
-                I(data_lucide="zap", style="width:16px;height:16px;"),
-                " Подключить",
-                hx_post="/telegram/generate-code",
-                hx_target="#telegram-status",
-                hx_swap="innerHTML",
+            A(
+                I(data_lucide="send", style="width:16px;height:16px;"),
+                " Подключить Telegram",
+                href=deep_link,
+                target="_blank",
                 cls="btn btn-primary",
                 style="display:inline-flex;align-items:center;gap:6px;"
+            ) if deep_link else P("Бот не настроен. Обратитесь к администратору.", cls="text-error"),
+            P("Нажмите кнопку → откроется Telegram → нажмите Start → готово!",
+              style="margin:12px 0 0;color:var(--text-secondary);font-size:0.8rem;"),
+            # Check button (in case user already connected via bot)
+            Button(
+                I(data_lucide="refresh-cw", style="width:14px;height:14px;"),
+                " Уже подключили? Проверить",
+                hx_get="/telegram/status",
+                hx_target="#telegram-status",
+                hx_swap="innerHTML",
+                cls="btn btn-outline-secondary btn-sm",
+                style="display:inline-flex;align-items:center;gap:6px;margin-top:12px;"
             ),
             id="telegram-status"
         )
@@ -49104,7 +49121,7 @@ def get_telegram_page(session):
             style="margin-bottom:1.5rem;"
         ),
         Div(
-            _telegram_status_fragment(status),
+            _telegram_status_fragment(status, user_id=user_id),
             cls="card",
             style="padding:24px;max-width:500px;"
         ),
@@ -49197,7 +49214,7 @@ def post_telegram_disconnect(session):
     unlink_telegram_account(user_id)
 
     status = get_user_telegram_status(user_id)
-    return _telegram_status_fragment(status)
+    return _telegram_status_fragment(status, user_id=user_id)
 
 
 @rt("/telegram/status")
@@ -49210,7 +49227,7 @@ def get_telegram_status_check(session):
     user = session["user"]
     user_id = user.get("id")
     status = get_user_telegram_status(user_id)
-    return _telegram_status_fragment(status)
+    return _telegram_status_fragment(status, user_id=user_id)
 
 
 # ============================================================================
