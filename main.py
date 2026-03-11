@@ -8251,9 +8251,8 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
 
     # -- Styles --
     header_card_style = (
-        "background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);"
+        "background: #fafbfc;"
         "border-radius: 12px; border: 1px solid #e2e8f0;"
-        "box-shadow: 0 2px 8px rgba(0,0,0,0.04);"
         "padding: 16px 24px; margin-bottom: 16px;"
         "display: flex; justify-content: space-between; align-items: center;"
         "flex-wrap: wrap; gap: 12px;"
@@ -8275,7 +8274,6 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         "padding: 8px 16px; font-size: 13px; font-weight: 600;"
         "color: white; background: #3b82f6;"
         "border: none; border-radius: 8px; text-decoration: none;"
-        "transition: background-color 0.15s ease; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.25);"
     )
 
     # Build summary stage cards
@@ -8328,23 +8326,24 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
 
         manager_name = manager_names.get(q.get("created_by"), "—")
 
+        _cell = "padding: 8px 12px; font-size: 13px;"
         table_rows.append(Tr(
-            Td(created_date, style="font-size: 12px; color: #64748b; white-space: nowrap; padding: 8px 12px;"),
+            Td(created_date, style=f"{_cell} color: #64748b; white-space: nowrap;"),
             Td(
                 A(idn_label, href=f"/quotes/{q['id']}",
                   style="font-weight: 600; color: #3b82f6; text-decoration: none;",
                   onclick="event.stopPropagation();"),
-                style="padding: 8px 12px;"
+                style=_cell
             ),
-            Td(customer_cell, style="padding: 8px 12px;"),
-            Td(manager_name, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
-            Td(workflow_status_badge(q.get("workflow_status", "draft")), style="padding: 8px 12px;"),
+            Td(customer_cell, style=_cell),
+            Td(manager_name, style=f"{_cell} color: #374151;"),
+            Td(workflow_status_badge(q.get("workflow_status", "draft")), style=_cell),
             Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
-               style="text-align: center; padding: 8px 12px;"),
+               style=f"{_cell} text-align: center;"),
             Td(format_money(q.get("total_amount"), quote_currency), cls="col-money",
-               style="padding: 8px 12px; font-size: 13px;"),
+               style=_cell),
             Td(format_money(q.get("total_profit_usd"), "USD"), cls="col-money",
-               style=f"padding: 8px 12px; font-size: 13px; color: {profit_color(q.get('total_profit_usd'))}; font-weight: 500;"),
+               style=f"{_cell} color: {profit_color(q.get('total_profit_usd'))}; font-weight: 500;"),
             cls="clickable-row",
             onclick=f"window.location='/quotes/{q['id']}'"
         ))
