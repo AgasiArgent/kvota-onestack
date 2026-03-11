@@ -339,8 +339,8 @@ class TestMainPyLogisticsCostIntegration:
                     f"Line {i+1}: Itogo block still uses quote.get('logistics_total'). " \
                     "It should use a calculated variable from invoices."
                 # Positive check: should reference logistics_total variable directly
-                assert re.search(r'format_money\(\s*logistics_total\b', line), \
-                    f"Line {i+1}: Expected format_money(logistics_total, ...) but got: {line.strip()}"
+                assert re.search(r'format_money\(\s*total_logistics\b', line), \
+                    f"Line {i+1}: Expected format_money(total_logistics, ...) but got: {line.strip()}"
                 return
 
         pytest.fail("Could not find Td('Логистика:') display line in main.py")
@@ -520,8 +520,8 @@ class TestQuoteDetailLogisticsDataFlow:
                 assert 'quote.get("logistics_total")' not in context, \
                     f"Line {i+1}: Still using quote.get('logistics_total'). Expected calculated variable."
                 # Verify it uses a variable (not a dict access on quote)
-                assert re.search(r'format_money\(\s*logistics_total', context), \
-                    f"Line {i+1}: Expected format_money(logistics_total, ...) but got: {context.strip()}"
+                assert re.search(r'format_money\(\s*total_logistics', context), \
+                    f"Line {i+1}: Expected format_money(total_logistics, ...) but got: {context.strip()}"
                 return
 
         pytest.fail("Could not find Td('Логистика:') in the Itogo block")

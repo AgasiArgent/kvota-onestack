@@ -466,91 +466,19 @@ def _extract_get_handler_signature():
 
 
 # ==============================================================================
-# A. Sub-tab Navigation (TestSubTabNavigation)
+# A. Merged Overview (subtabs removed — single page with all info)
 # ==============================================================================
 
-class TestSubTabNavigation:
-    """The overview tab should render pill-style sub-tab navigation
-    with 'Обзор' and 'Позиции' pills."""
+class TestMergedOverview:
+    """The overview tab should render ALL content on a single page
+    without sub-tab pills (Обзор/Позиции were merged)."""
 
-    @pytest.mark.xfail(reason="_extract_get_handler_signature truncates at first colon in quote_id: str")
-    def test_get_handler_accepts_subtab_parameter(self):
-        """GET handler for /quotes/{quote_id} must accept a `subtab` parameter
-        with default value 'info'."""
-        sig = _extract_get_handler_signature()
-        # Should contain subtab parameter with default "info"
-        assert "subtab" in sig, (
-            "GET handler must accept `subtab` parameter. "
-            f"Current signature: {sig}"
-        )
-        assert 'subtab: str = "info"' in sig or "subtab: str = 'info'" in sig, (
-            "subtab parameter must default to 'info'. "
-            f"Current signature: {sig}"
-        )
-
-    def test_overview_subtabs_function_exists(self):
-        """A function `overview_subtabs` must exist in main.py that returns
-        pill-style sub-tab navigation."""
+    def test_no_overview_subtabs_function(self):
+        """overview_subtabs function should NOT exist — subtabs were merged."""
         source = _read_main_source()
-        assert "def overview_subtabs(" in source, (
-            "Function `overview_subtabs(quote_id, active_subtab)` must exist in main.py "
-            "to render the pill-style sub-tab navigation."
-        )
-
-    def test_subtab_pills_contain_labels(self):
-        """The overview_subtabs function must render pills with labels
-        'Обзор' and 'Позиции'."""
-        source = _read_main_source()
-        # Find the overview_subtabs function body
-        func_start = source.find("def overview_subtabs(")
-        assert func_start != -1, "overview_subtabs function not found"
-        # Get the function body (up to next top-level def or 500 chars)
-        func_end = source.find("\ndef ", func_start + 10)
-        if func_end == -1:
-            func_end = func_start + 2000
-        func_body = source[func_start:func_end]
-        assert "Обзор" in func_body, (
-            "overview_subtabs must render a pill labeled 'Обзор' for the info sub-tab."
-        )
-        assert "Позиции" in func_body, (
-            "overview_subtabs must render a pill labeled 'Позиции' for the products sub-tab."
-        )
-
-    def test_active_pill_has_blue_background(self):
-        """The active pill in overview_subtabs must have blue background (#3b82f6)."""
-        source = _read_main_source()
-        func_start = source.find("def overview_subtabs(")
-        assert func_start != -1, "overview_subtabs function not found"
-        func_end = source.find("\ndef ", func_start + 10)
-        if func_end == -1:
-            func_end = func_start + 2000
-        func_body = source[func_start:func_end]
-        assert "#3b82f6" in func_body, (
-            "Active sub-tab pill must have blue background color #3b82f6."
-        )
-
-    def test_pills_link_to_correct_urls(self):
-        """Sub-tab pills must link to URLs with subtab parameter:
-        ?tab=overview&subtab=info and ?tab=overview&subtab=products."""
-        source = _read_main_source()
-        func_start = source.find("def overview_subtabs(")
-        assert func_start != -1, "overview_subtabs function not found"
-        func_end = source.find("\ndef ", func_start + 10)
-        if func_end == -1:
-            func_end = func_start + 2000
-        func_body = source[func_start:func_end]
-        assert "subtab=info" in func_body, (
-            "Pills must link to URL with subtab=info for the Обзор sub-tab."
-        )
-        assert "subtab=products" in func_body, (
-            "Pills must link to URL with subtab=products for the Позиции sub-tab."
-        )
-
-    def test_overview_subtabs_called_in_overview_tab(self):
-        """The overview tab section must call overview_subtabs to render navigation."""
-        section = _extract_overview_tab_section()
-        assert "overview_subtabs(" in section, (
-            "The overview tab must call overview_subtabs() to render sub-tab pills."
+        assert "def overview_subtabs(" not in source, (
+            "overview_subtabs function should be removed — "
+            "overview tab now shows all content on a single page."
         )
 
 
