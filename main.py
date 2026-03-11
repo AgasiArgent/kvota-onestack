@@ -45200,7 +45200,7 @@ def get(session):
                 style="flex: 1;"
             ),
             Div(*admin_controls) if admin_controls else None,
-            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; padding-top: 8px;"
+            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; padding-top: 24px;"
         ),
         # Category tabs
         Div(

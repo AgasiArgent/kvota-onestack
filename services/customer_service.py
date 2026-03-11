@@ -143,6 +143,9 @@ class Customer:
     # Order source (how customer was acquired)
     order_source: Optional[str] = None
 
+    # Manager (assigned sales person)
+    manager_id: Optional[str] = None
+
     # Notes (free-form text)
     notes: Optional[str] = None
 
@@ -204,6 +207,7 @@ def _parse_customer(data: dict, contacts: Optional[List[dict]] = None) -> Custom
         warehouse_addresses=warehouse_addresses,
         is_active=data.get("is_active", True),
         order_source=data.get("order_source"),
+        manager_id=data.get("manager_id"),
         notes=data.get("notes"),
         created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None,
         updated_at=datetime.fromisoformat(data["updated_at"].replace("Z", "+00:00")) if data.get("updated_at") else None,
