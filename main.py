@@ -8334,11 +8334,6 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                style="padding: 8px 12px; font-size: 13px;"),
             Td(format_money(q.get("total_profit_usd"), "USD"), cls="col-money",
                style=f"padding: 8px 12px; font-size: 13px; color: {profit_color(q.get('total_profit_usd'))}; font-weight: 500;"),
-            Td(
-                A(icon("eye", size=14), href=f"/quotes/{q['id']}", cls="table-action-btn", title="Просмотр"),
-                A(icon("pencil", size=14), href=f"/quotes/{q['id']}/edit", cls="table-action-btn", title="Редактировать"),
-                cls="col-actions", style="padding: 8px 12px;"
-            ),
             cls="clickable-row",
             onclick=f"window.location='/quotes/{q['id']}'"
         ))
@@ -8382,7 +8377,6 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                         Th("Версии", style="text-align: center; width: 70px; padding: 10px 12px;"),
                         Th("Сумма", cls="col-money", style="padding: 10px 12px;"),
                         Th("Профит", cls="col-money", style="padding: 10px 12px;"),
-                        Th("", cls="col-actions", style="padding: 10px 12px;"),
                     )),
                     Tbody(
                         *table_rows
@@ -8400,7 +8394,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                             ),
                             style="text-align: center; padding: 32px 24px;"
                         ),
-                        colspan="8"
+                        colspan="7"
                     ))),
                     cls="table-enhanced"
                 ),
@@ -37248,8 +37242,7 @@ def get(session, q: str = "", status: str = ""):
 
     # Import customer service functions
     from services.customer_service import (
-        get_all_customers, search_customers, get_customer_stats,
-        get_contacts_for_customer, count_contacts
+        get_all_customers, search_customers, get_customer_stats
     )
 
     # Sales-only users see only their own customers; heads/admins see all
@@ -37281,17 +37274,10 @@ def get(session, q: str = "", status: str = ""):
         # Get stats for summary (filtered by manager for sales-only users)
         stats = get_customer_stats(organization_id=org_id, manager_id=manager_filter)
 
-        # Fetch contacts for each customer for preview
-        customer_contacts_map = {}
-        for customer in customers:
-            contacts = get_contacts_for_customer(customer.id)
-            customer_contacts_map[customer.id] = contacts
-
     except Exception as e:
         print(f"Error loading customers: {e}")
         customers = []
         stats = {"total": 0, "active": 0, "inactive": 0, "with_contacts": 0, "with_signatory": 0}
-        customer_contacts_map = {}
 
     # Status options for filter
     status_options = [
@@ -37300,97 +37286,38 @@ def get(session, q: str = "", status: str = ""):
         Option("Неактивные", value="inactive", selected=(status == "inactive")),
     ]
 
-    # Build customer rows with contacts preview
+    # Resolve manager names from profiles
+    manager_ids = list(set(c.manager_id for c in customers if c.manager_id))
+    manager_names = {}
+    if manager_ids:
+        try:
+            supabase = get_supabase()
+            profiles_result = supabase.table("profiles") \
+                .select("id, full_name") \
+                .in_("id", manager_ids) \
+                .execute()
+            for p in (profiles_result.data or []):
+                manager_names[p["id"]] = p.get("full_name", "—")
+        except Exception:
+            pass
+
+    # Build customer rows — compact table: Name, INN, Manager, Status
     customer_rows = []
     for c in customers:
         status_class = "status-success" if c.is_active else "status-neutral"
         status_text = "Активен" if c.is_active else "Неактивен"
-
-        # Build contacts preview
-        contacts = customer_contacts_map.get(c.id, [])
-        contacts_preview = []
-        if contacts:
-            for contact in contacts[:3]:  # Show up to 3 contacts
-                badges = []
-                if contact.is_signatory:
-                    badges.append(Span(icon("pen-tool", size=10), " подписант", cls="badge badge-primary", style="font-size: 0.7em; margin-left: 0.3rem; display: inline-flex; align-items: center; gap: 0.15rem;"))
-                if contact.is_primary:
-                    badges.append(Span("★ основной", cls="badge badge-info", style="font-size: 0.7em; margin-left: 0.3rem;"))
-
-                contact_line = Div(
-                    Span(contact.name, style="font-weight: 500;"),
-                    *badges,
-                    Small(f" — {contact.position}" if contact.position else "", style="color: #666;"),
-                    style="margin-bottom: 0.2rem;"
-                )
-                contacts_preview.append(contact_line)
-
-            if len(contacts) > 3:
-                contacts_preview.append(Small(f"... ещё {len(contacts) - 3}", style="color: #888;"))
-        else:
-            contacts_preview.append(Small("Нет контактов", style="color: #999;"))
+        manager_name = manager_names.get(c.manager_id, "—") if c.manager_id else "—"
 
         customer_rows.append(
             Tr(
-                Td(
-                    Div(
-                        A(Strong(c.name), href=f"/customers/{c.id}", style="color: var(--accent); text-decoration: none;"),
-                        Small(f" (ИНН: {c.inn})" if c.inn else "", style="color: #666; margin-left: 0.3rem;")
-                    )
-                ),
-                Td(c.legal_address[:50] + "..." if c.legal_address and len(c.legal_address) > 50 else c.legal_address or "—"),
-                Td(
-                    Div(*contacts_preview),
-                    style="min-width: 200px;"
-                ),
-                Td(c.general_director_name or "—"),
+                Td(A(c.name, href=f"/customers/{c.id}", style="color: var(--accent); text-decoration: none; font-weight: 500;")),
+                Td(c.inn or "—", style="font-size: 13px; color: var(--text-secondary);"),
+                Td(manager_name, style="font-size: 13px;"),
                 Td(Span(status_text, cls=f"status-badge {status_class}")),
-                Td(
-                    A(icon("eye", size=16), href=f"/customers/{c.id}", title="Просмотр", cls="table-action-btn"),
-                    cls="col-actions"
-                )
             )
         )
 
     return page_layout("Клиенты",
-        # Header
-        H1(icon("users", size=28), " Клиенты", cls="page-header"),
-
-        # Info alert
-        Div(
-            icon("info", size=16), " Клиенты — это внешние компании, которые покупают у нас товары. ",
-            "Каждое КП (quote) привязывается к одному клиенту. ",
-            "У клиента могут быть несколько контактов (ЛПР). Контакт с флагом ",
-            Span(icon("pen-tool", size=14), " подписант", style="font-weight: bold; display: inline-flex; align-items: center; gap: 0.25rem;"),
-            " используется для генерации спецификации (PDF).",
-            cls="alert alert-info"
-        ),
-
-        # Stats cards
-        Div(
-            Div(
-                Div(str(stats.get("total", 0)), cls="stat-value"),
-                Div("Всего"),
-                cls="stat-card card"
-            ),
-            Div(
-                Div(str(stats.get("active", 0)), cls="stat-value"),
-                Div("Активных"),
-                cls="stat-card card"
-            ),
-            Div(
-                Div(str(stats.get("with_contacts", 0)), cls="stat-value"),
-                Div("С контактами"),
-                cls="stat-card card"
-            ),
-            Div(
-                Div(str(stats.get("with_signatory", 0)), cls="stat-value"),
-                Div("С подписантом"),
-                cls="stat-card card"
-            ),
-            cls="stats-grid"
-        ),
-
         # Unified Table with search in header
         Div(
             # Table header with search and filters
@@ -37398,7 +37325,9 @@ def get(session, q: str = "", status: str = ""):
                 Div(
                     Form(
                         Input(type="text", name="q", value=q, placeholder="Поиск по названию или ИНН...", cls="table-search"),
-                        Select(*status_options, name="status", style="padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border-color);"),
+                        Select(*status_options, name="status",
+                               style="padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 13px; background: white;",
+                               onchange="this.form.submit()"),
                         btn("Найти", variant="secondary", icon_name="search", type="submit", size="sm"),
                         method="get",
                         action="/customers",
@@ -37413,21 +37342,26 @@ def get(session, q: str = "", status: str = ""):
                 ),
                 cls="table-header"
             ),
+            # Compact stats summary
+            Div(
+                Span(f"Всего: {stats.get('total', 0)}", style="font-weight: 500;"),
+                Span(f"Активных: {stats.get('active', 0)}"),
+                Span(f"С контактами: {stats.get('with_contacts', 0)}"),
+                style="display: flex; gap: 16px; padding: 6px 12px; font-size: 12px; color: var(--text-secondary);"
+            ),
             # Table
             Div(
                 Table(
                     Thead(
                         Tr(
-                            Th("НАЗВАНИЕ"),
-                            Th("АДРЕС"),
-                            Th("КОНТАКТЫ"),
-                            Th("ДИРЕКТОР"),
+                            Th("НАИМЕНОВАНИЕ"),
+                            Th("ИНН"),
+                            Th("МЕНЕДЖЕР"),
                             Th("СТАТУС"),
-                            Th("", cls="col-actions"),
                         )
                     ),
                     Tbody(*customer_rows) if customer_rows else Tbody(
-                        Tr(Td("Клиенты не найдены", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
+                        Tr(Td("Клиенты не найдены", colspan="4", style="text-align: center; padding: 2rem; color: #666;"))
                     ),
                     cls="unified-table"
                 ),
@@ -37435,7 +37369,7 @@ def get(session, q: str = "", status: str = ""):
             ),
             # Table footer
             Div(
-                Span(f"Всего: {len(customers)} клиентов"),
+                Span(f"Показано: {len(customers)}"),
                 cls="table-footer"
             ),
             cls="table-container"
