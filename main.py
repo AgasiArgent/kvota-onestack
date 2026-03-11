@@ -8735,8 +8735,15 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     total_profit = float(quote.get("profit_quote_currency") or 0)
     total_cogs = float(quote.get("cogs_quote_currency") or 0)
 
+    # Fallback for old quotes without revenue_no_vat: derive from total / (1 + tax_rate%)
+    if total_no_vat == 0 and total_with_vat > 0:
+        tax_rate = float(quote.get("tax_rate") or 20)
+        total_no_vat = total_with_vat / (1 + tax_rate / 100)
+    # Fallback for old quotes without cogs: cogs = revenue_no_vat - profit
+    if total_cogs == 0 and total_no_vat > 0 and total_profit > 0:
+        total_cogs = total_no_vat - total_profit
+
     # Margin = profit / revenue (excl. VAT), Markup = profit / COGS
-    # Uses revenue_no_vat to match Cost Analysis formula
     margin_pct = (total_profit / total_no_vat) * 100 if total_no_vat > 0 else 0
     markup_pct = (total_profit / total_cogs) * 100 if total_cogs > 0 else 0
 
@@ -9384,6 +9391,13 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
     _itogo_cogs = float(quote.get("cogs_quote_currency") or 0)
     _itogo_currency = quote.get("currency", "RUB")
     _itogo_items_count = len(items)
+    # Fallback for old quotes without revenue_no_vat
+    if _itogo_revenue_no_vat == 0 and _itogo_total > 0:
+        _tax_rate = float(quote.get("tax_rate") or 20)
+        _itogo_revenue_no_vat = _itogo_total / (1 + _tax_rate / 100)
+    # Fallback for old quotes without cogs
+    if _itogo_cogs == 0 and _itogo_revenue_no_vat > 0 and _itogo_profit > 0:
+        _itogo_cogs = _itogo_revenue_no_vat - _itogo_profit
     # Margin = profit / revenue (excl. VAT); Markup = profit / COGS
     _itogo_margin = (_itogo_profit / _itogo_revenue_no_vat * 100) if _itogo_revenue_no_vat > 0 else 0
     _itogo_markup = (_itogo_profit / _itogo_cogs * 100) if _itogo_cogs > 0 else 0
