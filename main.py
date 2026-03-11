@@ -38100,6 +38100,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Td(A(quote.get("idn_quote", "—"), href=f"/quotes/{quote['id']}", style="font-weight: 500; color: var(--accent);")),
                     Td(Span(status_text, cls=f"status-badge {s_cls}")),
                     Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right;"),
+                    Td(format_money(total_profit, q_currency) if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
                 )
             )
 
@@ -38118,10 +38119,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
                             Th("IDN"),
                             Th("СТАТУС"),
                             Th("СУММА", cls="col-money"),
-                            Th(add_btn, style="text-align: right;", cls="col-money")
+                            Th("ПРОФИТ", cls="col-money"),
+                            Th(add_btn, style="text-align: right;")
                         )),
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
-                            Tr(Td("КП не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
+                            Tr(Td("КП не найдены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
                         cls="unified-table compact-table"
                     ),
