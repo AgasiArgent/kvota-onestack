@@ -8752,12 +8752,11 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     _current_wf_status = quote.get("workflow_status") or quote.get("status", "draft")
     _download_btn = btn("Скачать", variant="secondary", icon_name="download",
         onclick=f"location.href='/quotes/{quote.get('id')}/export/specification'") if _current_wf_status in _download_allowed_statuses else None
-    action_buttons = Div(
-        btn("Отправить на проверку", variant="primary", icon_name="send",
-            onclick=f"location.href='/quote-control/{quote.get('id')}'"),
+    # Download button moved to bottom of summary (after all blocks)
+    download_row = Div(
         _download_btn,
-        style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-bottom: 1rem;"
-    )
+        style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem;"
+    ) if _download_btn else None
 
     # --- Block I: Main info (customer/seller + contact phone) ---
     customer_name = (customer or {}).get("name", "—") or "—"
@@ -8928,13 +8927,13 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     # Row 2: Block II (Дополнительная) + Block V (Доставка)
     # Row 3: Block III (Печать) + Block VI (Итого)
     return Div(
-        action_buttons,
         # Row 1: Block I + Block IV
         Div(card_1, card_4, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
         # Row 2: Block II + Block V
         Div(card_2, card_5, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
         # Row 3: Block III + Block VI
         Div(card_3, card_6, style="display: flex; gap: 1rem; margin-bottom: 1rem;"),
+        download_row,
         id="tab-content",
         style="margin-top: 20px;"
     )
@@ -37935,7 +37934,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
                             Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;")),
                             id="contacts-tbody"
                         ),
-                        cls="unified-table"
+                        cls="unified-table",
+                        style="font-size: 13px;"
                     ),
                     cls="table-responsive"
                 ),
@@ -38061,7 +38061,13 @@ def get(customer_id: str, session, request, tab: str = "general"):
             status_text = {
                 "draft": "Черновик",
                 "pending_procurement": "Закупка",
-                "approved": "Согласовано",
+                "pending_logistics": "Логистика",
+                "pending_customs": "Таможня",
+                "pending_quote_control": "Контроль КП",
+                "pending_spec_control": "Контроль спец.",
+                "pending_sales_review": "Ревизия",
+                "pending_approval": "Согласование",
+                "approved": "Одобрено",
                 "sent_to_client": "Отправлено",
                 "deal": "Сделка",
                 "rejected": "Отклонено",
@@ -38073,13 +38079,22 @@ def get(customer_id: str, session, request, tab: str = "general"):
             total_profit = quote.get("total_profit", 0)
 
             q_currency = quote.get("currency", "RUB")
+
+            status_cls_map = {
+                "draft": "status-draft", "pending_procurement": "status-pending",
+                "approved": "status-approved", "sent_to_client": "status-sent",
+                "deal": "status-approved", "rejected": "status-rejected",
+                "cancelled": "status-neutral"
+            }
+            s_cls = status_cls_map.get(workflow_status, "status-draft")
+
             quotes_rows.append(
                 Tr(
-                    Td(A(Strong(quote.get("idn_quote", "—")), href=f"/quotes/{quote['id']}")),
-                    Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right;"),
-                    Td(format_money(total_profit, q_currency) if total_profit else "—", style="text-align: right; color: " + ("#16a34a" if total_profit > 0 else "#666")),
-                    Td(created_at or "—", style="font-size: 0.9em;"),
-                    Td(Span(status_text, cls="status-badge")),
+                    Td(created_at or "—", style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"),
+                    Td(A(quote.get("idn_quote", "—"), href=f"/quotes/{quote['id']}", style="font-weight: 500; color: var(--accent);")),
+                    Td(Span(status_text, cls=f"status-badge {s_cls}")),
+                    Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right; font-size: 13px;"),
+                    Td(format_money(total_profit, q_currency) if total_profit else "—", style="text-align: right; font-size: 13px; color: " + ("#16a34a" if total_profit > 0 else "#666")),
                 )
             )
 
@@ -38094,11 +38109,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 Div(
                     Table(
                         Thead(Tr(
-                            Th("IDN"),
-                            Th("СУММА", cls="col-money"),
-                            Th("ПРОФИТ", cls="col-money"),
                             Th("ДАТА"),
-                            Th(add_btn, style="text-align: right;")
+                            Th("IDN"),
+                            Th("СТАТУС"),
+                            Th("СУММА", cls="col-money"),
+                            Th(add_btn, style="text-align: right;", cls="col-money")
                         )),
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
                             Tr(Td("КП не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
@@ -38245,7 +38260,8 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Tbody(*items_rows) if items_rows else Tbody(
                             Tr(Td("Позиции не найдены.", colspan="7", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
-                        cls="unified-table"
+                        cls="unified-table",
+                        style="font-size: 13px;"
                     ),
                     cls="table-responsive"
                 ),
@@ -38406,10 +38422,7 @@ def _render_calls_list(customer_id: str, calls: list) -> object:
                 Span(" · ", style="color:#cbd5e1;"),
                 Span(date_str, style="color:#64748b;font-size:12px;"),
             ),
-            Details(
-                Summary((c.comment or "")[:150] + "…", style="cursor:pointer;font-size:14px;color:#374151;list-style:revert;margin:6px 0 0;"),
-                P(c.comment, style="margin:4px 0 0;font-size:14px;color:#374151;white-space:pre-wrap;"),
-            ) if c.comment and len(c.comment) > 150 else P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:14px;color:#374151;"),
+            P(c.comment or "Без комментария", style="margin:6px 0 0;font-size:13px;color:#374151;white-space:pre-wrap;"),
             Div(
                 Div(
                     Span("Потребление / Зона: ", style="color:#64748b;font-size:12px;font-weight:500;"),
