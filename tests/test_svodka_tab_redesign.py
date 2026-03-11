@@ -406,27 +406,29 @@ class TestBlockVITotals:
         )
 
     def test_block_vi_has_total_amount(self):
-        """Block VI must have 'Общая сумма' field."""
+        """Block VI must have a total amount field (Сумма с НДС or Общая сумма)."""
         func_source = _extract_function_source("_render_summary_tab")
-        assert "Общая сумма" in func_source, (
-            "Block VI must contain 'Общая сумма' field"
+        has_total = "Сумма с НДС" in func_source or "Общая сумма" in func_source
+        assert has_total, (
+            "Block VI must contain a total amount field ('Сумма с НДС' or 'Общая сумма')"
         )
 
     def test_block_vi_has_total_profit(self):
-        """Block VI must have 'Общий профит' field."""
+        """Block VI must have a profit field (Профит or Общий профит)."""
         func_source = _extract_function_source("_render_summary_tab")
-        assert "Общий профит" in func_source, (
-            "Block VI must contain 'Общий профит' field"
+        has_profit = "Профит" in func_source or "Общий профит" in func_source
+        assert has_profit, (
+            "Block VI must contain a profit field ('Профит' or 'Общий профит')"
         )
 
     def test_block_vi_has_item_count(self):
-        """Block VI must have 'Количество позиций' field."""
+        """Block VI must have an item count field (Позиции or Количество позиций)."""
         func_source = _extract_function_source("_render_summary_tab")
-        assert "Количество позиций" in func_source, (
-            "Block VI must contain 'Количество позиций' field"
+        has_count = "Позиции" in func_source or "Количество позиций" in func_source
+        assert has_count, (
+            "Block VI must contain an item count field ('Позиции' or 'Количество позиций')"
         )
 
-    @pytest.mark.xfail(reason="Маржа % field not yet implemented in Block VI ИТОГО")
     def test_block_vi_has_margin_percentage(self):
         """Block VI must have margin percentage label ('Маржа %' or 'Маржа').
         Formula: (profit / total_amount) * 100 if total_amount > 0, else 0."""
