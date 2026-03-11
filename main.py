@@ -8950,24 +8950,6 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     )
 
 
-def overview_subtabs(quote_id, active_subtab):
-    """Render pill-style sub-tab navigation for the overview tab."""
-    pills = []
-    # Обзор pill
-    info_active = (active_subtab == "info")
-    info_style = (
-        "padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 0.875rem; font-weight: 500; "
-        + ("background: #3b82f6; color: white;" if info_active else "background: #f3f4f6; color: #374151;")
-    )
-    pills.append(A("Обзор", href=f"/quotes/{quote_id}?tab=overview&subtab=info", style=info_style))
-    # Позиции pill
-    products_active = (active_subtab == "products")
-    products_style = (
-        "padding: 6px 16px; border-radius: 6px; text-decoration: none; font-size: 0.875rem; font-weight: 500; "
-        + ("background: #3b82f6; color: white;" if products_active else "background: #f3f4f6; color: #374151;")
-    )
-    pills.append(A("Позиции", href=f"/quotes/{quote_id}?tab=overview&subtab=products", style=products_style))
-    return Div(*pills, style="display: flex; gap: 0.5rem; margin-bottom: 1rem;")
 
 
 def _sales_action_toolbar(quote_id, workflow_status, is_revision, is_justification_needed):
@@ -9407,10 +9389,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         # Workflow progress bar (same as on procurement/logistics/customs pages)
         workflow_progress_bar(workflow_status),
 
-        # Sub-tab pills (Обзор / Позиции) — calculate and products via _overview_products_subtab(quote_id, subtab)
-        overview_subtabs(quote_id, subtab),
+        # Persistent action toolbar
 
-        # Persistent action toolbar — visible on both sub-tabs
         _sales_action_toolbar(quote_id, workflow_status, is_revision, is_justification_needed),
 
         # Block I: ОСНОВНАЯ ИНФОРМАЦИЯ (2-column grid)
@@ -9547,7 +9527,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             ),
             cls="card",
             style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
-        ) if subtab == "info" else None,
+        ),
 
         # Block II+III: ДОСТАВКА (left) + summary metrics (right) side-by-side
         Div(
@@ -9716,9 +9696,9 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
             ),
             style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;"
-        ) if subtab == "info" else None,
+        ),
 
-        # Products (Handsontable spreadsheet) with gradient styling
+        # Products (Handsontable spreadsheet)
         Div(
             # Section header with icon
             Div(
@@ -9729,9 +9709,6 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                     style="display: flex; align-items: center;"
                 ),
                 Div(
-                    # Show totals only for non-draft quotes
-                    (Span(f"Итого: {format_money(quote.get('total_amount'), quote.get('currency', 'RUB'))}",
-                        style="font-weight: 600; color: #1e40af; margin-right: 1rem;") if quote.get('total_amount') and workflow_status != 'draft' else None),
                     Span(id="save-status", style="margin-right: 1rem; font-size: 0.85rem; color: #64748b;"),
                     # Add row button
                     A(icon("plus", size=16), " Добавить", id="btn-add-row", role="button", cls="secondary", style="padding: 0.375rem 0.75rem; display: inline-flex; align-items: center; gap: 0.375rem; margin-right: 0.5rem; text-decoration: none; font-size: 0.8125rem;"),
@@ -9755,8 +9732,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 Span(id="footer-count", style="color: #64748b;"),
                 style="padding: 0.5rem 1rem; border-top: 1px solid #e2e8f0; font-size: 0.8125rem;"
             ),
-            style="margin: 0; background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%); border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;"
-        ) if subtab == "products" else None,
+            style="margin: 0; background: #fafbfc; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;"
+        ),
         # Handsontable initialization script - EXPLICIT SAVE ONLY (no auto-save)
         Script(f"""
             (function() {{
@@ -10085,27 +10062,9 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                     initTable();
                 }}
             }})();
-        """) if subtab == "products" else None,
-        # Tab button styles
+        """),
+        # Handsontable styles
         Style("""
-            .tab-btn {
-                padding: 0.75rem 1.5rem;
-                border: none;
-                background: transparent;
-                cursor: pointer;
-                font-weight: 500;
-                color: #6b7280;
-                border-bottom: 2px solid transparent;
-                margin-bottom: -2px;
-                transition: color 0.15s ease, border-color 0.15s ease;
-            }
-            .tab-btn:hover {
-                color: #374151;
-            }
-            .tab-btn.active {
-                color: #4f46e5;
-                border-bottom-color: #4f46e5;
-            }
             #items-spreadsheet .htCore {
                 font-size: 14px;
             }
@@ -10116,18 +10075,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 font-size: 0.75rem;
                 letter-spacing: 0.05em;
             }
-        """) if subtab == "products" else None,
-
-        # Totals
-        Div(
-            H3("Итого"),
-            Table(
-                Tr(Td("Товары (подитог):"), Td(format_money(quote.get("subtotal"), quote.get("currency", "RUB")))),
-                Tr(Td("Логистика:"), Td(format_money(logistics_total, quote.get("currency", "RUB")))),
-                Tr(Td(Strong("Итого:")), Td(Strong(format_money(quote.get("total_amount"), quote.get("currency", "RUB"))))),
-            ),
-            cls="card"
-        ) if quote.get("total_amount") else None,
+        """),
 
         # Multi-department approval progress (Bug #8 follow-up)
         Div(
@@ -10796,8 +10744,8 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             cls="card", style="border-left: 4px solid #dc2626;"
         ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
 
-        # Activity log (workflow transitions history, products subtab only)
-        workflow_transition_history(quote_id, limit=50, collapsed=True) if subtab == "products" else None,
+        # Activity log (workflow transitions history)
+        workflow_transition_history(quote_id, limit=50, collapsed=True),
 
         # Back button removed — toolbar at top has all navigation
 
