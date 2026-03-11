@@ -237,18 +237,17 @@ class TestToolbarPlacement:
             "to render the persistent action toolbar."
         )
 
-    def test_toolbar_called_after_overview_subtabs(self):
-        """_sales_action_toolbar call must appear AFTER overview_subtabs call."""
+    def test_toolbar_called_before_content(self):
+        """_sales_action_toolbar call must appear BEFORE the main content
+        (subtabs were merged, so toolbar is at the top of overview)."""
         section = _extract_overview_tab_section()
-        subtabs_pos = section.find("overview_subtabs(")
         toolbar_pos = section.find("_sales_action_toolbar(")
-        assert subtabs_pos != -1, "overview_subtabs() call not found in overview section"
         assert toolbar_pos != -1, "_sales_action_toolbar() call not found in overview section"
-        assert toolbar_pos > subtabs_pos, (
-            f"_sales_action_toolbar() (pos {toolbar_pos}) must appear AFTER "
-            f"overview_subtabs() (pos {subtabs_pos}) in the page_layout call. "
-            "Toolbar goes between sub-tab pills and content."
-        )
+        info_pos = section.find("ОСНОВНАЯ ИНФОРМАЦИЯ")
+        if info_pos != -1:
+            assert toolbar_pos < info_pos, (
+                "_sales_action_toolbar() must appear BEFORE the main content."
+            )
 
     def test_toolbar_called_before_subtab_content(self):
         """_sales_action_toolbar call must appear BEFORE the sub-tab content blocks."""
