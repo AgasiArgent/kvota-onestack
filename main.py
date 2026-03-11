@@ -37822,47 +37822,57 @@ def get(customer_id: str, session, request, tab: str = "general"):
         # Show postal address only if it differs from actual_address
         show_postal = customer.postal_address and customer.postal_address != customer.actual_address
 
-        tab_content = Div(
+        _addr_label = "color: #6b7280; font-size: 0.8em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.375rem;"
+        _addr_block = "margin-bottom: 1rem;"
+
+        # Block 1: Official addresses
+        official_block = Div(
             Div(
-                # Legal address with inline editing
-                Div(
-                    Div(Strong("Юридический адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "legal_address", customer.legal_address or ""),
-                    style="margin-bottom: 1.5rem;"
-                ),
-                # Actual address with inline editing
-                Div(
-                    Div(Strong("Фактический адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "actual_address", customer.actual_address or ""),
-                    style="margin-bottom: 1.5rem;"
-                ),
-                # Postal address (only if different from actual)
-                Div(
-                    Div(Strong("Почтовый адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_field_display(customer_id, "postal_address", customer.postal_address or ""),
-                    style="margin-bottom: 1.5rem;"
-                ) if show_postal else Div(
-                    Div(Strong("Почтовый адрес"), style="color: #6b7280; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    Div(
-                        "Совпадает с фактическим адресом",
-                        style="color: #9ca3af; padding: 0.5rem 0.75rem; font-style: italic;"
-                    ),
-                    style="margin-bottom: 1.5rem;"
-                ),
-                # Warehouse addresses with dynamic add/delete
-                Div(
-                    Div(Strong("Адреса складов"), style="color: #666; font-size: 0.9em; margin-bottom: 0.5rem;"),
-                    _render_warehouses_list(customer_id, customer.warehouse_addresses or []),
-                    btn("Добавить адрес склада", variant="secondary", icon_name="plus", type="button",
-                        hx_get=f"/customers/{customer_id}/warehouses/add",
-                        hx_target="#add-warehouse-form",
-                        hx_swap="outerHTML",
-                        id="add-warehouse-form"),
-                ),
-                cls="table-container",
-                style="margin: 0; padding: 1.5rem;"
-            )
+                icon("building-2", size=16, color="#64748b"),
+                Span(" Официальные адреса", style="font-size: 0.8rem; font-weight: 600; color: #374151; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
+            ),
+            Div(
+                Div(Strong("Юридический"), style=_addr_label),
+                _render_field_display(customer_id, "legal_address", customer.legal_address or ""),
+                style=_addr_block
+            ),
+            Div(
+                Div(Strong("Фактический"), style=_addr_label),
+                _render_field_display(customer_id, "actual_address", customer.actual_address or ""),
+                style=_addr_block
+            ),
+            Div(
+                Div(Strong("Почтовый"), style=_addr_label),
+                _render_field_display(customer_id, "postal_address", customer.postal_address or ""),
+                style=_addr_block
+            ) if show_postal else Div(
+                Div(Strong("Почтовый"), style=_addr_label),
+                Div("Совпадает с фактическим", style="color: #9ca3af; font-size: 13px; font-style: italic; padding: 0.25rem 0;"),
+                style=_addr_block
+            ),
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
         )
+
+        # Block 2: Warehouse addresses
+        warehouse_block = Div(
+            Div(
+                icon("warehouse", size=16, color="#64748b"),
+                Span(" Склады", style="font-size: 0.8rem; font-weight: 600; color: #374151; margin-left: 6px;"),
+                style="display: flex; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e5e7eb;"
+            ),
+            _render_warehouses_list(customer_id, customer.warehouse_addresses or []),
+            btn("Добавить склад", variant="secondary", icon_name="plus", type="button",
+                hx_get=f"/customers/{customer_id}/warehouses/add",
+                hx_target="#add-warehouse-form",
+                hx_swap="outerHTML",
+                id="add-warehouse-form"),
+            cls="card",
+            style="background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb;"
+        )
+
+        tab_content = Div(official_block, warehouse_block)
 
     elif tab == "contacts":
         # Build contacts list with inline editing
