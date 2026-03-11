@@ -1138,6 +1138,13 @@ table tbody td:last-child {
     border-bottom: none;
 }
 
+/* Compact table variant — smaller font for dense data */
+.unified-table.compact-table td,
+.unified-table.compact-table th {
+    font-size: 13px;
+    padding: 0.625rem 0.75rem;
+}
+
 /* Clickable row - global (works in all table types) */
 tr.clickable-row {
     cursor: pointer;
@@ -37934,8 +37941,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                             Tr(Td("Контакты не добавлены.", colspan="6", style="text-align: center; padding: 2rem; color: #666;")),
                             id="contacts-tbody"
                         ),
-                        cls="unified-table",
-                        style="font-size: 13px;"
+                        cls="unified-table compact-table"
                     ),
                     cls="table-responsive"
                 ),
@@ -38090,11 +38096,10 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
             quotes_rows.append(
                 Tr(
-                    Td(created_at or "—", style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;"),
+                    Td(created_at or "—", style="white-space: nowrap;"),
                     Td(A(quote.get("idn_quote", "—"), href=f"/quotes/{quote['id']}", style="font-weight: 500; color: var(--accent);")),
                     Td(Span(status_text, cls=f"status-badge {s_cls}")),
-                    Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right; font-size: 13px;"),
-                    Td(format_money(total_profit, q_currency) if total_profit else "—", style="text-align: right; font-size: 13px; color: " + ("#16a34a" if total_profit > 0 else "#666")),
+                    Td(format_money(total_sum, q_currency) if total_sum else "—", style="text-align: right;"),
                 )
             )
 
@@ -38118,7 +38123,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
                             Tr(Td("КП не найдены.", colspan="5", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
-                        cls="unified-table"
+                        cls="unified-table compact-table"
                     ),
                     cls="table-responsive"
                 ),
@@ -38260,8 +38265,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         Tbody(*items_rows) if items_rows else Tbody(
                             Tr(Td("Позиции не найдены.", colspan="7", style="text-align: center; padding: 2rem; color: #666;"))
                         ),
-                        cls="unified-table",
-                        style="font-size: 13px;"
+                        cls="unified-table compact-table"
                     ),
                     cls="table-responsive"
                 ),
