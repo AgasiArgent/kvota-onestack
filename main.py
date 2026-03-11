@@ -8532,11 +8532,15 @@ def get(session, customer_id: str = ""):
             if cust.inn:
                 selected_label = f"{cust.name} (ИНН {cust.inn})"
 
+    _section_hdr = "font-size: 0.8rem; font-weight: 600; color: #374151; margin: 0 0 0.75rem 0; display: flex; align-items: center; gap: 0.5rem;"
+    _section_card = "background: white; border-radius: 0.75rem; padding: 1rem; border: 1px solid #e5e7eb; margin-bottom: 1rem;"
+
     return page_layout("Новый КП",
         H1(icon("file-plus", size=28), " Новый КП", cls="page-header"),
-        Div(
-            Form(
-                # Customer (searchable datalist)
+        Form(
+            # Section 1: Customer + Contact
+            Div(
+                Div(icon("building-2", size=16), "Клиент и контакт", style=_section_hdr),
                 customer_search_dropdown(
                     selected_id=customer_id if customer_id else None,
                     selected_label=selected_label,
@@ -8551,23 +8555,28 @@ def get(session, customer_id: str = ""):
                     ),
                     cls="form-group"
                 ),
+                cls="card", style=_section_card
+            ),
+            # Section 2: Delivery details
+            Div(
+                Div(icon("truck", size=16), "Доставка", style=_section_hdr),
                 # Delivery city + country in one row
                 Div(
                     Div(
-                        Label("Город доставки", For="delivery_city"),
-                        Input(name="delivery_city", id="delivery_city", type="text",
-                              placeholder="Москва", cls="form-input"),
-                        cls="form-group"
-                    ),
-                    Div(
-                        Label("Страна доставки", For="delivery_country"),
+                        Label("Страна", For="delivery_country"),
                         Input(name="delivery_country", id="delivery_country", type="text",
                               placeholder="Россия", cls="form-input"),
                         cls="form-group"
                     ),
+                    Div(
+                        Label("Город", For="delivery_city"),
+                        Input(name="delivery_city", id="delivery_city", type="text",
+                              placeholder="Москва", cls="form-input"),
+                        cls="form-group"
+                    ),
                     cls="form-row"
                 ),
-                # Delivery method (optional)
+                # Delivery method
                 Div(
                     Label("Способ доставки", For="delivery_method"),
                     Select(
@@ -8580,15 +8589,16 @@ def get(session, customer_id: str = ""):
                     ),
                     cls="form-group"
                 ),
-                # Actions
-                Div(
-                    Button("Создать КП", type="submit", id="btn-create-quote", cls="btn btn--primary", disabled=True),
-                    A("Отмена", href="/quotes", cls="btn btn--secondary"),
-                    cls="form-actions"
-                ),
-                method="post", action="/quotes/new"
+                cls="card", style=_section_card
             ),
-            cls="card"
+            # Actions
+            Div(
+                Button("Создать КП", type="submit", id="btn-create-quote", cls="btn btn--primary", disabled=True),
+                A("Отмена", href="/quotes", cls="btn btn--secondary"),
+                cls="form-actions"
+            ),
+            method="post", action="/quotes/new",
+            style="max-width: 640px;"
         ),
         session=session
     )
@@ -37494,18 +37504,18 @@ def get(customer_id: str, session, request, tab: str = "general"):
             if contact.is_lpr:
                 badges.append(Span("ЛПР", title="Лицо, принимающее решения", style="margin-left: 0.25rem; background: #dbeafe; color: #1d4ed8; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600;"))
             if contact.is_signatory:
-                badges.append(Span(icon("pen-line", size=14), title="Подписант", style="margin-left: 0.25rem;"))
+                badges.append(Span(icon("pen-line", size=12), title="Подписант", style="margin-left: 0.25rem;"))
             if contact.is_primary:
                 badges.append(Span("★", title="Основной", style="margin-left: 0.25rem; color: #f59e0b;"))
             contacts_preview_items.append(
                 Div(
                     Div(
-                        Span(contact.get_full_name(), style="font-weight: 500; color: #374151;"),
+                        Span(contact.get_full_name(), style="font-weight: 500; color: #374151; font-size: 0.8rem;"),
                         *badges,
                         style="display: flex; align-items: center;"
                     ),
-                    Div(contact.position or "—", style="font-size: 0.75rem; color: #6b7280;"),
-                    style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;"
+                    Div(contact.position or "—", style="font-size: 0.7rem; color: #6b7280;"),
+                    style="padding: 0.35rem 0; border-bottom: 1px solid #e5e7eb;"
                 )
             )
 
@@ -37518,11 +37528,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
             contracts_preview_items.append(
                 Div(
                     Div(
-                        Span(f"№{contract.get('contract_number', '—')}", style="font-weight: 500; color: #374151;"),
+                        Span(f"№{contract.get('contract_number', '—')}", style="font-weight: 500; color: #374151; font-size: 0.8rem;"),
                         style="display: flex; align-items: center;"
                     ),
-                    Div(status_text, style=f"font-size: 0.75rem; color: {status_color};"),
-                    style="padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb;"
+                    Div(status_text, style=f"font-size: 0.7rem; color: {status_color};"),
+                    style="padding: 0.35rem 0; border-bottom: 1px solid #e5e7eb;"
                 )
             )
 
@@ -37537,7 +37547,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     q_date = "—"
             quotes_rows.append(
                 Tr(
-                    Td(A(q.get("idn_quote") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500;")),
+                    Td(A(q.get("idn_quote") or f"#{q['id'][:8]}", href=f"/quotes/{q['id']}", style="font-weight: 500; color: var(--accent);")),
                     Td(format_money(q.get('total_sum'), q.get('currency', 'RUB')), style="text-align: right;"),
                     Td(format_money(q.get('total_profit'), q.get('currency', 'RUB')), style="text-align: right; color: #10b981;"),
                     Td(q_date),
@@ -37563,7 +37573,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
             spec_currency = (s.get("quotes") or {}).get("currency", "RUB")
             specs_rows.append(
                 Tr(
-                    Td(A(spec_idn, href=f"/specifications/{s['id']}", style="font-weight: 500;")),
+                    Td(A(spec_idn, href=f"/specifications/{s['id']}", style="font-weight: 500; color: var(--accent);")),
                     Td(format_money(s.get('total_sum'), spec_currency), style="text-align: right;"),
                     Td(format_money(s.get('total_profit'), spec_currency), style="text-align: right; color: #10b981;"),
                     Td(s_date),
@@ -37594,7 +37604,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
 
         debt_card = Div(
             Div(
-                Span(icon("wallet", size=14), " Задолженность", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                Span(icon("wallet", size=14), " Задолженность", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: 500;"),
                 A("Подробнее →", href=f"/finance?tab=payments&customer_filter={customer_id}",
                   style="font-size: 0.75rem; color: #3b82f6; text-decoration: none;"),
                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;"
@@ -37654,11 +37664,11 @@ def get(customer_id: str, session, request, tab: str = "general"):
                         ),
                         Div(
                             Div("Создан", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
-                            Div(created_at or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                            Div(created_at or "—", style="color: #374151; font-size: 0.8rem; padding: 0.25rem 0;"),
                         ),
                         Div(
                             Div("Обновлён", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
-                            Div(updated_at or "—", style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"),
+                            Div(updated_at or "—", style="color: #374151; font-size: 0.8rem; padding: 0.25rem 0;"),
                         ),
                         Div(
                             Div("Источник", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase;"),
@@ -37680,7 +37690,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                                 style="display: flex; align-items: center; padding: 0.25rem 0;"
                             ) if can_change_manager else Div(
                                 current_manager_name,
-                                style="color: #374151; font-size: 0.875rem; padding: 0.25rem 0;"
+                                style="color: #374151; font-size: 0.8rem; padding: 0.25rem 0;"
                             ),
                         ),
                         style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;"
@@ -37692,7 +37702,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 # Card 2: Contacts preview
                 Div(
                     Div(
-                        Span(icon("users", size=14), " Контакты", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                        Span(icon("users", size=14), " Контакты", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: 500;"),
                         A("→", href=f"/customers/{customer_id}?tab=contacts",
                           hx_get=f"/customers/{customer_id}?tab=contacts",
                           hx_target="#tab-content",
@@ -37716,7 +37726,7 @@ def get(customer_id: str, session, request, tab: str = "general"):
                 # Card 3: Contracts preview
                 Div(
                     Div(
-                        Span(icon("file-text", size=14), " Договоры", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; font-weight: 500;"),
+                        Span(icon("file-text", size=14), " Договоры", style="color: #374151; display: flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; font-weight: 500;"),
                         A("→", href=f"/customers/{customer_id}?tab=contracts",
                           hx_get=f"/customers/{customer_id}?tab=contracts",
                           hx_target="#tab-content",
@@ -37765,20 +37775,20 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Table(
                         Thead(
                             Tr(
-                                Th("№", style="font-size: 0.75rem; color: #6b7280;"),
-                                Th("Сумма", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
-                                Th("Профит", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
-                                Th("Дата", style="font-size: 0.75rem; color: #6b7280;"),
-                                Th("Статус", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("№", style="font-size: 0.7rem; color: #6b7280;"),
+                                Th("Сумма", style="font-size: 0.7rem; text-align: right; color: #6b7280;"),
+                                Th("Профит", style="font-size: 0.7rem; text-align: right; color: #6b7280;"),
+                                Th("Дата", style="font-size: 0.7rem; color: #6b7280;"),
+                                Th("Статус", style="font-size: 0.7rem; color: #6b7280;"),
                             )
                         ),
                         Tbody(*quotes_rows) if quotes_rows else Tbody(
                             Tr(Td("Нет КП", colspan="5", style="text-align: center; color: #9ca3af; padding: 1rem;"))
                         ),
-                        style="font-size: 0.875rem;"
+                        cls="unified-table compact-table"
                     ),
                     cls="card",
-                    style="background: white; border-radius: 0.75rem; padding: 1rem; flex: 1; border: 1px solid #e5e7eb;"
+                    style="background: white; border-radius: 0.75rem; padding: 0.75rem; flex: 1; border: 1px solid #e5e7eb;"
                 ),
 
                 # Latest Specifications table
@@ -37799,20 +37809,20 @@ def get(customer_id: str, session, request, tab: str = "general"):
                     Table(
                         Thead(
                             Tr(
-                                Th("№", style="font-size: 0.75rem; color: #6b7280;"),
-                                Th("Сумма", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
-                                Th("Профит", style="font-size: 0.75rem; text-align: right; color: #6b7280;"),
-                                Th("Дата", style="font-size: 0.75rem; color: #6b7280;"),
-                                Th("Статус", style="font-size: 0.75rem; color: #6b7280;"),
+                                Th("№", style="font-size: 0.7rem; color: #6b7280;"),
+                                Th("Сумма", style="font-size: 0.7rem; text-align: right; color: #6b7280;"),
+                                Th("Профит", style="font-size: 0.7rem; text-align: right; color: #6b7280;"),
+                                Th("Дата", style="font-size: 0.7rem; color: #6b7280;"),
+                                Th("Статус", style="font-size: 0.7rem; color: #6b7280;"),
                             )
                         ),
                         Tbody(*specs_rows) if specs_rows else Tbody(
                             Tr(Td("Нет спецификаций", colspan="5", style="text-align: center; color: #9ca3af; padding: 1rem;"))
                         ),
-                        style="font-size: 0.875rem;"
+                        cls="unified-table compact-table"
                     ),
                     cls="card",
-                    style="background: white; border-radius: 0.75rem; padding: 1rem; flex: 1; border: 1px solid #e5e7eb;"
+                    style="background: white; border-radius: 0.75rem; padding: 0.75rem; flex: 1; border: 1px solid #e5e7eb;"
                 ),
                 style="display: flex; gap: 1.5rem;"
             )
