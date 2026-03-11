@@ -45266,7 +45266,7 @@ def get(session):
                 style="flex: 1;"
             ),
             Div(*admin_controls) if admin_controls else None,
-            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;"
+            style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; padding-top: 8px;"
         ),
         # Category tabs
         Div(
@@ -48926,7 +48926,7 @@ def get(session):
                 P("Записей ещё нет", style="margin-top: 12px; color: var(--text-secondary); font-size: 1rem;"),
                 style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 20px; text-align: center;"
             ),
-            style="max-width: 800px; margin: 0 auto;"
+            style="max-width: 960px; margin: 0 auto;"
         )
     else:
         timeline_items = []
@@ -49031,7 +49031,7 @@ def get(session):
                     padding: 16px 20px;
                 }
             """),
-            style="max-width: 800px; margin: 0 auto;"
+            style="max-width: 960px; margin: 0 auto;"
         )
 
     return page_layout("Обновления", content, session=session, current_path="/changelog")
