@@ -8730,12 +8730,14 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     currency_symbol = currency_symbols.get(currency, currency)
 
     # Totals (prefer quote-currency columns, fallback to total_amount)
-    total_amount = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
+    total_with_vat = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
+    total_no_vat = float(quote.get("revenue_no_vat_quote_currency") or 0)
     total_profit = float(quote.get("profit_quote_currency") or 0)
     total_cogs = float(quote.get("cogs_quote_currency") or 0)
 
-    # Margin = profit/revenue, Markup = profit/COGS
-    margin_pct = (total_profit / total_amount) * 100 if total_amount > 0 else 0
+    # Margin = profit / revenue (excl. VAT), Markup = profit / COGS
+    # Uses revenue_no_vat to match Cost Analysis formula
+    margin_pct = (total_profit / total_no_vat) * 100 if total_no_vat > 0 else 0
     markup_pct = (total_profit / total_cogs) * 100 if total_cogs > 0 else 0
 
     # Payment terms
@@ -8905,37 +8907,38 @@ def _render_summary_tab(quote, customer, seller_companies, contacts, items, crea
     )
 
     # --- Block VI: ИТОГО (3-column grid: total, profit, count, margin, markup) ---
-    total_amount_display = f"{total_amount:,.2f} {currency_symbol}" if total_amount is not None else "—"
+    total_amount_display = f"{total_with_vat:,.2f} {currency_symbol}" if total_with_vat else "—"
     total_profit_display = f"{total_profit:,.2f} {currency_symbol}" if total_profit is not None else "—"
     items_count = len(items)
     margin_display = f"{margin_pct:.1f}%"
     markup_display = f"{markup_pct:.1f}%" if total_cogs > 0 else "—"
 
+    _itogo_big = "font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"
     card_6 = Div(
         _card_header("dollar-sign", "ИТОГО"),
         Div(
             Div(
-                Div("Общая сумма", style=label_style),
-                Div(total_amount_display, style="color: #374151; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+                Div("Сумма с НДС", style=label_style),
+                Div(total_amount_display, style=f"color: #374151; {_itogo_big}"),
             ),
             Div(
-                Div(f"Общий профит ({currency})", style=label_style),
+                Div(f"Профит ({currency})", style=label_style),
                 Div(total_profit_display,
-                    style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+                    style=f"color: {'#10b981' if total_profit > 0 else '#ef4444' if total_profit < 0 else '#374151'}; {_itogo_big}"),
             ),
             Div(
-                Div("Количество позиций", style=label_style),
+                Div("Позиции", style=label_style),
                 Div(f"{items_count} шт", style=value_style),
             ),
             Div(
-                Div("Маржа % (профит/выручка)", style=label_style),
+                Div("Маржа (профит ÷ выручка без НДС)", style=label_style),
                 Div(margin_display,
-                    style=f"color: {'#10b981' if margin_pct > 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+                    style=f"color: {'#10b981' if margin_pct > 0 else '#374151'}; {_itogo_big}"),
             ),
             Div(
-                Div("Наценка % (профит/себест.)", style=label_style),
+                Div("Наценка (профит ÷ себестоимость)", style=label_style),
                 Div(markup_display,
-                    style=f"color: {'#10b981' if markup_pct > 0 else '#374151'}; font-weight: 600; font-size: 1.25rem; margin-top: 0.25rem;"),
+                    style=f"color: {'#10b981' if markup_pct > 0 else '#374151'}; {_itogo_big}"),
             ),
             style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;"
         ),
@@ -9376,16 +9379,18 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 
     # Precompute ИТОГО block values
     _itogo_total = float(quote.get("total_quote_currency") or quote.get("total_amount") or 0)
+    _itogo_revenue_no_vat = float(quote.get("revenue_no_vat_quote_currency") or 0)
     _itogo_profit = float(quote.get("profit_quote_currency") or 0)
     _itogo_cogs = float(quote.get("cogs_quote_currency") or 0)
     _itogo_currency = quote.get("currency", "RUB")
     _itogo_items_count = len(items)
-    _itogo_margin = (_itogo_profit / _itogo_total * 100) if _itogo_total > 0 else 0
+    # Margin = profit / revenue (excl. VAT); Markup = profit / COGS
+    _itogo_margin = (_itogo_profit / _itogo_revenue_no_vat * 100) if _itogo_revenue_no_vat > 0 else 0
     _itogo_markup = (_itogo_profit / _itogo_cogs * 100) if _itogo_cogs > 0 else 0
     _itogo_total_display = format_money(_itogo_total, _itogo_currency) if _itogo_total > 0 else "—"
     _itogo_profit_display = format_money(_itogo_profit, _itogo_currency) if _itogo_profit != 0 else "—"
     _itogo_profit_color = "#16a34a" if _itogo_profit > 0 else "#dc2626" if _itogo_profit < 0 else "#64748b"
-    _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_total > 0 else "—"
+    _itogo_margin_display = f"{_itogo_margin:.1f}%" if _itogo_revenue_no_vat > 0 else "—"
     _itogo_markup_display = f"{_itogo_markup:.1f}%" if _itogo_cogs > 0 else "—"
     _itogo_margin_color = "#16a34a" if _itogo_profit > 0 else "#64748b"
 
@@ -9691,12 +9696,12 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                         style="text-align: center; padding: 0.5rem;"
                     ),
                     Div(
-                        Div("Маржа (профит/выр.)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div("Маржа (профит ÷ выр. без НДС)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
                         Div(_itogo_margin_display, style=f"font-size: 1.1rem; font-weight: 600; color: {_itogo_margin_color};"),
                         style="text-align: center; padding: 0.5rem;"
                     ),
                     Div(
-                        Div("Наценка (профит/себ.)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
+                        Div("Наценка (профит ÷ себест.)", style="color: #6b7280; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 0.25rem;"),
                         Div(_itogo_markup_display, style=f"font-size: 1.1rem; font-weight: 600; color: {'#16a34a' if _itogo_markup > 0 else '#64748b'};"),
                         style="text-align: center; padding: 0.5rem;"
                     ),
@@ -14158,6 +14163,7 @@ def post(
             "total_profit_usd": float(total_profit_usd),
             # Quote-currency totals (for display on summary tab)
             "total_quote_currency": float(total_with_vat),
+            "revenue_no_vat_quote_currency": float(total_no_vat),
             "profit_quote_currency": float(total_profit),
             "cogs_quote_currency": float(total_cogs),
             # USD analytics columns
@@ -14466,7 +14472,7 @@ def post(
                     cls="stat-card"
                 ),
                 Div(
-                    Div("Средняя наценка", style="font-size: 0.875rem; color: #666;"),
+                    Div("Наценка (профит ÷ себест.)", style="font-size: 0.875rem; color: #666;"),
                     Div(f"{avg_margin:.1f}%", cls="stat-value"),
                     cls="stat-card"
                 ),
@@ -23107,13 +23113,13 @@ def get_cost_analysis(session, quote_id: str):
                 style=card_style
             ),
             Div(
-                P("Наценка", style=card_label_style),
-                P(f"{markup_pct:.1f}%", style=card_value_style),
+                P("Чистая прибыль", style=card_label_style),
+                P(f"{fmt(net_profit)} {currency}", style=f"{card_value_style} color: {'#16a34a' if net_profit >= 0 else '#dc2626'};"),
                 style=card_style
             ),
             Div(
-                P("Продажа / Закупка", style=card_label_style),
-                P(f"{sale_purchase_ratio:.2f}", style=card_value_style),
+                P("Наценка (выр. ÷ закуп − 1)", style=card_label_style),
+                P(f"{markup_pct:.1f}%", style=card_value_style),
                 style=card_style
             ),
             style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem;"
@@ -39741,6 +39747,26 @@ def post(session, customer_id: str, name: str, last_name: str = "", patronymic: 
         # Form has: last_name (Фамилия), name (Имя), patronymic (Отчество)
         full_name_parts = [last_name, name, patronymic]
         full_name = " ".join(p.strip() for p in full_name_parts if p and p.strip())
+
+        # Check for duplicate contact (same name for same customer)
+        existing = supabase.table("customer_contacts") \
+            .select("id, name") \
+            .eq("customer_id", customer_id) \
+            .eq("name", full_name) \
+            .limit(1) \
+            .execute()
+
+        if existing.data:
+            return page_layout("Добавить контакт",
+                Div(f"Контакт «{full_name}» уже существует у данного клиента.",
+                    style="background: #fef3c7; border: 1px solid #f59e0b; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; color: #92400e;"),
+                H1(f"Добавить контакт для {customer['name']}"),
+                Div(
+                    btn_link("← Назад к клиенту", href=f"/customers/{customer_id}?tab=contacts", variant="secondary", icon_name="arrow-left"),
+                    style="margin-top: 1rem;"
+                ),
+                session=session
+            )
 
         # Insert new contact
         result = supabase.table("customer_contacts").insert({
