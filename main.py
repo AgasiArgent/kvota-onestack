@@ -8155,20 +8155,21 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
     except Exception:
         customers_list = []
 
-    # Manager options from distinct created_by values in quotes
+    # Manager names from distinct created_by values in quotes (for filter + table column)
     managers = []
-    if not is_sales_only:
-        creator_ids = list(set(q.get("created_by") for q in quotes if q.get("created_by")))
-        if creator_ids:
-            try:
-                profiles_result = supabase.table("profiles") \
-                    .select("id, full_name") \
-                    .in_("id", creator_ids) \
-                    .order("full_name") \
-                    .execute()
-                managers = profiles_result.data or []
-            except Exception:
-                managers = []
+    creator_ids = list(set(q.get("created_by") for q in quotes if q.get("created_by")))
+    manager_names = {}
+    if creator_ids:
+        try:
+            profiles_result = supabase.table("profiles") \
+                .select("id, full_name") \
+                .in_("id", creator_ids) \
+                .order("full_name") \
+                .execute()
+            managers = profiles_result.data or []
+            manager_names = {m["id"]: m.get("full_name", "—") for m in managers}
+        except Exception:
+            managers = []
 
     # --- Python-side filtering ---
     filtered_quotes = list(quotes)
@@ -8266,7 +8267,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         "display: inline-flex; align-items: center;"
         "padding: 3px 10px; border-radius: 9999px;"
         "font-size: 12px; font-weight: 600;"
-        "background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);"
+        "background: #dbeafe;"
         "color: #1e40af; border: 1px solid #bfdbfe;"
     )
     new_btn_style = (
@@ -8325,6 +8326,8 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
             if cust_id else Span(customer_name, style="color: #94a3b8;")
         )
 
+        manager_name = manager_names.get(q.get("created_by"), "—")
+
         table_rows.append(Tr(
             Td(created_date, style="font-size: 12px; color: #64748b; white-space: nowrap; padding: 8px 12px;"),
             Td(
@@ -8334,6 +8337,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                 style="padding: 8px 12px;"
             ),
             Td(customer_cell, style="padding: 8px 12px;"),
+            Td(manager_name, style="padding: 8px 12px; font-size: 13px; color: #374151;"),
             Td(workflow_status_badge(q.get("workflow_status", "draft")), style="padding: 8px 12px;"),
             Td(version_badge(q['id'], q.get('current_version', 1), q.get('version_count', 1)),
                style="text-align: center; padding: 8px 12px;"),
@@ -8380,6 +8384,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                         Th("Дата", style="padding: 10px 12px;"),
                         Th("IDN", style="padding: 10px 12px;"),
                         Th("Клиент", style="padding: 10px 12px;"),
+                        Th("Менеджер", style="padding: 10px 12px;"),
                         Th("Статус", style="padding: 10px 12px;"),
                         Th("Версии", style="text-align: center; width: 70px; padding: 10px 12px;"),
                         Th("Сумма", cls="col-money", style="padding: 10px 12px;"),
@@ -8401,7 +8406,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                             ),
                             style="text-align: center; padding: 32px 24px;"
                         ),
-                        colspan="7"
+                        colspan="8"
                     ))),
                     cls="table-enhanced"
                 ),
