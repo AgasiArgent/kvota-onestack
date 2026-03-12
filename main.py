@@ -3659,7 +3659,7 @@ def feedback_modal():
                 hx_post="/api/feedback",
                 hx_swap="innerHTML",
                 hx_target="#feedback-result",
-                **{"hx-on::after-request": "if(event.detail.successful){closeFeedbackModal();showFeedbackToast()}"}
+                **{"hx-on::after-request": "if(document.getElementById('feedback-success-marker')){closeFeedbackModal();showFeedbackToast()}"}
             ),
             Div(id="feedback-result"),
             id="feedback-modal-box",
@@ -25905,6 +25905,7 @@ async def submit_feedback(session, request: Request):
             logger.warning(f"Telegram notification failed for {short_id}: {e}")
 
         return Div(
+            Div(id="feedback-success-marker", style="display:none"),
             Div("Спасибо за обратную связь!", cls="text-success font-medium"),
             P(f"Номер обращения: {short_id}", cls="text-sm text-gray-500 mt-1 font-mono"),
             btn("Закрыть", variant="secondary", size="sm", onclick="closeFeedbackModal()", type="button")
