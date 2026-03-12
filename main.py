@@ -3184,15 +3184,16 @@ function handleScreenshotUpload(input) {
     if (!file.type.startsWith('image/')) return;
     var reader = new FileReader();
     reader.onload = function(e) {
-        var dataUrl = e.target.result;
-        window._feedbackScreenshotData = dataUrl;
-        var thumb = document.getElementById('feedback-screenshot-thumb');
-        thumb.src = dataUrl;
-        thumb.style.display = 'block';
-        var hidden = document.getElementById('feedback-screenshot-data');
-        hidden.value = dataUrl;
-        var addBtn = document.getElementById('feedback-add-screenshot-btn');
-        if (addBtn) addBtn.textContent = 'Изменить скриншот';
+        compressScreenshot(e.target.result, function(compressed) {
+            window._feedbackScreenshotData = compressed;
+            var thumb = document.getElementById('feedback-screenshot-thumb');
+            thumb.src = compressed;
+            thumb.style.display = 'block';
+            var hidden = document.getElementById('feedback-screenshot-data');
+            hidden.value = compressed;
+            var addBtn = document.getElementById('feedback-add-screenshot-btn');
+            if (addBtn) addBtn.textContent = 'Изменить скриншот';
+        });
     };
     reader.readAsDataURL(file);
     // Reset input so same file can be re-selected
@@ -3219,6 +3220,27 @@ function showFeedbackToast() {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         }, 300);
     }, 3000);
+}
+
+// Compress screenshot: resize to max 1280px width, JPEG quality 0.7
+function compressScreenshot(dataUrl, callback) {
+    var img = new Image();
+    img.onload = function() {
+        var maxW = 1280;
+        var w = img.width;
+        var h = img.height;
+        if (w > maxW) {
+            h = Math.round(h * maxW / w);
+            w = maxW;
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        callback(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.onerror = function() { callback(dataUrl); };
+    img.src = dataUrl;
 }
 """
 
@@ -3521,21 +3543,23 @@ function saveAnnotation(annotCanvas) {
     bgImg.onload = function() {
         finalCtx.drawImage(bgImg, 0, 0);
         finalCtx.drawImage(annotCanvas, 0, 0);
-        var dataUrl = finalCanvas.toDataURL('image/png');
-        window._feedbackScreenshotData = dataUrl;
+        var rawDataUrl = finalCanvas.toDataURL('image/png');
+        compressScreenshot(rawDataUrl, function(compressed) {
+            window._feedbackScreenshotData = compressed;
 
-        var thumb = document.getElementById('feedback-screenshot-thumb');
-        thumb.src = dataUrl;
-        thumb.style.display = 'block';
+            var thumb = document.getElementById('feedback-screenshot-thumb');
+            thumb.src = compressed;
+            thumb.style.display = 'block';
 
-        var hidden = document.getElementById('feedback-screenshot-data');
-        hidden.value = dataUrl;
+            var hidden = document.getElementById('feedback-screenshot-data');
+            hidden.value = compressed;
 
-        var addBtn = document.getElementById('feedback-add-screenshot-btn');
-        if (addBtn) addBtn.textContent = 'Change screenshot';
+            var addBtn = document.getElementById('feedback-add-screenshot-btn');
+            if (addBtn) addBtn.textContent = 'Change screenshot';
 
-        document.getElementById('annotation-editor-overlay').remove();
-        document.getElementById('feedback-modal-box').style.display = 'block';
+            document.getElementById('annotation-editor-overlay').remove();
+            document.getElementById('feedback-modal-box').style.display = 'block';
+        });
     };
     bgImg.src = bgUrl;
 }
@@ -25755,10 +25779,12 @@ async def telegram_webhook(request):
 # ============================================================================
 
 def generate_feedback_short_id():
-    """Generate short ID: FB-YYMMDDHHMMSS"""
+    """Generate short ID: FB-YYMMDD-HHMMSS-xxxx (with random hex suffix for uniqueness)"""
+    import uuid
     from datetime import datetime
     now = datetime.now()
-    return f"FB-{now.strftime('%y%m%d%H%M%S')}"
+    suffix = uuid.uuid4().hex[:4]
+    return f"FB-{now.strftime('%y%m%d')}-{now.strftime('%H%M%S')}-{suffix}"
 
 
 @rt("/api/feedback", methods=["POST"])
@@ -25823,7 +25849,17 @@ async def submit_feedback(session, request: Request):
         if screenshot_b64:
             insert_payload["screenshot_data"] = screenshot_b64
 
-        supabase.table("user_feedback").insert(insert_payload).execute()
+        # Retry with new short_id on UNIQUE constraint violation
+        for attempt in range(3):
+            try:
+                supabase.table("user_feedback").insert(insert_payload).execute()
+                break
+            except Exception as insert_err:
+                if "duplicate" in str(insert_err).lower() and attempt < 2:
+                    short_id = generate_feedback_short_id()
+                    insert_payload["short_id"] = short_id
+                    continue
+                raise
 
         # 2. Create ClickUp task (best-effort, don't fail submission if it fails)
         clickup_task_id = None
@@ -25878,7 +25914,9 @@ async def submit_feedback(session, request: Request):
         logger.error(f"Error saving feedback: {e}")
         return Div(
             Div("Ошибка при отправке", cls="text-error font-medium"),
-            P(str(e), cls="text-sm text-gray-500 mt-1"),
+            P("Попробуйте ещё раз через несколько секунд", cls="text-sm text-gray-500 mt-1"),
+            btn("Попробовать снова", variant="secondary", size="sm",
+                onclick="document.getElementById('feedback-result').innerHTML=''", type="button", cls="mt-2"),
             cls="mt-2"
         )
 
