@@ -5,16 +5,31 @@ This is enforced as Starlette middleware, not a per-handler decorator,
 so new API endpoints are protected by default.
 """
 
+import asyncio
 import os
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
+from supabase_auth import SyncGoTrueClient
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 # Paths under /api/ that don't require auth
 PUBLIC_API_PATHS = {"/api/health"}
+
+# Module-level singleton — reused across requests
+_gotrue_client: SyncGoTrueClient | None = None
+
+
+def _get_gotrue_client() -> SyncGoTrueClient:
+    global _gotrue_client
+    if _gotrue_client is None:
+        _gotrue_client = SyncGoTrueClient(
+            url=f"{SUPABASE_URL}/auth/v1",
+            headers={"apikey": SUPABASE_ANON_KEY},
+        )
+    return _gotrue_client
 
 
 def get_user_from_token(auth_header: str):
@@ -24,13 +39,8 @@ def get_user_from_token(auth_header: str):
 
     token = auth_header[7:]
     try:
-        from gotrue import SyncGoTrueClient
-
-        gotrue = SyncGoTrueClient(
-            url=f"{SUPABASE_URL}/auth/v1",
-            headers={"apikey": SUPABASE_ANON_KEY},
-        )
-        user = gotrue.get_user(token)
+        client = _get_gotrue_client()
+        user = client.get_user(token)
         return user.user if user else None
     except Exception:
         return None
@@ -50,9 +60,11 @@ class ApiAuthMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_API_PATHS:
             return await call_next(request)
 
-        # Validate JWT
+        # Validate JWT (run sync GoTrue call in thread pool to avoid blocking event loop)
         auth_header = request.headers.get("authorization", "")
-        user = get_user_from_token(auth_header)
+        user = await asyncio.get_event_loop().run_in_executor(
+            None, get_user_from_token, auth_header
+        )
         if not user:
             return JSONResponse(
                 {"success": False, "error": {"code": "UNAUTHORIZED", "message": "Invalid or missing token"}},

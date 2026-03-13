@@ -1,12 +1,9 @@
 import { createClient } from "@/shared/lib/supabase/server";
 
-const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:5001";
+export type { ApiResponse } from "@/shared/types/api";
+import type { ApiResponse } from "@/shared/types/api";
 
-export interface ApiResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: { code: string; message: string };
-}
+const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:5001";
 
 export async function apiServerClient<T = unknown>(
   path: string,
