@@ -36,13 +36,13 @@ jobs:
           script_stop: true
           script: |
             echo "Waiting for containers to start..."
-            sleep 5
+            sleep 15
             for CONTAINER in kvota-onestack kvota-frontend; do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
               echo "$CONTAINER health: $STATUS"
               if [ "$STATUS" != "healthy" ]; then
-                echo "$CONTAINER not healthy, waiting 15 more seconds..."
-                sleep 15
+                echo "$CONTAINER not healthy, waiting 30 more seconds..."
+                sleep 30
                 STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
                 echo "$CONTAINER health after retry: $STATUS"
               fi
