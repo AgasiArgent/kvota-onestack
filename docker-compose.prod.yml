@@ -36,6 +36,31 @@ services:
     networks:
       - kvota-network
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+        - NEXT_PUBLIC_APP_BASE_URL=${APP_BASE_URL:-https://kvotaflow.ru}
+    container_name: kvota-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PYTHON_API_URL=http://kvota-onestack:5001
+      - NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    depends_on:
+      - onestack
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kvota-network
+
 networks:
   kvota-network:
     driver: bridge
