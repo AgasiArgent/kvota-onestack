@@ -46,14 +46,19 @@ export function AnnotationEditor({
     const img = new Image();
     img.onload = () => {
       bgImageRef.current = img;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      canvas.width = img.width;
-      canvas.height = img.height;
       setImageLoaded(true);
     };
     img.src = screenshotDataUrl;
   }, [screenshotDataUrl]);
+
+  // Set canvas dimensions once it renders (after imageLoaded becomes true)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const img = bgImageRef.current;
+    if (!canvas || !img) return;
+    canvas.width = img.width;
+    canvas.height = img.height;
+  }, [imageLoaded]);
 
   const getCtx = useCallback(() => {
     const ctx = canvasRef.current?.getContext("2d");
