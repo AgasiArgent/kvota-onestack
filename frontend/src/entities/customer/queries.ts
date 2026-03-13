@@ -160,20 +160,37 @@ export async function fetchCustomerQuotes(customerId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("quotes")
-    .select("id, idn, total_amount, profit_amount, created_at, status")
+    .select("id, idn_quote, total_amount, profit_quote_currency, created_at, status")
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false });
-  return data ?? [];
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    idn: row.idn_quote,
+    total_amount: row.total_amount,
+    profit_amount: row.profit_quote_currency,
+    created_at: row.created_at,
+    status: row.status,
+  }));
 }
 
 export async function fetchCustomerSpecs(customerId: string) {
   const supabase = await createClient();
+  // Specs have no customer_id — join through quote_id
   const { data } = await supabase
     .from("specifications")
-    .select("id, idn, total_amount, profit_amount, created_at, status")
-    .eq("customer_id", customerId)
+    .select("id, specification_number, status, created_at, quotes!inner(customer_id)")
+    .eq("quotes.customer_id", customerId)
     .order("created_at", { ascending: false });
-  return data ?? [];
+
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    idn: row.specification_number,
+    total_amount: null,
+    profit_amount: null,
+    created_at: row.created_at,
+    status: row.status,
+  }));
 }
 
 export async function fetchCustomerPositions(customerId: string) {
@@ -181,7 +198,7 @@ export async function fetchCustomerPositions(customerId: string) {
   const { data } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name, brand, sku, quantity, quotes!inner(idn, customer_id)"
+      "id, product_name, brand, sku, quantity, quotes!inner(idn_quote, customer_id)"
     )
     .eq("quotes.customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -193,6 +210,6 @@ export async function fetchCustomerPositions(customerId: string) {
     brand: row.brand,
     sku: row.sku,
     quantity: row.quantity,
-    quote_idn: row.quotes?.idn ?? "—",
+    quote_idn: row.quotes?.idn_quote ?? "—",
   }));
 }

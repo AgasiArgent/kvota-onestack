@@ -30,7 +30,7 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
   return (
     <div>
       <CustomerHeader customer={customer} />
-      <CustomerTabs customerId={id}>
+      <CustomerTabs customerId={id} activeTab={tab}>
         {tab === "overview" && <OverviewContent customerId={id} customer={customer} />}
         {tab === "crm" && <CRMContent customerId={id} customer={customer} />}
         {tab === "documents" && <DocumentsContent customerId={id} subtab={subtab} />}

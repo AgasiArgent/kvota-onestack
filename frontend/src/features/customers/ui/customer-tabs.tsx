@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   customerId: string;
+  activeTab?: string;
   children: React.ReactNode;
 }
 
@@ -18,9 +19,9 @@ const TABS = [
 
 export type TabKey = (typeof TABS)[number]["key"];
 
-export function CustomerTabs({ customerId, children }: Props) {
+export function CustomerTabs({ customerId, activeTab: activeTabProp, children }: Props) {
   const searchParams = useSearchParams();
-  const activeTab = (searchParams?.get("tab") ?? "overview") as TabKey;
+  const activeTab = (activeTabProp ?? searchParams?.get("tab") ?? "overview") as TabKey;
 
   return (
     <div>

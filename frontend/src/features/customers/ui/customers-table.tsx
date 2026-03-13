@@ -69,7 +69,7 @@ export function CustomersTable({
         </div>
         <Select name="status" defaultValue={initialStatus || "all"}>
           <SelectTrigger className="w-[160px]">
-            <SelectValue />
+            <SelectValue placeholder="Все статусы" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Все статусы</SelectItem>
