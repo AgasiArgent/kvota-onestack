@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -45,6 +45,9 @@ export function CustomersTable({
   initialStatus = "",
   initialPage = 1,
 }: Props) {
+  const getLabel = (v: string) =>
+    STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
+  const [statusLabel, setStatusLabel] = useState(getLabel(initialStatus || "all"));
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
 
   function formatDate(dateStr: string | null) {
@@ -73,9 +76,13 @@ export function CustomersTable({
             className="pl-9"
           />
         </div>
-        <Select name="status" defaultValue={initialStatus || "all"}>
+        <Select
+          name="status"
+          defaultValue={initialStatus || "all"}
+          onValueChange={(v) => setStatusLabel(getLabel(v ?? "all"))}
+        >
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Все статусы" />
+            <span className="flex flex-1 text-left">{statusLabel}</span>
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map((opt) => (
