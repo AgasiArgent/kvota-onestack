@@ -14,16 +14,16 @@ interface Quote {
   idn: string;
   total_amount: number | null;
   profit_amount: number | null;
-  created_at: string;
+  created_at: string | null;
   status: string;
 }
 
 interface Spec {
   id: string;
-  idn: string;
+  idn: string | null;
   total_amount: number | null;
   profit_amount: number | null;
-  created_at: string;
+  created_at: string | null;
   status: string;
 }
 
@@ -59,7 +59,8 @@ export function TabDocuments({ quotes, specs, initialSubTab }: Props) {
     (initialSubTab as SubTab) ?? "quotes"
   );
 
-  function formatDate(d: string) {
+  function formatDate(d: string | null) {
+    if (!d) return "—";
     return new Date(d).toLocaleDateString("ru-RU");
   }
 
@@ -121,10 +122,10 @@ function DocumentTable({
   formatDate,
   formatAmount,
 }: {
-  items: { id: string; idn: string; total_amount: number | null; profit_amount: number | null; created_at: string; status: string }[];
+  items: { id: string; idn: string | null; total_amount: number | null; profit_amount: number | null; created_at: string | null; status: string }[];
   emptyText: string;
   linkPrefix: string;
-  formatDate: (d: string) => string;
+  formatDate: (d: string | null) => string;
   formatAmount: (n: number | null) => string;
 }) {
   if (items.length === 0) {
