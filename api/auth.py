@@ -16,6 +16,8 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
 # Paths under /api/ that don't require auth
+# Paths that handle their own auth (dual-auth: JWT or session)
+DUAL_AUTH_PATHS = {"/api/feedback"}
 PUBLIC_API_PATHS = {"/api/health"}
 
 # Module-level singleton — reused across requests
@@ -65,6 +67,12 @@ class ApiAuthMiddleware(BaseHTTPMiddleware):
         user = await asyncio.get_event_loop().run_in_executor(
             None, get_user_from_token, auth_header
         )
+
+        # Dual-auth paths: attach JWT user if present, but allow through for session auth
+        if path in DUAL_AUTH_PATHS:
+            request.state.api_user = user  # None if no JWT — handler checks session
+            return await call_next(request)
+
         if not user:
             return JSONResponse(
                 {"success": False, "error": {"code": "UNAUTHORIZED", "message": "Invalid or missing token"}},

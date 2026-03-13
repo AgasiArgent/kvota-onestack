@@ -25793,40 +25793,61 @@ def generate_feedback_short_id():
 
 @rt("/api/feedback", methods=["POST"])
 async def submit_feedback(session, request: Request):
-    """Handle feedback/bug report submission with optional screenshot."""
+    """Handle feedback submission from both FastHTML (form) and Next.js (JSON)."""
     import json as json_lib
     import logging
     logger = logging.getLogger(__name__)
 
-    user = session.get("user", {})
-    form = await request.form()
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_meta = api_user.user_metadata or {}
+        user = {
+            "id": str(api_user.id),
+            "email": api_user.email or "",
+            "name": user_meta.get("name", api_user.email or ""),
+            "org_id": user_meta.get("org_id"),
+            "org_name": user_meta.get("org_name", ""),
+        }
+    else:
+        user = session.get("user", {})
 
-    feedback_type = form.get("feedback_type", "bug")
-    description = form.get("description", "").strip()
-    page_url = form.get("page_url", "")
-    page_title = form.get("page_title", "")
-    debug_context_str = form.get("debug_context", "{}")
-    screenshot_data = form.get("screenshot", "").strip()
+    # Dual input: JSON (Next.js) or form (FastHTML)
+    content_type = request.headers.get("content-type", "")
+    is_json = "application/json" in content_type
+    if is_json:
+        body = await request.json()
+    else:
+        form = await request.form()
+        body = dict(form)
+
+    feedback_type = body.get("feedback_type", "bug")
+    description = body.get("description", "").strip()
+    page_url = body.get("page_url", "")
+    page_title = body.get("page_title", "")
+    debug_context_str = body.get("debug_context", "{}")
+    screenshot_data = body.get("screenshot", "").strip() if body.get("screenshot") else ""
+    screenshot_url = body.get("screenshot_url", "").strip() if body.get("screenshot_url") else ""
 
     if not description:
+        if is_json:
+            return JSONResponse({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Description required"}}, status_code=400)
         return Div("Пожалуйста, опишите проблему", cls="text-error mt-2")
 
     try:
-        debug_context = json_lib.loads(debug_context_str)
+        debug_context = json_lib.loads(debug_context_str) if isinstance(debug_context_str, str) else debug_context_str
     except Exception:
         debug_context = {}
 
     short_id = generate_feedback_short_id()
     supabase = get_supabase()
 
-    # Strip data URI prefix for storage (store raw base64 only)
+    # Strip data URI prefix for base64 storage
     screenshot_b64 = None
     if screenshot_data and screenshot_data.startswith("data:image"):
         screenshot_b64 = screenshot_data.split(",", 1)[1] if "," in screenshot_data else None
 
     try:
-        # 1. Save to database
-        # Validate org_id exists (session may cache deleted org)
         org_id = user.get("org_id")
         try:
             if org_id:
@@ -25852,6 +25873,8 @@ async def submit_feedback(session, request: Request):
         }
         if screenshot_b64:
             insert_payload["screenshot_data"] = screenshot_b64
+        if screenshot_url:
+            insert_payload["screenshot_url"] = screenshot_url
 
         # Retry with new short_id on UNIQUE constraint violation
         for attempt in range(3):
@@ -25865,7 +25888,7 @@ async def submit_feedback(session, request: Request):
                     continue
                 raise
 
-        # 2. Create ClickUp task (best-effort, don't fail submission if it fails)
+        # ClickUp task (best-effort)
         clickup_task_id = None
         try:
             admin_url = f"{os.getenv('APP_BASE_URL', 'https://kvotaflow.ru')}/admin/feedback/{short_id}"
@@ -25879,7 +25902,7 @@ async def submit_feedback(session, request: Request):
                 page_url=page_url,
                 debug_context=debug_context,
                 admin_url=admin_url,
-                has_screenshot=bool(screenshot_b64)
+                has_screenshot=bool(screenshot_b64 or screenshot_url)
             )
             if clickup_task_id:
                 supabase.table("user_feedback").update(
@@ -25888,11 +25911,9 @@ async def submit_feedback(session, request: Request):
         except Exception as e:
             logger.warning(f"ClickUp task creation failed for {short_id}: {e}")
 
-        # 3. Send to Telegram (with photo if available)
+        # Telegram notification (best-effort)
         try:
-            clickup_url = None
-            if clickup_task_id:
-                clickup_url = f"https://app.clickup.com/t/{clickup_task_id}"
+            clickup_url = f"https://app.clickup.com/t/{clickup_task_id}" if clickup_task_id else None
             await send_admin_bug_report_with_photo(
                 short_id=short_id,
                 user_name=user.get("name", user.get("email", "Неизвестный")),
@@ -25908,6 +25929,10 @@ async def submit_feedback(session, request: Request):
         except Exception as e:
             logger.warning(f"Telegram notification failed for {short_id}: {e}")
 
+        # Dual response: JSON (Next.js) or HTML (FastHTML)
+        if is_json:
+            return JSONResponse({"success": True, "data": {"short_id": short_id}})
+
         return Div(
             Div(id="feedback-success-marker", style="display:none"),
             Div("Спасибо за обратную связь!", cls="text-success font-medium"),
@@ -25917,6 +25942,9 @@ async def submit_feedback(session, request: Request):
 
     except Exception as e:
         logger.error(f"Error saving feedback: {e}")
+        if is_json:
+            return JSONResponse({"success": False, "error": {"code": "INTERNAL_ERROR", "message": "Failed to save feedback"}}, status_code=500)
+
         return Div(
             Div("Ошибка при отправке", cls="text-error font-medium"),
             P("Попробуйте ещё раз через несколько секунд", cls="text-sm text-gray-500 mt-1"),
@@ -31661,14 +31689,25 @@ def get(session, short_id: str):
     status_label, status_cls = STATUS_LABELS.get(item.get("status", "new"), ("—", "status-neutral"))
     type_label = FEEDBACK_TYPE_LABELS_RU.get(item.get("feedback_type", ""), item.get("feedback_type", ""))
 
-    # Screenshot display
+    # Screenshot display (prefer URL from Supabase Storage, fall back to base64)
     screenshot_section = None
-    if item.get("screenshot_data"):
+    screenshot_url = item.get("screenshot_url")
+    screenshot_b64 = item.get("screenshot_data")
+    if screenshot_url:
         screenshot_section = Div(
             H4("Скриншот", style="margin-bottom: 8px; font-weight: 600;"),
             Img(
-                src=f"data:image/png;base64,{item['screenshot_data']}",
-                style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;"
+                src=screenshot_url,
+                style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 500px;"
+            ),
+            style="margin-bottom: 20px;"
+        )
+    elif screenshot_b64:
+        screenshot_section = Div(
+            H4("Скриншот", style="margin-bottom: 8px; font-weight: 600;"),
+            Img(
+                src=f"data:image/jpeg;base64,{screenshot_b64}",
+                style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 500px;"
             ),
             style="margin-bottom: 20px;"
         )
