@@ -139,6 +139,10 @@ app, rt = fast_app(
     live=True,
 )
 
+# JWT auth middleware for /api/* endpoints (Next.js frontend)
+from api.auth import ApiAuthMiddleware
+app.add_middleware(ApiAuthMiddleware)
+
 # ============================================================================
 # STYLES
 # ============================================================================
@@ -49242,6 +49246,12 @@ def get_telegram_status_check(session):
     user_id = user.get("id")
     status = get_user_telegram_status(user_id)
     return _telegram_status_fragment(status, user_id=user_id)
+
+
+# === API: Health check (for Next.js frontend) ===
+@rt("/api/health")
+def get():
+    return JSONResponse({"success": True, "status": "ok"})
 
 
 # ============================================================================
