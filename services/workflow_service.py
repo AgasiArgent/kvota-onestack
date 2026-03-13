@@ -398,6 +398,42 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     ),
     StatusTransition(
         WorkflowStatus.APPROVED,
+        WorkflowStatus.PENDING_SPEC_CONTROL,  # Client accepted directly
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.CLIENT_NEGOTIATION,
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.REJECTED,  # Client rejected
+        ["sales", "admin"],
+        requires_comment=True
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.PENDING_LOGISTICS,  # Client requests logistics change
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.PENDING_PROCUREMENT,  # Client requests add item or full recalc
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
+        WorkflowStatus.PENDING_SALES_REVIEW,  # Client requests price change
+        ["sales", "admin"],
+        requires_comment=False
+    ),
+    StatusTransition(
+        WorkflowStatus.APPROVED,
         WorkflowStatus.CANCELLED,
         ["sales", "admin"],
         requires_comment=True

@@ -5593,7 +5593,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             )
 
     # -------------------------------------------------------------------------
-    # SALES: Approved quotes - need to send to client
+    # SALES: Approved quotes - awaiting client response
     # -------------------------------------------------------------------------
     if 'sales' in roles:
         approved_query = supabase.table("quotes") \
@@ -5615,14 +5615,14 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                     Td(q.get("idn_quote", f"#{q['id'][:8]}")),
                     Td((q.get("customers") or {}).get("name", "—")),
                     Td(format_money(q.get("total_amount"), q.get("currency", "RUB"))),
-                    Td(A("Отправить клиенту", href=f"/quotes/{q['id']}", cls="button",
+                    Td(A("Открыть КП", href=f"/quotes/{q['id']}", cls="button",
                          style="padding: 0.25rem 0.5rem; font-size: 0.875rem; background: #0891b2; color: white; border-color: #0891b2;"))
                 ) for q in approved_quotes
             ]
 
             sections.append(
                 Div(
-                    H2(icon("check-circle", size=20), f" Одобрено: готово к отправке клиенту ({approved_count})",
+                    H2(icon("check-circle", size=20), f" Одобрено: ожидает ответа клиента ({approved_count})",
                        style="font-size: 14px; font-weight: 600; color: #1e293b; margin: 0 0 12px 0; display: flex; align-items: center; gap: 8px;"),
                     Div(
                         Table(
@@ -10680,34 +10680,10 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
             cls="card", style="border-left: 4px solid #f59e0b;"
         ) if workflow_status == "pending_approval" and user_has_any_role(session, ["top_manager", "admin"]) else None,
 
-        # Workflow Actions (for approved quotes - Send to Client)
-        Div(
-            H3("Отправить клиенту"),
-            Form(
-                Div(
-                    Label("Email получателя", fr="sent_to_email", style="font-weight: 500;"),
-                    Input(
-                        type="email",
-                        name="sent_to_email",
-                        placeholder="client@company.com",
-                        value=customer.get("email", "") if customer else "",
-                        style="width: 100%; margin-top: 0.25rem;",
-                        required=True
-                    ),
-                    style="margin-bottom: 1rem;"
-                ),
-                btn("Отправлено клиенту", variant="primary", icon_name="send", size="lg", type="submit"),
-                P("Отметить КП как отправленное клиенту.", style="margin-top: 0.5rem; font-size: 0.875rem; color: #666;"),
-                method="post",
-                action=f"/quotes/{quote_id}/send-to-client"
-            ),
-            cls="card", style="border-left: 4px solid #0891b2;"
-        ) if workflow_status == "approved" and user_has_any_role(session, ["sales", "admin"]) else None,
-
-        # Workflow Actions (for sent_to_client - Client Response)
+        # Workflow Actions (for approved/sent_to_client - Client Response)
         Div(
             H3(icon("message-circle", size=20), " Ответ клиента", style="display: flex; align-items: center; gap: 0.5rem;"),
-            P("КП отправлено клиенту. Какой результат?", style="margin-bottom: 1rem; color: #666;"),
+            P("КП одобрено. Какой результат от клиента?", style="margin-bottom: 1rem; color: #666;"),
             Div(
                 Form(
                     btn("Клиент согласен → Спецификация", variant="success", icon_name="check", type="submit"),
@@ -10718,7 +10694,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 style="margin-bottom: 1rem;"
             ),
             cls="card", style="border-left: 4px solid #14b8a6;"
-        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
+        ) if workflow_status in ("approved", "sent_to_client") and user_has_any_role(session, ["sales", "admin"]) else None,
 
         # Client Change Request Section (for sent_to_client)
         Div(
@@ -10763,7 +10739,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 action=f"/quotes/{quote_id}/client-change-request"
             ),
             cls="card", style="border-left: 4px solid #f59e0b;"
-        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
+        ) if workflow_status in ("approved", "sent_to_client") and user_has_any_role(session, ["sales", "admin"]) else None,
 
         # Client Rejected Section (for sent_to_client)
         Div(
@@ -10799,7 +10775,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 action=f"/quotes/{quote_id}/client-rejected"
             ),
             cls="card", style="border-left: 4px solid #dc2626;"
-        ) if workflow_status == "sent_to_client" and user_has_any_role(session, ["sales", "admin"]) else None,
+        ) if workflow_status in ("approved", "sent_to_client") and user_has_any_role(session, ["sales", "admin"]) else None,
 
         # Activity log (workflow transitions history)
         workflow_transition_history(quote_id, limit=50, collapsed=True),
