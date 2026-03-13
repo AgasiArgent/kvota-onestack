@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -32,6 +32,12 @@ interface Props {
 
 const PAGE_SIZE = 50;
 
+const STATUS_OPTIONS = [
+  { value: "all", label: "Все статусы" },
+  { value: "active", label: "Активные" },
+  { value: "inactive", label: "Неактивные" },
+] as const;
+
 export function CustomersTable({
   initialData,
   initialTotal,
@@ -39,6 +45,7 @@ export function CustomersTable({
   initialStatus = "",
   initialPage = 1,
 }: Props) {
+  const [status, setStatus] = useState(initialStatus || "all");
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
 
   function formatDate(dateStr: string | null) {
@@ -67,14 +74,18 @@ export function CustomersTable({
             className="pl-9"
           />
         </div>
-        <Select name="status" defaultValue={initialStatus || ""}>
+        <Select name="status" value={status} onValueChange={(v) => setStatus(v ?? "all")}>
           <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Все статусы" />
+            <span className="flex flex-1 text-left">
+              {STATUS_OPTIONS.find((o) => o.value === status)?.label ?? "Все статусы"}
+            </span>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Все статусы</SelectItem>
-            <SelectItem value="active">Активные</SelectItem>
-            <SelectItem value="inactive">Неактивные</SelectItem>
+            {STATUS_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Button type="submit" size="sm">

@@ -10,7 +10,7 @@ const PAGE_SIZE = 50;
 
 export async function fetchCustomersList(params: {
   search?: string;
-  status?: "active" | "inactive" | "";
+  status?: string;
   page?: number;
 }): Promise<{ data: CustomerListItem[]; total: number }> {
   const supabase = await createClient();

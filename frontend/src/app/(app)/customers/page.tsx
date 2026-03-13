@@ -8,7 +8,7 @@ interface Props {
 export default async function CustomersPage({ searchParams }: Props) {
   const params = await searchParams;
   const search = params.q ?? "";
-  const status = (params.status ?? "") as "active" | "inactive" | "";
+  const status = params.status ?? "";
   const page = parseInt(params.page ?? "1", 10);
 
   const { data, total } = await fetchCustomersList({ search, status, page });
