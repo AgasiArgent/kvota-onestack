@@ -23,7 +23,8 @@ export function FeedbackButton() {
       const dataUrl = await captureScreenshot();
       setRawScreenshot(dataUrl);
       setAnnotatorOpen(true);
-    } catch {
+    } catch (err) {
+      console.error("[FeedbackWidget] Screenshot capture failed:", err);
       setModalOpen(true);
     }
   }, []);

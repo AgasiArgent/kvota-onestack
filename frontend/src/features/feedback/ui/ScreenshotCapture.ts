@@ -2,10 +2,13 @@ import html2canvas from "html2canvas";
 import { compressScreenshot } from "../lib/compressScreenshot";
 
 export async function captureScreenshot(): Promise<string> {
+  console.log("[FeedbackWidget] Starting html2canvas capture...");
+
   const canvas = await html2canvas(document.body, {
     useCORS: true,
     allowTaint: true,
     scale: 0.75,
+    logging: true,
     ignoreElements: (el) => {
       return (
         el.id === "feedback-modal" ||
@@ -13,7 +16,9 @@ export async function captureScreenshot(): Promise<string> {
       );
     },
     onclone: (clonedDoc) => {
-      // Replace oklch() colors that html2canvas can't parse
+      console.log("[FeedbackWidget] onclone called, fixing oklch colors...");
+
+      // Replace oklch() in <style> tags
       const styles = clonedDoc.querySelectorAll("style");
       styles.forEach((s) => {
         if (s.textContent?.includes("oklch")) {
@@ -21,6 +26,7 @@ export async function captureScreenshot(): Promise<string> {
         }
       });
 
+      // Replace oklch() in computed styles
       const all = clonedDoc.querySelectorAll("*");
       const colorProps = [
         "color",
@@ -49,9 +55,18 @@ export async function captureScreenshot(): Promise<string> {
           // Skip inaccessible elements
         }
       });
+
+      console.log("[FeedbackWidget] oklch fix complete");
     },
   });
 
+  console.log("[FeedbackWidget] html2canvas done, canvas size:", canvas.width, "x", canvas.height);
+
   const rawDataUrl = canvas.toDataURL("image/png");
-  return compressScreenshot(rawDataUrl);
+  console.log("[FeedbackWidget] rawDataUrl length:", rawDataUrl.length);
+
+  const compressed = await compressScreenshot(rawDataUrl);
+  console.log("[FeedbackWidget] compressed length:", compressed.length);
+
+  return compressed;
 }
