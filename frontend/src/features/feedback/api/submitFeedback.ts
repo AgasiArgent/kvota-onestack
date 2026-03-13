@@ -1,6 +1,5 @@
-"use client";
-
 import { createClient } from "@/shared/lib/supabase/client";
+import { apiClient } from "@/shared/lib/api";
 import { dataUrlToBlob } from "../lib/compressScreenshot";
 import type { DebugContext } from "../lib/debugContext";
 
@@ -58,13 +57,8 @@ export async function submitFeedback(
   }
 
   try {
-    const apiBaseUrl = process.env.NEXT_PUBLIC_PYTHON_API_URL || "";
-    const response = await fetch(`${apiBaseUrl}/api/feedback`, {
+    const result = await apiClient<{ short_id: string }>("/feedback", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
       body: JSON.stringify({
         feedback_type: params.feedbackType,
         description: params.description,
@@ -75,8 +69,7 @@ export async function submitFeedback(
       }),
     });
 
-    const result = await response.json();
-    if (!response.ok || !result.success) {
+    if (!result.success) {
       return {
         success: false,
         error: result.error?.message || "Submit failed",

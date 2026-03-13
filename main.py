@@ -25812,6 +25812,13 @@ async def submit_feedback(session, request: Request):
     else:
         user = session.get("user", {})
 
+    # Reject unauthenticated requests (neither JWT nor session)
+    if not user or not user.get("id"):
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            return JSONResponse({"success": False, "error": {"code": "UNAUTHORIZED", "message": "Authentication required"}}, status_code=401)
+        return Div("Требуется авторизация", cls="text-error mt-2")
+
     # Dual input: JSON (Next.js) or form (FastHTML)
     content_type = request.headers.get("content-type", "")
     is_json = "application/json" in content_type
@@ -25827,7 +25834,16 @@ async def submit_feedback(session, request: Request):
     page_title = body.get("page_title", "")
     debug_context_str = body.get("debug_context", "{}")
     screenshot_data = body.get("screenshot", "").strip() if body.get("screenshot") else ""
-    screenshot_url = body.get("screenshot_url", "").strip() if body.get("screenshot_url") else ""
+    screenshot_url_raw = body.get("screenshot_url", "").strip() if body.get("screenshot_url") else ""
+    # Validate screenshot_url is a Supabase Storage URL (prevent arbitrary URL injection)
+    supabase_url = os.getenv("SUPABASE_URL", "")
+    public_supabase_url = os.getenv("PUBLIC_SUPABASE_URL", supabase_url)
+    screenshot_url = ""
+    if screenshot_url_raw and (
+        screenshot_url_raw.startswith(f"{supabase_url}/storage/")
+        or screenshot_url_raw.startswith(f"{public_supabase_url}/storage/")
+    ):
+        screenshot_url = screenshot_url_raw
 
     if not description:
         if is_json:

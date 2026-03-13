@@ -33,6 +33,14 @@ export function AnnotationEditor({
     arrowSnapshot: null as ImageData | null,
   });
   const bgImageRef = useRef<HTMLImageElement | null>(null);
+  const activeInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Clean up orphaned text input on unmount
+  useEffect(() => {
+    return () => {
+      activeInputRef.current?.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const img = new Image();
@@ -129,6 +137,7 @@ export function AnnotationEditor({
       input.placeholder = "Введите текст...";
       input.style.cssText = `position:fixed;left:${rect.left + displayX}px;top:${rect.top + displayY - 14}px;background:#222;color:${STROKE_COLOR};border:2px solid ${STROKE_COLOR};padding:4px 8px;font:bold 18px sans-serif;z-index:10001;min-width:150px;outline:none;border-radius:4px;`;
       document.body.appendChild(input);
+      activeInputRef.current = input;
       input.addEventListener("mousedown", (ev) => ev.stopPropagation());
 
       let committed = false;
@@ -146,6 +155,7 @@ export function AnnotationEditor({
           }
         }
         input.remove();
+        activeInputRef.current = null;
       };
 
       setTimeout(() => {
