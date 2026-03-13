@@ -20,10 +20,7 @@ export async function fetchCustomersList(params: {
 
   let query = supabase
     .from("customers")
-    .select(
-      "id, name, inn, is_active, manager:user_profiles!manager_id(full_name)",
-      { count: "exact" }
-    )
+    .select("id, name, inn, is_active, manager_id", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
 
@@ -36,9 +33,21 @@ export async function fetchCustomersList(params: {
   const { data, count, error } = await query;
   if (error) throw error;
 
-  const customerIds = (data ?? []).map((c: any) => c.id);
-  const { data: quoteCounts } = await supabase
-    .rpc("get_customers_quote_counts", { customer_ids: customerIds });
+  const rows = data ?? [];
+  const customerIds = rows.map((c: any) => c.id);
+  const managerIds = rows.map((c: any) => c.manager_id).filter(Boolean);
+
+  // Fetch manager names and quote counts in parallel
+  const [quoteCounts, managers] = await Promise.all([
+    supabase.rpc("get_customers_quote_counts", { customer_ids: customerIds }).then((r) => r.data),
+    managerIds.length > 0
+      ? supabase
+          .from("user_profiles")
+          .select("user_id, full_name")
+          .in("user_id", managerIds)
+          .then((r) => r.data)
+      : Promise.resolve([]),
+  ]);
 
   const countsMap = new Map<string, { count: number; lastDate: string | null }>(
     (quoteCounts ?? []).map(
@@ -49,12 +58,18 @@ export async function fetchCustomersList(params: {
     )
   );
 
-  const items: CustomerListItem[] = (data ?? []).map((row: any) => ({
+  const managerMap = new Map<string, string>(
+    (managers ?? []).map((m: any) => [m.user_id, m.full_name])
+  );
+
+  const items: CustomerListItem[] = rows.map((row: any) => ({
     id: row.id,
     name: row.name,
     inn: row.inn,
     is_active: row.is_active,
-    manager: (row.manager as { full_name: string } | null) ?? null,
+    manager: row.manager_id && managerMap.has(row.manager_id)
+      ? { full_name: managerMap.get(row.manager_id)! }
+      : null,
     quotes_count: countsMap.get(row.id)?.count ?? 0,
     last_quote_date: countsMap.get(row.id)?.lastDate ?? null,
   }));
@@ -66,11 +81,23 @@ export async function fetchCustomerDetail(id: string): Promise<Customer | null> 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("customers")
-    .select("*, manager:user_profiles!manager_id(full_name)")
+    .select("*")
     .eq("id", id)
     .single();
   if (error) return null;
-  return data as Customer;
+
+  // Resolve manager name separately (no FK relationship)
+  let manager: { full_name: string } | null = null;
+  if (data.manager_id) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("full_name")
+      .eq("user_id", data.manager_id)
+      .single();
+    if (profile) manager = { full_name: profile.full_name };
+  }
+
+  return { ...data, manager } as Customer;
 }
 
 export async function fetchCustomerStats(
