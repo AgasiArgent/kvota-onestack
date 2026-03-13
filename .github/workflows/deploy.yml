@@ -35,19 +35,28 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script_stop: true
           script: |
-            echo "Waiting for container to start..."
+            echo "Waiting for containers to start..."
             sleep 5
-            STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
-            echo "Container health: $STATUS"
-            if [ "$STATUS" != "healthy" ]; then
-              echo "Container not healthy, waiting 10 more seconds..."
-              sleep 10
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
-              echo "Container health after retry: $STATUS"
-            fi
-            if [ "$STATUS" != "healthy" ]; then
-              echo "::error::Container kvota-onestack is not healthy: $STATUS"
-              docker logs kvota-onestack --tail 20
+            for CONTAINER in kvota-onestack kvota-frontend; do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
+              echo "$CONTAINER health: $STATUS"
+              if [ "$STATUS" != "healthy" ]; then
+                echo "$CONTAINER not healthy, waiting 15 more seconds..."
+                sleep 15
+                STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
+                echo "$CONTAINER health after retry: $STATUS"
+              fi
+              if [ "$STATUS" != "healthy" ]; then
+                echo "::warning::Container $CONTAINER is not healthy: $STATUS"
+                docker logs $CONTAINER --tail 20
+              else
+                echo "$CONTAINER verified healthy"
+              fi
+            done
+            # Backend must be healthy for deploy to succeed
+            BACKEND=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
+            if [ "$BACKEND" != "healthy" ]; then
+              echo "::error::Backend kvota-onestack is not healthy"
               exit 1
             fi
-            echo "Deployment verified: container is healthy"
+            echo "Deployment verified"
