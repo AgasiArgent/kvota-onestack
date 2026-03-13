@@ -10693,6 +10693,16 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 ),
                 style="margin-bottom: 1rem;"
             ),
+            # Compact "mark as sent" — only shown when status is still "approved"
+            Div(
+                Form(
+                    btn("Отметить: отправлено клиенту", variant="secondary", icon_name="send", size="sm", type="submit"),
+                    method="post",
+                    action=f"/quotes/{quote_id}/send-to-client",
+                    style="display: inline;"
+                ),
+                style="border-top: 1px solid #e2e8f0; padding-top: 0.75rem; margin-top: 0.5rem;"
+            ) if workflow_status == "approved" else None,
             cls="card", style="border-left: 4px solid #14b8a6;"
         ) if workflow_status in ("approved", "sent_to_client") and user_has_any_role(session, ["sales", "admin"]) else None,
 
