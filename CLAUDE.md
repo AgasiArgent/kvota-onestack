@@ -49,42 +49,11 @@ Read `.claude/NAVIGATION_ARCHITECTURE.md` before creating new pages.
 
 ## Frontend Type Safety
 
-The Next.js frontend uses auto-generated `database.types.ts` to catch wrong column names at **build time**.
+Auto-generated `database.types.ts` catches wrong column names at **build time**. After DB migrations: `cd frontend && npm run db:types`.
 
-**Workflow after DB schema changes:**
-1. Apply migration to DB
-2. Run `cd frontend && npm run db:types` to regenerate types
-3. Run `npm run build` — TS compiler will flag any broken queries
-
-**What it catches:** nonexistent columns (e.g. `is_active` instead of `status`), wrong table names
-**What it does NOT catch:** picking the wrong valid column (e.g. `total_amount` vs `total_amount_without_vat`)
-
-**Rules for frontend queries:**
 - Never use `as any` to suppress Supabase query types — fix the query instead
-- RPC function types must be added manually to the `Functions` section of `database.types.ts`
-- FK joins (`quotes!inner(...)`) are not type-checked (Relationships array is empty in generated types) — verify these manually
-- Before using an `amount`/`total`/`price` column, check the reference below — many columns sound similar but mean different things
-
-**Confusable columns — quotes table:**
-
-| Need this | Use this column | NOT this |
-|-----------|----------------|----------|
-| Total price for client (in quote currency) | `total_amount_quote` | `total_amount` (base, no margin) |
-| Total including VAT (in quote currency) | `total_with_vat_quote` | `total_with_vat_usd` (USD) |
-| Total in USD (for internal reporting) | `total_amount_usd` | `total_usd` (subtotal) |
-| Profit in quote currency | `profit_quote_currency` | `total_profit_usd` (USD) |
-| Revenue excl. VAT in quote currency | `revenue_no_vat_quote_currency` | `total_quote_currency` |
-| COGS in quote currency | `cogs_quote_currency` | — |
-| Quote status (lifecycle) | `status` | `workflow_status` (approval flow) |
-
-**Confusable columns — quote_items table:**
-
-| Need this | Use this column | NOT this |
-|-----------|----------------|----------|
-| Purchase price (supplier currency) | `purchase_price_original` | `base_price_vat` (calculated) |
-| Proforma excl. VAT (supplier currency) | `proforma_amount_excl_vat` | `proforma_amount_incl_vat` |
-| Proforma excl. VAT (USD) | `proforma_amount_excl_vat_usd` | `proforma_amount_excl_vat` (original) |
-| Product identifier (supplier's) | `supplier_sku` | `idn_sku` (internal), `product_code` (old) |
+- Before using `amount`/`total`/`price` columns, check `.kiro/steering/database.md` — confusable column reference
+- FK joins (`quotes!inner(...)`) aren't type-checked — verify manually
 
 ---
 
