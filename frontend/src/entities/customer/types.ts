@@ -10,7 +10,7 @@ export interface Customer {
   general_director_name: string | null;
   general_director_position: string | null;
   warehouse_addresses: { address: string; label?: string }[] | null;
-  is_active: boolean;
+  status: string;
   order_source: string | null;
   manager_id: string | null;
   notes: string | null;
@@ -42,7 +42,7 @@ export interface CustomerListItem {
   id: string;
   name: string;
   inn: string | null;
-  is_active: boolean;
+  status: string;
   manager: { full_name: string } | null;
   quotes_count: number;
   last_quote_date: string | null;

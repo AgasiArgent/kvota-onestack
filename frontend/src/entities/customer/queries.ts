@@ -20,15 +20,15 @@ export async function fetchCustomersList(params: {
 
   let query = supabase
     .from("customers")
-    .select("id, name, inn, is_active, manager_id", { count: "exact" })
+    .select("id, name, inn, status, manager_id", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,inn.ilike.%${search}%`);
   }
-  if (status === "active") query = query.eq("is_active", true);
-  if (status === "inactive") query = query.eq("is_active", false);
+  if (status === "active") query = query.eq("status", "active");
+  if (status === "inactive") query = query.neq("status", "active");
 
   const { data, count, error } = await query;
   if (error) throw error;
@@ -66,7 +66,7 @@ export async function fetchCustomersList(params: {
     id: row.id,
     name: row.name,
     inn: row.inn,
-    is_active: row.is_active,
+    status: row.status,
     manager: row.manager_id && managerMap.has(row.manager_id)
       ? { full_name: managerMap.get(row.manager_id)! }
       : null,

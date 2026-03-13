@@ -128,8 +128,8 @@ export function CustomersTable({
                 {formatDate(customer.last_quote_date)}
               </TableCell>
               <TableCell>
-                <Badge variant={customer.is_active ? "default" : "secondary"}>
-                  {customer.is_active ? "Активен" : "Неактивен"}
+                <Badge variant={customer.status === "active" ? "default" : "secondary"}>
+                  {customer.status === "active" ? "Активен" : "Неактивен"}
                 </Badge>
               </TableCell>
             </TableRow>

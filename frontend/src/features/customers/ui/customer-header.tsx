@@ -22,8 +22,8 @@ export function CustomerHeader({ customer }: Props) {
         <div className="flex items-center gap-3">
           <Building2 size={24} className="text-slate-400" />
           <h1 className="text-2xl font-bold">{customer.name}</h1>
-          <Badge variant={customer.is_active ? "default" : "secondary"}>
-            {customer.is_active ? "Активен" : "Неактивен"}
+          <Badge variant={customer.status === "active" ? "default" : "secondary"}>
+            {customer.status === "active" ? "Активен" : "Неактивен"}
           </Badge>
         </div>
         <Link href={`/quotes/new?customer_id=${customer.id}`} className={buttonVariants()}>
