@@ -1,14 +1,15 @@
 import html2canvas from "html2canvas";
 import { compressScreenshot } from "../lib/compressScreenshot";
 
-export async function captureScreenshot(): Promise<string> {
-  console.log("[FeedbackWidget] Starting html2canvas capture...");
+// CSS color functions unsupported by html2canvas 1.x
+const UNSUPPORTED_COLOR_RE = /(?:oklch|oklab|lab|lch)\([^)]*\)/g;
+const FALLBACK_COLOR = "#888888";
 
+export async function captureScreenshot(): Promise<string> {
   const canvas = await html2canvas(document.body, {
     useCORS: true,
     allowTaint: true,
     scale: 0.75,
-    logging: true,
     ignoreElements: (el) => {
       return (
         el.id === "feedback-modal" ||
@@ -16,17 +17,18 @@ export async function captureScreenshot(): Promise<string> {
       );
     },
     onclone: (clonedDoc) => {
-      console.log("[FeedbackWidget] onclone called, fixing oklch colors...");
-
-      // Replace oklch() in <style> tags
+      // Replace unsupported color functions in <style> tags
       const styles = clonedDoc.querySelectorAll("style");
       styles.forEach((s) => {
-        if (s.textContent?.includes("oklch")) {
-          s.textContent = s.textContent.replace(/oklch\([^)]*\)/g, "#888888");
+        if (s.textContent && UNSUPPORTED_COLOR_RE.test(s.textContent)) {
+          s.textContent = s.textContent.replace(
+            UNSUPPORTED_COLOR_RE,
+            FALLBACK_COLOR
+          );
         }
       });
 
-      // Replace oklch() in computed styles
+      // Replace unsupported color functions in computed styles
       const all = clonedDoc.querySelectorAll("*");
       const colorProps = [
         "color",
@@ -36,6 +38,9 @@ export async function captureScreenshot(): Promise<string> {
         "border-right-color",
         "border-bottom-color",
         "border-left-color",
+        "outline-color",
+        "text-decoration-color",
+        "box-shadow",
       ];
       all.forEach((el) => {
         try {
@@ -43,10 +48,10 @@ export async function captureScreenshot(): Promise<string> {
           if (!cs) return;
           colorProps.forEach((prop) => {
             const val = cs.getPropertyValue(prop);
-            if (val?.includes("oklch")) {
+            if (val && UNSUPPORTED_COLOR_RE.test(val)) {
               (el as HTMLElement).style.setProperty(
                 prop,
-                "#888888",
+                val.replace(UNSUPPORTED_COLOR_RE, FALLBACK_COLOR),
                 "important"
               );
             }
@@ -55,18 +60,9 @@ export async function captureScreenshot(): Promise<string> {
           // Skip inaccessible elements
         }
       });
-
-      console.log("[FeedbackWidget] oklch fix complete");
     },
   });
 
-  console.log("[FeedbackWidget] html2canvas done, canvas size:", canvas.width, "x", canvas.height);
-
   const rawDataUrl = canvas.toDataURL("image/png");
-  console.log("[FeedbackWidget] rawDataUrl length:", rawDataUrl.length);
-
-  const compressed = await compressScreenshot(rawDataUrl);
-  console.log("[FeedbackWidget] compressed length:", compressed.length);
-
-  return compressed;
+  return compressScreenshot(rawDataUrl);
 }
