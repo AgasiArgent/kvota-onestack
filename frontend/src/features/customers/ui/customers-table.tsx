@@ -67,12 +67,12 @@ export function CustomersTable({
             className="pl-9"
           />
         </div>
-        <Select name="status" defaultValue={initialStatus || "all"}>
+        <Select name="status" defaultValue={initialStatus || ""}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Все статусы" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все статусы</SelectItem>
+            <SelectItem value="">Все статусы</SelectItem>
             <SelectItem value="active">Активные</SelectItem>
             <SelectItem value="inactive">Неактивные</SelectItem>
           </SelectContent>
