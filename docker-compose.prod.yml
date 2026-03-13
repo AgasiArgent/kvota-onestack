@@ -54,7 +54,7 @@ services:
     depends_on:
       - onestack
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/login"]
+      test: ["CMD", "wget", "-q", "--spider", "http://0.0.0.0:3000/login"]
       interval: 30s
       timeout: 10s
       retries: 3
