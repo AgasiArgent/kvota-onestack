@@ -1110,10 +1110,11 @@ class TestFeedbackEdgeCases:
         # so text-only submissions continue to work
         has_screenshot_with_default = (
             'form.get("screenshot", "")' in handler or
-            'form.get("screenshot")' in handler
+            'form.get("screenshot")' in handler or
+            'body.get("screenshot"' in handler
         )
         assert has_screenshot_with_default, (
-            "submit_feedback must read 'screenshot' from form with a default value "
+            "submit_feedback must read 'screenshot' from request body with a default value "
             "so text-only submissions continue to work (backward compatibility)"
         )
 
