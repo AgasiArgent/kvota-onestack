@@ -2,49 +2,43 @@ import html2canvas from "html2canvas";
 import { compressScreenshot } from "../lib/compressScreenshot";
 
 // CSS color functions unsupported by html2canvas 1.x
-const UNSUPPORTED_COLOR_RE =
-  /(?:oklch|oklab|lab|lch|color-mix|light-dark)\([^)]*(?:\([^)]*\)[^)]*)*\)/g;
-const FALLBACK_COLOR = "#888888";
+const UNSUPPORTED_FN_RE =
+  /oklch|oklab|lab|lch|color-mix|light-dark/;
 
-function replaceUnsupportedColors(css: string): string {
-  return css.replace(UNSUPPORTED_COLOR_RE, FALLBACK_COLOR);
+const COLOR_PROPS = [
+  "color",
+  "background-color",
+  "border-color",
+  "border-top-color",
+  "border-right-color",
+  "border-bottom-color",
+  "border-left-color",
+  "outline-color",
+  "text-decoration-color",
+];
+
+/**
+ * Convert any CSS color string to hex using the canvas 2D context.
+ * This works because canvas fillStyle setter normalizes all colors to hex/rgb.
+ */
+function colorToHex(color: string): string {
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return "#888888";
+  ctx.fillStyle = color;
+  return ctx.fillStyle; // returns #rrggbb or rgba(...)
 }
 
-function inlineLinkedStylesheets(clonedDoc: Document): void {
-  // Convert <link> stylesheets to inline <style> with colors patched
-  const links = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
-  links.forEach((link) => {
-    try {
-      // Find the matching CSSStyleSheet
-      const href = link.getAttribute("href");
-      if (!href) return;
-
-      // Read CSS rules from the CSSOM
-      const sheets = Array.from(clonedDoc.styleSheets);
-      const sheet = sheets.find(
-        (s) => s.href?.endsWith(href.split("?")[0]) || s.ownerNode === link
-      );
-      if (!sheet) return;
-
-      let cssText = "";
-      try {
-        const rules = Array.from(sheet.cssRules);
-        cssText = rules.map((r) => r.cssText).join("\n");
-      } catch {
-        // CORS — can't read rules, skip
-        return;
-      }
-
-      if (!cssText) return;
-
-      // Replace the <link> with an inline <style>
-      const style = clonedDoc.createElement("style");
-      style.textContent = replaceUnsupportedColors(cssText);
-      link.replaceWith(style);
-    } catch {
-      // Skip this stylesheet
-    }
-  });
+/**
+ * Replace unsupported color functions in a CSS text string.
+ * Uses a regex that handles nested parentheses (e.g., color-mix()).
+ */
+function patchCssText(css: string): string {
+  // Match function-call patterns for unsupported color functions
+  // Handles one level of nested parens for color-mix(in oklch, ...)
+  return css.replace(
+    /(?:oklch|oklab|lab|lch|color-mix|light-dark)\([^)]*(?:\([^)]*\)[^)]*)*\)/g,
+    "#888888"
+  );
 }
 
 export async function captureScreenshot(): Promise<string> {
@@ -59,44 +53,63 @@ export async function captureScreenshot(): Promise<string> {
       );
     },
     onclone: (clonedDoc) => {
-      // 1. Inline linked stylesheets with colors patched
-      inlineLinkedStylesheets(clonedDoc);
-
-      // 2. Patch remaining <style> tags
+      // 1. Patch all <style> tags in the cloned document
       const styles = clonedDoc.querySelectorAll("style");
       styles.forEach((s) => {
-        if (s.textContent) {
-          s.textContent = replaceUnsupportedColors(s.textContent);
+        if (s.textContent && UNSUPPORTED_FN_RE.test(s.textContent)) {
+          s.textContent = patchCssText(s.textContent);
         }
       });
 
-      // 3. Patch inline styles with unsupported computed colors
-      const all = clonedDoc.querySelectorAll("*");
-      const colorProps = [
-        "color",
-        "background-color",
-        "border-color",
-        "border-top-color",
-        "border-right-color",
-        "border-bottom-color",
-        "border-left-color",
-        "outline-color",
-        "text-decoration-color",
-      ];
-      all.forEach((el) => {
-        try {
-          const cs = clonedDoc.defaultView?.getComputedStyle(el);
-          if (!cs) return;
-          colorProps.forEach((prop) => {
-            const val = cs.getPropertyValue(prop);
-            if (val && UNSUPPORTED_COLOR_RE.test(val)) {
-              (el as HTMLElement).style.setProperty(
-                prop,
-                replaceUnsupportedColors(val),
-                "important"
+      // 2. Patch linked stylesheets by reading from CSSOM
+      try {
+        const sheets = Array.from(clonedDoc.styleSheets);
+        for (const sheet of sheets) {
+          try {
+            const rules = Array.from(sheet.cssRules);
+            const cssText = rules.map((r) => r.cssText).join("\n");
+            if (UNSUPPORTED_FN_RE.test(cssText)) {
+              const style = clonedDoc.createElement("style");
+              style.textContent = patchCssText(cssText);
+              sheet.ownerNode?.parentNode?.replaceChild(
+                style,
+                sheet.ownerNode
               );
             }
-          });
+          } catch {
+            // CORS — can't access rules
+          }
+        }
+      } catch {
+        // Skip CSSOM patching
+      }
+
+      // 3. Force all computed colors to safe rgb/hex on each element
+      const view = clonedDoc.defaultView;
+      if (!view) return;
+
+      const all = clonedDoc.querySelectorAll("*");
+      all.forEach((el) => {
+        try {
+          const cs = view.getComputedStyle(el);
+          for (const prop of COLOR_PROPS) {
+            const val = cs.getPropertyValue(prop);
+            if (val && UNSUPPORTED_FN_RE.test(val)) {
+              // Convert using canvas context (always returns hex/rgb)
+              const safe = colorToHex(val);
+              (el as HTMLElement).style.setProperty(prop, safe, "important");
+            }
+          }
+
+          // Also check box-shadow which can contain color values
+          const shadow = cs.getPropertyValue("box-shadow");
+          if (shadow && UNSUPPORTED_FN_RE.test(shadow)) {
+            (el as HTMLElement).style.setProperty(
+              "box-shadow",
+              "none",
+              "important"
+            );
+          }
         } catch {
           // Skip inaccessible elements
         }
