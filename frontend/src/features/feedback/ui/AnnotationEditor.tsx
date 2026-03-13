@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { Pencil, ArrowUpRight, Type, Undo2, Check, X } from "lucide-react";
+import { Brush, ArrowUpRight, Type, Undo2, Check, X } from "lucide-react";
 import { compressScreenshot } from "../lib/compressScreenshot";
 
 type Tool = "brush" | "arrow" | "text";
@@ -263,8 +263,8 @@ export function AnnotationEditor({
     onSave(compressed);
   }, [onSave]);
 
-  const tools: { id: Tool; icon: typeof Pencil; label: string }[] = [
-    { id: "brush", icon: Pencil, label: "Кисть" },
+  const tools: { id: Tool; icon: typeof Brush; label: string }[] = [
+    { id: "brush", icon: Brush, label: "Кисть" },
     { id: "arrow", icon: ArrowUpRight, label: "Стрелка" },
     { id: "text", icon: Type, label: "Текст" },
   ];

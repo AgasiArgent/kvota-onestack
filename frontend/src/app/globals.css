@@ -146,6 +146,15 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+
+    /* Custom dark overrides */
+    --bg-page: #0f172a;
+    --bg-card: #1e293b;
+    --border-color: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --shadow-subtle: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
 @theme inline {
@@ -208,17 +217,6 @@
     line-height: 1.25;
     letter-spacing: -0.01em;
     }
-
-  /* Dark mode overrides */
-  .dark {
-    --bg-page: #0f172a;
-    --bg-card: #1e293b;
-    --border-color: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --shadow-subtle: 0 1px 4px rgba(0, 0, 0, 0.3);
-  }
 
   /* Sidebar-aware main content margin */
   .sidebar-margin {
