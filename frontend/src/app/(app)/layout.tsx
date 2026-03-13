@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
 import { Sidebar } from "@/widgets/sidebar";
+import { FeedbackButton } from "@/features/feedback";
 
 export default async function AppLayout({
   children,
@@ -19,6 +20,7 @@ export default async function AppLayout({
       <main className="flex-1 sidebar-margin p-6 max-w-[1200px]">
         {children}
       </main>
+      <FeedbackButton />
     </div>
   );
 }
