@@ -25,7 +25,7 @@ export function CustomerTabs({ customerId, activeTab: activeTabProp, children }:
 
   return (
     <div>
-      <div className="flex gap-1 border-b border-slate-200 mb-6">
+      <div className="flex gap-1 border-b border-border-light mb-6">
         {TABS.map((tab) => (
           <Link
             key={tab.key}
@@ -33,8 +33,8 @@ export function CustomerTabs({ customerId, activeTab: activeTabProp, children }:
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px",
               activeTab === tab.key
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "border-accent text-accent"
+                : "border-transparent text-text-muted hover:text-text hover:border-border"
             )}
           >
             {tab.label}

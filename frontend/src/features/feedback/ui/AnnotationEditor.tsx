@@ -12,7 +12,7 @@ interface AnnotationEditorProps {
   onCancel: () => void;
 }
 
-const STROKE_COLOR = "#ff3333";
+const STROKE_COLOR = "#C2410C";
 const STROKE_WIDTH = 3;
 const ARROW_HEAD_LEN = 18;
 const MAX_UNDO = 20;

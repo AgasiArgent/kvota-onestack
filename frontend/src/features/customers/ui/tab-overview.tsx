@@ -51,7 +51,7 @@ export function TabOverview({ customer, stats }: Props) {
             <CardTitle className="text-base">Коммерческие предложения</CardTitle>
             <Link
               href="?tab=documents&subtab=quotes"
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-accent hover:underline"
             >
               Все →
             </Link>
@@ -70,7 +70,7 @@ export function TabOverview({ customer, stats }: Props) {
             <CardTitle className="text-base">Спецификации</CardTitle>
             <Link
               href="?tab=documents&subtab=specs"
-              className="text-sm text-blue-600 hover:underline"
+              className="text-sm text-accent hover:underline"
             >
               Все →
             </Link>
@@ -91,7 +91,7 @@ export function TabOverview({ customer, stats }: Props) {
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
   return (
     <div className="flex justify-between">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-text-muted">{label}</span>
       <span className="font-medium">{value ?? "—"}</span>
     </div>
   );
@@ -101,7 +101,7 @@ function CounterBlock({ label, value }: { label: string; value: number }) {
   return (
     <div>
       <div className="text-2xl font-bold tabular-nums">{value}</div>
-      <div className="text-xs text-slate-500 mt-1">{label}</div>
+      <div className="text-xs text-text-muted mt-1">{label}</div>
     </div>
   );
 }

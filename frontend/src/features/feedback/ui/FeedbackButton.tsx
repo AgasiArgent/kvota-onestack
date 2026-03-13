@@ -50,7 +50,7 @@ export function FeedbackButton() {
     <>
       <button
         onClick={() => setModalOpen(true)}
-        className="fixed bottom-4 right-4 z-50 w-16 h-16 flex items-center justify-center bg-white border border-slate-200 rounded-lg text-slate-400 hover:text-slate-600 hover:border-slate-300 shadow-md cursor-pointer transition-colors"
+        className="fixed bottom-4 right-4 z-50 w-16 h-16 flex items-center justify-center bg-card border border-border-light rounded-lg text-text-subtle hover:text-text-muted hover:border-border shadow-md cursor-pointer transition-colors"
         title="Сообщить о проблеме"
         type="button"
       >

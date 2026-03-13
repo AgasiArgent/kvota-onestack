@@ -47,10 +47,10 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-background">
       <Card className="w-full max-w-[420px] shadow-lg">
         <CardHeader className="text-center space-y-4">
-          <div className="mx-auto w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-[14px] flex items-center justify-center shadow-md">
+          <div className="mx-auto w-14 h-14 bg-accent rounded-lg flex items-center justify-center shadow-md">
             <Layers className="text-white" size={28} />
           </div>
           <div>
@@ -61,7 +61,7 @@ export function LoginForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1">
-              <Label htmlFor="email" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <Label htmlFor="email" className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                 Электронная почта
               </Label>
               <Input
@@ -74,7 +74,7 @@ export function LoginForm() {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor="password" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <Label htmlFor="password" className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                 Пароль
               </Label>
               <Input
@@ -86,7 +86,7 @@ export function LoginForm() {
               />
             </div>
             {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-md">{error}</p>
+              <p className="text-sm text-error bg-error-bg px-3 py-2 rounded-md">{error}</p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
               <LogIn size={18} />

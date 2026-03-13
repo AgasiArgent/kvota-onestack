@@ -33,12 +33,11 @@ interface Props {
   initialSubTab?: string;
 }
 
-type SubTab = "quotes" | "specs" | "contracts";
+type SubTab = "quotes" | "specs";
 
 const SUB_TABS: { key: SubTab; label: string }[] = [
   { key: "quotes", label: "КП" },
   { key: "specs", label: "Спецификации" },
-  { key: "contracts", label: "Договоры" },
 ];
 
 const STATUS_LABELS: Record<string, string> = {
@@ -79,8 +78,8 @@ export function TabDocuments({ quotes, specs, initialSubTab }: Props) {
             className={cn(
               "px-3 py-1.5 text-sm rounded-md transition-colors",
               activeSubTab === tab.key
-                ? "bg-blue-100 text-blue-700 font-medium"
-                : "text-slate-500 hover:bg-slate-100"
+                ? "bg-accent-subtle text-accent font-medium"
+                : "text-text-muted hover:bg-sidebar"
             )}
           >
             {tab.label}
@@ -106,11 +105,6 @@ export function TabDocuments({ quotes, specs, initialSubTab }: Props) {
           formatAmount={formatAmount}
         />
       )}
-      {activeSubTab === "contracts" && (
-        <div className="py-8 text-center text-slate-400">
-          Договоры — в разработке
-        </div>
-      )}
     </div>
   );
 }
@@ -129,7 +123,7 @@ function DocumentTable({
   formatAmount: (n: number | null) => string;
 }) {
   if (items.length === 0) {
-    return <p className="py-8 text-center text-slate-400">{emptyText}</p>;
+    return <p className="py-8 text-center text-text-subtle">{emptyText}</p>;
   }
   return (
     <Table>
@@ -148,14 +142,14 @@ function DocumentTable({
             <TableCell>
               <Link
                 href={`${linkPrefix}/${item.id}`}
-                className="text-blue-600 hover:underline font-medium"
+                className="text-accent hover:underline font-medium"
               >
                 {item.idn}
               </Link>
             </TableCell>
             <TableCell className="tabular-nums">{formatAmount(item.total_amount)}</TableCell>
             <TableCell className="tabular-nums">{formatAmount(item.profit_amount)}</TableCell>
-            <TableCell className="text-slate-500">{formatDate(item.created_at)}</TableCell>
+            <TableCell className="text-text-muted">{formatDate(item.created_at)}</TableCell>
             <TableCell>
               <Badge variant="secondary">{STATUS_LABELS[item.status] ?? item.status}</Badge>
             </TableCell>

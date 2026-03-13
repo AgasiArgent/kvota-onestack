@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Moon, Sun, Menu } from "lucide-react";
+import { LogOut, Moon, Sun, Menu, X, PanelLeftClose, PanelLeft } from "lucide-react";
 import { createClient } from "@/shared/lib/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,16 @@ interface SidebarProps {
   changelogUnreadCount?: number;
 }
 
+type ViewportMode = "desktop" | "tablet" | "mobile";
+
+function getViewportMode(): ViewportMode {
+  if (typeof window === "undefined") return "desktop";
+  const width = window.innerWidth;
+  if (width <= 640) return "mobile";
+  if (width <= 768) return "tablet";
+  return "desktop";
+}
+
 export function Sidebar({
   user,
   pendingApprovalsCount = 0,
@@ -28,6 +38,50 @@ export function Sidebar({
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Detect viewport mode on mount and resize
+  useEffect(() => {
+    function handleResize() {
+      const mode = getViewportMode();
+      setViewportMode(mode);
+
+      if (mode === "mobile") {
+        // On mobile, sidebar is an overlay — zero out the content margin
+        document.documentElement.setAttribute("data-sidebar-collapsed", "mobile");
+      } else if (mode === "tablet") {
+        // Auto-collapse on tablet
+        setCollapsed(true);
+        document.documentElement.setAttribute("data-sidebar-collapsed", "true");
+        setMobileOpen(false);
+      } else {
+        // Desktop — restore expanded sidebar
+        setCollapsed(false);
+        document.documentElement.setAttribute("data-sidebar-collapsed", "false");
+        setMobileOpen(false);
+      }
+    }
+
+    // Set initial mode
+    handleResize();
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Persist dark mode in localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("theme") as "light" | "dark" | null;
+    const initial = saved === "dark" ? "dark" : "light";
+    setTheme(initial);
+    document.documentElement.classList.toggle("dark", initial === "dark");
+  }, []);
+
+  // Close mobile sidebar on navigation
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   function toggleCollapsed() {
     const next = !collapsed;
@@ -36,6 +90,10 @@ export function Sidebar({
       "data-sidebar-collapsed",
       String(next)
     );
+  }
+
+  function toggleMobileOpen() {
+    setMobileOpen((prev) => !prev);
   }
 
   const isAdmin =
@@ -51,6 +109,7 @@ export function Sidebar({
     const next = theme === "light" ? "dark" : "light";
     setTheme(next);
     document.documentElement.classList.toggle("dark", next === "dark");
+    localStorage.setItem("theme", next);
   }
 
   async function handleLogout() {
@@ -62,19 +121,26 @@ export function Sidebar({
 
   const initials = user.email[0]?.toUpperCase() ?? "U";
 
-  return (
+  // On mobile, the sidebar is either hidden or shown as an overlay
+  const isMobile = viewportMode === "mobile";
+  const isIconOnly = collapsed || viewportMode === "tablet";
+  const showLabels = !isIconOnly || isMobile;
+
+  const sidebarContent = (
     <aside
       className={cn(
-        "fixed left-0 top-0 h-screen bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 flex flex-col z-50 transition-[width] duration-200",
-        collapsed ? "w-[60px]" : "w-[260px]"
+        "fixed left-0 top-0 h-screen bg-sidebar border-r border-border-light flex flex-col z-50 transition-[width] duration-200",
+        isMobile ? "w-[260px]" : isIconOnly ? "w-[60px]" : "w-[260px]",
+        isMobile && !mobileOpen && "hidden"
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-14 border-b border-slate-200 dark:border-slate-700">
-        {!collapsed && (
+      <div className="flex items-center justify-between px-4 h-14 border-b border-border-light">
+        {showLabels && (
           <Link
             href="/dashboard"
-            className="font-semibold text-lg text-blue-600"
+            prefetch={false}
+            className="font-semibold text-lg text-accent"
           >
             Kvota
           </Link>
@@ -82,18 +148,28 @@ export function Sidebar({
         <div className="flex items-center gap-1">
           <button
             onClick={toggleTheme}
-            className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="p-1.5 rounded-md hover:bg-sidebar"
             title="Переключить тему"
           >
             {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
           </button>
-          <button
-            onClick={toggleCollapsed}
-            className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-            title="Свернуть панель"
-          >
-            <Menu size={18} />
-          </button>
+          {isMobile ? (
+            <button
+              onClick={toggleMobileOpen}
+              className="p-1.5 rounded-md hover:bg-sidebar"
+              title="Закрыть меню"
+            >
+              <X size={18} />
+            </button>
+          ) : (
+            <button
+              onClick={toggleCollapsed}
+              className="p-1.5 rounded-md hover:bg-sidebar"
+              title={collapsed ? "Развернуть панель" : "Свернуть панель"}
+            >
+              {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -102,8 +178,8 @@ export function Sidebar({
         <nav className="py-2">
           {sections.map((section, idx) => (
             <div key={section.title} className="mb-1">
-              {!collapsed && (
-                <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {showLabels && (
+                <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
                   {section.title}
                 </div>
               )}
@@ -118,20 +194,21 @@ export function Sidebar({
                   <Link
                     key={item.href + item.label}
                     href={item.href}
+                    prefetch={false}
                     className={cn(
                       "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
                       isActive
-                        ? "bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400"
-                        : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800",
-                      collapsed && "justify-center px-0"
+                        ? "bg-accent-subtle text-accent"
+                        : "text-text hover:bg-sidebar",
+                      !showLabels && "justify-center px-0"
                     )}
-                    title={collapsed ? item.label : undefined}
+                    title={!showLabels ? item.label : undefined}
                   >
                     <Icon size={20} className="shrink-0" />
-                    {!collapsed && (
+                    {showLabels && (
                       <span className="truncate">{item.label}</span>
                     )}
-                    {!collapsed && item.badge && (
+                    {showLabels && item.badge && (
                       <Badge
                         variant="destructive"
                         className="ml-auto text-[10px] px-1.5 py-0 min-w-[18px] text-center"
@@ -149,29 +226,59 @@ export function Sidebar({
       </ScrollArea>
 
       {/* Footer */}
-      <div className="border-t border-slate-200 dark:border-slate-700 p-3">
-        <Link href="/profile" className="flex items-center gap-3 mb-2">
+      <div className="border-t border-border-light p-3">
+        <Link
+          href="/profile"
+          prefetch={false}
+          className="flex items-center gap-3 mb-2"
+        >
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-blue-100 text-blue-700 text-sm">
+            <AvatarFallback className="bg-accent-subtle text-accent text-sm">
               {initials}
             </AvatarFallback>
           </Avatar>
-          {!collapsed && (
+          {showLabels && (
             <div className="min-w-0">
               <p className="text-sm truncate">{user.email}</p>
-              <p className="text-xs text-blue-500">Профиль</p>
+              <p className="text-xs text-accent">Профиль</p>
             </div>
           )}
         </Link>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 text-slate-400 hover:text-slate-600 text-xs w-full px-1"
+          className="flex items-center gap-2 text-text-subtle hover:text-text-muted text-xs w-full px-1"
           title="Выйти из системы"
         >
           <LogOut size={16} />
-          {!collapsed && <span>Выйти</span>}
+          {showLabels && <span>Выйти</span>}
         </button>
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Mobile hamburger button — visible only when sidebar is hidden on mobile */}
+      {isMobile && !mobileOpen && (
+        <button
+          onClick={toggleMobileOpen}
+          className="fixed top-3 left-3 z-50 p-2 rounded-md bg-sidebar border border-border-light shadow-sm hover:bg-sidebar/80"
+          title="Открыть меню"
+        >
+          <Menu size={20} />
+        </button>
+      )}
+
+      {/* Mobile backdrop */}
+      {isMobile && mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={toggleMobileOpen}
+          aria-hidden="true"
+        />
+      )}
+
+      {sidebarContent}
+    </>
   );
 }

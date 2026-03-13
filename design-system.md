@@ -2,328 +2,289 @@
 
 > Claude Code MUST read this file before any UI work.
 > This is the single source of truth for all visual decisions.
+> **Priority:** This file overrides plugin aesthetics (colors/fonts/spacing). Plugin creativity applies to layout/UX only.
 
 ## Stack
 
-- **Framework:** FastHTML (Python) — server-rendered HTML
-- **CSS Base:** PicoCSS v2
-- **Utilities:** Tailwind CDN (play CDN, no config)
-- **Components:** DaisyUI v4
-- **Interactivity:** HTMX
-- **Custom styles:** CSS variables in `APP_STYLES` (main.py, line ~149)
+- **Framework:** Next.js 15 (App Router) — migrating from FastHTML
+- **CSS:** Tailwind CSS v4
+- **Components:** shadcn/ui
+- **Icons:** Lucide React (no emoji as icons)
+- **Font:** Plus Jakarta Sans (Google Fonts)
 
 ## Principles
 
 1. **Visual hierarchy: size > weight > color** — one element per section gets all three
 2. **Design in grayscale first** — color is supplementary, not structural
 3. **Constrained scales only** — no arbitrary px/rem/hex values outside this document
-4. **Variables over inline** — use `var(--token)` not hardcoded values
-5. **No global transitions** — animate only specific properties on specific elements
-6. **Compact by default** — this is a data-heavy CRM, not a marketing site
+4. **CSS variables** — use semantic tokens, never hardcoded hex in components
+5. **One primary CTA per section** — secondary/tertiary actions visually subordinate
+6. **Comfortable density by default** — compact mode opt-in for power users
+7. **Warm, not cold** — backgrounds are cream-tinted, grays are warm stone, not blue-gray
 
 ---
 
-## Color Palette
+## Color Palette: Slate & Copper
 
-### Primary: Blue
+### Brand Identity
 
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--blue-50` | `#eff6ff` | Tinted backgrounds, selected row |
-| `--blue-100` | `#dbeafe` | Hover backgrounds, active tab bg |
-| `--blue-200` | `#bfdbfe` | Borders on active elements |
-| `--blue-300` | `#93c5fd` | Disabled primary elements |
-| `--blue-400` | `#60a5fa` | Links on hover |
-| `--blue-500` | `#3b82f6` | **Primary accent** — buttons, links, active states |
-| `--blue-600` | `#2563eb` | Button hover, strong emphasis |
-| `--blue-700` | `#1d4ed8` | Active/pressed states |
-| `--blue-800` | `#1e40af` | Dark emphasis text |
-| `--blue-900` | `#1e3a8a` | Headings on colored bg |
+A warm, premium palette that combines **stone/slate neutrals** with **copper/burnt orange accents**. Inspired by natural materials — leather, stone, warm metal. Professional but human. Completely distinct from standard blue SaaS.
 
-### Gray: Slate (blue-tinted)
+### Light Mode
 
-Standardize on **slate** palette (not gray). The blue tint harmonizes with the blue primary.
+| Token             | Hex       | OKLCH                  | Usage                                      |
+| ----------------- | --------- | ---------------------- | ------------------------------------------ |
+| `--primary`       | `#57534E` | `oklch(0.41 0.01 55)`  | Sidebar active, headings emphasis, logo    |
+| `--primary-light` | `#78716C` | `oklch(0.52 0.01 55)`  | Hover states, secondary borders            |
+| `--accent`        | `#C2410C` | `oklch(0.50 0.16 35)`  | Primary CTA buttons, links, focus rings    |
+| `--accent-hover`  | `#9A3412` | `oklch(0.42 0.14 35)`  | CTA hover/pressed state                    |
+| `--accent-subtle` | `#FFF7ED` | `oklch(0.98 0.01 70)`  | Accent backgrounds (selected rows, badges) |
+| `--background`    | `#FAF9F7` | `oklch(0.98 0.005 80)` | Page background — warm off-white           |
+| `--card`          | `#FFFFFF` | `oklch(1.0 0 0)`       | Cards, panels, table backgrounds           |
+| `--sidebar`       | `#F0EDEA` | `oklch(0.94 0.008 60)` | Sidebar background — warm light gray       |
+| `--text`          | `#1C1917` | `oklch(0.15 0.01 55)`  | Primary text — warm near-black             |
+| `--text-muted`    | `#78716C` | `oklch(0.52 0.01 55)`  | Secondary text, labels, captions           |
+| `--text-subtle`   | `#A8A29E` | `oklch(0.68 0.01 55)`  | Placeholder text, disabled                 |
+| `--border`        | `#D6D3CE` | `oklch(0.85 0.008 60)` | Standard borders                           |
+| `--border-light`  | `#E7E5E0` | `oklch(0.91 0.006 60)` | Subtle dividers, card borders              |
+| `--ring`          | `#C2410C` | `oklch(0.50 0.16 35)`  | Focus ring (matches accent)                |
 
-| Token | Hex | CSS Variable | Usage |
-|-------|-----|-------------|-------|
-| `slate-50` | `#f8fafc` | `--bg-page` alt | Page bg, compact input bg |
-| `slate-100` | `#f1f5f9` | — | Card hover, table header bg |
-| `slate-200` | `#e2e8f0` | `--border-color` | Borders, dividers, input borders |
-| `slate-300` | `#cbd5e1` | — | Disabled input borders |
-| `slate-400` | `#94a3b8` | `--text-muted` | Placeholder text, icons |
-| `slate-500` | `#64748b` | `--text-secondary` | Secondary labels, muted text |
-| `slate-600` | `#475569` | — | Body text secondary |
-| `slate-700` | `#334155` | — | Body text primary |
-| `slate-800` | `#1e293b` | `--text-primary` | Headings, high-contrast text |
-| `slate-900` | `#0f172a` | — | Near-black |
+### Dark Mode
+
+| Token            | Hex       | OKLCH                  | Usage                               |
+| ---------------- | --------- | ---------------------- | ----------------------------------- |
+| `--background`   | `#1C1917` | `oklch(0.15 0.01 55)`  | Page background                     |
+| `--card`         | `#292524` | `oklch(0.21 0.01 40)`  | Cards, panels                       |
+| `--sidebar`      | `#171412` | `oklch(0.12 0.01 40)`  | Sidebar                             |
+| `--text`         | `#E7E5E4` | `oklch(0.92 0.005 55)` | Primary text                        |
+| `--text-muted`   | `#A8A29E` | `oklch(0.68 0.01 55)`  | Secondary text                      |
+| `--text-subtle`  | `#78716C` | `oklch(0.52 0.01 55)`  | Placeholder, disabled               |
+| `--border`       | `#44403C` | `oklch(0.32 0.01 55)`  | Standard borders                    |
+| `--border-light` | `#332F2C` | `oklch(0.25 0.01 50)`  | Subtle dividers                     |
+| `--accent`       | `#EA580C` | `oklch(0.57 0.18 35)`  | CTA — slightly brighter for dark bg |
+| `--accent-hover` | `#F97316` | `oklch(0.65 0.18 45)`  | CTA hover                           |
 
 ### Semantic Colors
 
-| Role | Hex | Usage |
-|------|-----|-------|
-| Success | `#10b981` | Confirmations, approved states |
-| Warning | `#f59e0b` | Alerts, pending states, draft |
-| Error | `#ef4444` | Errors, rejected, destructive |
-| Info | `#3b82f6` | Informational (same as primary) |
-
-### Status Badge Colors
-
-| Status | Background | Text |
-|--------|-----------|------|
-| Draft | `#fef3c7` | `#92400e` |
-| Sent/In Progress | `#dbeafe` | `#1e40af` |
-| Approved | `#d1fae5` | `#065f46` |
-| Rejected | `#fee2e2` | `#991b1b` |
-| Pending | `#fef3c7` | `#92400e` |
-| Cancelled | `#f3f4f6` | `#4b5563` |
-
-**Rule:** Use flat background + dark text for badges (not gradients). Easier to read, lighter visually.
+| Token          | Light     | Dark                     | Usage                            |
+| -------------- | --------- | ------------------------ | -------------------------------- |
+| `--success`    | `#059669` | `#10B981`                | Won deals, positive metrics      |
+| `--success-bg` | `#DCFCE7` | `rgba(22, 101, 52, 0.3)` | Success badge background         |
+| `--warning`    | `#D97706` | `#F59E0B`                | Pending, awaiting action         |
+| `--warning-bg` | `#FEF3C7` | `rgba(146, 64, 14, 0.3)` | Warning badge background         |
+| `--error`      | `#DC2626` | `#EF4444`                | Errors, overdue, rejected        |
+| `--error-bg`   | `#FEE2E2` | `rgba(220, 38, 38, 0.3)` | Error badge background           |
+| `--info`       | `#9A3412` | `#C2410C`                | In progress (uses copper family) |
+| `--info-bg`    | `#FFF7ED` | `rgba(154, 52, 18, 0.3)` | Info badge background            |
 
 ---
 
 ## Typography
 
-### Font
+### Font: Plus Jakarta Sans
 
-**Primary:** Inter — `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
-
-Load via Google Fonts:
-```html
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+```css
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap");
 ```
 
-### Type Scale (constrained)
+**Why:** Modern alternative to Inter. Geometric but friendly. Professional but approachable. Single font, multiple weights — no pairing complexity.
 
-Only these sizes are allowed. No 13px, 15px, 0.7rem, 0.85rem, or other arbitrary values.
+### Type Scale (1.25 ratio)
 
-| Size | Name | Usage | Weight |
-|------|------|-------|--------|
-| 11px | `--text-2xs` | Uppercase labels, timestamps | 600 |
-| 12px | `--text-xs` | Badges, captions, compact table cells | 400-500 |
-| 14px | `--text-sm` | **Base body**, form inputs, table cells, nav links | 400 |
-| 16px | `--text-base` | Emphasized body, standalone paragraphs | 400 |
-| 18px | `--text-lg` | Card titles, section headings | 600 |
-| 20px | `--text-xl` | Page section titles | 600 |
-| 24px | `--text-2xl` | Page titles | 700 |
+| Token         | Size | Weight  | Line Height | Usage                               |
+| ------------- | ---- | ------- | ----------- | ----------------------------------- |
+| `--text-xs`   | 12px | 400-500 | 1.5         | Badges, timestamps, captions        |
+| `--text-sm`   | 14px | 400-500 | 1.5         | Labels, table cells, secondary text |
+| `--text-base` | 16px | 400     | 1.625       | Body text, form inputs              |
+| `--text-lg`   | 18px | 600     | 1.4         | Card titles, section headings       |
+| `--text-xl`   | 20px | 600     | 1.3         | Page section titles                 |
+| `--text-2xl`  | 24px | 700     | 1.25        | Page titles                         |
+| `--text-3xl`  | 30px | 700     | 1.2         | Dashboard hero numbers              |
 
-**Rules:**
-- Body text base = **14px** (this is a data-dense CRM)
-- Headings use `font-weight: 600-700`, body uses `400`
-- Line height: `1.25` for headings, `1.5` for body
-- Max prose width: `65ch`
-- **Letter spacing:** `-0.01em` for headings 20px+, `0.05em` for uppercase labels
+### Rules
 
-### Mapping from current values
-
-| Current (remove) | Map to |
-|-------------------|--------|
-| 13px | 12px or 14px |
-| 15px | 14px or 16px |
-| 0.7rem (11.2px) | 11px |
-| 0.75rem (12px) | 12px |
-| 0.8rem (12.8px) | 12px |
-| 0.8125rem (13px) | 14px |
-| 0.85rem (13.6px) | 14px |
-| 0.875rem (14px) | 14px |
-| 0.9rem (14.4px) | 14px |
-| 0.9375rem (15px) | 14px or 16px |
-| 1rem (16px) | 16px |
-| 1.125rem (18px) | 18px |
-| 1.25rem (20px) | 20px |
-| 1.5rem (24px) | 24px |
-| 1.75rem (28px) | 24px |
-| 2rem (32px) | 24px |
+- **Headings:** `font-semibold` (600) — never `font-bold` (700) except page titles
+- **Body:** `font-normal` (400)
+- **Labels:** `text-sm font-medium text-muted uppercase tracking-wide`
+- **Numbers:** `font-variant-numeric: tabular-nums` for aligned columns
+- **Max prose width:** 65ch (`max-w-prose`)
 
 ---
 
-## Spacing Scale
+## Spacing Scale (4px base)
 
-| Value | Name | Usage |
-|-------|------|-------|
-| 2px | — | Borders, outlines only |
-| 4px | `xs` | Icon gaps, tight inline elements |
-| 6px | `sm` | Compact badge padding, chip gaps |
-| 8px | `md` | List items, compact card padding, form field vertical gap |
-| 12px | `lg` | Standard card padding, form group gap |
-| 16px | `xl` | Comfortable card padding, between components |
-| 20px | `2xl` | Section gap within a card |
-| 24px | `3xl` | Between cards, section spacing |
-| 32px | `4xl` | Between page sections |
-| 48px | `5xl` | Large page margins |
+| Token | Value | Usage                                  |
+| ----- | ----- | -------------------------------------- |
+| `1`   | 4px   | Icon gaps, tight inline                |
+| `2`   | 8px   | Between related items, compact padding |
+| `3`   | 12px  | Form field gaps, small card padding    |
+| `4`   | 16px  | Card padding, section element gaps     |
+| `6`   | 24px  | Between form groups, card sections     |
+| `8`   | 32px  | Between major content blocks           |
+| `12`  | 48px  | Between page sections                  |
+| `16`  | 64px  | Top/bottom page margins                |
 
-**Rules:**
-- **No arbitrary spacing.** If a value doesn't appear in this table, don't use it.
-- Prefer `8px` and `12px` for most internal padding (compact CRM feel).
-- Use `16px` or `24px` for card padding (depending on content density).
-- Gap between form label and input: `4px`
-- Gap between form fields: `12px`
-- Gap between form sections: `24px`
+### Rules
+
+- **Card padding:** `p-5` (20px) standard, `p-4` (16px) compact
+- **Section gaps:** `gap-6` (24px)
+- **Page padding:** `px-8` (32px) desktop, `px-4` (16px) mobile
+- **Form field gaps:** `gap-3` to `gap-4`
+- **Table cell padding:** `px-5 py-3.5` (20px/14px)
+- **Button padding:** `px-4 py-2.5` standard, `px-3 py-2` small
 
 ---
 
-## Component Patterns
+## Border Radius
 
-### Buttons (BEM system — `.btn`)
+| Token         | Value | Usage                  |
+| ------------- | ----- | ---------------------- |
+| `--radius-sm` | 6px   | Badges, small inputs   |
+| `--radius-md` | 8px   | Buttons, inputs, pills |
+| `--radius-lg` | 12px  | Cards, panels, modals  |
 
-The project uses a BEM button system defined in APP_STYLES. **Always use `.btn` classes, never raw `<button>` without a class.**
+One system. Never mix 4px, 10px, 16px randomly.
 
-| Variant | Class | Look | Usage |
-|---------|-------|------|-------|
-| Primary | `.btn.btn--primary` | **Blue fill** (`#3b82f6`), white text | Main actions (Сохранить, Передать) |
-| Secondary | `.btn.btn--secondary` | White + slate border | Secondary actions (Отмена, Назад) |
-| Success | `.btn.btn--success` | White + green border, green fill on hover | Confirmations (Одобрить, Подтвердить) |
-| Danger | `.btn.btn--danger` | White + red border, red fill on hover | Destructive (Удалить, Отклонить) |
-| Ghost | `.btn.btn--ghost` | Transparent, hover bg | Toolbar/inline (Добавить, Загрузить) |
+---
 
-| Modifier | Class | Usage |
-|----------|-------|-------|
-| Small | `.btn--sm` | Inline, table actions |
-| Large | `.btn--lg` | Full-page primary CTA |
-| Full width | `.btn--full` | Form submit on mobile |
-| Icon only | `.btn--icon-only` | Toolbar icon buttons |
+## Shadows
 
-**Button rules:**
-- Max 1 primary button per card/section
-- Destructive buttons always on the right
-- Group buttons with `gap: 8px`
-- No hover transforms on buttons (remove `translateY`)
+| Token         | Value                                                               | Usage                     |
+| ------------- | ------------------------------------------------------------------- | ------------------------- |
+| `--shadow-sm` | `0 1px 2px rgba(28, 25, 23, 0.05)`                                  | Cards resting state       |
+| `--shadow`    | `0 1px 3px rgba(28, 25, 23, 0.1), 0 1px 2px rgba(28, 25, 23, 0.06)` | Elevated cards, dropdowns |
+| `--shadow-md` | `0 4px 6px rgba(28, 25, 23, 0.1)`                                   | Modals, floating panels   |
 
-### Cards
+**Rules:**
 
-```
-background: var(--bg-card);
-border: 1px solid var(--border-color);
-border-radius: 8px;
-padding: 16px;           /* compact */
-padding: 20px 24px;      /* standard */
-box-shadow: var(--shadow-subtle);  /* 0 1px 4px rgba(0,0,0,0.06) */
-```
+- Cards use `border` by default, NOT shadows (Stripe pattern)
+- Shadows only for elevated/floating elements (dropdowns, modals, tooltips)
+- Shadow color uses warm black (`28, 25, 23`), not pure black
 
-**Card rules:**
-- **No hover lift effect** — remove `transform: translateY(-4px)` from cards
-- No hover border color change
-- Cards are static containers, not interactive targets
-- Use `cursor: pointer` + subtle `background` change only if the entire card is clickable
+---
 
-### Tables
+## Components
+
+### Buttons
 
 ```
-Header:  background: #f8fafc; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b;
-Cells:   font-size: 14px; padding: 8px 12px; color: #1e293b;
-Rows:    border-bottom: 1px solid #e2e8f0;
-Hover:   background: #f8fafc; (subtle, no transform)
+Primary:    bg-accent text-white rounded-md px-4 py-2.5 font-semibold
+Secondary:  bg-transparent border border-border text-text rounded-md px-4 py-2.5 font-semibold
+Ghost:      bg-transparent text-text-muted rounded-md px-4 py-2.5 font-medium
+Danger:     bg-transparent border border-error text-error rounded-md px-4 py-2.5 font-semibold
 ```
 
-**Table rules:**
-- Headers always uppercase, smaller than body
-- No zebra stripes (use hover instead)
-- Compact padding: `8px 12px`
-- Date columns: first or second column
-- Status columns: use badge, not plain text
-- Action columns: right-aligned, ghost buttons
-
-### Forms
-
-```
-Label:   font-size: 12px; font-weight: 500; color: #64748b; margin-bottom: 4px;
-Input:   height: 36px; padding: 8px 12px; font-size: 14px; border: 1px solid #e2e8f0; border-radius: 6px;
-Focus:   border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
-Group:   gap between fields: 12px; gap between sections: 24px;
-```
+- **Max 1 primary button per section**
+- Destructive actions: NEVER primary style — use outlined danger with confirmation
+- Loading state: disable + show spinner
 
 ### Badges
 
 ```
-padding: 2px 8px;
-font-size: 12px;
-font-weight: 500;
-border-radius: 4px;
-background: {semantic flat color};
-color: {semantic dark text};
+Success:    bg-success-bg text-success-text rounded-sm px-2.5 py-1 text-xs font-semibold
+Warning:    bg-warning-bg text-warning-text rounded-sm px-2.5 py-1 text-xs font-semibold
+Error:      bg-error-bg text-error-text rounded-sm px-2.5 py-1 text-xs font-semibold
+Copper:     bg-accent-subtle text-info rounded-sm px-2.5 py-1 text-xs font-semibold
+Neutral:    bg-sidebar text-text-muted rounded-sm px-2.5 py-1 text-xs font-semibold
 ```
 
-**No gradients on badges.** Use flat bg from Status Badge Colors table above.
+### Cards
+
+```
+Standard:   bg-card border border-border-light rounded-lg
+Elevated:   bg-card border border-border-light rounded-lg shadow-sm
+```
+
+- No gradient backgrounds on cards
+- No colored card headers — use type hierarchy instead
+
+### Tables
+
+```
+Header:     text-xs font-semibold uppercase tracking-wide text-text-muted
+Row:        hover:bg-[rgba(87,83,78,0.04)] transition-colors
+Cell:       text-sm py-3.5 px-5
+Border:     border-b border-border-light
+```
+
+- Row hover: subtle warm tint, not highlight
+- Sort indicator on column headers
+- Max 3 visible action icons per row, rest in overflow menu
+
+### Forms
+
+```
+Input:      bg-transparent border border-border rounded-md px-3 py-2.5 text-base
+            focus:ring-2 focus:ring-accent focus:border-accent
+Label:      text-xs font-semibold uppercase tracking-wide text-text-muted mb-1.5
+Helper:     text-xs text-text-subtle mt-1
+Error:      text-xs text-error mt-1
+```
+
+- Labels ABOVE inputs (never beside)
+- Max 5 fields visible without progressive disclosure
+- Smart defaults: pre-fill from context
 
 ### Sidebar
 
-Keep the current sidebar structure. Key tokens:
-- Width: `260px` expanded, `60px` collapsed
-- Background: `#ffffff` (light) / dark theme variant
-- Active item: `background: rgba(59, 130, 246, 0.1); color: #3b82f6;`
-- Font size: `14px`
+```
+Background: bg-sidebar border-r border-border-light
+Logo:       text-lg font-bold text-primary
+Section:    text-xs font-semibold uppercase tracking-wide text-text-muted
+Item:       text-sm font-medium text-text-muted px-3 py-2 rounded-md
+Active:     text-text font-semibold bg-[rgba(87,83,78,0.08)]
+```
 
 ---
 
-## Animations & Transitions
-
-### Removed (performance)
+## Tailwind v4 CSS Variables
 
 ```css
-/* REMOVED — was causing performance issues */
-/* * { transition: all 0.2s ease-in-out; } */
+@theme inline {
+  /* Primary palette */
+  --color-primary: oklch(0.41 0.01 55);
+  --color-primary-light: oklch(0.52 0.01 55);
+  --color-accent: oklch(0.5 0.16 35);
+  --color-accent-hover: oklch(0.42 0.14 35);
+  --color-accent-subtle: oklch(0.98 0.01 70);
+
+  /* Backgrounds */
+  --color-background: oklch(0.98 0.005 80);
+  --color-card: oklch(1 0 0);
+  --color-sidebar: oklch(0.94 0.008 60);
+
+  /* Text */
+  --color-text: oklch(0.15 0.01 55);
+  --color-text-muted: oklch(0.52 0.01 55);
+  --color-text-subtle: oklch(0.68 0.01 55);
+
+  /* Borders */
+  --color-border: oklch(0.85 0.008 60);
+  --color-border-light: oklch(0.91 0.006 60);
+
+  /* Semantic */
+  --color-success: oklch(0.55 0.15 160);
+  --color-warning: oklch(0.6 0.15 75);
+  --color-error: oklch(0.5 0.2 25);
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
 ```
-
-### Allowed transitions (opt-in only)
-
-```css
-/* Only these properties may be animated */
-.transition-colors { transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease; }
-.transition-opacity { transition: opacity 0.15s ease; }
-.transition-shadow { transition: box-shadow 0.15s ease; }
-```
-
-**Rules:**
-- No `transform: translateY()` on hover — cards don't lift, buttons don't bounce
-- No `transition: all` — always specify the exact property
-- Max transition duration: `0.2s`
-- Allowed animations: loading spinners, toast slide-in, modal fade
 
 ---
 
-## Layout
+## Anti-Patterns (NEVER do these)
 
-### Page structure
-
-```
-[Sidebar 260px] | [Main Content max-width: 1200px, padding: 24px]
-```
-
-### Responsive breakpoints
-
-| Name | Width | Behavior |
-|------|-------|----------|
-| `sm` | ≤640px | Stack columns, full-width cards |
-| `md` | ≤1024px | Collapse sidebar, 2-col grid |
-| `lg` | >1024px | Full layout, sidebar visible |
-
-### Content width
-
-- Main content: `max-width: 1200px`
-- Forms: `max-width: 600px` (single column)
-- Tables: full width of content area
-- Prose text: `max-width: 65ch`
-
----
-
-## Icons
-
-Use Lucide icons (already available via HTML SVG). Consistent sizing:
-- Inline with text: `16px` (width/height)
-- Section headers: `20px`
-- Page headers: `24px`
-- Standalone/decorative: `32px` or `48px`
-
----
-
-## Do NOT
-
-1. ❌ Use hex colors not in this palette
-2. ❌ Use font sizes not in the type scale
-3. ❌ Use spacing values not in the spacing scale
-4. ❌ Add `transition: all` anywhere
-5. ❌ Add `transform: translateY()` on hover
-6. ❌ Use `!important` (fix specificity instead)
-7. ❌ Add gradient backgrounds to badges
-8. ❌ Use inline `style=` for colors/fonts/spacing (use CSS classes or variables)
-9. ❌ Mix `rem` and `px` for the same property type (use `px` for this project)
-10. ❌ Use Manrope font (migrated to Inter)
+- No `transition: all` — animate specific properties only
+- No `transform: translateY()` on hover for cards/buttons — use color/shadow changes
+- No emoji as icons — use Lucide React SVGs
+- No pure gray (`#6b7280`) — always warm-tinted (`#78716C`)
+- No hardcoded hex in components — use semantic tokens
+- No `text-[#hex]` or `bg-[#hex]` — use design system classes
+- No decorative images in task flows (forms, dashboards)
+- No more than 4 distinct colors carrying meaning per page
+- No arbitrary spacing (`gap-[13px]`) — use scale values only
+- No mixing border-radius values outside the 3-value system

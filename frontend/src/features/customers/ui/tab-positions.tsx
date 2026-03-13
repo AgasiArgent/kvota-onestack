@@ -18,7 +18,7 @@ interface Props {
 
 export function TabPositions({ positions }: Props) {
   if (positions.length === 0) {
-    return <p className="py-8 text-center text-slate-400">Нет запрошенных позиций</p>;
+    return <p className="py-8 text-center text-text-subtle">Нет запрошенных позиций</p>;
   }
   return (
     <Table>
@@ -35,10 +35,10 @@ export function TabPositions({ positions }: Props) {
         {positions.map((p) => (
           <TableRow key={p.id}>
             <TableCell className="font-medium">{p.product_name}</TableCell>
-            <TableCell className="text-slate-500">{p.brand ?? "—"}</TableCell>
-            <TableCell className="text-slate-500">{p.sku ?? "—"}</TableCell>
+            <TableCell className="text-text-muted">{p.brand ?? "—"}</TableCell>
+            <TableCell className="text-text-muted">{p.sku ?? "—"}</TableCell>
             <TableCell className="text-right tabular-nums">{p.quantity ?? "—"}</TableCell>
-            <TableCell className="text-blue-600">{p.quote_idn}</TableCell>
+            <TableCell className="text-text-muted">{p.quote_idn}</TableCell>
           </TableRow>
         ))}
       </TableBody>

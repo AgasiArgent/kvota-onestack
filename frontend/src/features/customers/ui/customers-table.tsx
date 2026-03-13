@@ -68,7 +68,7 @@ export function CustomersTable({
       {/* Search + Filter bar */}
       <form className="flex items-center gap-3" method="GET">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" size={16} />
           <Input
             name="q"
             defaultValue={initialSearch}
@@ -92,7 +92,7 @@ export function CustomersTable({
             ))}
           </SelectContent>
         </Select>
-        <Button type="submit" size="sm">
+        <Button type="submit" size="sm" variant="outline">
           <Search size={16} />
           Найти
         </Button>
@@ -103,7 +103,7 @@ export function CustomersTable({
       </form>
 
       {/* Stats row */}
-      <div className="flex gap-4 text-sm text-slate-500">
+      <div className="flex gap-4 text-sm text-text-muted">
         <span>Всего: {initialTotal}</span>
       </div>
 
@@ -125,21 +125,21 @@ export function CustomersTable({
               <TableCell>
                 <Link
                   href={`/customers/${customer.id}`}
-                  className="text-blue-600 hover:underline font-medium"
+                  className="text-accent hover:underline font-medium"
                 >
                   {truncate(customer.name, 50)}
                 </Link>
               </TableCell>
-              <TableCell className="text-slate-500 tabular-nums">
+              <TableCell className="text-text-muted tabular-nums">
                 {customer.inn ?? "—"}
               </TableCell>
-              <TableCell className="text-slate-500">
+              <TableCell className="text-text-muted">
                 {customer.manager?.full_name ?? "—"}
               </TableCell>
               <TableCell className="text-center tabular-nums">
                 {customer.quotes_count || "—"}
               </TableCell>
-              <TableCell className="text-slate-500">
+              <TableCell className="text-text-muted">
                 {formatDate(customer.last_quote_date)}
               </TableCell>
               <TableCell>
@@ -151,7 +151,7 @@ export function CustomersTable({
           ))}
           {initialData.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center py-8 text-slate-400">
+              <TableCell colSpan={6} className="text-center py-8 text-text-subtle">
                 Клиенты не найдены
               </TableCell>
             </TableRow>
@@ -162,7 +162,7 @@ export function CustomersTable({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-text-muted">
             Страница {initialPage} из {totalPages}
           </span>
           <div className="flex gap-2">

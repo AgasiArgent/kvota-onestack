@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Plus, Building2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { config } from "@/shared/config";
 import type { Customer } from "@/entities/customer";
 
 interface Props {
@@ -15,23 +16,28 @@ export function CustomerHeader({ customer }: Props) {
     <div className="mb-6">
       <Link
         href="/customers"
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-3"
+        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text mb-3"
       >
         <ArrowLeft size={16} />
         Клиенты
       </Link>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Building2 size={24} className="text-slate-400" />
+          <Building2 size={24} className="text-text-subtle" />
           <h1 className="text-2xl font-bold">{customer.name}</h1>
           <Badge variant={customer.status === "active" ? "default" : "secondary"}>
             {customer.status === "active" ? "Активен" : "Неактивен"}
           </Badge>
         </div>
-        <Link href={`/quotes/new?customer_id=${customer.id}`} className={buttonVariants()}>
+        <a
+          href={`${config.legacyAppUrl}/quotes/new?customer_id=${customer.id}`}
+          target="_blank"
+          rel="noopener"
+          className={buttonVariants()}
+        >
           <Plus size={16} />
           Создать КП
-        </Link>
+        </a>
       </div>
     </div>
   );
