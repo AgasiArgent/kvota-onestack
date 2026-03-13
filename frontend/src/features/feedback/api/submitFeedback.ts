@@ -2,6 +2,7 @@
 
 import { createClient } from "@/shared/lib/supabase/client";
 import { dataUrlToBlob } from "../lib/compressScreenshot";
+import type { DebugContext } from "../lib/debugContext";
 
 export type FeedbackType = "bug" | "ux_ui" | "suggestion" | "question";
 
@@ -10,7 +11,7 @@ interface SubmitFeedbackParams {
   description: string;
   pageUrl: string;
   pageTitle: string;
-  debugContext: Record<string, unknown>;
+  debugContext: DebugContext;
   screenshotDataUrl?: string;
 }
 

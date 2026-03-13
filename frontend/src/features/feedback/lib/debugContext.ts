@@ -4,7 +4,7 @@ interface ConsoleEntry {
   time: string;
 }
 
-interface DebugContext {
+export interface DebugContext {
   url: string;
   title: string;
   userAgent: string;
