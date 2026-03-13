@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import type { SessionUser } from "./types";
+import { ACTIVE_ROLES } from "./types";
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   const supabase = await createClient();
@@ -37,22 +38,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
     // training_manager gets all roles (super-role for demos)
     if (roles.includes("training_manager")) {
-      const allRoles = [
-        "admin",
-        "sales",
-        "procurement",
-        "logistics",
-        "customs",
-        "quote_controller",
-        "spec_controller",
-        "finance",
-        "top_manager",
-        "head_of_sales",
-        "head_of_procurement",
-        "head_of_logistics",
-        "training_manager",
-      ];
-      roles = [...new Set([...roles, ...allRoles])];
+      roles = [...new Set([...roles, ...ACTIVE_ROLES, "training_manager"])];
     }
   }
 

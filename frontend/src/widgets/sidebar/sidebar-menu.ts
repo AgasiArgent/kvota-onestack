@@ -24,7 +24,6 @@ export interface MenuItem {
   icon: LucideIcon;
   label: string;
   href: string;
-  roles: string[] | null; // null = visible to all authenticated users
   badge?: number;
 }
 
@@ -53,16 +52,15 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
 
   // === MAIN ===
   const mainItems: MenuItem[] = [
-    { icon: Inbox, label: "Мои задачи", href: "/tasks", roles: null },
-    { icon: PlayCircle, label: "Обучение", href: "/training", roles: null },
+    { icon: Inbox, label: "Мои задачи", href: "/tasks" },
+    { icon: PlayCircle, label: "Обучение", href: "/training" },
     {
       icon: Newspaper,
       label: "Обновления",
       href: "/changelog",
-      roles: null,
       ...(changelogUnreadCount > 0 ? { badge: changelogUnreadCount } : {}),
     },
-    { icon: Send, label: "Уведомления", href: "/telegram", roles: null },
+    { icon: Send, label: "Уведомления", href: "/telegram" },
   ];
 
   if (hasRole("sales", "sales_manager")) {
@@ -70,7 +68,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: PlusCircle,
       label: "Новый КП",
       href: "/quotes/new",
-      roles: ["sales", "sales_manager", "admin"],
     });
   }
   if (
@@ -92,7 +89,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: BarChart3,
       label: "Обзор",
       href: "/dashboard?tab=overview",
-      roles: null,
     });
   }
   if (hasRole("top_manager")) {
@@ -100,7 +96,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: Clock,
       label: "Согласования",
       href: "/approvals",
-      roles: ["admin", "top_manager"],
       ...(pendingApprovalsCount > 0 ? { badge: pendingApprovalsCount } : {}),
     });
   }
@@ -113,33 +108,23 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: Users,
       label: "Клиенты",
       href: "/customers",
-      roles: [
-        "sales",
-        "sales_manager",
-        "admin",
-        "top_manager",
-        "head_of_sales",
-      ],
     });
   }
   registries.push({
     icon: FileText,
     label: "Коммерческие предложения",
     href: "/quotes",
-    roles: null,
   });
   if (hasRole("procurement")) {
     registries.push({
       icon: Building2,
       label: "Поставщики",
       href: "/suppliers",
-      roles: ["procurement", "admin"],
     });
     registries.push({
       icon: ClipboardList,
       label: "Очередь PHMB",
       href: "/phmb/procurement",
-      roles: ["procurement", "admin"],
     });
   }
   if (hasRole("customs", "finance")) {
@@ -147,7 +132,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: FileText,
       label: "Таможенные декларации",
       href: "/customs/declarations",
-      roles: ["customs", "finance", "admin"],
     });
   }
   if (hasRole("sales", "sales_manager", "top_manager")) {
@@ -155,7 +139,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: Phone,
       label: "Журнал звонков",
       href: "/calls",
-      roles: ["sales", "sales_manager", "top_manager", "admin"],
     });
   }
   if (isAdmin) {
@@ -163,7 +146,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: Building,
       label: "Юрлица",
       href: "/companies",
-      roles: ["admin"],
     });
   }
   if (registries.length > 0) {
@@ -177,13 +159,11 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
         icon: FileText,
         label: "Контроль платежей",
         href: "/finance?tab=erps",
-        roles: ["finance", "top_manager", "admin"],
       },
       {
         icon: Calendar,
         label: "Календарь",
         href: "/payments/calendar",
-        roles: ["finance", "top_manager", "admin"],
       },
     ];
     if (hasRole("currency_controller")) {
@@ -191,7 +171,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
         icon: FileText,
         label: "Валютные инвойсы",
         href: "/currency-invoices",
-        roles: ["currency_controller", "admin"],
       });
     }
     sections.push({ title: "Финансы", items: financeItems });
@@ -202,30 +181,10 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     sections.push({
       title: "Администрирование",
       items: [
-        {
-          icon: User,
-          label: "Пользователи",
-          href: "/admin",
-          roles: ["admin"],
-        },
-        {
-          icon: MessageSquare,
-          label: "Обращения",
-          href: "/admin/feedback",
-          roles: ["admin"],
-        },
-        {
-          icon: GitBranch,
-          label: "Маршрутизация закупок",
-          href: "/admin/procurement-groups",
-          roles: ["admin"],
-        },
-        {
-          icon: Settings,
-          label: "Настройки",
-          href: "/settings",
-          roles: ["admin"],
-        },
+        { icon: User, label: "Пользователи", href: "/admin" },
+        { icon: MessageSquare, label: "Обращения", href: "/admin/feedback" },
+        { icon: GitBranch, label: "Маршрутизация закупок", href: "/admin/procurement-groups" },
+        { icon: Settings, label: "Настройки", href: "/settings" },
       ],
     });
   }
