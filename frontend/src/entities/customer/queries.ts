@@ -206,13 +206,28 @@ export async function fetchCustomerCalls(customerId: string) {
   const { data } = await supabase
     .from("calls")
     .select(
-      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, created_at, customer_contacts!calls_contact_person_id_fkey(name), user_profiles!calls_user_id_fkey(full_name)"
+      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, user_id, created_at, customer_contacts!calls_contact_person_id_fkey(name)"
     )
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false })
     .limit(50);
 
-  return (data ?? []).map((row) => ({
+  const rows = data ?? [];
+
+  // Batch-fetch user names (calls.user_id FK goes to auth.users, not user_profiles)
+  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  let userMap: Record<string, string> = {};
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("id, full_name")
+      .in("id", userIds);
+    userMap = Object.fromEntries(
+      (profiles ?? []).map((p) => [p.id, p.full_name ?? ""])
+    );
+  }
+
+  return rows.map((row) => ({
     id: row.id,
     call_type: row.call_type as "call" | "scheduled",
     call_category: row.call_category,
@@ -222,8 +237,7 @@ export async function fetchCustomerCalls(customerId: string) {
     meeting_notes: row.meeting_notes,
     contact_name:
       (row.customer_contacts as unknown as { name: string } | null)?.name ?? null,
-    user_name:
-      (row.user_profiles as unknown as { full_name: string } | null)?.full_name ?? null,
+    user_name: row.user_id ? userMap[row.user_id] ?? null : null,
     created_at: row.created_at,
   }));
 }

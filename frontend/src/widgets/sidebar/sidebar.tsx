@@ -135,7 +135,10 @@ export function Sidebar({
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 h-14 border-b border-border-light">
+      <div className={cn(
+        "flex items-center h-14 border-b border-border-light",
+        showLabels ? "justify-between px-4" : "justify-center"
+      )}>
         {showLabels && (
           <Link
             href="/dashboard"
