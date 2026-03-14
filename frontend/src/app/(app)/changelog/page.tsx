@@ -1,4 +1,4 @@
-import { fetchChangelogEntries } from "@/entities/changelog";
+import { fetchChangelogEntries } from "@/entities/changelog/queries";
 import { ChangelogTimeline } from "@/features/changelog";
 
 export default async function ChangelogPage() {

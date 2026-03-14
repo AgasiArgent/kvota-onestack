@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { UserProfile, ProfileFormData } from "@/entities/profile";
-import { updateProfile } from "@/entities/profile";
+import type { UserProfile, ProfileFormData } from "@/entities/profile/types";
+import { updateProfile } from "@/entities/profile/mutations";
 
 interface Props {
   profile: UserProfile;

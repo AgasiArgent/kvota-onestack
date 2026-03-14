@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
-import { fetchCurrentUserProfile } from "@/entities/profile";
+import { fetchCurrentUserProfile } from "@/entities/profile/queries";
 import { ProfileForm } from "@/features/profile";
 
 export default async function ProfilePage() {

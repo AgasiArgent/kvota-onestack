@@ -3,8 +3,8 @@
 import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { ChangelogEntry } from "@/entities/changelog";
-import { markChangelogRead } from "@/entities/changelog";
+import type { ChangelogEntry } from "@/entities/changelog/types";
+import { markChangelogRead } from "@/entities/changelog/mutations";
 
 const RUSSIAN_MONTHS: Record<number, string> = {
   1: "января",
