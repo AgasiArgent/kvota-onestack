@@ -1,5 +1,10 @@
-import { Users, MapPin, StickyNote, Star, Phone } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Users, MapPin, StickyNote, Star, Phone, Plus, Pencil, Save, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow,
@@ -7,6 +12,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { Customer, CustomerContact, CustomerCall } from "@/entities/customer";
+import { updateCustomerNotes } from "@/entities/customer";
+import { ContactFormModal } from "./contact-form-modal";
+import { CallFormModal } from "./call-form-modal";
 
 interface Props {
   customer: Customer;
@@ -15,23 +23,82 @@ interface Props {
 }
 
 export function TabCRM({ customer, contacts, calls }: Props) {
+  const router = useRouter();
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<CustomerContact | undefined>();
+  const [callModalOpen, setCallModalOpen] = useState(false);
+
+  function handleContactSaved() {
+    router.refresh();
+  }
+
+  function handleCallSaved() {
+    router.refresh();
+  }
+
+  function openEditContact(contact: CustomerContact) {
+    setEditingContact(contact);
+    setContactModalOpen(true);
+  }
+
+  function openNewContact() {
+    setEditingContact(undefined);
+    setContactModalOpen(true);
+  }
+
   return (
     <div className="space-y-6">
-      <ContactsSection contacts={contacts} />
+      <ContactsSection
+        contacts={contacts}
+        onAdd={openNewContact}
+        onEdit={openEditContact}
+      />
       <Separator />
       <AddressesSection customer={customer} />
       <Separator />
-      <CallsSection calls={calls} />
+      <CallsSection
+        calls={calls}
+        onAdd={() => setCallModalOpen(true)}
+      />
       <Separator />
-      <NotesSection notes={customer.notes} />
+      <NotesSection customerId={customer.id} notes={customer.notes} />
+
+      <ContactFormModal
+        open={contactModalOpen}
+        onClose={() => { setContactModalOpen(false); setEditingContact(undefined); }}
+        onSaved={handleContactSaved}
+        customerId={customer.id}
+        contact={editingContact}
+      />
+      <CallFormModal
+        open={callModalOpen}
+        onClose={() => setCallModalOpen(false)}
+        onSaved={handleCallSaved}
+        customerId={customer.id}
+        contacts={contacts}
+      />
     </div>
   );
 }
 
-function ContactsSection({ contacts }: { contacts: CustomerContact[] }) {
+function ContactsSection({
+  contacts,
+  onAdd,
+  onEdit,
+}: {
+  contacts: CustomerContact[];
+  onAdd: () => void;
+  onEdit: (c: CustomerContact) => void;
+}) {
   return (
     <div>
-      <h3 className="text-base font-semibold mb-3">Контакты</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold">Контакты</h3>
+        <Button size="sm" variant="outline" onClick={onAdd}>
+          <Plus size={14} />
+          Добавить
+        </Button>
+      </div>
       {contacts.length === 0 ? (
         <div className="py-12 text-center">
           <Users size={40} className="mx-auto text-text-subtle mb-3" />
@@ -47,6 +114,7 @@ function ContactsSection({ contacts }: { contacts: CustomerContact[] }) {
               <TableHead>Email</TableHead>
               <TableHead>Телефон</TableHead>
               <TableHead>Заметки</TableHead>
+              <TableHead className="w-[40px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -74,6 +142,15 @@ function ContactsSection({ contacts }: { contacts: CustomerContact[] }) {
                 </TableCell>
                 <TableCell className="text-text-muted max-w-[200px] truncate">
                   {c.notes ?? "—"}
+                </TableCell>
+                <TableCell>
+                  <button
+                    onClick={() => onEdit(c)}
+                    className="p-1 rounded hover:bg-sidebar text-text-subtle hover:text-text-muted"
+                    title="Редактировать"
+                  >
+                    <Pencil size={14} />
+                  </button>
                 </TableCell>
               </TableRow>
             ))}
@@ -155,7 +232,13 @@ const CALL_CATEGORY_LABELS: Record<string, string> = {
   incoming: "Входящий",
 };
 
-function CallsSection({ calls }: { calls: CustomerCall[] }) {
+function CallsSection({
+  calls,
+  onAdd,
+}: {
+  calls: CustomerCall[];
+  onAdd: () => void;
+}) {
   function formatDate(d: string | null) {
     if (!d) return "—";
     return new Date(d).toLocaleDateString("ru-RU", {
@@ -169,7 +252,13 @@ function CallsSection({ calls }: { calls: CustomerCall[] }) {
 
   return (
     <div>
-      <h3 className="text-base font-semibold mb-3">Звонки и встречи</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold">Звонки и встречи</h3>
+        <Button size="sm" variant="outline" onClick={onAdd}>
+          <Plus size={14} />
+          Добавить
+        </Button>
+      </div>
       {calls.length === 0 ? (
         <div className="py-12 text-center">
           <Phone size={40} className="mx-auto text-text-subtle mb-3" />
@@ -224,11 +313,65 @@ function CallsSection({ calls }: { calls: CustomerCall[] }) {
   );
 }
 
-function NotesSection({ notes }: { notes: string | null }) {
+function NotesSection({ customerId, notes: initialNotes }: { customerId: string; notes: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const [notes, setNotes] = useState(initialNotes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateCustomerNotes(customerId, notes);
+      setEditing(false);
+    } catch (err) {
+      console.error("Failed to save notes:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleCancel() {
+    setNotes(initialNotes ?? "");
+    setEditing(false);
+  }
+
   return (
     <div>
-      <h3 className="text-base font-semibold mb-3">Заметки</h3>
-      {notes ? (
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-base font-semibold">Заметки</h3>
+        {!editing && (
+          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            <Pencil size={14} />
+            Редактировать
+          </Button>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-3">
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={5}
+            className="w-full px-3 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent resize-y"
+            placeholder="Заметки о клиенте..."
+          />
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving}
+              className="bg-accent text-white hover:bg-accent-hover"
+            >
+              <Save size={14} />
+              {saving ? "Сохранение..." : "Сохранить"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleCancel} disabled={saving}>
+              <X size={14} />
+              Отмена
+            </Button>
+          </div>
+        </div>
+      ) : notes ? (
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm whitespace-pre-wrap">{notes}</p>
