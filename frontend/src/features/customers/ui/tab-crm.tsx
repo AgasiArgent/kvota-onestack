@@ -48,6 +48,13 @@ export function TabCRM({ customer, contacts, calls }: Props) {
 
   return (
     <div className="space-y-6">
+      <CallsSection
+        calls={calls}
+        onAdd={() => setCallModalOpen(true)}
+      />
+      <Separator />
+      <NotesSection customerId={customer.id} notes={customer.notes} />
+      <Separator />
       <ContactsSection
         contacts={contacts}
         onAdd={openNewContact}
@@ -55,13 +62,6 @@ export function TabCRM({ customer, contacts, calls }: Props) {
       />
       <Separator />
       <AddressesSection customer={customer} />
-      <Separator />
-      <CallsSection
-        calls={calls}
-        onAdd={() => setCallModalOpen(true)}
-      />
-      <Separator />
-      <NotesSection customerId={customer.id} notes={customer.notes} />
 
       <ContactFormModal
         open={contactModalOpen}
