@@ -148,32 +148,15 @@ export function Sidebar({
             Kvota
           </Link>
         )}
-        <div className="flex items-center gap-1">
+        {isMobile && (
           <button
-            onClick={toggleTheme}
+            onClick={toggleMobileOpen}
             className="p-1.5 rounded-md hover:bg-sidebar"
-            title="Переключить тему"
+            title="Закрыть меню"
           >
-            {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+            <X size={18} />
           </button>
-          {isMobile ? (
-            <button
-              onClick={toggleMobileOpen}
-              className="p-1.5 rounded-md hover:bg-sidebar"
-              title="Закрыть меню"
-            >
-              <X size={18} />
-            </button>
-          ) : (
-            <button
-              onClick={toggleCollapsed}
-              className="p-1.5 rounded-md hover:bg-sidebar"
-              title={collapsed ? "Развернуть панель" : "Свернуть панель"}
-            >
-              {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Navigation */}
@@ -229,11 +212,11 @@ export function Sidebar({
       </ScrollArea>
 
       {/* Footer */}
-      <div className="border-t border-border-light p-3">
+      <div className="border-t border-border-light p-3 space-y-2">
         <Link
           href="/profile"
           prefetch={false}
-          className="flex items-center gap-3 mb-2"
+          className="flex items-center gap-3"
         >
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-accent-subtle text-accent text-sm">
@@ -247,14 +230,48 @@ export function Sidebar({
             </div>
           )}
         </Link>
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-2 text-text-subtle hover:text-text-muted text-xs w-full px-1"
-          title="Выйти из системы"
-        >
-          <LogOut size={16} />
-          {showLabels && <span>Выйти</span>}
-        </button>
+        <div className={cn(
+          "flex items-center gap-1",
+          showLabels ? "justify-between" : "justify-center"
+        )}>
+          {showLabels && (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-text-subtle hover:text-text-muted text-xs px-1"
+              title="Выйти из системы"
+            >
+              <LogOut size={16} />
+              <span>Выйти</span>
+            </button>
+          )}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
+              title="Переключить тему"
+            >
+              {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
+            {!isMobile && (
+              <button
+                onClick={toggleCollapsed}
+                className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
+                title={collapsed ? "Развернуть панель" : "Свернуть панель"}
+              >
+                {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+              </button>
+            )}
+            {!showLabels && (
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
+                title="Выйти из системы"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </aside>
   );
