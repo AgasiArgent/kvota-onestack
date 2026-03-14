@@ -171,4 +171,36 @@
   html[data-sidebar-collapsed="mobile"] .sidebar-margin {
     margin-left: 0;
   }
+
+  /* Changelog body — rendered markdown from Python API */
+  .changelog-body h2 {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-foreground);
+    margin: 12px 0 6px;
+  }
+  .changelog-body h2:first-child {
+    margin-top: 0;
+  }
+  .changelog-body ul {
+    margin: 0 0 10px 0;
+    padding-left: 18px;
+  }
+  .changelog-body li {
+    font-size: 0.875rem;
+    color: var(--foreground);
+    margin-bottom: 3px;
+    line-height: 1.5;
+  }
+  .changelog-body p {
+    font-size: 0.875rem;
+    color: var(--foreground);
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+  .changelog-body strong {
+    font-weight: 600;
+  }
 }
