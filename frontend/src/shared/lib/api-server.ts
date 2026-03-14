@@ -25,5 +25,13 @@ export async function apiServerClient<T = unknown>(
     },
   });
 
-  return response.json();
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    return {
+      success: false,
+      error: { code: "PARSE_ERROR", message: `HTTP ${response.status}` },
+    };
+  }
 }
