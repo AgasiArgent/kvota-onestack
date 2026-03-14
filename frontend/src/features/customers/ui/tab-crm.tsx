@@ -12,7 +12,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { Customer, CustomerContact, CustomerCall } from "@/entities/customer";
-import { updateCustomerNotes } from "@/entities/customer";
+import { updateCustomerNotes } from "@/entities/customer/mutations";
 import { ContactFormModal } from "./contact-form-modal";
 import { CallFormModal } from "./call-form-modal";
 
