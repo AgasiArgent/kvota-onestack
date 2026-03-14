@@ -1,23 +1,27 @@
-import { Users, MapPin, StickyNote, Star } from "lucide-react";
+import { Users, MapPin, StickyNote, Star, Phone } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import {
   Table, TableBody, TableCell, TableHead,
   TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { Customer, CustomerContact } from "@/entities/customer";
+import type { Customer, CustomerContact, CustomerCall } from "@/entities/customer";
 
 interface Props {
   customer: Customer;
   contacts: CustomerContact[];
+  calls: CustomerCall[];
 }
 
-export function TabCRM({ customer, contacts }: Props) {
+export function TabCRM({ customer, contacts, calls }: Props) {
   return (
     <div className="space-y-6">
       <ContactsSection contacts={contacts} />
       <Separator />
       <AddressesSection customer={customer} />
+      <Separator />
+      <CallsSection calls={calls} />
       <Separator />
       <NotesSection notes={customer.notes} />
     </div>
@@ -135,6 +139,86 @@ function AddressesSection({ customer }: { customer: Customer }) {
             </CardContent>
           </Card>
         </div>
+      )}
+    </div>
+  );
+}
+
+const CALL_TYPE_LABELS: Record<string, string> = {
+  call: "Звонок",
+  scheduled: "Встреча",
+};
+
+const CALL_CATEGORY_LABELS: Record<string, string> = {
+  cold: "Холодный",
+  warm: "Тёплый",
+  incoming: "Входящий",
+};
+
+function CallsSection({ calls }: { calls: CustomerCall[] }) {
+  function formatDate(d: string | null) {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return (
+    <div>
+      <h3 className="text-base font-semibold mb-3">Звонки и встречи</h3>
+      {calls.length === 0 ? (
+        <div className="py-12 text-center">
+          <Phone size={40} className="mx-auto text-text-subtle mb-3" />
+          <p className="text-text-muted mb-1">Нет звонков и встреч</p>
+          <p className="text-xs text-text-subtle">История взаимодействий с клиентом появится здесь</p>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Дата</TableHead>
+              <TableHead>Тип</TableHead>
+              <TableHead>Категория</TableHead>
+              <TableHead>Контакт</TableHead>
+              <TableHead>Менеджер</TableHead>
+              <TableHead>Комментарий</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {calls.map((call) => (
+              <TableRow key={call.id}>
+                <TableCell className="text-text-muted tabular-nums whitespace-nowrap">
+                  {call.call_type === "scheduled" && call.scheduled_date
+                    ? formatDate(call.scheduled_date)
+                    : formatDate(call.created_at)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">
+                    {CALL_TYPE_LABELS[call.call_type] ?? call.call_type}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-text-muted">
+                  {call.call_category
+                    ? CALL_CATEGORY_LABELS[call.call_category] ?? call.call_category
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-text-muted">
+                  {call.contact_name ?? "—"}
+                </TableCell>
+                <TableCell className="text-text-muted">
+                  {call.user_name ?? "—"}
+                </TableCell>
+                <TableCell className="text-text-muted max-w-[250px] truncate">
+                  {call.comment ?? call.meeting_notes ?? "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   );

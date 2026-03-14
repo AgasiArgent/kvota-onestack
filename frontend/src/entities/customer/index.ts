@@ -1,6 +1,7 @@
 export type {
   Customer,
   CustomerContact,
+  CustomerCall,
   CustomerListItem,
   CustomerStats,
 } from "./types";
@@ -9,6 +10,7 @@ export {
   fetchCustomerDetail,
   fetchCustomerStats,
   fetchCustomerContacts,
+  fetchCustomerCalls,
   fetchCustomerQuotes,
   fetchCustomerSpecs,
   fetchCustomerPositions,

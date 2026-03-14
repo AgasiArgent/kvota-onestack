@@ -48,6 +48,19 @@ export interface CustomerListItem {
   last_quote_date: string | null;
 }
 
+export interface CustomerCall {
+  id: string;
+  call_type: "call" | "scheduled";
+  call_category: string | null;
+  scheduled_date: string | null;
+  comment: string | null;
+  customer_needs: string | null;
+  meeting_notes: string | null;
+  contact_name: string | null;
+  user_name: string | null;
+  created_at: string | null;
+}
+
 export interface CustomerStats {
   quotes_in_review: number;
   quotes_in_progress: number;

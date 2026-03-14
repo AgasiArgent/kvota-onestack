@@ -3,6 +3,7 @@ import {
   fetchCustomerDetail,
   fetchCustomerStats,
   fetchCustomerContacts,
+  fetchCustomerCalls,
   fetchCustomerQuotes,
   fetchCustomerSpecs,
   fetchCustomerPositions,
@@ -58,8 +59,11 @@ async function CRMContent({
   customerId: string;
   customer: Customer;
 }) {
-  const contacts = await fetchCustomerContacts(customerId);
-  return <TabCRM customer={customer} contacts={contacts} />;
+  const [contacts, calls] = await Promise.all([
+    fetchCustomerContacts(customerId),
+    fetchCustomerCalls(customerId),
+  ]);
+  return <TabCRM customer={customer} contacts={contacts} calls={calls} />;
 }
 
 async function DocumentsContent({

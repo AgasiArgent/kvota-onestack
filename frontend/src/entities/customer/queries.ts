@@ -201,12 +201,39 @@ export async function fetchCustomerSpecs(customerId: string) {
   }));
 }
 
+export async function fetchCustomerCalls(customerId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("calls")
+    .select(
+      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, created_at, customer_contacts!calls_contact_person_id_fkey(name), user_profiles!calls_user_id_fkey(full_name)"
+    )
+    .eq("customer_id", customerId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    call_type: row.call_type as "call" | "scheduled",
+    call_category: row.call_category,
+    scheduled_date: row.scheduled_date,
+    comment: row.comment,
+    customer_needs: row.customer_needs,
+    meeting_notes: row.meeting_notes,
+    contact_name:
+      (row.customer_contacts as unknown as { name: string } | null)?.name ?? null,
+    user_name:
+      (row.user_profiles as unknown as { full_name: string } | null)?.full_name ?? null,
+    created_at: row.created_at,
+  }));
+}
+
 export async function fetchCustomerPositions(customerId: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name, brand, idn_sku, quantity, quotes!inner(idn_quote, customer_id)"
+      "id, product_name, brand, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, customer_id)"
     )
     .eq("quotes.customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -218,6 +245,9 @@ export async function fetchCustomerPositions(customerId: string) {
     brand: row.brand,
     sku: row.idn_sku,
     quantity: row.quantity,
+    purchase_price: row.purchase_price_original,
+    purchase_currency: row.purchase_currency,
+    procurement_date: row.procurement_completed_at,
     quote_idn:
       (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
   }));

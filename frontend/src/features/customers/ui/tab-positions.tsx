@@ -9,11 +9,29 @@ interface Position {
   brand: string | null;
   sku: string | null;
   quantity: number | null;
+  purchase_price: number | null;
+  purchase_currency: string | null;
+  procurement_date: string | null;
   quote_idn: string;
 }
 
 interface Props {
   positions: Position[];
+}
+
+function formatPrice(price: number | null, currency: string | null) {
+  if (price == null) return "—";
+  const symbol = currency === "RUB" ? "₽" : currency === "EUR" ? "€" : "$";
+  return `${price.toLocaleString("ru-RU")} ${symbol}`;
+}
+
+function formatDate(d: string | null) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 export function TabPositions({ positions }: Props) {
@@ -28,6 +46,8 @@ export function TabPositions({ positions }: Props) {
           <TableHead>Бренд</TableHead>
           <TableHead>Артикул</TableHead>
           <TableHead className="text-right">Кол-во</TableHead>
+          <TableHead className="text-right">Цена закупки</TableHead>
+          <TableHead>Дата закупки</TableHead>
           <TableHead>КП</TableHead>
         </TableRow>
       </TableHeader>
@@ -38,6 +58,12 @@ export function TabPositions({ positions }: Props) {
             <TableCell className="text-text-muted">{p.brand ?? "—"}</TableCell>
             <TableCell className="text-text-muted">{p.sku ?? "—"}</TableCell>
             <TableCell className="text-right tabular-nums">{p.quantity ?? "—"}</TableCell>
+            <TableCell className="text-right tabular-nums">
+              {formatPrice(p.purchase_price, p.purchase_currency)}
+            </TableCell>
+            <TableCell className="text-text-muted tabular-nums">
+              {formatDate(p.procurement_date)}
+            </TableCell>
             <TableCell className="text-text-muted">{p.quote_idn}</TableCell>
           </TableRow>
         ))}
