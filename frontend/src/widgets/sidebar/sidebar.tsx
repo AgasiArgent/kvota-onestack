@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Moon, Sun, Menu, X, PanelLeftClose, PanelLeft } from "lucide-react";
+import { LogOut, Menu, X, PanelLeftClose, PanelLeft } from "lucide-react";
 import { createClient } from "@/shared/lib/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -37,48 +37,32 @@ export function Sidebar({
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Detect viewport mode on mount and resize
   useEffect(() => {
     function handleResize() {
       const mode = getViewportMode();
       setViewportMode(mode);
 
       if (mode === "mobile") {
-        // On mobile, sidebar is an overlay — zero out the content margin
         document.documentElement.setAttribute("data-sidebar-collapsed", "mobile");
       } else if (mode === "tablet") {
-        // Auto-collapse on tablet
         setCollapsed(true);
         document.documentElement.setAttribute("data-sidebar-collapsed", "true");
         setMobileOpen(false);
       } else {
-        // Desktop — restore expanded sidebar
         setCollapsed(false);
         document.documentElement.setAttribute("data-sidebar-collapsed", "false");
         setMobileOpen(false);
       }
     }
 
-    // Set initial mode
     handleResize();
-
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Persist dark mode in localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") as "light" | "dark" | null;
-    const initial = saved === "dark" ? "dark" : "light";
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
-
-  // Close mobile sidebar on navigation
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
@@ -86,10 +70,7 @@ export function Sidebar({
   function toggleCollapsed() {
     const next = !collapsed;
     setCollapsed(next);
-    document.documentElement.setAttribute(
-      "data-sidebar-collapsed",
-      String(next)
-    );
+    document.documentElement.setAttribute("data-sidebar-collapsed", String(next));
   }
 
   function toggleMobileOpen() {
@@ -105,13 +86,6 @@ export function Sidebar({
     changelogUnreadCount,
   });
 
-  function toggleTheme() {
-    const next = theme === "light" ? "dark" : "light";
-    setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    localStorage.setItem("theme", next);
-  }
-
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -121,7 +95,6 @@ export function Sidebar({
 
   const initials = user.email[0]?.toUpperCase() ?? "U";
 
-  // On mobile, the sidebar is either hidden or shown as an overlay
   const isMobile = viewportMode === "mobile";
   const isIconOnly = collapsed || viewportMode === "tablet";
   const showLabels = !isIconOnly || isMobile;
@@ -151,7 +124,7 @@ export function Sidebar({
         {isMobile && (
           <button
             onClick={toggleMobileOpen}
-            className="p-1.5 rounded-md hover:bg-sidebar"
+            className="p-1.5 rounded-md hover:bg-background"
             title="Закрыть меню"
           >
             <X size={18} />
@@ -185,7 +158,7 @@ export function Sidebar({
                       "flex items-center gap-3 px-4 py-2 text-sm transition-colors",
                       isActive
                         ? "bg-accent-subtle text-accent"
-                        : "text-text hover:bg-sidebar",
+                        : "text-text hover:bg-background",
                       !showLabels && "justify-center px-0"
                     )}
                     title={!showLabels ? item.label : undefined}
@@ -231,10 +204,10 @@ export function Sidebar({
           )}
         </Link>
         <div className={cn(
-          "flex items-center gap-1",
-          showLabels ? "justify-between" : "justify-center"
+          "flex items-center",
+          showLabels ? "justify-between" : "justify-center gap-1"
         )}>
-          {showLabels && (
+          {showLabels ? (
             <button
               onClick={handleLogout}
               className="flex items-center gap-2 text-text-subtle hover:text-text-muted text-xs px-1"
@@ -243,34 +216,24 @@ export function Sidebar({
               <LogOut size={16} />
               <span>Выйти</span>
             </button>
-          )}
-          <div className="flex items-center gap-1">
+          ) : (
             <button
-              onClick={toggleTheme}
+              onClick={handleLogout}
               className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
-              title="Переключить тему"
+              title="Выйти из системы"
             >
-              {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
+              <LogOut size={16} />
             </button>
-            {!isMobile && (
-              <button
-                onClick={toggleCollapsed}
-                className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
-                title={collapsed ? "Развернуть панель" : "Свернуть панель"}
-              >
-                {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
-              </button>
-            )}
-            {!showLabels && (
-              <button
-                onClick={handleLogout}
-                className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
-                title="Выйти из системы"
-              >
-                <LogOut size={16} />
-              </button>
-            )}
-          </div>
+          )}
+          {!isMobile && (
+            <button
+              onClick={toggleCollapsed}
+              className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
+              title={collapsed ? "Развернуть панель" : "Свернуть панель"}
+            >
+              {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          )}
         </div>
       </div>
     </aside>
@@ -278,7 +241,6 @@ export function Sidebar({
 
   return (
     <>
-      {/* Mobile hamburger button — visible only when sidebar is hidden on mobile */}
       {isMobile && !mobileOpen && (
         <button
           onClick={toggleMobileOpen}
@@ -289,7 +251,6 @@ export function Sidebar({
         </button>
       )}
 
-      {/* Mobile backdrop */}
       {isMobile && mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50"
