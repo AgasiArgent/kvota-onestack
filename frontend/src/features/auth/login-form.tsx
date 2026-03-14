@@ -88,7 +88,7 @@ export function LoginForm() {
             {error && (
               <p className="text-sm text-error bg-error-bg px-3 py-2 rounded-md">{error}</p>
             )}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full bg-accent text-white hover:bg-accent-hover" disabled={loading}>
               <LogIn size={18} />
               {loading ? "Вход..." : "Войти в систему"}
             </Button>

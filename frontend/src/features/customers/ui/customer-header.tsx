@@ -33,7 +33,7 @@ export function CustomerHeader({ customer }: Props) {
           href={`${config.legacyAppUrl}/quotes/new?customer_id=${customer.id}`}
           target="_blank"
           rel="noopener"
-          className={buttonVariants()}
+          className={buttonVariants({ className: "bg-accent text-white hover:bg-accent-hover" })}
         >
           <Plus size={16} />
           Создать КП

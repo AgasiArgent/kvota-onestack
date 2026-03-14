@@ -96,7 +96,7 @@ export function CustomersTable({
           <Search size={16} />
           Найти
         </Button>
-        <Link href="/customers/new" className={buttonVariants({ variant: "default", size: "sm", className: "ml-auto" })}>
+        <Link href="/customers/new" className={buttonVariants({ variant: "default", size: "sm", className: "ml-auto bg-accent text-white hover:bg-accent-hover" })}>
           <Plus size={16} />
           Новый клиент
         </Link>
