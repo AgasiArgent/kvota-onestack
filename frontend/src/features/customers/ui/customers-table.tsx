@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -96,7 +97,7 @@ export function CustomersTable({
           <Search size={16} />
           Найти
         </Button>
-        <Link href="/customers/new" className={buttonVariants({ variant: "default", size: "sm", className: "ml-auto bg-accent text-white hover:bg-accent-hover" })}>
+        <Link href="/customers/new" className={cn(buttonVariants({ size: "sm" }), "ml-auto bg-accent text-white hover:bg-accent-hover")}>
           <Plus size={16} />
           Новый клиент
         </Link>

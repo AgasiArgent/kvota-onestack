@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, Plus, Building2 } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { config } from "@/shared/config";
 import type { Customer } from "@/entities/customer";
@@ -33,7 +34,7 @@ export function CustomerHeader({ customer }: Props) {
           href={`${config.legacyAppUrl}/quotes/new?customer_id=${customer.id}`}
           target="_blank"
           rel="noopener"
-          className={buttonVariants({ className: "bg-accent text-white hover:bg-accent-hover" })}
+          className={cn(buttonVariants(), "bg-accent text-white hover:bg-accent-hover")}
         >
           <Plus size={16} />
           Создать КП
