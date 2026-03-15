@@ -1,8 +1,9 @@
 """
 PHMB API endpoints for Next.js frontend.
 
-POST /api/phmb/calculate  — Run PHMB calculation for a quote
-POST /api/phmb/export-pdf — Generate commercial offer PDF for a PHMB quote
+POST /api/phmb/calculate         — Run PHMB calculation for a quote
+POST /api/phmb/export-pdf        — Generate commercial offer PDF for a PHMB quote
+POST /api/phmb/notify-price-set  — Send Telegram notification after procurement prices an item
 
 These are JSON API endpoints called by the Next.js frontend.
 Auth: JWT via ApiAuthMiddleware (request.state.api_user).
@@ -477,3 +478,96 @@ def _build_phmb_pdf_html(
     </div>
 </body>
 </html>"""
+
+
+async def phmb_notify_price_set(request):
+    """POST /api/phmb/notify-price-set
+
+    Send Telegram notification to the quote's sales manager after procurement sets a price.
+
+    Input JSON: { "queue_item_id": "uuid" }
+    Returns: { "success": true, "data": { "telegram_sent": bool, ... } }
+    """
+    user, err = _get_api_user(request)
+    if err:
+        return err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Invalid JSON body"}},
+            status_code=400,
+        )
+
+    queue_item_id = body.get("queue_item_id")
+    if not queue_item_id:
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "queue_item_id is required"}},
+            status_code=400,
+        )
+
+    org_id = user["org_id"]
+    sb = get_supabase()
+
+    # Fetch queue item with FK joins to quote item and quote
+    result = (
+        sb.table("phmb_procurement_queue")
+        .select("*, phmb_quote_items!quote_item_id(*), quotes!quote_id(id, idn_quote, created_by_user_id, created_by)")
+        .eq("id", queue_item_id)
+        .eq("org_id", org_id)
+        .execute()
+    )
+
+    if not result.data:
+        return JSONResponse(
+            {"success": False, "error": {"code": "NOT_FOUND", "message": "Queue item not found"}},
+            status_code=404,
+        )
+
+    row = result.data[0]
+    if row.get("status") != "priced":
+        return JSONResponse(
+            {"success": False, "error": {"code": "BAD_REQUEST", "message": "Item is not priced yet"}},
+            status_code=400,
+        )
+
+    quote = (row.get("quotes") or {})
+    item = (row.get("phmb_quote_items") or {})
+    quote_id = row.get("quote_id", "")
+    price_rmb = float(row.get("priced_rmb") or 0)
+
+    # Count priced vs total items for this quote
+    count_result = sb.table("phmb_quote_items").select("id, list_price_rmb").eq("quote_id", quote_id).execute()
+    all_items = count_result.data or []
+    total_count = len(all_items)
+    priced_count = sum(1 for i in all_items if i.get("list_price_rmb") and float(i["list_price_rmb"]) > 0)
+
+    from services.telegram_service import send_phmb_price_set_notification
+
+    try:
+        notify_result = await send_phmb_price_set_notification(
+            user_id=quote.get("created_by_user_id") or quote.get("created_by"),
+            quote_id=quote_id,
+            quote_idn=quote.get("idn_quote", "N/A"),
+            product_name=item.get("product_name", "N/A"),
+            cat_number=item.get("cat_number", "N/A"),
+            price_rmb=price_rmb,
+            priced_count=priced_count,
+            total_count=total_count,
+        )
+    except Exception as e:
+        logger.error(f"Error sending PHMB price set notification: {e}")
+        return JSONResponse(
+            {"success": True, "data": {"telegram_sent": False, "error": str(e)}},
+        )
+
+    return JSONResponse({
+        "success": True,
+        "data": {
+            "telegram_sent": notify_result.get("telegram_sent", False),
+            "notification_id": notify_result.get("notification_id"),
+            "priced_count": priced_count,
+            "total_count": total_count,
+        },
+    })

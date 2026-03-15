@@ -4,46 +4,84 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import type { PhmbVersion } from "@/entities/phmb-quote/types";
+import { createPhmbVersion } from "@/entities/phmb-quote/mutations";
 
 interface VersionPillsProps {
   quoteId: string;
-  currentLabel: string;
+  versions: PhmbVersion[];
+  activeVersionId: string | null;
+  currentTerms: {
+    phmb_advance_pct: number;
+    phmb_payment_days: number;
+    phmb_markup_pct: number;
+  };
+  onSwitch: (version: PhmbVersion | null) => void;
+  onCreate: (version: PhmbVersion) => void;
 }
 
-/**
- * Version pills for PHMB workspace.
- *
- * TODO: PHMB versioning requires a dedicated DB table or migration to add
- * phmb_advance_pct/phmb_payment_days/phmb_markup_pct to quote_versions.
- * Currently shows a single "v1" pill as a placeholder.
- * When the migration is done, this component should:
- * - Accept versions: PhmbVersion[], activeVersionId, onSwitch, onCreate
- * - Render pills for each version with active state
- * - "+" button to create a new version (copies current items + terms)
- */
-export function VersionPills({ currentLabel }: VersionPillsProps) {
-  const [versions] = useState([{ id: "current", label: currentLabel || "v1" }]);
+export function VersionPills({
+  quoteId,
+  versions,
+  activeVersionId,
+  currentTerms,
+  onSwitch,
+  onCreate,
+}: VersionPillsProps) {
+  const [isCreating, setIsCreating] = useState(false);
 
-  function handleCreateVersion() {
-    toast.info("Версионирование PHMB будет доступно после миграции БД.");
+  async function handleCreateVersion() {
+    setIsCreating(true);
+    try {
+      const newVersion = await createPhmbVersion(quoteId, currentTerms);
+      onCreate(newVersion);
+      toast.success(`Версия ${newVersion.label} создана.`);
+    } catch {
+      toast.error("Не удалось создать версию.");
+    } finally {
+      setIsCreating(false);
+    }
   }
 
   return (
     <div className="flex items-center gap-1.5">
+      {/* "Current" pill — the live quote terms (no version selected) */}
+      <button
+        type="button"
+        onClick={() => onSwitch(null)}
+        className={cn(
+          "px-3 py-1 text-xs font-semibold rounded-md transition-colors",
+          activeVersionId === null
+            ? "bg-accent text-white"
+            : "bg-surface-raised text-text-muted hover:text-text"
+        )}
+      >
+        Текущая
+      </button>
+
       {versions.map((v) => (
         <button
           key={v.id}
           type="button"
-          className="px-3 py-1 text-xs font-semibold rounded-md bg-accent text-white"
+          onClick={() => onSwitch(v)}
+          className={cn(
+            "px-3 py-1 text-xs font-semibold rounded-md transition-colors",
+            activeVersionId === v.id
+              ? "bg-accent text-white"
+              : "bg-surface-raised text-text-muted hover:text-text"
+          )}
         >
           {v.label}
         </button>
       ))}
+
       <Button
         variant="ghost"
         size="sm"
         className="h-7 w-7 p-0 text-text-muted hover:text-text"
         onClick={handleCreateVersion}
+        disabled={isCreating}
       >
         <Plus size={14} />
       </Button>

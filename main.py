@@ -48505,7 +48505,7 @@ def get(session, brand_group_id: str = "", status: str = "", partial: str = ""):
 
 
 @rt("/api/phmb/queue/status/{queue_item_id}")
-def post(session, queue_item_id: str, new_status: str = "", priced_rmb: float = 0):
+async def post(session, queue_item_id: str, new_status: str = "", priced_rmb: float = 0):
     """Change status of a queue item. If priced, also writes back to quote item."""
     redirect = require_login(session)
     if redirect:
@@ -48519,7 +48519,8 @@ def post(session, queue_item_id: str, new_status: str = "", priced_rmb: float = 
 
     from services.phmb_price_service import price_queue_item, update_queue_item_status
 
-    if new_status == "priced" and priced_rmb > 0:
+    just_priced = new_status == "priced" and priced_rmb > 0
+    if just_priced:
         price_queue_item(org_id, queue_item_id, priced_rmb)
     else:
         update_queue_item_status(queue_item_id, new_status, priced_rmb if priced_rmb > 0 else None)
@@ -48532,6 +48533,35 @@ def post(session, queue_item_id: str, new_status: str = "", priced_rmb: float = 
         .eq("id", queue_item_id)
         .execute()
     )
+
+    # Send Telegram notification to sales manager after pricing
+    if just_priced and result.data:
+        try:
+            from services.telegram_service import send_phmb_price_set_notification
+            row = result.data[0]
+            quote = (row.get("quotes") or {})
+            item = (row.get("phmb_quote_items") or {})
+            quote_id = row.get("quote_id", "")
+
+            # Count priced vs total items for this quote
+            count_result = sb.table("phmb_quote_items").select("id, list_price_rmb").eq("quote_id", quote_id).execute()
+            all_items = count_result.data or []
+            total_count = len(all_items)
+            priced_count = sum(1 for i in all_items if i.get("list_price_rmb") and float(i["list_price_rmb"]) > 0)
+
+            await send_phmb_price_set_notification(
+                user_id=quote.get("created_by_user_id") or quote.get("created_by"),
+                quote_id=quote_id,
+                quote_idn=quote.get("idn_quote", "N/A"),
+                product_name=item.get("product_name", "N/A"),
+                cat_number=item.get("cat_number", "N/A"),
+                price_rmb=priced_rmb,
+                priced_count=priced_count,
+                total_count=total_count,
+            )
+        except Exception as e:
+            print(f"Error sending PHMB price set notification: {e}")
+
     if result.data:
         return _render_queue_row(result.data[0])
 
@@ -48675,7 +48705,7 @@ def delete(session, group_id: str):
 
 # --- PHMB JSON API (for Next.js frontend) ---
 
-from api.phmb import phmb_calculate, phmb_export_pdf
+from api.phmb import phmb_calculate, phmb_export_pdf, phmb_notify_price_set
 
 @rt("/api/phmb/calculate", methods=["POST"])
 async def post_phmb_calculate(request):
@@ -48684,6 +48714,10 @@ async def post_phmb_calculate(request):
 @rt("/api/phmb/export-pdf", methods=["POST"])
 async def post_phmb_export_pdf(request):
     return await phmb_export_pdf(request)
+
+@rt("/api/phmb/notify-price-set", methods=["POST"])
+async def post_phmb_notify_price_set(request):
+    return await phmb_notify_price_set(request)
 
 
 # ============================================================================

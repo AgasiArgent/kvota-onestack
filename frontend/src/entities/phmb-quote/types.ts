@@ -37,6 +37,21 @@ export interface CustomerSearchResult {
   inn: string | null;
 }
 
+// --- Version types ---
+
+export interface PhmbVersion {
+  id: string;
+  quote_id: string;
+  version_number: number;
+  label: string;
+  phmb_advance_pct: number;
+  phmb_payment_days: number;
+  phmb_markup_pct: number;
+  total_amount_usd: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Workspace types (Screen 2) ---
 
 export interface PhmbQuoteDetail {

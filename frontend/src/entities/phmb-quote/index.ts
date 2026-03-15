@@ -8,6 +8,7 @@ export type {
   PhmbQuoteDetail,
   PhmbQuoteItem,
   PhmbItemStatus,
+  PhmbVersion,
   PriceListSearchResult,
   CalcResult,
   ProcurementQueueStatus,
@@ -20,11 +21,13 @@ export {
   fetchSellerCompanies,
   fetchPhmbQuoteDetail,
   fetchPhmbQuoteItems,
+  fetchPhmbVersions,
   fetchProcurementQueue,
   fetchBrandGroups,
 } from "./queries";
 export {
   createPhmbQuote,
+  createPhmbVersion,
   searchCustomers,
   addItemToQuote,
   updateItemQuantity,

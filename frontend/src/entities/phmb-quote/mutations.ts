@@ -4,6 +4,7 @@ import type {
   CustomerSearchResult,
   PhmbQuoteItem,
   PhmbItemStatus,
+  PhmbVersion,
   PriceListSearchResult,
   CalcResult,
   ProcurementQueueStatus,
@@ -91,6 +92,61 @@ export async function searchCustomers(
     name: row.name,
     inn: row.inn,
   }));
+}
+
+// --- Version mutations ---
+
+export async function createPhmbVersion(
+  quoteId: string,
+  terms: {
+    phmb_advance_pct: number;
+    phmb_payment_days: number;
+    phmb_markup_pct: number;
+  }
+): Promise<PhmbVersion> {
+  const supabase = createClient();
+
+  // Determine next version number
+  const { data: existing, error: fetchError } = await supabase
+    .from("phmb_versions")
+    .select("version_number")
+    .eq("quote_id", quoteId)
+    .order("version_number", { ascending: false })
+    .limit(1);
+
+  if (fetchError) throw fetchError;
+
+  const nextNumber = (existing?.[0]?.version_number ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("phmb_versions")
+    .insert({
+      quote_id: quoteId,
+      version_number: nextNumber,
+      label: `v${nextNumber}`,
+      phmb_advance_pct: terms.phmb_advance_pct,
+      phmb_payment_days: terms.phmb_payment_days,
+      phmb_markup_pct: terms.phmb_markup_pct,
+    })
+    .select(
+      "id, quote_id, version_number, label, phmb_advance_pct, phmb_payment_days, phmb_markup_pct, total_amount_usd, created_at, updated_at"
+    )
+    .single();
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    quote_id: data.quote_id,
+    version_number: data.version_number,
+    label: data.label,
+    phmb_advance_pct: data.phmb_advance_pct,
+    phmb_payment_days: data.phmb_payment_days,
+    phmb_markup_pct: data.phmb_markup_pct,
+    total_amount_usd: data.total_amount_usd,
+    created_at: data.created_at ?? "",
+    updated_at: data.updated_at ?? "",
+  };
 }
 
 // --- Workspace mutations (Screen 2) ---
@@ -371,6 +427,15 @@ export async function setProcurementPrice(
         { onConflict: "org_id,cat_number" }
       );
   }
+
+  // 5. Send Telegram notification to sales manager (fire-and-forget)
+  fetch("/api/phmb/notify-price-set", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ queue_item_id: queueItemId }),
+  }).catch(() => {
+    // Notification failure should not break the pricing flow
+  });
 }
 
 export async function updateQueueItemStatus(

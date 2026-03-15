@@ -3,6 +3,7 @@ import { getSessionUser } from "@/entities/user";
 import {
   fetchPhmbQuoteDetail,
   fetchPhmbQuoteItems,
+  fetchPhmbVersions,
 } from "@/entities/phmb-quote";
 import { QuoteWorkspace } from "@/features/phmb/ui/quote-workspace";
 
@@ -24,9 +25,10 @@ export default async function PhmbWorkspacePage({ params }: Props) {
 
   const { id } = await params;
 
-  const [quote, items] = await Promise.all([
+  const [quote, items, versions] = await Promise.all([
     fetchPhmbQuoteDetail(id),
     fetchPhmbQuoteItems(id),
+    fetchPhmbVersions(id),
   ]);
 
   if (!quote) redirect("/phmb");
@@ -35,6 +37,7 @@ export default async function PhmbWorkspacePage({ params }: Props) {
     <QuoteWorkspace
       quote={quote}
       items={items}
+      versions={versions}
       orgId={user.orgId}
     />
   );

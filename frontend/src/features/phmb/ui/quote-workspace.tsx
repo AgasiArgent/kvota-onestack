@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import type {
   PhmbQuoteDetail,
   PhmbQuoteItem,
+  PhmbVersion,
   PriceListSearchResult,
   CalcResult,
 } from "@/entities/phmb-quote/types";
@@ -29,15 +30,19 @@ import { VersionPills } from "./version-pills";
 interface QuoteWorkspaceProps {
   quote: PhmbQuoteDetail;
   items: PhmbQuoteItem[];
+  versions: PhmbVersion[];
   orgId: string;
 }
 
 export function QuoteWorkspace({
   quote,
   items: initialItems,
+  versions: initialVersions,
   orgId,
 }: QuoteWorkspaceProps) {
   const [items, setItems] = useState<PhmbQuoteItem[]>(initialItems);
+  const [versions, setVersions] = useState<PhmbVersion[]>(initialVersions);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [terms, setTerms] = useState({
     phmb_advance_pct: quote.phmb_advance_pct,
     phmb_payment_days: quote.phmb_payment_days,
@@ -246,7 +251,37 @@ export function QuoteWorkspace({
               >
                 {quote.customer_name}
               </Badge>
-              <VersionPills quoteId={quote.id} currentLabel="v1" />
+              <VersionPills
+                quoteId={quote.id}
+                versions={versions}
+                activeVersionId={activeVersionId}
+                currentTerms={terms}
+                onSwitch={(version) => {
+                  setActiveVersionId(version?.id ?? null);
+                  if (version) {
+                    setTerms({
+                      phmb_advance_pct: version.phmb_advance_pct,
+                      phmb_payment_days: version.phmb_payment_days,
+                      phmb_markup_pct: version.phmb_markup_pct,
+                    });
+                  } else {
+                    setTerms({
+                      phmb_advance_pct: quote.phmb_advance_pct,
+                      phmb_payment_days: quote.phmb_payment_days,
+                      phmb_markup_pct: quote.phmb_markup_pct,
+                    });
+                  }
+                }}
+                onCreate={(newVersion) => {
+                  setVersions((prev) => [...prev, newVersion]);
+                  setActiveVersionId(newVersion.id);
+                  setTerms({
+                    phmb_advance_pct: newVersion.phmb_advance_pct,
+                    phmb_payment_days: newVersion.phmb_payment_days,
+                    phmb_markup_pct: newVersion.phmb_markup_pct,
+                  });
+                }}
+              />
             </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-text-muted">
               <span className="tabular-nums">

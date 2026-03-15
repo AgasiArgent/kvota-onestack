@@ -1980,6 +1980,45 @@ export type Database = {
         }
         Relationships: []
       }
+      phmb_versions: {
+        Row: {
+          id: string
+          quote_id: string
+          version_number: number
+          label: string
+          phmb_advance_pct: number
+          phmb_payment_days: number
+          phmb_markup_pct: number
+          total_amount_usd: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          version_number?: number
+          label?: string
+          phmb_advance_pct?: number
+          phmb_payment_days?: number
+          phmb_markup_pct?: number
+          total_amount_usd?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          version_number?: number
+          label?: string
+          phmb_advance_pct?: number
+          phmb_payment_days?: number
+          phmb_markup_pct?: number
+          total_amount_usd?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       phmb_settings: {
         Row: {
           id: string

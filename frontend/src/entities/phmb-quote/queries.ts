@@ -7,6 +7,7 @@ import type {
   PhmbItemStatus,
   PhmbDefaults,
   SellerCompany,
+  PhmbVersion,
   ProcurementQueueItem,
   ProcurementQueueStatus,
   BrandGroup,
@@ -221,6 +222,37 @@ export async function fetchPhmbQuoteItems(
     total_price_usd: row.total_price_usd,
     total_price_with_vat_usd: row.total_price_with_vat_usd,
     status: computeItemStatus(row),
+  }));
+}
+
+// --- Version queries ---
+
+export async function fetchPhmbVersions(
+  quoteId: string
+): Promise<PhmbVersion[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("phmb_versions")
+    .select(
+      "id, quote_id, version_number, label, phmb_advance_pct, phmb_payment_days, phmb_markup_pct, total_amount_usd, created_at, updated_at"
+    )
+    .eq("quote_id", quoteId)
+    .order("version_number", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    quote_id: row.quote_id,
+    version_number: row.version_number,
+    label: row.label,
+    phmb_advance_pct: row.phmb_advance_pct,
+    phmb_payment_days: row.phmb_payment_days,
+    phmb_markup_pct: row.phmb_markup_pct,
+    total_amount_usd: row.total_amount_usd,
+    created_at: row.created_at ?? "",
+    updated_at: row.updated_at ?? "",
   }));
 }
 
