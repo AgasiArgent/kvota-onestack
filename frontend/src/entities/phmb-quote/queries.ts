@@ -2,6 +2,9 @@ import { createClient } from "@/shared/lib/supabase/server";
 import type {
   PhmbQuoteListItem,
   PhmbQuoteStatus,
+  PhmbQuoteDetail,
+  PhmbQuoteItem,
+  PhmbItemStatus,
   PhmbDefaults,
   SellerCompany,
 } from "./types";
@@ -137,5 +140,83 @@ export async function fetchSellerCompanies(
   return (data ?? []).map((row) => ({
     id: row.id,
     name: row.name,
+  }));
+}
+
+export async function fetchPhmbQuoteDetail(
+  quoteId: string
+): Promise<PhmbQuoteDetail | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select(
+      "id, idn_quote, currency, phmb_advance_pct, phmb_payment_days, phmb_markup_pct, total_amount_usd, created_at, is_phmb, customers!customer_id(name)"
+    )
+    .eq("id", quoteId)
+    .is("deleted_at", null)
+    .single();
+
+  if (error) return null;
+  if (!data || !data.is_phmb) return null;
+
+  const customerData = data.customers as unknown as { name: string } | null;
+
+  return {
+    id: data.id,
+    idn_quote: data.idn_quote,
+    customer_name: customerData?.name ?? "—",
+    currency: data.currency,
+    phmb_advance_pct: data.phmb_advance_pct ?? 0,
+    phmb_payment_days: data.phmb_payment_days ?? 0,
+    phmb_markup_pct: data.phmb_markup_pct ?? 0,
+    total_amount_usd: data.total_amount_usd,
+    created_at: data.created_at ?? "",
+  };
+}
+
+function computeItemStatus(item: {
+  list_price_rmb: number | null;
+  total_price_usd: number | null;
+}): PhmbItemStatus {
+  // An item is "priced" if it has a list price (from price list or procurement)
+  if (item.list_price_rmb !== null && item.list_price_rmb > 0) return "priced";
+  return "waiting";
+}
+
+export async function fetchPhmbQuoteItems(
+  quoteId: string
+): Promise<PhmbQuoteItem[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("phmb_quote_items")
+    .select(
+      "id, quote_id, cat_number, product_name, brand, product_classification, quantity, list_price_rmb, discount_pct, hs_code, duty_pct, delivery_days, exw_price_usd, cogs_usd, financial_cost_usd, total_price_usd, total_price_with_vat_usd"
+    )
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    quote_id: row.quote_id,
+    cat_number: row.cat_number,
+    product_name: row.product_name,
+    brand: row.brand,
+    product_classification: row.product_classification,
+    quantity: row.quantity,
+    list_price_rmb: row.list_price_rmb,
+    discount_pct: row.discount_pct,
+    hs_code: row.hs_code,
+    duty_pct: row.duty_pct,
+    delivery_days: row.delivery_days,
+    exw_price_usd: row.exw_price_usd,
+    cogs_usd: row.cogs_usd,
+    financial_cost_usd: row.financial_cost_usd,
+    total_price_usd: row.total_price_usd,
+    total_price_with_vat_usd: row.total_price_with_vat_usd,
+    status: computeItemStatus(row),
   }));
 }

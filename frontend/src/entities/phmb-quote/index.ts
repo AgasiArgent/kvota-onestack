@@ -5,10 +5,28 @@ export type {
   PhmbDefaults,
   SellerCompany,
   CustomerSearchResult,
+  PhmbQuoteDetail,
+  PhmbQuoteItem,
+  PhmbItemStatus,
+  PriceListSearchResult,
+  CalcResult,
 } from "./types";
 export {
   fetchPhmbQuotesList,
   fetchPhmbDefaults,
   fetchSellerCompanies,
+  fetchPhmbQuoteDetail,
+  fetchPhmbQuoteItems,
 } from "./queries";
-export { createPhmbQuote, searchCustomers } from "./mutations";
+export {
+  createPhmbQuote,
+  searchCustomers,
+  addItemToQuote,
+  updateItemQuantity,
+  updateItemPrice,
+  deleteItem,
+  savePaymentTerms,
+  searchPriceList,
+  calculateQuote,
+  exportPdf,
+} from "./mutations";
