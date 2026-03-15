@@ -1,12 +1,16 @@
-import { apiServerClient } from "@/shared/lib/api-server";
 import type { ChangelogEntry } from "./types";
 
-export async function fetchChangelogEntries(): Promise<ChangelogEntry[]> {
-  const res = await apiServerClient<ChangelogEntry[]>("/changelog");
+const PYTHON_API_URL = process.env.PYTHON_API_URL || "http://localhost:5001";
 
-  if (!res.success || !res.data) {
+export async function fetchChangelogEntries(): Promise<ChangelogEntry[]> {
+  try {
+    const response = await fetch(`${PYTHON_API_URL}/api/changelog`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    const json = await response.json();
+    return json.success ? json.data : [];
+  } catch {
     return [];
   }
-
-  return res.data;
 }
