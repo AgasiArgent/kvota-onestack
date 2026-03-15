@@ -48673,6 +48673,19 @@ def delete(session, group_id: str):
     return Response(status_code=200)
 
 
+# --- PHMB JSON API (for Next.js frontend) ---
+
+from api.phmb import phmb_calculate, phmb_export_pdf
+
+@rt("/api/phmb/calculate", methods=["POST"])
+async def post_phmb_calculate(request):
+    return await phmb_calculate(request)
+
+@rt("/api/phmb/export-pdf", methods=["POST"])
+async def post_phmb_export_pdf(request):
+    return await phmb_export_pdf(request)
+
+
 # ============================================================================
 # QUOTE CHAT TAB (Comments)
 # ============================================================================
