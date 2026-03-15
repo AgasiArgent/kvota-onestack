@@ -6,7 +6,6 @@ export type {
   BrandGroup,
   SettingsPageData,
 } from "./types";
-export { fetchSettingsPageData } from "./queries";
 export {
   upsertCalcSettings,
   upsertPhmbSettings,

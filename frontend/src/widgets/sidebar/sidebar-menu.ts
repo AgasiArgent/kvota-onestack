@@ -9,6 +9,7 @@ import {
   Clock,
   Users,
   FileText,
+  FileSpreadsheet,
   Building2,
   ClipboardList,
   Phone,
@@ -115,6 +116,13 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     label: "Коммерческие предложения",
     href: "/quotes",
   });
+  if (hasRole("sales", "sales_manager")) {
+    registries.push({
+      icon: FileSpreadsheet,
+      label: "PHMB",
+      href: "/phmb",
+    });
+  }
   if (hasRole("procurement")) {
     registries.push({
       icon: Building2,

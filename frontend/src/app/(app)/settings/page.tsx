@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
-import { fetchSettingsPageData } from "@/entities/settings";
+import { fetchSettingsPageData } from "@/entities/settings/queries";
 import { SettingsTabs } from "@/features/settings";
 
 interface Props {
