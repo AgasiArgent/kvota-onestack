@@ -1,6 +1,8 @@
 import { fetchChangelogEntries } from "@/entities/changelog/queries";
 import { ChangelogTimeline } from "@/features/changelog";
 
+export const dynamic = "force-dynamic";
+
 export default async function ChangelogPage() {
   const entries = await fetchChangelogEntries();
 
