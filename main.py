@@ -49089,14 +49089,17 @@ def get(session):
 # --- Changelog JSON API (for Next.js frontend) ---
 
 @rt("/api/changelog")
-def get_changelog_api(session):
+def get_changelog_api(request, session):
     """Return changelog entries as JSON for the Next.js frontend."""
-    redirect = require_login(session)
-    if redirect:
-        return JSONResponse(
-            {"success": False, "error": {"code": "UNAUTHORIZED", "message": "Not authenticated"}},
-            status_code=401,
-        )
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, "api_user", None)
+    if not api_user:
+        redirect = require_login(session)
+        if redirect:
+            return JSONResponse(
+                {"success": False, "error": {"code": "UNAUTHORIZED", "message": "Not authenticated"}},
+                status_code=401,
+            )
 
     from services.changelog_service import get_all_entries, render_entry_html
 
