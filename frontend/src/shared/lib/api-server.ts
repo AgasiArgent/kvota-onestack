@@ -14,10 +14,13 @@ export async function apiServerClient<T = unknown>(
     data: { session },
   } = await supabase.auth.getSession();
 
+  const method = (options.method ?? "GET").toUpperCase();
+  const hasBody = method !== "GET" && method !== "HEAD" && method !== "DELETE";
+
   const response = await fetch(`${PYTHON_API_URL}/api${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(session?.access_token
         ? { Authorization: `Bearer ${session.access_token}` }
         : {}),
