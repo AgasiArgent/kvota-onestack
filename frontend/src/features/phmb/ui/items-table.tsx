@@ -4,7 +4,8 @@ import { useCallback, useMemo } from "react";
 import { HotTable, type HotTableClass } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import type Handsontable from "handsontable";
-import "handsontable/dist/handsontable.full.min.css";
+import "handsontable/styles/handsontable.css";
+import "handsontable/styles/ht-theme-main.min.css";
 import type { PhmbQuoteItem, CalcResult } from "@/entities/phmb-quote/types";
 
 registerAllModules();
