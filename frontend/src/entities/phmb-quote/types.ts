@@ -101,3 +101,32 @@ export interface CalcResult {
     total_with_vat_usd: number;
   };
 }
+
+// --- Procurement Queue types (Screen 3) ---
+
+export type ProcurementQueueStatus = "new" | "requested" | "priced";
+
+export interface ProcurementQueueItem {
+  id: string;
+  quote_item_id: string;
+  quote_id: string;
+  brand: string;
+  brand_group_id: string | null;
+  status: ProcurementQueueStatus;
+  priced_rmb: number | null;
+  notes: string | null;
+  created_at: string;
+  // Joined from phmb_quote_items
+  cat_number: string;
+  product_name: string;
+  quantity: number;
+  delivery_days: number | null;
+  // Joined from quotes
+  quote_idn: string;
+  customer_name: string;
+}
+
+export interface BrandGroup {
+  id: string;
+  name: string;
+}

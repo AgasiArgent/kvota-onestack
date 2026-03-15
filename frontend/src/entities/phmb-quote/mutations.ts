@@ -6,6 +6,7 @@ import type {
   PhmbItemStatus,
   PriceListSearchResult,
   CalcResult,
+  ProcurementQueueStatus,
 } from "./types";
 
 async function generateIdnQuote(
@@ -298,4 +299,93 @@ export async function exportPdf(
   }
 
   return response.blob();
+}
+
+// --- Procurement Queue mutations (Screen 3) ---
+
+export async function setProcurementPrice(
+  queueItemId: string,
+  pricedRmb: number
+): Promise<void> {
+  if (pricedRmb <= 0) {
+    throw new Error("Price must be greater than 0");
+  }
+
+  const supabase = createClient();
+
+  // 1. Fetch queue row with FK join to get quote item data
+  const { data: queueRow, error: fetchError } = await supabase
+    .from("phmb_procurement_queue")
+    .select("id, quote_item_id, org_id, phmb_quote_items!quote_item_id(cat_number, product_name, brand, product_classification)")
+    .eq("id", queueItemId)
+    .single();
+
+  if (fetchError || !queueRow) {
+    throw new Error("Queue item not found");
+  }
+
+  const quoteItem = queueRow.phmb_quote_items as unknown as {
+    cat_number: string;
+    product_name: string;
+    brand: string;
+    product_classification: string;
+  } | null;
+
+  // 2. Update queue status to 'priced'
+  const { error: queueError } = await supabase
+    .from("phmb_procurement_queue")
+    .update({
+      status: "priced",
+      priced_rmb: pricedRmb,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", queueItemId);
+
+  if (queueError) throw queueError;
+
+  // 3. Write price back to quote item
+  const { error: itemError } = await supabase
+    .from("phmb_quote_items")
+    .update({
+      list_price_rmb: pricedRmb,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", queueRow.quote_item_id);
+
+  if (itemError) throw itemError;
+
+  // 4. Upsert into price list (if cat_number is not empty)
+  const catNumber = quoteItem?.cat_number ?? "";
+  if (catNumber) {
+    await supabase
+      .from("phmb_price_list")
+      .upsert(
+        {
+          org_id: queueRow.org_id,
+          cat_number: catNumber,
+          product_name: quoteItem?.product_name ?? "",
+          brand: quoteItem?.brand ?? "",
+          product_classification: quoteItem?.product_classification ?? "",
+          list_price_rmb: pricedRmb,
+        },
+        { onConflict: "org_id,cat_number" }
+      );
+  }
+}
+
+export async function updateQueueItemStatus(
+  queueItemId: string,
+  newStatus: ProcurementQueueStatus
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("phmb_procurement_queue")
+    .update({
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", queueItemId);
+
+  if (error) throw error;
 }

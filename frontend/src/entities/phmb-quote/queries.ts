@@ -7,6 +7,9 @@ import type {
   PhmbItemStatus,
   PhmbDefaults,
   SellerCompany,
+  ProcurementQueueItem,
+  ProcurementQueueStatus,
+  BrandGroup,
 } from "./types";
 
 const PAGE_SIZE = 20;
@@ -218,5 +221,83 @@ export async function fetchPhmbQuoteItems(
     total_price_usd: row.total_price_usd,
     total_price_with_vat_usd: row.total_price_with_vat_usd,
     status: computeItemStatus(row),
+  }));
+}
+
+// --- Procurement Queue queries (Screen 3) ---
+
+export async function fetchProcurementQueue(params: {
+  orgId: string;
+  brandGroupId?: string;
+  status?: ProcurementQueueStatus;
+}): Promise<ProcurementQueueItem[]> {
+  const supabase = await createClient();
+  const { orgId, brandGroupId, status } = params;
+
+  let query = supabase
+    .from("phmb_procurement_queue")
+    .select(
+      "id, quote_item_id, quote_id, brand, brand_group_id, status, priced_rmb, notes, created_at, phmb_quote_items!quote_item_id(cat_number, product_name, quantity, delivery_days), quotes!quote_id(idn_quote, customers!customer_id(name))"
+    )
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: true });
+
+  if (brandGroupId) {
+    query = query.eq("brand_group_id", brandGroupId);
+  }
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data ?? []).map((row) => {
+    const quoteItem = row.phmb_quote_items as unknown as {
+      cat_number: string;
+      product_name: string;
+      quantity: number;
+      delivery_days: number | null;
+    } | null;
+
+    const quoteData = row.quotes as unknown as {
+      idn_quote: string;
+      customers: { name: string } | null;
+    } | null;
+
+    return {
+      id: row.id,
+      quote_item_id: row.quote_item_id,
+      quote_id: row.quote_id,
+      brand: row.brand,
+      brand_group_id: row.brand_group_id,
+      status: row.status as ProcurementQueueStatus,
+      priced_rmb: row.priced_rmb,
+      notes: row.notes,
+      created_at: row.created_at ?? "",
+      cat_number: quoteItem?.cat_number ?? "",
+      product_name: quoteItem?.product_name ?? "",
+      quantity: quoteItem?.quantity ?? 0,
+      delivery_days: quoteItem?.delivery_days ?? null,
+      quote_idn: quoteData?.idn_quote ?? "—",
+      customer_name: (quoteData?.customers as { name: string } | null)?.name ?? "—",
+    };
+  });
+}
+
+export async function fetchBrandGroups(orgId: string): Promise<BrandGroup[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("phmb_brand_groups")
+    .select("id, name")
+    .eq("org_id", orgId)
+    .order("sort_order", { ascending: true });
+
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
   }));
 }

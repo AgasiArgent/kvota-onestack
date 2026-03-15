@@ -10,6 +10,9 @@ export type {
   PhmbItemStatus,
   PriceListSearchResult,
   CalcResult,
+  ProcurementQueueStatus,
+  ProcurementQueueItem,
+  BrandGroup,
 } from "./types";
 export {
   fetchPhmbQuotesList,
@@ -17,6 +20,8 @@ export {
   fetchSellerCompanies,
   fetchPhmbQuoteDetail,
   fetchPhmbQuoteItems,
+  fetchProcurementQueue,
+  fetchBrandGroups,
 } from "./queries";
 export {
   createPhmbQuote,
@@ -29,4 +34,6 @@ export {
   searchPriceList,
   calculateQuote,
   exportPdf,
+  setProcurementPrice,
+  updateQueueItemStatus,
 } from "./mutations";
