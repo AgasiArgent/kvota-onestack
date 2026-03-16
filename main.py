@@ -16830,8 +16830,8 @@ def get(quote_id: str, session):
             session=session
         )
 
-    # Check if user is admin - bypass brand filtering
-    is_admin = user_has_any_role(session, ["admin"])
+    # Check if user is admin or head_of_procurement - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin", "head_of_procurement"])
 
     # Get user's assigned brands (admin sees all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
@@ -19007,12 +19007,12 @@ async def api_complete_procurement(quote_id: str, session):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     try:
-        # Check if user is admin - bypass brand filtering
-        is_admin = user_has_any_role(session, ["admin"])
+        # Check if user is admin or head_of_procurement - bypass brand filtering
+        is_admin = user_has_any_role(session, ["admin", "head_of_procurement"])
 
         supabase = get_supabase()
 
@@ -19140,8 +19140,8 @@ async def render_invoices_list(quote_id: str, org_id: str, session):
     user = session["user"]
     user_id = user["id"]
 
-    # Check if user is admin - bypass brand filtering
-    is_admin = user_has_any_role(session, ["admin"])
+    # Check if user is admin or head_of_procurement - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin", "head_of_procurement"])
 
     # Get user's assigned brands (admin sees all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
@@ -19570,8 +19570,8 @@ def get(quote_id: str, session):
 
     customer_name = (quote.get("customers") or {}).get("name", "")
 
-    # Check if user is admin - bypass brand filtering
-    is_admin = user_has_any_role(session, ["admin"])
+    # Check if user is admin or head_of_procurement - bypass brand filtering
+    is_admin = user_has_any_role(session, ["admin", "head_of_procurement"])
 
     # Get user's assigned brands (admin sees all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
