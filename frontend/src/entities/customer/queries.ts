@@ -41,7 +41,7 @@ export async function fetchCustomersList(params: {
 
   // Fetch manager names and quote counts in parallel
   const [quoteCounts, managers] = await Promise.all([
-    supabase
+    (supabase as unknown as { rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: { customer_id: string; cnt: number; last_date: string | null }[] | null }> })
       .rpc("get_customers_quote_counts", { customer_ids: customerIds })
       .then((r) => r.data),
     managerIds.length > 0
