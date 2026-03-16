@@ -5978,7 +5978,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
     PHMB quotes (is_phmb=true) are excluded from all procurement views.
     """
     # Check if user is admin - bypass brand filtering
-    is_admin = roles and "admin" in roles
+    is_admin = roles and ("admin" in roles or "head_of_procurement" in roles)
 
     # Get brands assigned to this user (empty for admin = see all)
     my_brands = get_assigned_brands(user_id, org_id) if not is_admin else []
