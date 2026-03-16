@@ -33,30 +33,33 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
+          script_stop: false
           script: |
             echo "Waiting for containers to start..."
             sleep 15
-            for CONTAINER in kvota-onestack kvota-frontend; do
-              STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
-              echo "$CONTAINER health: $STATUS"
-              if [ "$STATUS" != "healthy" ]; then
-                echo "$CONTAINER not healthy, waiting 30 more seconds..."
-                sleep 30
-                STATUS=$(docker inspect --format='{{.State.Health.Status}}' $CONTAINER 2>/dev/null || echo "unknown")
-                echo "$CONTAINER health after retry: $STATUS"
-              fi
-              if [ "$STATUS" != "healthy" ]; then
-                echo "::warning::Container $CONTAINER is not healthy: $STATUS"
-                docker logs $CONTAINER --tail 20
-              else
-                echo "$CONTAINER verified healthy"
-              fi
-            done
-            # Backend must be healthy for deploy to succeed
-            BACKEND=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
-            if [ "$BACKEND" != "healthy" ]; then
-              echo "::error::Backend kvota-onestack is not healthy"
+            BACKEND_STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
+            echo "kvota-onestack health: $BACKEND_STATUS"
+            FRONTEND_STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-frontend 2>/dev/null || echo "unknown")
+            echo "kvota-frontend health: $FRONTEND_STATUS"
+            if [ "$BACKEND_STATUS" != "healthy" ]; then
+              echo "Backend not healthy, waiting 30 more seconds..."
+              sleep 30
+              BACKEND_STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-onestack 2>/dev/null || echo "unknown")
+              echo "kvota-onestack health after retry: $BACKEND_STATUS"
+            fi
+            if [ "$FRONTEND_STATUS" != "healthy" ]; then
+              echo "Frontend not healthy, waiting 30 more seconds..."
+              sleep 30
+              FRONTEND_STATUS=$(docker inspect --format='{{.State.Health.Status}}' kvota-frontend 2>/dev/null || echo "unknown")
+              echo "kvota-frontend health after retry: $FRONTEND_STATUS"
+            fi
+            if [ "$BACKEND_STATUS" != "healthy" ]; then
+              echo "::error::Backend kvota-onestack is not healthy: $BACKEND_STATUS"
+              docker logs kvota-onestack --tail 20 || true
               exit 1
             fi
-            echo "Deployment verified"
+            if [ "$FRONTEND_STATUS" != "healthy" ]; then
+              echo "::warning::Frontend kvota-frontend is not healthy: $FRONTEND_STATUS"
+              docker logs kvota-frontend --tail 20 || true
+            fi
+            echo "Deployment verified (backend: $BACKEND_STATUS, frontend: $FRONTEND_STATUS)"
