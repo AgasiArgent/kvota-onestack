@@ -16805,7 +16805,7 @@ def get(quote_id: str, session):
     org_id = user["org_id"]
 
     # Check if user has procurement role
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -18255,7 +18255,7 @@ async def api_create_invoice(quote_id: str, session, request):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
@@ -18385,7 +18385,7 @@ async def api_update_invoice(quote_id: str, session, request):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     form = await request.form()
@@ -18515,7 +18515,7 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
@@ -18563,7 +18563,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
@@ -18779,7 +18779,7 @@ async def api_reopen_invoice(quote_id: str, invoice_id: str, session):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     supabase = get_supabase()
@@ -18839,7 +18839,7 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     body = await request.body()
@@ -18907,7 +18907,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     body = await request.body()
@@ -19123,7 +19123,7 @@ def api_delete_document(document_id: str, session):
 
     user = session["user"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
 
     # Delete the document
@@ -19307,7 +19307,7 @@ def get(quote_id: str, session):
     user = session["user"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -19463,7 +19463,7 @@ def post(quote_id: str, session, comment: str = ""):
     user_id = user["id"]
     org_id = user["org_id"]
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     if not comment or not comment.strip():
@@ -19551,7 +19551,7 @@ def get(quote_id: str, session):
     org_id = user["org_id"]
 
     # Check if user has procurement role
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     supabase = get_supabase()
@@ -48369,7 +48369,7 @@ def get(session, brand_group_id: str = "", status: str = "", partial: str = ""):
     if redirect:
         return redirect
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return RedirectResponse("/unauthorized", status_code=303)
 
     user = session["user"]
@@ -48511,7 +48511,7 @@ async def post(session, queue_item_id: str, new_status: str = "", priced_rmb: fl
     if redirect:
         return Response("Unauthorized", status_code=401)
 
-    if not user_has_any_role(session, ["procurement", "admin"]):
+    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
         return Response("Forbidden", status_code=403)
 
     user = session["user"]
