@@ -5,8 +5,8 @@ import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { CreateCustomerDialog } from "./create-customer-dialog";
 import {
   Select,
   SelectContent,
@@ -29,6 +29,7 @@ interface Props {
   initialSearch?: string;
   initialStatus?: string;
   initialPage?: number;
+  orgId: string;
 }
 
 const PAGE_SIZE = 50;
@@ -45,10 +46,12 @@ export function CustomersTable({
   initialSearch = "",
   initialStatus = "",
   initialPage = 1,
+  orgId,
 }: Props) {
   const getLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
   const [statusLabel, setStatusLabel] = useState(getLabel(initialStatus || "all"));
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
 
   function formatDate(dateStr: string | null) {
@@ -97,10 +100,14 @@ export function CustomersTable({
           <Search size={16} />
           Найти
         </Button>
-        <Link href="/customers/new" className={cn(buttonVariants({ size: "sm" }), "ml-auto bg-accent text-white hover:bg-accent-hover")}>
+        <Button
+          size="sm"
+          className="ml-auto bg-accent text-white hover:bg-accent-hover"
+          onClick={() => setCreateDialogOpen(true)}
+        >
           <Plus size={16} />
           Новый клиент
-        </Link>
+        </Button>
       </form>
 
       {/* Stats row */}
@@ -186,6 +193,11 @@ export function CustomersTable({
           </div>
         </div>
       )}
+      <CreateCustomerDialog
+        orgId={orgId}
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+      />
     </div>
   );
 }

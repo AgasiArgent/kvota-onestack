@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { fetchCustomersList } from "@/entities/customer";
+import { getSessionUser } from "@/entities/user";
 import { CustomersTable } from "@/features/customers";
 
 interface Props {
@@ -6,6 +8,9 @@ interface Props {
 }
 
 export default async function CustomersPage({ searchParams }: Props) {
+  const user = await getSessionUser();
+  if (!user?.orgId) redirect("/login");
+
   const params = await searchParams;
   const search = params.q ?? "";
   const status = params.status ?? "";
@@ -22,6 +27,7 @@ export default async function CustomersPage({ searchParams }: Props) {
         initialSearch={search}
         initialStatus={status}
         initialPage={page}
+        orgId={user.orgId}
       />
     </div>
   );

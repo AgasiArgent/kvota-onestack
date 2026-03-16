@@ -43,6 +43,7 @@ services:
         - NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
         - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
         - NEXT_PUBLIC_APP_BASE_URL=${FRONTEND_BASE_URL:-https://app.kvotaflow.ru}
+        - NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-kvota_error_bot}
     container_name: kvota-frontend
     restart: unless-stopped
     ports:
@@ -52,6 +53,7 @@ services:
       - NEXT_PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-kvota_error_bot}
     depends_on:
       - onestack
     healthcheck:

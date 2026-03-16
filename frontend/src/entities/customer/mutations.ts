@@ -138,6 +138,31 @@ export async function createCall(
   return call;
 }
 
+// ---------- Customer creation ----------
+
+export async function createCustomer(
+  orgId: string,
+  data: { name: string; inn?: string }
+): Promise<{ id: string }> {
+  const supabase = createClient();
+  const userId = await getCurrentUserId();
+
+  const { data: customer, error } = await supabase
+    .from("customers")
+    .insert({
+      name: data.name,
+      inn: data.inn || null,
+      organization_id: orgId,
+      status: "active",
+      created_by: userId,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return customer;
+}
+
 // ---------- Customer field mutations ----------
 
 export async function updateCustomerNotes(
