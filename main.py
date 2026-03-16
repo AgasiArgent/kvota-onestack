@@ -5036,7 +5036,7 @@ DASHBOARD_TABS = [
         "id": "overview",
         "icon": "bar-chart-3",
         "label": "Обзор",
-        "roles": ["admin", "top_manager", "sales", "sales_manager", "head_of_sales", "procurement", "logistics", "head_of_logistics", "customs", "head_of_customs", "quote_controller", "spec_controller", "finance"],
+        "roles": ["admin", "top_manager", "sales", "sales_manager", "head_of_sales", "procurement", "head_of_procurement", "logistics", "head_of_logistics", "customs", "head_of_customs", "quote_controller", "spec_controller", "finance"],
         "priority": 0,
     },
     {
@@ -5050,7 +5050,7 @@ DASHBOARD_TABS = [
         "id": "procurement",
         "icon": "shopping-cart",
         "label": "Закупки",
-        "roles": ["procurement", "admin"],
+        "roles": ["procurement", "head_of_procurement", "admin"],
         "priority": 2,
     },
     {
