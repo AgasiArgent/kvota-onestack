@@ -97,7 +97,9 @@ for file in $(ls -1 migrations/*.sql 2>/dev/null | sort); do
     echo "  Applying: $filename..."
 
     # Apply migration (don't stop on error)
+    # Set search_path so old migrations without kvota. prefix work correctly
     MIGRATION_OUTPUT=$(docker exec -i supabase-db psql -U postgres -d postgres 2>&1 << MIGRATION_EOF
+SET search_path TO kvota, public;
 $(cat "$file")
 MIGRATION_EOF
 )
