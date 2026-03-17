@@ -133,7 +133,7 @@ export function Sidebar({
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-hidden">
         <nav className="py-2">
           {sections.map((section, idx) => (
             <div key={section.title} className="mb-1">
