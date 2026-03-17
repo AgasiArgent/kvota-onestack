@@ -6,7 +6,9 @@ import {
   fetchCustomerCalls,
   fetchCustomerQuotes,
   fetchCustomerSpecs,
+  fetchCustomerContracts,
   fetchCustomerPositions,
+  fetchOrgUsers,
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
 import { CustomerHeader } from "@/features/customers/ui/customer-header";
@@ -59,11 +61,12 @@ async function CRMContent({
   customerId: string;
   customer: Customer;
 }) {
-  const [contacts, calls] = await Promise.all([
+  const [contacts, calls, orgUsers] = await Promise.all([
     fetchCustomerContacts(customerId),
     fetchCustomerCalls(customerId),
+    fetchOrgUsers(customer.organization_id),
   ]);
-  return <TabCRM customer={customer} contacts={contacts} calls={calls} />;
+  return <TabCRM customer={customer} contacts={contacts} calls={calls} orgUsers={orgUsers} />;
 }
 
 async function DocumentsContent({
@@ -73,11 +76,20 @@ async function DocumentsContent({
   customerId: string;
   subtab?: string;
 }) {
-  const [quotes, specs] = await Promise.all([
+  const [quotes, specs, contracts] = await Promise.all([
     fetchCustomerQuotes(customerId),
     fetchCustomerSpecs(customerId),
+    fetchCustomerContracts(customerId),
   ]);
-  return <TabDocuments quotes={quotes} specs={specs} initialSubTab={subtab} />;
+  return (
+    <TabDocuments
+      customerId={customerId}
+      quotes={quotes}
+      specs={specs}
+      contracts={contracts}
+      initialSubTab={subtab}
+    />
+  );
 }
 
 async function PositionsContent({ customerId }: { customerId: string }) {

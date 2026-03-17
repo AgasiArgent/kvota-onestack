@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/client";
+import type { ContractFormData, CustomerContract, PhoneEntry } from "./types";
 
 // ---------- Form data types ----------
 
@@ -9,6 +10,7 @@ export interface ContactFormData {
   position?: string;
   email?: string;
   phone?: string;
+  phones?: PhoneEntry[];
   is_signatory?: boolean;
   is_primary?: boolean;
   is_lpr?: boolean;
@@ -20,6 +22,7 @@ export interface CallFormData {
   call_category?: string;
   scheduled_date?: string;
   contact_person_id?: string;
+  assigned_to?: string;
   comment?: string;
   customer_needs?: string;
   meeting_notes?: string;
@@ -69,10 +72,24 @@ export async function createContact(
   const supabase = createClient();
   const organizationId = await getCustomerOrgId(customerId);
 
+  const phonesArr = data.phones ?? [];
+  const primaryPhone = phonesArr[0]?.number ?? data.phone ?? null;
+  const phonesJson = JSON.parse(JSON.stringify(phonesArr));
+
   const { data: contact, error } = await supabase
     .from("customer_contacts")
     .insert({
-      ...data,
+      name: data.name,
+      last_name: data.last_name ?? null,
+      patronymic: data.patronymic ?? null,
+      position: data.position ?? null,
+      email: data.email ?? null,
+      phone: primaryPhone,
+      phones: phonesJson,
+      is_signatory: data.is_signatory ?? false,
+      is_primary: data.is_primary ?? false,
+      is_lpr: data.is_lpr ?? false,
+      notes: data.notes ?? null,
       customer_id: customerId,
       organization_id: organizationId,
     })
@@ -89,9 +106,25 @@ export async function updateContact(
 ) {
   const supabase = createClient();
 
+  const phonesArr = data.phones ?? [];
+  const primaryPhone = phonesArr[0]?.number ?? data.phone ?? null;
+  const phonesJson = JSON.parse(JSON.stringify(phonesArr));
+
   const { data: contact, error } = await supabase
     .from("customer_contacts")
-    .update(data)
+    .update({
+      name: data.name,
+      last_name: data.last_name ?? null,
+      patronymic: data.patronymic ?? null,
+      position: data.position ?? null,
+      email: data.email ?? null,
+      phone: primaryPhone,
+      phones: phonesJson,
+      is_signatory: data.is_signatory ?? false,
+      is_primary: data.is_primary ?? false,
+      is_lpr: data.is_lpr ?? false,
+      notes: data.notes ?? null,
+    })
     .eq("id", contactId)
     .select()
     .single();
@@ -127,6 +160,7 @@ export async function createCall(
     .from("calls")
     .insert({
       ...data,
+      assigned_to: data.assigned_to || null,
       customer_id: customerId,
       organization_id: organizationId,
       user_id: userId,
@@ -189,6 +223,78 @@ export async function updateCustomerAddresses(
     .from("customers")
     .update(data)
     .eq("id", customerId);
+
+  if (error) throw error;
+}
+
+// ---------- General email mutation ----------
+
+export async function updateCustomerGeneralEmail(
+  customerId: string,
+  email: string
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("customers")
+    .update({ general_email: email || null })
+    .eq("id", customerId);
+
+  if (error) throw error;
+}
+
+// ---------- Contract mutations ----------
+
+export async function createContract(
+  customerId: string,
+  data: ContractFormData
+): Promise<CustomerContract> {
+  const supabase = createClient();
+  const organizationId = await getCustomerOrgId(customerId);
+
+  const { data: contract, error } = await supabase
+    .from("customer_contracts")
+    .insert({
+      customer_id: customerId,
+      organization_id: organizationId,
+      contract_number: data.contract_number,
+      contract_date: data.contract_date || new Date().toISOString().split("T")[0],
+      status: data.status,
+      notes: data.notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return contract as unknown as CustomerContract;
+}
+
+export async function updateContract(
+  contractId: string,
+  data: ContractFormData
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("customer_contracts")
+    .update({
+      contract_number: data.contract_number,
+      contract_date: data.contract_date ?? null,
+      status: data.status,
+      notes: data.notes ?? null,
+    })
+    .eq("id", contractId);
+
+  if (error) throw error;
+}
+
+export async function deleteContract(contractId: string) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("customer_contracts")
+    .delete()
+    .eq("id", contractId);
 
   if (error) throw error;
 }

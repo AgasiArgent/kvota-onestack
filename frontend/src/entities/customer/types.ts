@@ -9,9 +9,11 @@ export interface Customer {
   postal_address: string | null;
   general_director_name: string | null;
   general_director_position: string | null;
+  general_email: string | null;
   warehouse_addresses: { address: string; label?: string }[] | null;
   status: string;
   order_source: string | null;
+  organization_id: string;
   manager_id: string | null;
   notes: string | null;
   created_at: string;
@@ -19,6 +21,12 @@ export interface Customer {
   manager?: { full_name: string } | null;
   quotes_count?: number;
   specs_count?: number;
+}
+
+export interface PhoneEntry {
+  number: string;
+  ext: string | null;
+  label: string;
 }
 
 export interface CustomerContact {
@@ -30,6 +38,7 @@ export interface CustomerContact {
   position: string | null;
   email: string | null;
   phone: string | null;
+  phones: PhoneEntry[];
   is_signatory: boolean;
   is_primary: boolean;
   is_lpr: boolean;
@@ -57,8 +66,32 @@ export interface CustomerCall {
   customer_needs: string | null;
   meeting_notes: string | null;
   contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
   user_name: string | null;
+  assigned_to: string | null;
+  assigned_user_name?: string;
   created_at: string | null;
+}
+
+export interface CustomerContract {
+  id: string;
+  customer_id: string;
+  organization_id: string;
+  contract_number: string;
+  contract_date: string | null;
+  status: "active" | "suspended" | "terminated";
+  notes: string | null;
+  next_specification_number: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractFormData {
+  contract_number: string;
+  contract_date: string;
+  status: "active" | "suspended" | "terminated";
+  notes: string;
 }
 
 export interface CustomerStats {

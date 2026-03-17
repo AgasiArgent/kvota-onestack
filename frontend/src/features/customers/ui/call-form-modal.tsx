@@ -21,17 +21,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { CustomerContact } from "@/entities/customer";
-import { createClient } from "@/shared/lib/supabase/client";
+import {
+  createCall,
+  type CallFormData,
+} from "@/entities/customer/mutations";
 
-// ── Types ───────────────────────────────────────────────────────────
+// -- Types --
 
 type CallType = "call" | "scheduled";
 type CallCategory = "cold" | "warm" | "incoming";
 
-interface CallFormData {
+interface FormState {
   call_type: CallType;
   call_category: CallCategory | null;
   contact_person_id: string | null;
+  assigned_to: string | null;
   scheduled_date: string | null;
   comment: string;
   customer_needs: string;
@@ -44,44 +48,11 @@ interface CallFormModalProps {
   onSaved: () => void;
   customerId: string;
   contacts: CustomerContact[];
+  orgUsers?: { id: string; full_name: string }[];
+  currentUserId?: string;
 }
 
-// ── Inline mutation (until entities/customer/mutations is ready) ─────
-
-async function createCall(customerId: string, data: CallFormData) {
-  const supabase = createClient();
-
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("organization_id")
-    .eq("id", customerId)
-    .single();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!customer?.organization_id || !user?.id) {
-    throw new Error("Не удалось определить организацию или пользователя");
-  }
-
-  const { error } = await supabase.from("calls").insert({
-    customer_id: customerId,
-    organization_id: customer.organization_id,
-    user_id: user.id,
-    call_type: data.call_type,
-    call_category: data.call_category,
-    contact_person_id: data.contact_person_id,
-    scheduled_date: data.scheduled_date,
-    comment: data.comment || null,
-    customer_needs: data.customer_needs || null,
-    meeting_notes: data.meeting_notes || null,
-  });
-
-  if (error) throw error;
-}
-
-// ── Constants ───────────────────────────────────────────────────────
+// -- Constants --
 
 const CALL_CATEGORIES: { value: CallCategory; label: string }[] = [
   { value: "cold", label: "Холодный" },
@@ -89,17 +60,18 @@ const CALL_CATEGORIES: { value: CallCategory; label: string }[] = [
   { value: "incoming", label: "Входящий" },
 ];
 
-const INITIAL_FORM: CallFormData = {
+const INITIAL_FORM: FormState = {
   call_type: "call",
   call_category: null,
   contact_person_id: null,
+  assigned_to: null,
   scheduled_date: null,
   comment: "",
   customer_needs: "",
   meeting_notes: "",
 };
 
-// ── Component ───────────────────────────────────────────────────────
+// -- Component --
 
 export function CallFormModal({
   open,
@@ -107,8 +79,13 @@ export function CallFormModal({
   onSaved,
   customerId,
   contacts,
+  orgUsers = [],
+  currentUserId,
 }: CallFormModalProps) {
-  const [form, setForm] = useState<CallFormData>(INITIAL_FORM);
+  const [form, setForm] = useState<FormState>({
+    ...INITIAL_FORM,
+    assigned_to: currentUserId ?? null,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsExpanded, setNeedsExpanded] = useState(false);
@@ -117,7 +94,7 @@ export function CallFormModal({
   const title = isScheduled ? "Новая встреча" : "Новый звонок";
 
   function resetAndClose() {
-    setForm(INITIAL_FORM);
+    setForm({ ...INITIAL_FORM, assigned_to: currentUserId ?? null });
     setError(null);
     setNeedsExpanded(false);
     onClose();
@@ -127,9 +104,9 @@ export function CallFormModal({
     if (!open) resetAndClose();
   }
 
-  function updateField<K extends keyof CallFormData>(
+  function updateField<K extends keyof FormState>(
     key: K,
-    value: CallFormData[K],
+    value: FormState[K],
   ) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -141,16 +118,17 @@ export function CallFormModal({
 
     try {
       const payload: CallFormData = {
-        ...form,
-        call_category: form.call_category || null,
-        contact_person_id: form.contact_person_id || null,
-        scheduled_date: form.scheduled_date || null,
-        comment: form.comment.trim(),
-        customer_needs: form.customer_needs.trim() || "",
-        meeting_notes: form.meeting_notes.trim() || "",
+        call_type: form.call_type,
+        call_category: form.call_category || undefined,
+        contact_person_id: form.contact_person_id || undefined,
+        assigned_to: form.assigned_to || undefined,
+        scheduled_date: form.scheduled_date || undefined,
+        comment: form.comment.trim() || undefined,
+        customer_needs: form.customer_needs.trim() || undefined,
+        meeting_notes: form.meeting_notes.trim() || undefined,
       };
       await createCall(customerId, payload);
-      setForm(INITIAL_FORM);
+      setForm({ ...INITIAL_FORM, assigned_to: currentUserId ?? null });
       setNeedsExpanded(false);
       onSaved();
       onClose();
@@ -241,6 +219,32 @@ export function CallFormModal({
                   {contacts.map((contact) => (
                     <SelectItem key={contact.id} value={contact.id}>
                       {getContactLabel(contact)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Assigned to */}
+          {orgUsers.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Ответственный
+              </label>
+              <Select
+                value={form.assigned_to ?? undefined}
+                onValueChange={(val) =>
+                  updateField("assigned_to", val || null)
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Не выбран" />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -347,7 +351,7 @@ export function CallFormModal({
   );
 }
 
-// ── Type pill sub-component ─────────────────────────────────────────
+// -- Type pill sub-component --
 
 function TypePill({
   active,

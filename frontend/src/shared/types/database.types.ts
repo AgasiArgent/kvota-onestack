@@ -21,6 +21,7 @@ export type Database = {
           decision_comment: string | null
           requested_at: string
           decided_at: string | null
+          modifications: Json | null
         }
         Insert: {
           id?: string
@@ -33,6 +34,7 @@ export type Database = {
           decision_comment?: string | null
           requested_at?: string
           decided_at?: string | null
+          modifications?: Json | null
         }
         Update: {
           id?: string
@@ -45,6 +47,7 @@ export type Database = {
           decision_comment?: string | null
           requested_at?: string
           decided_at?: string | null
+          modifications?: Json | null
         }
         Relationships: []
       }
@@ -297,6 +300,7 @@ export type Database = {
           meeting_notes: string | null
           created_at: string | null
           updated_at: string | null
+          assigned_to: string | null
         }
         Insert: {
           id?: string
@@ -312,6 +316,7 @@ export type Database = {
           meeting_notes?: string | null
           created_at?: string | null
           updated_at?: string | null
+          assigned_to?: string | null
         }
         Update: {
           id?: string
@@ -327,6 +332,7 @@ export type Database = {
           meeting_notes?: string | null
           created_at?: string | null
           updated_at?: string | null
+          assigned_to?: string | null
         }
         Relationships: []
       }
@@ -549,6 +555,7 @@ export type Database = {
           signatory_position: string | null
           patronymic: string | null
           is_lpr: boolean | null
+          phones: Json | null
         }
         Insert: {
           id?: string
@@ -567,6 +574,7 @@ export type Database = {
           signatory_position?: string | null
           patronymic?: string | null
           is_lpr?: boolean | null
+          phones?: Json | null
         }
         Update: {
           id?: string
@@ -585,6 +593,7 @@ export type Database = {
           signatory_position?: string | null
           patronymic?: string | null
           is_lpr?: boolean | null
+          phones?: Json | null
         }
         Relationships: []
       }
@@ -705,6 +714,7 @@ export type Database = {
           postal_address: string | null
           order_source: string | null
           manager_id: string | null
+          general_email: string | null
         }
         Insert: {
           id?: string
@@ -738,6 +748,7 @@ export type Database = {
           postal_address?: string | null
           order_source?: string | null
           manager_id?: string | null
+          general_email?: string | null
         }
         Update: {
           id?: string
@@ -771,6 +782,7 @@ export type Database = {
           postal_address?: string | null
           order_source?: string | null
           manager_id?: string | null
+          general_email?: string | null
         }
         Relationships: []
       }
@@ -1375,6 +1387,12 @@ export type Database = {
           sent_at: string | null
           read_at: string | null
           created_at: string
+          organization_id: string | null
+          specification_id: string | null
+          approval_id: string | null
+          priority: string | null
+          metadata: Json | null
+          expires_at: string | null
         }
         Insert: {
           id?: string
@@ -1391,6 +1409,12 @@ export type Database = {
           sent_at?: string | null
           read_at?: string | null
           created_at?: string
+          organization_id?: string | null
+          specification_id?: string | null
+          approval_id?: string | null
+          priority?: string | null
+          metadata?: Json | null
+          expires_at?: string | null
         }
         Update: {
           id?: string
@@ -1407,6 +1431,12 @@ export type Database = {
           sent_at?: string | null
           read_at?: string | null
           created_at?: string
+          organization_id?: string | null
+          specification_id?: string | null
+          approval_id?: string | null
+          priority?: string | null
+          metadata?: Json | null
+          expires_at?: string | null
         }
         Relationships: []
       }
@@ -1636,6 +1666,7 @@ export type Database = {
           general_director_last_name: string | null
           general_director_first_name: string | null
           general_director_patronymic: string | null
+          idn_counters: Json | null
         }
         Insert: {
           id?: string
@@ -1667,6 +1698,7 @@ export type Database = {
           general_director_last_name?: string | null
           general_director_first_name?: string | null
           general_director_patronymic?: string | null
+          idn_counters?: Json | null
         }
         Update: {
           id?: string
@@ -1698,6 +1730,7 @@ export type Database = {
           general_director_last_name?: string | null
           general_director_first_name?: string | null
           general_director_patronymic?: string | null
+          idn_counters?: Json | null
         }
         Relationships: []
       }
@@ -3046,6 +3079,11 @@ export type Database = {
           license_sgr_required: boolean | null
           license_sgr_cost: number | null
           supplier_sku: string | null
+          item_idn: string | null
+          supplier_advance_percent: number | null
+          weight_kg: number | null
+          customs_duty_percent: number | null
+          customs_extra_cost: number | null
         }
         Insert: {
           id?: string
@@ -3110,6 +3148,11 @@ export type Database = {
           license_sgr_required?: boolean | null
           license_sgr_cost?: number | null
           supplier_sku?: string | null
+          item_idn?: string | null
+          supplier_advance_percent?: number | null
+          weight_kg?: number | null
+          customs_duty_percent?: number | null
+          customs_extra_cost?: number | null
         }
         Update: {
           id?: string
@@ -3174,6 +3217,11 @@ export type Database = {
           license_sgr_required?: boolean | null
           license_sgr_cost?: number | null
           supplier_sku?: string | null
+          item_idn?: string | null
+          supplier_advance_percent?: number | null
+          weight_kg?: number | null
+          customs_duty_percent?: number | null
+          customs_extra_cost?: number | null
         }
         Relationships: []
       }
@@ -3441,6 +3489,7 @@ export type Database = {
           phmb_payment_days: number | null
           cogs_quote_currency: number | null
           revenue_no_vat_quote_currency: number | null
+          idn: string | null
         }
         Insert: {
           id?: string
@@ -3552,6 +3601,7 @@ export type Database = {
           phmb_payment_days?: number | null
           cogs_quote_currency?: number | null
           revenue_no_vat_quote_currency?: number | null
+          idn?: string | null
         }
         Update: {
           id?: string
@@ -3663,6 +3713,7 @@ export type Database = {
           phmb_payment_days?: number | null
           cogs_quote_currency?: number | null
           revenue_no_vat_quote_currency?: number | null
+          idn?: string | null
         }
         Relationships: []
       }
@@ -3999,6 +4050,8 @@ export type Database = {
           delivery_days_type: string | null
           delivery_days: number | null
           signed_scan_document_id: string | null
+          specification_date: string | null
+          export_data: Json | null
         }
         Insert: {
           id?: string
@@ -4041,6 +4094,8 @@ export type Database = {
           delivery_days_type?: string | null
           delivery_days?: number | null
           signed_scan_document_id?: string | null
+          specification_date?: string | null
+          export_data?: Json | null
         }
         Update: {
           id?: string
@@ -4083,6 +4138,53 @@ export type Database = {
           delivery_days_type?: string | null
           delivery_days?: number | null
           signed_scan_document_id?: string | null
+          specification_date?: string | null
+          export_data?: Json | null
+        }
+        Relationships: []
+      }
+      supplier_contacts: {
+        Row: {
+          id: string
+          supplier_id: string
+          organization_id: string
+          name: string
+          position: string | null
+          email: string | null
+          phone: string | null
+          is_primary: boolean | null
+          notes: string | null
+          created_at: string | null
+          updated_at: string | null
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          supplier_id: string
+          organization_id: string
+          name: string
+          position?: string | null
+          email?: string | null
+          phone?: string | null
+          is_primary?: boolean | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          supplier_id?: string
+          organization_id?: string
+          name?: string
+          position?: string | null
+          email?: string | null
+          phone?: string | null
+          is_primary?: boolean | null
+          notes?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+          created_by?: string | null
         }
         Relationships: []
       }
@@ -4281,6 +4383,7 @@ export type Database = {
           contact_phone: string | null
           default_payment_terms: string | null
           created_by: string | null
+          registration_number: string | null
         }
         Insert: {
           id?: string
@@ -4299,6 +4402,7 @@ export type Database = {
           contact_phone?: string | null
           default_payment_terms?: string | null
           created_by?: string | null
+          registration_number?: string | null
         }
         Update: {
           id?: string
@@ -4317,6 +4421,7 @@ export type Database = {
           contact_phone?: string | null
           default_payment_terms?: string | null
           created_by?: string | null
+          registration_number?: string | null
         }
         Relationships: []
       }

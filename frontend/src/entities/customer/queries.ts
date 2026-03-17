@@ -3,7 +3,9 @@ import type {
   CustomerListItem,
   Customer,
   CustomerContact,
+  CustomerContract,
   CustomerStats,
+  PhoneEntry,
 } from "./types";
 
 const PAGE_SIZE = 50;
@@ -157,7 +159,27 @@ export async function fetchCustomerContacts(
     .order("is_primary", { ascending: false })
     .order("name");
   if (error) throw error;
-  return (data ?? []) as CustomerContact[];
+  return (data ?? []).map((row) => {
+    const rawPhones = Array.isArray(row.phones) ? row.phones : [];
+    type RawPhone = { number?: unknown; ext?: unknown; label?: unknown };
+    const phones: PhoneEntry[] = rawPhones.map((p) => {
+      const phone = p as RawPhone;
+      return {
+        number: String(phone.number ?? ""),
+        ext: phone.ext != null ? String(phone.ext) : null,
+        label: String(phone.label ?? ""),
+      };
+    });
+    return {
+      ...row,
+      is_signatory: row.is_signatory ?? false,
+      is_primary: row.is_primary ?? false,
+      is_lpr: row.is_lpr ?? false,
+      phones,
+      created_at: row.created_at ?? "",
+      updated_at: row.updated_at ?? "",
+    };
+  }) as CustomerContact[];
 }
 
 export async function fetchCustomerQuotes(customerId: string) {
@@ -206,7 +228,7 @@ export async function fetchCustomerCalls(customerId: string) {
   const { data } = await supabase
     .from("calls")
     .select(
-      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, user_id, created_at, customer_contacts!calls_contact_person_id_fkey(name)"
+      "id, call_type, call_category, scheduled_date, comment, customer_needs, meeting_notes, user_id, assigned_to, created_at, customer_contacts!calls_contact_person_id_fkey(name, phone, email)"
     )
     .eq("customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -214,31 +236,80 @@ export async function fetchCustomerCalls(customerId: string) {
 
   const rows = data ?? [];
 
-  // Batch-fetch user names (calls.user_id FK goes to auth.users, not user_profiles)
-  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  // Collect all user IDs (creators + assigned) for batch resolution
+  const allUserIds = [
+    ...new Set(
+      rows
+        .flatMap((r) => [r.user_id, r.assigned_to])
+        .filter((id): id is string => id !== null && id !== undefined)
+    ),
+  ];
+
   let userMap: Record<string, string> = {};
-  if (userIds.length > 0) {
+  if (allUserIds.length > 0) {
     const { data: profiles } = await supabase
       .from("user_profiles")
-      .select("id, full_name")
-      .in("id", userIds);
+      .select("user_id, full_name")
+      .in("user_id", allUserIds);
     userMap = Object.fromEntries(
-      (profiles ?? []).map((p) => [p.id, p.full_name ?? ""])
+      (profiles ?? []).map((p) => [p.user_id, p.full_name ?? ""])
     );
   }
 
-  return rows.map((row) => ({
-    id: row.id,
-    call_type: row.call_type as "call" | "scheduled",
-    call_category: row.call_category,
-    scheduled_date: row.scheduled_date,
-    comment: row.comment,
-    customer_needs: row.customer_needs,
-    meeting_notes: row.meeting_notes,
-    contact_name:
-      (row.customer_contacts as unknown as { name: string } | null)?.name ?? null,
-    user_name: row.user_id ? userMap[row.user_id] ?? null : null,
-    created_at: row.created_at,
+  return rows.map((row) => {
+    const contact = row.customer_contacts as unknown as {
+      name: string;
+      phone: string | null;
+      email: string | null;
+    } | null;
+
+    return {
+      id: row.id,
+      call_type: row.call_type as "call" | "scheduled",
+      call_category: row.call_category,
+      scheduled_date: row.scheduled_date,
+      comment: row.comment,
+      customer_needs: row.customer_needs,
+      meeting_notes: row.meeting_notes,
+      contact_name: contact?.name ?? null,
+      contact_phone: contact?.phone ?? null,
+      contact_email: contact?.email ?? null,
+      user_name: row.user_id ? userMap[row.user_id] ?? null : null,
+      assigned_to: row.assigned_to,
+      assigned_user_name: row.assigned_to
+        ? userMap[row.assigned_to] ?? undefined
+        : undefined,
+      created_at: row.created_at,
+    };
+  });
+}
+
+export async function fetchCustomerContracts(
+  customerId: string
+): Promise<CustomerContract[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customer_contracts")
+    .select("*")
+    .eq("customer_id", customerId)
+    .order("contract_date", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as CustomerContract[];
+}
+
+export async function fetchOrgUsers(
+  orgId: string
+): Promise<{ id: string; full_name: string }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .eq("organization_id", orgId)
+    .order("full_name");
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.user_id,
+    full_name: row.full_name ?? "",
   }));
 }
 
@@ -247,7 +318,7 @@ export async function fetchCustomerPositions(customerId: string) {
   const { data } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name, brand, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, customer_id)"
+      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, customer_id)"
     )
     .eq("quotes.customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -257,7 +328,8 @@ export async function fetchCustomerPositions(customerId: string) {
     id: row.id,
     product_name: row.product_name,
     brand: row.brand,
-    sku: row.idn_sku,
+    sku: row.supplier_sku,
+    idn_sku: row.idn_sku,
     quantity: row.quantity,
     purchase_price: row.purchase_price_original,
     purchase_currency: row.purchase_currency,
