@@ -34285,21 +34285,32 @@ def customer_search_dropdown(
 # ============================================================================
 
 @rt("/api/customers/search")
-def get(session, q: str = "", limit: int = 20):
+def get(request, session, q: str = "", limit: int = 20):
     """Customer search for datalist typeahead on /quotes/new.
     Respects role-based visibility: sales-only users see only their customers."""
-    redirect = require_login(session)
-    if redirect:
-        return Option("Требуется авторизация", value="", disabled=True)
+    # Dual auth: JWT (Next.js) or session (FastHTML HTMX)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_meta = api_user.user_metadata or {}
+        user = {
+            "id": str(api_user.id),
+            "email": api_user.email or "",
+            "name": user_meta.get("name", api_user.email or ""),
+            "org_id": user_meta.get("org_id"),
+        }
+    else:
+        redirect = require_login(session)
+        if redirect:
+            return Option("Требуется авторизация", value="", disabled=True)
+        user = session["user"]
 
-    user = session["user"]
     org_id = user.get("org_id")
     if not org_id:
         return Option("Организация не найдена", value="", disabled=True)
 
     from services.customer_service import search_customers, get_all_customers
 
-    roles = get_effective_roles(session)
+    roles = get_user_role_codes(user["id"], org_id) if api_user else get_effective_roles(session)
     has_full_visibility = any(r in roles for r in ["admin", "top_manager", "head_of_sales"])
     is_sales_only = not has_full_visibility
     manager_id = user["id"] if is_sales_only else None
@@ -49349,14 +49360,21 @@ def post_telegram_disconnect(session):
 @rt("/telegram/status")
 def get_telegram_status_check(session):
     """HTMX endpoint to check current Telegram connection status."""
-    redirect = require_login(session)
-    if redirect:
-        return redirect
+    try:
+        redirect = require_login(session)
+        if redirect:
+            return redirect
 
-    user = session["user"]
-    user_id = user.get("id")
-    status = get_user_telegram_status(user_id)
-    return _telegram_status_fragment(status, user_id=user_id)
+        user = session.get("user")
+        if not user or not user.get("id"):
+            return Div("Ошибка: не удалось определить пользователя", id="telegram-status", cls="text-error text-sm")
+
+        user_id = user["id"]
+        status = get_user_telegram_status(user_id)
+        return _telegram_status_fragment(status, user_id=user_id)
+    except Exception as e:
+        print(f"Telegram status error: {e}")
+        return Div("Не удалось загрузить статус", id="telegram-status", cls="text-error text-sm")
 
 
 # === API: Health check (for Next.js frontend) ===

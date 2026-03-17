@@ -22,6 +22,7 @@ services:
       - CLICKUP_API_KEY=${CLICKUP_API_KEY:-}
       - CLICKUP_BUG_LIST_ID=${CLICKUP_BUG_LIST_ID:-}
       - APP_BASE_URL=${APP_BASE_URL:-https://kvotaflow.ru}
+      - TZ=Europe/Moscow
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/login')"]
       interval: 30s
@@ -54,6 +55,7 @@ services:
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=${TELEGRAM_BOT_USERNAME:-kvota_error_bot}
+      - TZ=Europe/Moscow
     depends_on:
       - onestack
     healthcheck:
