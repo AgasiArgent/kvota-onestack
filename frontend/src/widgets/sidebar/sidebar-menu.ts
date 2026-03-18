@@ -8,7 +8,6 @@ import {
   Clock,
   Users,
   FileText,
-  FileSpreadsheet,
   Building2,
   ClipboardList,
   Phone,
@@ -18,6 +17,7 @@ import {
   MessageSquare,
   GitBranch,
   Settings,
+  ExternalLink,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -114,30 +114,18 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     label: "Коммерческие предложения",
     href: "/quotes",
   });
-  if (hasRole("sales", "sales_manager")) {
-    registries.push({
-      icon: FileSpreadsheet,
-      label: "PHMB",
-      href: "/phmb",
-    });
-  }
   if (hasRole("procurement")) {
     registries.push({
       icon: Building2,
       label: "Поставщики",
       href: "/suppliers",
     });
-    registries.push({
-      icon: ClipboardList,
-      label: "Очередь PHMB",
-      href: "/phmb/procurement",
-    });
   }
   if (hasRole("sales", "sales_manager")) {
     registries.push({
-      icon: Settings,
-      label: "Настройки PHMB",
-      href: "/phmb/settings",
+      icon: ExternalLink,
+      label: "PHMB →",
+      href: "https://phmb.kvotaflow.ru",
     });
   }
   if (hasRole("customs", "finance")) {
@@ -201,6 +189,48 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       ],
     });
   }
+
+  return sections;
+}
+
+export function buildPhmbMenuSections(config: MenuConfig): MenuSection[] {
+  const { roles, isAdmin } = config;
+  const hasRole = (...r: string[]) =>
+    isAdmin || r.some((role) => roles.includes(role));
+  const sections: MenuSection[] = [];
+
+  // === PHMB MAIN ===
+  const phmbItems: MenuItem[] = [
+    { icon: FileText, label: "Реестр КП", href: "/phmb" },
+  ];
+
+  if (hasRole("procurement")) {
+    phmbItems.push({
+      icon: ClipboardList,
+      label: "Очередь закупок",
+      href: "/phmb/procurement",
+    });
+  }
+  if (hasRole("sales", "sales_manager")) {
+    phmbItems.push({
+      icon: Settings,
+      label: "Настройки",
+      href: "/phmb/settings",
+    });
+  }
+  sections.push({ title: "PHMB", items: phmbItems });
+
+  // === LINK TO MAIN APP ===
+  sections.push({
+    title: "",
+    items: [
+      {
+        icon: ExternalLink,
+        label: "Основное приложение →",
+        href: "https://app.kvotaflow.ru",
+      },
+    ],
+  });
 
   return sections;
 }

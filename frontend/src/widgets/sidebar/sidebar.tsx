@@ -11,12 +11,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { SessionUser } from "@/entities/user";
-import { buildMenuSections } from "./sidebar-menu";
+import { buildMenuSections, buildPhmbMenuSections } from "./sidebar-menu";
+import type { AppContext } from "@/shared/lib/app-context";
 
 interface SidebarProps {
   user: SessionUser;
   pendingApprovalsCount?: number;
   changelogUnreadCount?: number;
+  appContext?: AppContext;
 }
 
 type ViewportMode = "desktop" | "tablet" | "mobile";
@@ -33,6 +35,7 @@ export function Sidebar({
   user,
   pendingApprovalsCount = 0,
   changelogUnreadCount = 0,
+  appContext = "main",
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
@@ -79,7 +82,8 @@ export function Sidebar({
 
   const isAdmin =
     user.roles.includes("admin") || user.roles.includes("training_manager");
-  const sections = buildMenuSections({
+  const menuBuilder = appContext === "phmb" ? buildPhmbMenuSections : buildMenuSections;
+  const sections = menuBuilder({
     roles: user.roles,
     isAdmin,
     pendingApprovalsCount,
