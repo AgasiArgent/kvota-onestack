@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
-import { fetchQuotesList, fetchFilterOptions } from "@/entities/quote";
+import { fetchQuotesList, fetchFilterOptions, getActionStatusesForUser } from "@/entities/quote";
 import type { QuotesFilterParams } from "@/entities/quote";
 import { QuotesTable } from "@/features/quotes";
 
@@ -35,11 +35,20 @@ export default async function QuotesPage({ searchParams }: Props) {
     fetchFilterOptions(user.orgId, { id: user.id, roles: user.roles }),
   ]);
 
+  const actionStatuses = new Set(getActionStatusesForUser(user.roles));
+  const actionQuotes = quotesResult.data.filter((q) =>
+    actionStatuses.has(q.workflow_status)
+  );
+  const otherQuotes = quotesResult.data.filter(
+    (q) => !actionStatuses.has(q.workflow_status)
+  );
+
   return (
     <div>
       <h1 className="text-2xl font-bold mb-6">Коммерческие предложения</h1>
       <QuotesTable
-        quotes={quotesResult.data}
+        actionQuotes={actionQuotes}
+        otherQuotes={otherQuotes}
         total={quotesResult.total}
         page={quotesResult.page}
         pageSize={quotesResult.pageSize}

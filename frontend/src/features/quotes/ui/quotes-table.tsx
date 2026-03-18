@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Table,
@@ -25,7 +25,8 @@ import type { QuoteListItem, QuotesFilterParams } from "@/entities/quote/types";
 import { getGroupForStatus } from "@/entities/quote/types";
 
 interface QuotesTableProps {
-  quotes: QuoteListItem[];
+  actionQuotes: QuoteListItem[];
+  otherQuotes: QuoteListItem[];
   total: number;
   page: number;
   pageSize: number;
@@ -97,8 +98,84 @@ function buildFilterUrl(
   return qs ? `/quotes?${qs}` : "/quotes";
 }
 
+function QuoteRow({
+  quote,
+  onRowClick,
+  onCustomerClick,
+}: {
+  quote: QuoteListItem;
+  onRowClick: (id: string) => void;
+  onCustomerClick: (e: React.MouseEvent, id: string) => void;
+}) {
+  const group = getGroupForStatus(quote.workflow_status);
+  const profit = formatProfit(quote.total_profit_usd);
+  return (
+    <TableRow
+      className="cursor-pointer"
+      onClick={() => onRowClick(quote.id)}
+    >
+      <TableCell className="text-muted-foreground tabular-nums">
+        {formatDate(quote.created_at)}
+      </TableCell>
+      <TableCell>
+        <span className="text-accent font-medium">
+          {quote.idn_quote}
+        </span>
+      </TableCell>
+      <TableCell className="max-w-[200px]">
+        {quote.customer ? (
+          <button
+            type="button"
+            className="text-accent hover:underline text-left truncate block max-w-full"
+            title={quote.customer.name}
+            onClick={(e) => onCustomerClick(e, quote.customer!.id)}
+          >
+            {quote.customer.name}
+          </button>
+        ) : (
+          <span className="text-muted-foreground">&mdash;</span>
+        )}
+      </TableCell>
+      <TableCell className="text-muted-foreground truncate max-w-[140px]" title={quote.manager?.full_name ?? ""}>
+        {quote.manager?.full_name ?? "\u2014"}
+      </TableCell>
+      <TableCell>
+        {group ? (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${group.color}`}
+          >
+            {group.label}
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-xs">
+            {quote.workflow_status}
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="text-center tabular-nums">
+        {quote.version_count > 1 ? (
+          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+            v{quote.current_version} ({quote.version_count})
+          </span>
+        ) : (
+          <span className="text-muted-foreground text-sm">
+            v{quote.current_version}
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {formatAmount(quote.total_amount_quote, quote.currency)}
+      </TableCell>
+      <TableCell className={`text-right tabular-nums ${profit.className}`}>
+        {profit.text}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 export function QuotesTable({
-  quotes,
+  actionQuotes,
+  otherQuotes,
   total,
   page,
   pageSize,
@@ -246,76 +323,47 @@ export function QuotesTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {quotes.map((quote) => {
-            const group = getGroupForStatus(quote.workflow_status);
-            const profit = formatProfit(quote.total_profit_usd);
-            return (
-              <TableRow
-                key={quote.id}
-                className="cursor-pointer"
-                onClick={() => handleRowClick(quote.id)}
-              >
-                <TableCell className="text-muted-foreground tabular-nums">
-                  {formatDate(quote.created_at)}
-                </TableCell>
-                <TableCell>
-                  <span className="text-accent font-medium">
-                    {quote.idn_quote}
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-[200px]">
-                  {quote.customer ? (
-                    <button
-                      type="button"
-                      className="text-accent hover:underline text-left truncate block max-w-full"
-                      title={quote.customer.name}
-                      onClick={(e) =>
-                        handleCustomerClick(e, quote.customer!.id)
-                      }
-                    >
-                      {quote.customer.name}
-                    </button>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-muted-foreground truncate max-w-[140px]" title={quote.manager?.full_name ?? ""}>
-                  {quote.manager?.full_name ?? "—"}
-                </TableCell>
-                <TableCell>
-                  {group ? (
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${group.color}`}
-                    >
-                      {group.label}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground text-xs">
-                      {quote.workflow_status}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-center tabular-nums">
-                  {quote.version_count > 1 ? (
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                      v{quote.current_version} ({quote.version_count})
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground text-sm">
-                      v{quote.current_version}
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {formatAmount(quote.total_amount_quote, quote.currency)}
-                </TableCell>
-                <TableCell className={`text-right tabular-nums ${profit.className}`}>
-                  {profit.text}
+          {actionQuotes.length > 0 && (
+            <>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="py-3 px-0">
+                  <div className="border-l-4 border-accent pl-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <AlertCircle size={16} className="text-accent shrink-0" />
+                    Требует вашего действия ({actionQuotes.length})
+                  </div>
                 </TableCell>
               </TableRow>
-            );
-          })}
-          {quotes.length === 0 && (
+              {actionQuotes.map((quote) => (
+                <QuoteRow
+                  key={quote.id}
+                  quote={quote}
+                  onRowClick={handleRowClick}
+                  onCustomerClick={handleCustomerClick}
+                />
+              ))}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="py-2 px-0">
+                  <div className="border-t border-border" />
+                </TableCell>
+              </TableRow>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="py-2 px-0">
+                  <span className="text-sm text-muted-foreground font-medium">
+                    Остальные КП
+                  </span>
+                </TableCell>
+              </TableRow>
+            </>
+          )}
+          {otherQuotes.map((quote) => (
+            <QuoteRow
+              key={quote.id}
+              quote={quote}
+              onRowClick={handleRowClick}
+              onCustomerClick={handleCustomerClick}
+            />
+          ))}
+          {actionQuotes.length === 0 && otherQuotes.length === 0 && (
             <TableRow>
               <TableCell
                 colSpan={8}

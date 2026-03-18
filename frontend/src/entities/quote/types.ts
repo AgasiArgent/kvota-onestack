@@ -87,3 +87,28 @@ export function getStatusesForGroup(groupKey: string): string[] {
 export function getGroupForStatus(status: string): StatusGroup | undefined {
   return STATUS_GROUP_MAP.get(status);
 }
+
+const ROLE_ACTION_STATUSES: Record<string, string[]> = {
+  sales: ["pending_sales_review", "approved"],
+  head_of_sales: ["pending_sales_review", "approved"],
+  procurement: ["pending_procurement"],
+  head_of_procurement: ["pending_procurement"],
+  logistics: ["pending_logistics", "pending_logistics_and_customs"],
+  head_of_logistics: ["pending_logistics", "pending_logistics_and_customs"],
+  customs: ["pending_customs", "pending_logistics_and_customs"],
+  quote_controller: ["pending_quote_control"],
+  spec_controller: ["pending_spec_control"],
+  top_manager: ["pending_approval"],
+  admin: ["pending_approval"],
+};
+
+export function getActionStatusesForUser(roles: string[]): string[] {
+  const statuses = new Set<string>();
+  for (const role of roles) {
+    const roleStatuses = ROLE_ACTION_STATUSES[role];
+    if (roleStatuses) {
+      for (const s of roleStatuses) statuses.add(s);
+    }
+  }
+  return Array.from(statuses);
+}
