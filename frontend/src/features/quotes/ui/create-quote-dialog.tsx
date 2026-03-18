@@ -25,7 +25,7 @@ import {
   createQuote,
   searchCustomers,
   fetchSellerCompanies,
-} from "@/entities/quote";
+} from "@/entities/quote/mutations";
 
 const DELIVERY_METHODS = [
   { value: "air", label: "Авиа" },

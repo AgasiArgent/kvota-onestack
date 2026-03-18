@@ -114,7 +114,7 @@ export function Sidebar({
       )}>
         {showLabels && (
           <Link
-            href="/dashboard"
+            href="/quotes"
             prefetch={false}
             className="font-semibold text-lg text-accent"
           >
