@@ -3,6 +3,9 @@ import { createClient as createJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/shared/types/database.types";
 
+// Share auth cookies across subdomains (app.kvotaflow.ru ↔ phmb.kvotaflow.ru)
+const COOKIE_DOMAIN = process.env.NODE_ENV === "production" ? ".kvotaflow.ru" : undefined;
+
 /**
  * Server-side Supabase client with user's auth context (via cookies).
  * Use for auth operations and user-scoped data queries.
@@ -22,7 +25,10 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, {
+                ...options,
+                ...(COOKIE_DOMAIN ? { domain: COOKIE_DOMAIN } : {}),
+              })
             );
           } catch {
             // The `setAll` method was called from a Server Component.
