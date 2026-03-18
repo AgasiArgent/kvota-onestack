@@ -275,11 +275,11 @@ export function QuotesTable({
                       {quote.customer.name}
                     </button>
                   ) : (
-                    <span className="text-muted-foreground">\u2014</span>
+                    <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {quote.manager?.full_name ?? "\u2014"}
+                  {quote.manager?.full_name ?? "—"}
                 </TableCell>
                 <TableCell>
                   {group ? (
@@ -352,7 +352,7 @@ export function QuotesTable({
                 href={buildFilterUrl(filters, { page: page - 1 })}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                \u2190 Назад
+                ← Назад
               </Link>
             )}
             {page < totalPages && (
@@ -360,7 +360,7 @@ export function QuotesTable({
                 href={buildFilterUrl(filters, { page: page + 1 })}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
               >
-                Вперёд \u2192
+                Вперёд →
               </Link>
             )}
           </div>
