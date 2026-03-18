@@ -147,17 +147,38 @@ export async function fetchSellerCompanies(
   }));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function resolvePhmbQuoteId(
+  idOrIdn: string
+): Promise<string | null> {
+  if (UUID_RE.test(idOrIdn)) return idOrIdn;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("quotes")
+    .select("id")
+    .eq("idn_quote", idOrIdn)
+    .is("deleted_at", null)
+    .single();
+
+  return data?.id ?? null;
+}
+
 export async function fetchPhmbQuoteDetail(
   quoteId: string
 ): Promise<PhmbQuoteDetail | null> {
   const supabase = await createClient();
+
+  const resolvedId = await resolvePhmbQuoteId(quoteId);
+  if (!resolvedId) return null;
 
   const { data, error } = await supabase
     .from("quotes")
     .select(
       "id, idn_quote, currency, phmb_advance_pct, phmb_payment_days, phmb_markup_pct, total_amount_usd, created_at, is_phmb, customers!customer_id(name)"
     )
-    .eq("id", quoteId)
+    .eq("id", resolvedId)
     .is("deleted_at", null)
     .single();
 

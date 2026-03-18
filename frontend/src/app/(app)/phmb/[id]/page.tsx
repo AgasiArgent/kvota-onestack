@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
 import {
+  resolvePhmbQuoteId,
   fetchPhmbQuoteDetail,
   fetchPhmbQuoteItems,
   fetchPhmbVersions,
@@ -23,12 +24,15 @@ export default async function PhmbWorkspacePage({ params }: Props) {
   if (!isSalesOrAdmin) redirect("/dashboard");
   if (!user.orgId) redirect("/dashboard");
 
-  const { id } = await params;
+  const { id: rawId } = await params;
+
+  const quoteId = await resolvePhmbQuoteId(rawId);
+  if (!quoteId) redirect("/phmb");
 
   const [quote, items, versions] = await Promise.all([
-    fetchPhmbQuoteDetail(id),
-    fetchPhmbQuoteItems(id),
-    fetchPhmbVersions(id),
+    fetchPhmbQuoteDetail(quoteId),
+    fetchPhmbQuoteItems(quoteId),
+    fetchPhmbVersions(quoteId),
   ]);
 
   if (!quote) redirect("/phmb");

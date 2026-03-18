@@ -19,6 +19,7 @@ export {
   fetchPhmbQuotesList,
   fetchPhmbDefaults,
   fetchSellerCompanies,
+  resolvePhmbQuoteId,
   fetchPhmbQuoteDetail,
   fetchPhmbQuoteItems,
   fetchPhmbVersions,
