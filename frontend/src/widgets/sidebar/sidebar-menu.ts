@@ -17,7 +17,6 @@ import {
   MessageSquare,
   GitBranch,
   Settings,
-  ExternalLink,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -121,13 +120,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/suppliers",
     });
   }
-  if (hasRole("sales", "sales_manager")) {
-    registries.push({
-      icon: ExternalLink,
-      label: "PHMB →",
-      href: "https://phmb.kvotaflow.ru",
-    });
-  }
   if (hasRole("customs", "finance")) {
     registries.push({
       icon: FileText,
@@ -219,18 +211,6 @@ export function buildPhmbMenuSections(config: MenuConfig): MenuSection[] {
     });
   }
   sections.push({ title: "PHMB", items: phmbItems });
-
-  // === LINK TO MAIN APP ===
-  sections.push({
-    title: "",
-    items: [
-      {
-        icon: ExternalLink,
-        label: "Основное приложение →",
-        href: "https://app.kvotaflow.ru",
-      },
-    ],
-  });
 
   return sections;
 }

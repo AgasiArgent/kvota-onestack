@@ -117,13 +117,22 @@ export function Sidebar({
         showLabels ? "justify-between px-4" : "justify-center"
       )}>
         {showLabels && (
-          <Link
-            href="/quotes"
-            prefetch={false}
-            className="font-semibold text-lg text-accent"
-          >
-            Kvota
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={appContext === "phmb" ? "/phmb" : "/quotes"}
+              prefetch={false}
+              className="font-semibold text-lg text-accent"
+            >
+              {appContext === "phmb" ? "PHMB" : "Kvota"}
+            </Link>
+            <a
+              href={appContext === "phmb" ? "https://app.kvotaflow.ru" : "https://phmb.kvotaflow.ru"}
+              className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border-light text-text-muted hover:text-accent hover:border-accent transition-colors"
+              title={appContext === "phmb" ? "Перейти в основное приложение" : "Перейти в PHMB"}
+            >
+              {appContext === "phmb" ? "Main" : "PHMB"}
+            </a>
+          </div>
         )}
         {isMobile && (
           <button
