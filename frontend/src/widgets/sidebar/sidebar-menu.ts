@@ -133,6 +133,13 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/phmb/procurement",
     });
   }
+  if (hasRole("sales", "sales_manager")) {
+    registries.push({
+      icon: Settings,
+      label: "Настройки PHMB",
+      href: "/phmb/settings",
+    });
+  }
   if (hasRole("customs", "finance")) {
     registries.push({
       icon: FileText,

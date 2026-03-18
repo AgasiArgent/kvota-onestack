@@ -6,32 +6,32 @@ import { Settings } from "lucide-react";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import type { SettingsPageData } from "@/entities/settings";
-import { CalcRatesForm } from "./calc-rates-form";
+import { PhmbForm } from "./phmb-form";
 import { BrandDiscountsTable } from "./brand-discounts-table";
 
-interface SettingsTabsProps {
+interface Props {
   data: SettingsPageData;
   defaultTab: string;
 }
 
 const TABS = [
-  { key: "calc", label: "Расчёты" },
+  { key: "markup", label: "Наценки PHMB" },
   { key: "discounts", label: "Скидки по брендам" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
 
-export function SettingsTabs({ data, defaultTab }: SettingsTabsProps) {
+export function PhmbSettingsTabs({ data, defaultTab }: Props) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabKey>(
     TABS.some((t) => t.key === defaultTab)
       ? (defaultTab as TabKey)
-      : "calc"
+      : "markup"
   );
 
   function handleTabChange(tab: TabKey) {
     setActiveTab(tab);
-    router.push(`/settings?tab=${tab}`, { scroll: false });
+    router.push(`/phmb/settings?tab=${tab}`, { scroll: false });
   }
 
   return (
@@ -42,7 +42,7 @@ export function SettingsTabs({ data, defaultTab }: SettingsTabsProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Settings size={24} className="text-accent" />
-          <h1 className="text-2xl font-bold">Настройки</h1>
+          <h1 className="text-2xl font-bold">Настройки PHMB</h1>
         </div>
         <span className="text-sm text-text-muted">{data.organization.name}</span>
       </div>
@@ -66,9 +66,9 @@ export function SettingsTabs({ data, defaultTab }: SettingsTabsProps) {
       </div>
 
       {/* Tab content */}
-      {activeTab === "calc" && (
-        <CalcRatesForm
-          settings={data.calcSettings}
+      {activeTab === "markup" && (
+        <PhmbForm
+          settings={data.phmbSettings}
           orgId={data.organization.id}
         />
       )}
