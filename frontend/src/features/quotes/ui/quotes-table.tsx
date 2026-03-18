@@ -232,14 +232,14 @@ export function QuotesTable({
       </div>
 
       {/* Table */}
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead>Дата</TableHead>
-            <TableHead>№КП</TableHead>
-            <TableHead>Клиент</TableHead>
-            <TableHead>Менеджер</TableHead>
-            <TableHead>Статус</TableHead>
+            <TableHead className="w-[100px]">Дата</TableHead>
+            <TableHead className="w-[130px]">№КП</TableHead>
+            <TableHead className="w-[200px]">Клиент</TableHead>
+            <TableHead className="w-[140px]">Менеджер</TableHead>
+            <TableHead className="w-[120px]">Статус</TableHead>
             <TableHead className="text-center">Версия</TableHead>
             <TableHead className="text-right">Сумма</TableHead>
             <TableHead className="text-right">Прибыль</TableHead>
@@ -263,11 +263,12 @@ export function QuotesTable({
                     {quote.idn_quote}
                   </span>
                 </TableCell>
-                <TableCell>
+                <TableCell className="max-w-[200px]">
                   {quote.customer ? (
                     <button
                       type="button"
-                      className="text-accent hover:underline text-left"
+                      className="text-accent hover:underline text-left truncate block max-w-full"
+                      title={quote.customer.name}
                       onClick={(e) =>
                         handleCustomerClick(e, quote.customer!.id)
                       }
@@ -278,7 +279,7 @@ export function QuotesTable({
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="text-muted-foreground truncate max-w-[140px]" title={quote.manager?.full_name ?? ""}>
                   {quote.manager?.full_name ?? "—"}
                 </TableCell>
                 <TableCell>
