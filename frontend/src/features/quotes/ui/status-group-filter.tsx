@@ -50,6 +50,7 @@ export function StatusGroupFilter({
               name="status"
               value={isActive && !activeStatus ? "" : group.key}
               onClick={() => handleGroupClick(group)}
+              title={group.statuses.map((s) => formatStatusLabel(s)).join(", ")}
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
                 group.color
               } ${
@@ -68,7 +69,7 @@ export function StatusGroupFilter({
                   onClick={(e) => toggleExpansion(e, group.key)}
                   className="ml-0.5 text-xs"
                 >
-                  {expandedGroup === group.key ? "\u25B4" : "\u25BE"}
+                  {expandedGroup === group.key ? "▴" : "▾"}
                 </button>
               )}
             </button>
@@ -121,6 +122,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending_procurement: "Закупки",
   logistics: "Логистика",
   pending_customs: "Таможня",
+  pending_logistics_and_customs: "Логистика и таможня",
   pending_quote_control: "Контроль КП",
   pending_spec_control: "Контроль спец.",
   pending_sales_review: "Ревью продаж",
