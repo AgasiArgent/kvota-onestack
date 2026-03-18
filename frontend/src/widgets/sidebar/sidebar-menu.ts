@@ -3,7 +3,6 @@ import {
   Inbox,
   PlayCircle,
   Newspaper,
-  Send,
   PlusCircle,
   BarChart3,
   Clock,
@@ -61,7 +60,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/changelog",
       ...(changelogUnreadCount > 0 ? { badge: changelogUnreadCount } : {}),
     },
-    { icon: Send, label: "Уведомления", href: "/telegram" },
   ];
 
   if (hasRole("sales", "sales_manager")) {

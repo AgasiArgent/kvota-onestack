@@ -1,7 +1,15 @@
-import { type NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/shared/lib/supabase/middleware";
 
 export async function middleware(request: NextRequest) {
+  // Redirect /telegram → /profile#notifications
+  if (request.nextUrl.pathname === "/telegram") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/profile";
+    url.hash = "notifications";
+    return NextResponse.redirect(url);
+  }
+
   return await updateSession(request);
 }
 
