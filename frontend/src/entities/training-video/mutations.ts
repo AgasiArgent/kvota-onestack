@@ -47,6 +47,7 @@ interface UpdateVideoInput {
 
 export async function updateTrainingVideo(
   id: string,
+  orgId: string,
   input: UpdateVideoInput
 ): Promise<void> {
   const parsed = parseVideoUrl(input.url);
@@ -65,18 +66,20 @@ export async function updateTrainingVideo(
       category: input.category.trim() || "Общее",
       platform: parsed.platform,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) throw error;
 }
 
-export async function deleteTrainingVideo(id: string): Promise<void> {
+export async function deleteTrainingVideo(id: string, orgId: string): Promise<void> {
   const supabase = createClient();
 
   const { error } = await supabase
     .from("training_videos")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("organization_id", orgId);
 
   if (error) throw error;
 }

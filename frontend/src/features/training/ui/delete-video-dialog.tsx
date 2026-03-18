@@ -19,9 +19,10 @@ import { deleteTrainingVideo } from "@/entities/training-video/mutations";
 interface DeleteVideoDialogProps {
   video: TrainingVideo | null;
   onClose: () => void;
+  orgId: string;
 }
 
-export function DeleteVideoDialog({ video, onClose }: DeleteVideoDialogProps) {
+export function DeleteVideoDialog({ video, onClose, orgId }: DeleteVideoDialogProps) {
   const router = useRouter();
   const isOpen = video !== null;
   const [submitting, setSubmitting] = useState(false);
@@ -31,7 +32,7 @@ export function DeleteVideoDialog({ video, onClose }: DeleteVideoDialogProps) {
 
     setSubmitting(true);
     try {
-      await deleteTrainingVideo(video.id);
+      await deleteTrainingVideo(video.id, orgId);
       toast.success("Видео удалено");
       onClose();
       router.refresh();

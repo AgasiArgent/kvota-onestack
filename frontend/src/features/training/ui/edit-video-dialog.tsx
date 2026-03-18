@@ -23,6 +23,7 @@ interface EditVideoDialogProps {
   video: TrainingVideo | null;
   onClose: () => void;
   existingCategories: string[];
+  orgId: string;
 }
 
 /**
@@ -44,6 +45,7 @@ export function EditVideoDialog({
   video,
   onClose,
   existingCategories,
+  orgId,
 }: EditVideoDialogProps) {
   const router = useRouter();
   const isOpen = video !== null;
@@ -98,7 +100,7 @@ export function EditVideoDialog({
 
     setSubmitting(true);
     try {
-      await updateTrainingVideo(video.id, {
+      await updateTrainingVideo(video.id, orgId, {
         title,
         url,
         category: category || "Общее",

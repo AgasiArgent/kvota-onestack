@@ -135,10 +135,12 @@ export function TrainingPage({
             video={editVideo}
             onClose={() => setEditVideo(null)}
             existingCategories={categories}
+            orgId={orgId}
           />
           <DeleteVideoDialog
             video={deleteVideo}
             onClose={() => setDeleteVideo(null)}
+            orgId={orgId}
           />
         </>
       )}

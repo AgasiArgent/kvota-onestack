@@ -58,7 +58,7 @@ export async function fetchTrainingVideos(
     description: row.description,
     youtube_id: row.youtube_id,
     category: row.category,
-    platform: row.platform as TrainingVideo["platform"],
+    platform: (["rutube", "youtube", "loom"].includes(row.platform) ? row.platform : "rutube") as TrainingVideo["platform"],
     thumbnail_url: row.thumbnail_url,
     sort_order: row.sort_order,
     is_active: row.is_active,
