@@ -4,12 +4,14 @@ export type {
   CustomerCall,
   CustomerContract,
   CustomerListItem,
+  CustomerFinancials,
   CustomerStats,
   PhoneEntry,
   ContractFormData,
 } from "./types";
 export {
   fetchCustomersList,
+  fetchCustomerFinancials,
   fetchCustomerDetail,
   fetchCustomerStats,
   fetchCustomerContacts,

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { fetchCustomersList } from "@/entities/customer";
+import { fetchCustomersList, fetchCustomerFinancials } from "@/entities/customer";
 import { getSessionUser } from "@/entities/user";
 import { CustomersTable } from "@/features/customers";
 
@@ -16,7 +16,10 @@ export default async function CustomersPage({ searchParams }: Props) {
   const status = params.status ?? "";
   const page = parseInt(params.page ?? "1", 10);
 
-  const { data, total } = await fetchCustomersList({ search, status, page });
+  const [{ data, total }, financials] = await Promise.all([
+    fetchCustomersList({ search, status, page }),
+    fetchCustomerFinancials(user.orgId),
+  ]);
 
   return (
     <div>
@@ -28,6 +31,7 @@ export default async function CustomersPage({ searchParams }: Props) {
         initialStatus={status}
         initialPage={page}
         orgId={user.orgId}
+        financials={financials}
       />
     </div>
   );

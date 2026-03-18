@@ -1,6 +1,7 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import type {
   CustomerListItem,
+  CustomerFinancials,
   Customer,
   CustomerContact,
   CustomerContract,
@@ -337,4 +338,23 @@ export async function fetchCustomerPositions(customerId: string) {
     quote_idn:
       (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
   }));
+}
+
+export async function fetchCustomerFinancials(
+  orgId: string
+): Promise<Map<string, CustomerFinancials>> {
+  const supabase = await createClient();
+
+  const { data, error } = await (supabase.rpc as Function)(
+    "get_customer_financials",
+    { p_org_id: orgId }
+  );
+
+  if (error || !data) return new Map();
+
+  const map = new Map<string, CustomerFinancials>();
+  for (const row of data as CustomerFinancials[]) {
+    map.set(row.customer_id, row);
+  }
+  return map;
 }

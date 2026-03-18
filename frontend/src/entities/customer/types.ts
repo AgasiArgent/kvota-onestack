@@ -57,6 +57,15 @@ export interface CustomerListItem {
   last_quote_date: string | null;
 }
 
+export interface CustomerFinancials {
+  customer_id: string;
+  quotes_count: number;
+  last_quote_date: string | null;
+  specs_count: number;
+  revenue_usd: number;
+  profit_usd: number;
+}
+
 export interface CustomerCall {
   id: string;
   call_type: "call" | "scheduled";
