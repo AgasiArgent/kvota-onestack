@@ -99,7 +99,14 @@ const ROLE_ACTION_STATUSES: Record<string, string[]> = {
   quote_controller: ["pending_quote_control"],
   spec_controller: ["pending_spec_control"],
   top_manager: ["pending_approval"],
-  admin: ["pending_approval"],
+  admin: [
+    "pending_sales_review", "approved",
+    "pending_procurement",
+    "pending_logistics", "pending_logistics_and_customs",
+    "pending_customs",
+    "pending_quote_control", "pending_spec_control",
+    "pending_approval",
+  ],
 };
 
 export function getActionStatusesForUser(roles: string[]): string[] {
