@@ -44,7 +44,7 @@ export const STATUS_GROUPS: StatusGroup[] = [
   {
     key: "in_progress",
     label: "В работе",
-    statuses: ["pending_procurement", "logistics", "pending_customs"],
+    statuses: ["pending_procurement", "logistics", "pending_customs", "pending_logistics_and_customs"],
     color: "bg-blue-100 text-blue-700",
   },
   {
