@@ -1,0 +1,7 @@
+{
+  "name": "admin-routing",
+  "description": "Unified procurement routing page at /admin/routing with 4 tabs: brands, groups, tender, unassigned",
+  "status": "in_progress",
+  "created": "2026-03-19",
+  "design_ref": "docs/superpowers/specs/2026-03-18-admin-reorganization-design.md"
+}
