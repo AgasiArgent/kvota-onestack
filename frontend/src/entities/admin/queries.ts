@@ -1,22 +1,5 @@
-import { createClient as createJsClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import type { OrgMember, RoleOption, FeedbackItem, FeedbackDetail } from "./types";
-
-/** Untyped admin client for querying auth schema (auth.users). */
-function createAuthAdminClient() {
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!serviceRoleKey) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  }
-  return createJsClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    {
-      db: { schema: "auth" },
-      auth: { autoRefreshToken: false, persistSession: false },
-    }
-  );
-}
 
 const FEEDBACK_PAGE_SIZE = 20;
 
@@ -39,7 +22,7 @@ export async function fetchOrgMembers(
   const userIds = members.map((m) => m.user_id);
 
   // 2. Batch-fetch profiles, roles, telegram in parallel
-  const [profilesResult, rolesResult, telegramResult, authUsersResult] =
+  const [profilesResult, rolesResult, telegramResult] =
     await Promise.all([
       admin
         .from("user_profiles")
@@ -54,26 +37,26 @@ export async function fetchOrgMembers(
         .from("telegram_users")
         .select("user_id, telegram_username")
         .in("user_id", userIds),
-      // auth.users is in auth schema — use untyped client with auth schema
-      createAuthAdminClient().from("users").select("id, email").in("id", userIds),
     ]);
 
   if (profilesResult.error) throw profilesResult.error;
   if (rolesResult.error) throw rolesResult.error;
   if (telegramResult.error)
     console.error("Failed to fetch telegram users:", telegramResult.error);
-  if (authUsersResult.error) throw authUsersResult.error;
+
+  // Fetch emails via Supabase Auth Admin API (auth.users not accessible via PostgREST)
+  const { data: authData } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  const authUsers = authData?.users ?? [];
 
   // Build lookup maps
-  const profileMap = new Map(
-    (profilesResult.data ?? []).map((p) => [p.user_id, p.full_name])
+  const profileMap = new Map<string, string | null>(
+    (profilesResult.data ?? []).map((p) => [p.user_id, p.full_name as string | null])
   );
-  const authUsers = (authUsersResult.data ?? []) as { id: string; email: string }[];
   const emailMap = new Map(
     authUsers.map((u) => [u.id, u.email ?? ""])
   );
-  const telegramMap = new Map(
-    (telegramResult.data ?? []).map((t) => [t.user_id, t.telegram_username])
+  const telegramMap = new Map<string, string | null>(
+    (telegramResult.data ?? []).map((t) => [t.user_id, t.telegram_username as string | null])
   );
 
   // Group roles by user_id
