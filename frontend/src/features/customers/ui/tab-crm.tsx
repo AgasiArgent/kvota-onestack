@@ -38,6 +38,12 @@ export function TabCRM({ customer, contacts, calls, orgUsers, currentUserId }: P
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<CustomerContact | undefined>();
   const [callModalOpen, setCallModalOpen] = useState(false);
+  const [editingCall, setEditingCall] = useState<CustomerCall | undefined>();
+
+  function openEditCall(call: CustomerCall) {
+    setEditingCall(call);
+    setCallModalOpen(true);
+  }
 
   function handleContactSaved() {
     router.refresh();
@@ -61,7 +67,8 @@ export function TabCRM({ customer, contacts, calls, orgUsers, currentUserId }: P
     <div className="space-y-6">
       <CallsSection
         calls={calls}
-        onAdd={() => setCallModalOpen(true)}
+        onAdd={() => { setEditingCall(undefined); setCallModalOpen(true); }}
+        onEdit={openEditCall}
       />
       <Separator />
       <ContactsSection
@@ -81,12 +88,13 @@ export function TabCRM({ customer, contacts, calls, orgUsers, currentUserId }: P
       />
       <CallFormModal
         open={callModalOpen}
-        onClose={() => setCallModalOpen(false)}
+        onClose={() => { setCallModalOpen(false); setEditingCall(undefined); }}
         onSaved={handleCallSaved}
         customerId={customer.id}
         contacts={contacts}
         orgUsers={orgUsers}
         currentUserId={currentUserId}
+        call={editingCall}
       />
     </div>
   );
@@ -484,9 +492,11 @@ const CALL_CATEGORY_LABELS: Record<string, string> = {
 function CallsSection({
   calls,
   onAdd,
+  onEdit,
 }: {
   calls: CustomerCall[];
   onAdd: () => void;
+  onEdit: (call: CustomerCall) => void;
 }) {
   const router = useRouter();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -662,6 +672,16 @@ function CallsSection({
                               </Button>
                             </div>
                           )}
+
+                          <div className="pt-2 border-t border-border-light">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onEdit(call); }}
+                              className="flex items-center gap-1.5 text-xs text-text-muted hover:text-accent transition-colors"
+                            >
+                              <Pencil size={12} />
+                              Редактировать
+                            </button>
+                          </div>
                         </div>
                       </TableCell>
                     </TableRow>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -23,8 +23,10 @@ import {
 import type { CustomerContact } from "@/entities/customer";
 import {
   createCall,
+  updateCall,
   type CallFormData,
 } from "@/entities/customer/mutations";
+import type { CustomerCall } from "@/entities/customer";
 
 // -- Types --
 
@@ -50,6 +52,7 @@ interface CallFormModalProps {
   contacts: CustomerContact[];
   orgUsers?: { id: string; full_name: string }[];
   currentUserId?: string;
+  call?: CustomerCall;
 }
 
 // -- Constants --
@@ -81,17 +84,42 @@ export function CallFormModal({
   contacts,
   orgUsers = [],
   currentUserId,
+  call,
 }: CallFormModalProps) {
-  const [form, setForm] = useState<FormState>({
-    ...INITIAL_FORM,
-    assigned_to: currentUserId ?? null,
-  });
+  const isEdit = !!call;
+
+  function buildInitialForm(): FormState {
+    if (call) {
+      return {
+        call_type: call.call_type,
+        call_category: (call.call_category as CallCategory) ?? null,
+        contact_person_id: null, // contact_person_id not in CustomerCall type
+        assigned_to: call.assigned_to ?? null,
+        scheduled_date: call.scheduled_date ?? null,
+        comment: call.comment ?? "",
+        customer_needs: call.customer_needs ?? "",
+        meeting_notes: call.meeting_notes ?? "",
+      };
+    }
+    return { ...INITIAL_FORM, assigned_to: currentUserId ?? null };
+  }
+
+  const [form, setForm] = useState<FormState>(buildInitialForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [needsExpanded, setNeedsExpanded] = useState(false);
+  const [needsExpanded, setNeedsExpanded] = useState(isEdit && !!(call?.customer_needs));
+
+  // Re-init form when call prop changes (opening for different record)
+  useEffect(() => {
+    setForm(buildInitialForm());
+    setNeedsExpanded(isEdit && !!(call?.customer_needs));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [call?.id]);
 
   const isScheduled = form.call_type === "scheduled";
-  const title = isScheduled ? "Новая встреча" : "Новый звонок";
+  const title = isEdit
+    ? (isScheduled ? "Редактировать встречу" : "Редактировать звонок")
+    : (isScheduled ? "Новая встреча" : "Новый звонок");
 
   function resetAndClose() {
     setForm({ ...INITIAL_FORM, assigned_to: currentUserId ?? null });
@@ -127,7 +155,11 @@ export function CallFormModal({
         customer_needs: form.customer_needs.trim() || undefined,
         meeting_notes: form.meeting_notes.trim() || undefined,
       };
-      await createCall(customerId, payload);
+      if (isEdit && call) {
+        await updateCall(call.id, payload);
+      } else {
+        await createCall(customerId, payload);
+      }
       setForm({ ...INITIAL_FORM, assigned_to: currentUserId ?? null });
       setNeedsExpanded(false);
       onSaved();
