@@ -20,8 +20,7 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import type { Customer, CustomerContact, CustomerCall } from "@/entities/customer";
-import { updateCall } from "@/entities/customer";
-import { updateCustomerAddresses } from "@/entities/customer/mutations";
+import { updateCall, updateCustomerAddresses } from "@/entities/customer/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { ContactFormModal } from "./contact-form-modal";
 import { CallFormModal } from "./call-form-modal";

@@ -33,7 +33,6 @@ export {
   updateContact,
   deleteContact,
   createCall,
-  updateCall,
   updateCustomerNotes,
   updateCustomerAddresses,
   updateCustomerGeneralEmail,
