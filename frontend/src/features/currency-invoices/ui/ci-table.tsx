@@ -160,7 +160,7 @@ export function CITable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-[90px]">Дата</TableHead>
-            <TableHead className="w-[180px]">Номер</TableHead>
+            <TableHead>Номер</TableHead>
             <TableHead className="w-[80px]">Сегмент</TableHead>
             <TableHead>Продавец</TableHead>
             <TableHead>Покупатель</TableHead>
@@ -178,8 +178,8 @@ export function CITable({
               <TableCell className="text-muted-foreground tabular-nums">
                 {formatDate(ci.created_at)}
               </TableCell>
-              <TableCell className="max-w-[180px]">
-                <span className="text-accent font-medium truncate block" title={ci.invoice_number}>
+              <TableCell>
+                <span className="text-accent font-medium whitespace-nowrap">
                   {ci.invoice_number}
                 </span>
               </TableCell>
