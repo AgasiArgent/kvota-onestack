@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, Menu, X, PanelLeftClose, PanelLeft } from "lucide-react";
+import { LogOut, Menu, X, PanelLeftClose, PanelLeft, ChevronDown } from "lucide-react";
 import { createClient } from "@/shared/lib/supabase/client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,23 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const saved = localStorage.getItem("sidebar-collapsed-sections");
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const toggleSection = useCallback((title: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) next.delete(title);
+      else next.add(title);
+      try { localStorage.setItem("sidebar-collapsed-sections", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     function handleResize() {
@@ -148,14 +165,27 @@ export function Sidebar({
       {/* Navigation */}
       <ScrollArea className="flex-1 overflow-hidden">
         <nav className="py-2">
-          {sections.map((section, idx) => (
+          {sections.map((section, idx) => {
+            const isSectionCollapsed = collapsedSections.has(section.title);
+            return (
             <div key={section.title} className="mb-1">
               {showLabels && (
-                <div className="px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
-                  {section.title}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.title)}
+                  className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-text-subtle hover:text-text-muted transition-colors"
+                >
+                  <span>{section.title}</span>
+                  <ChevronDown
+                    size={12}
+                    className={cn(
+                      "transition-transform duration-200",
+                      isSectionCollapsed && "-rotate-90"
+                    )}
+                  />
+                </button>
               )}
-              {section.items.map((item) => {
+              {!isSectionCollapsed && section.items.map((item) => {
                 const hrefPath = item.href.split("?")[0];
                 const isActive =
                   pathname === hrefPath ||
@@ -193,7 +223,8 @@ export function Sidebar({
               })}
               {idx < sections.length - 1 && <Separator className="my-1" />}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </ScrollArea>
 
