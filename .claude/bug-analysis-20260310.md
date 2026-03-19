@@ -25,10 +25,11 @@
 | 0 | Design system foundation | 2 | DONE | ✅ Completed (commits e6e3634, 122dea1, c81a043) |
 | A | Customer pages | 18 | HIGH | 🔄 In progress (list: b0eaf94, detail tabs: 96f860f, general: cc45dd9) |
 | B | Quote pages | 18 | HIGH | 🔄 In progress (list: 33a9837/e65b64c, summary: 96f860f, overview: 266482d, new form: cc45dd9) |
-| C | General pages (dashboard, tasks, changelog, training) | 10 | MEDIUM | 🔄 Partial (changelog width, training padding: dd8b073) |
-| D | Calls | 6 | MEDIUM | ⬜ Not started |
-| E | Logistics / Customs / Procurement | 12 | LOW | ⬜ Not started |
-| F | Other (telegram, settings, chat) | 8 | LOW | ⬜ Not started |
+| C | General pages (dashboard, tasks, changelog, training) | 10 | MEDIUM | ✅ Triaged 2026-03-19: 8 resolved, 1 obsolete, 1 backlog |
+| D | Calls | 4 | MEDIUM | ✅ Triaged 2026-03-19: 3 resolved (15e07d9), 1 obsolete |
+| E | Logistics / Customs / Procurement | 8 | LOW | 🔄 Triaged 2026-03-19: 1 resolved, 3 duplicates merged, 4 unique open |
+| F | Other (telegram, settings, chat) | 5 | LOW | ✅ Triaged 2026-03-19: all resolved (chat: 6906770, telegram: 368f817) |
+| G | New feedback (2026-03-16) | 5 | MEDIUM | ⬜ New — added 2026-03-19 |
 
 ---
 
@@ -153,22 +154,22 @@ Global CSS changes applied project-wide:
 
 ---
 
-## Batch C: General Pages (10 items)
+## Batch C: General Pages (10 items) — Triaged 2026-03-19
 
 ### C1. Dashboard `/dashboard`
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 1 | FB-260310183315 | ux_ui | Сделать sales главной страницей. Метрики кликабельны. Убрать ФИО/компанию/должность блок. Мои задачи + Обзор → одна страница. Выровнять блоки | ⬜ |
-| 2 | FB-260310141333 | bug | Убрать уведомления (оставить только в настройках) | ⬜ |
+| 1 | FB-260310183315 | ux_ui | Сделать sales главной страницей. Метрики кликабельны. Убрать ФИО/компанию/должность блок. Мои задачи + Обзор → одна страница. Выровнять блоки | ✅ Dashboard redirects to /quotes (7cf08f1). No separate profile block |
+| 2 | FB-260310141333 | bug | Убрать уведомления (оставить только в настройках) | ✅ No notifications in Next.js dashboard (page is redirect to /quotes) |
 
 ### C2. Tasks `/tasks`
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
 | 3 | FB-260310195547 | ux_ui | Убрать эффект всплытия блока (hover lift) — жрет мощности | ✅ Done in Batch 0 |
-| 4 | FB-260302074057 | suggestion | Отдельно кнопка "Выйти", отдельно вход в профиль | ⬜ |
-| 5 | FB-260224094403 | suggestion | Отобразить какие этапы КП пройдены (в таблице) | ⬜ |
+| 4 | FB-260302074057 | suggestion | Отдельно кнопка "Выйти", отдельно вход в профиль | ✅ Next.js sidebar has separate Выйти + Profile link |
+| 5 | FB-260224094403 | suggestion | Отобразить какие этапы КП пройдены (в таблице) | ❌ OBSOLETE — tasks consolidated into /quotes page, no separate tasks table |
 
 ### C3. Changelog `/changelog`
 
@@ -181,74 +182,94 @@ Global CSS changes applied project-wide:
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 8 | FB-260310201337 | ux_ui | Нет отступов сверху | ✅ Done (dd8b073) |
+| 8 | FB-260310201337 | ux_ui | Нет отступов сверху | ✅ Done (dd8b073 + migrated to Next.js: 12f683a) |
 
 ### C5. Specifications
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 9 | FB-260227110353 | suggestion | Добавить отношение договора к спецификации (несколько договоров) | ⬜ |
+| 9 | FB-260227110353 | suggestion | Добавить отношение договора к спецификации (несколько договоров) | ⬜ Feature request — backlog |
 
 ---
 
-## Batch D: Calls (6 items)
+## Batch D: Calls (4 items) — Triaged 2026-03-19
+
+> Note: Standalone `/calls` registry removed from sidebar (adf2173 — Mango not integrated).
+> Items below apply to **customer calls tab** which remains active.
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 1 | FB-260310105655 | bug | Перенести запланированный звонок в звонок (кнопка). "Продолжить общение" | ⬜ |
-| 2 | FB-260310105146 | suggestion | Исправить расположение кнопок. Добавить "Добавить звонок" с выбором компании/контакта | ⬜ |
-| 3 | FB-260310115140 | suggestion | Руководителям видеть все звонки подчинённых | ⬜ |
-| 4 | FB-260302074436 | suggestion | Добавить возможность раскрыть звонок | ⬜ |
+| 1 | FB-260310105655 | bug | Перенести запланированный звонок в звонок (кнопка). "Продолжить общение" | ✅ "Завершить встречу" in expanded row (15e07d9) |
+| 2 | FB-260310105146 | suggestion | Исправить расположение кнопок. Добавить "Добавить звонок" с выбором компании/контакта | ✅ Button kept as-is, contact selection in modal works (pre-existing) |
+| 3 | FB-260310115140 | suggestion | Руководителям видеть все звонки подчинённых | ❌ OBSOLETE — standalone calls registry dropped (adf2173) |
+| 4 | FB-260302074436 | suggestion | Добавить возможность раскрыть звонок (полный комментарий, заметки) | ✅ Expandable rows with full details (15e07d9) |
 
 ---
 
-## Batch E: Logistics / Customs / Procurement (12 items)
+## Batch E: Logistics / Customs / Procurement (5 items) — Triaged 2026-03-19, design notes added
 
-### E1. Logistics
+### E1. Logistics — SVH + Additional Expenses (3 reports consolidated)
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 1 | FB-260310081358 | bug | Перенести расходы СВХ, добавить графу "Дополнительные расходы" | ⬜ |
-| 2 | FB-260310083213 | bug | Перенести расходы СВХ (из Таможни), добавить "Дополнительные расходы" | ⬜ |
-| 3 | FB-260224103929 | suggestion | Добавить СВХ, Дополнительные расходы | ⬜ |
+| 1 | FB-260310081358 + FB-260310083213 + FB-260224103929 | bug+suggestion | Перенести расходы СВХ из Таможни в Логистику, добавить графу "Дополнительные расходы" | ⏸️ Design note for Next.js migration |
+
+> **Design note (E1):** СВХ должен быть категорией расходов в logistics stages (не в customs). Добавить generic "Доп. расходы" в logistics. Потребует новую DB категорию + миграцию существующих данных customs→logistics.
 
 ### E2. Procurement
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 4 | FB-260310202407 | bug | Таблицы стали черными (скрин не делается) | ⬜ |
-| 5 | FB-260306071028 | bug | Файл загружал, но не отобразился как загруженный | ⬜ |
-| 6 | FB-260227120839 | bug | Скан загружен, но не отображается как загруженный | ⬜ |
-| 7 | FB-260224080017 | suggestion | Добавить столбцы: Вес кг, Ставка НДС % | ⬜ |
+| 2 | FB-260310202407 | bug | Таблицы стали черными | ✅ RESOLVED — Handsontable CSS v17 fix (935be1c) |
+| 3 | FB-260306071028 + FB-260227120839 | bug | Файл/скан загружен, но не отобразился как загруженный | ⏸️ Design note for Next.js migration |
+| 4 | FB-260224080017 | suggestion | Добавить столбцы: Вес кг, Ставка НДС % | ⏸️ Design note for Next.js migration |
+
+> **Design note (E3):** `supplier_invoices.invoice_file_url` колонка есть, таблица пуста (0 записей). При миграции: upload → Supabase Storage → URL в `invoice_file_url`, отображать статус загрузки.
+>
+> **Design note (E4):** `quote_items.weight_in_kg` есть. `vat_rate` (ставка %) нет — нужна новая колонка. `weight_kg` дублирует `weight_in_kg` — унифицировать. Подтверждено FB-260316-111518.
 
 ### E3. Customs
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 8 | FB-260224093431 | suggestion | Расширяющийся размер таблицы "Таможня по позициям" | ⬜ |
+| 5 | FB-260224093431 | suggestion | Расширяющийся размер таблицы "Таможня по позициям" | ⏸️ Design note for Next.js migration |
+
+> **Design note (E5):** Responsive table с горизонтальным скроллом или collapsible columns.
 
 ---
 
-## Batch F: Other (8 items)
+## Batch F: Other (5 items) — ✅ ALL RESOLVED (Triaged 2026-03-19)
 
 ### F1. Chat
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 1 | FB-260310083243 | bug | Править чат сделки | ⬜ |
-| 2 | FB-260310082744 | bug | Править чат сделки (duplicate) | ⬜ |
-| 3 | FB-260303133417 | bug | Беды с чатом | ⬜ |
+| 1 | FB-260310083243 | bug | Править чат сделки | ✅ Chat implemented (6906770) + empty state fixed (60728d3) |
+| 2 | FB-260310082744 | bug | Править чат сделки (duplicate) | ✅ Same fix |
+| 3 | FB-260303133417 | bug | Беды с чатом | ✅ Same fix |
 
 ### F2. Telegram / Settings
 
 | # | ID | Type | Description | Status |
 |---|-----|------|-------------|--------|
-| 4 | FB-260310083630 | bug | Telegram: не удалось | ⬜ |
-| 5 | FB-260310083600 | bug | Не дает подключить телеграм | ⬜ |
+| 4 | FB-260310083630 | bug | Telegram: не удалось | ✅ Simplified to one-click deep link (368f817) |
+| 5 | FB-260310083600 | bug | Не дает подключить телеграм | ✅ Same fix |
 
 ---
 
-## Already Resolved (16 items) — No action needed
+## Batch G: New Feedback (2026-03-16) — Triaged 2026-03-19
+
+| # | ID | Type | Page | Description | Status |
+|---|-----|------|------|-------------|--------|
+| 1 | FB-260316-063243 | suggestion | customer documents | Добавить договоры | ✅ Already implemented — tab-documents.tsx has Договоры CRUD |
+| 2 | FB-260316-065611 | suggestion | customer CRM | Добавить редактируемость CRM записей | ✅ Full edit via modal (2e3f573) |
+| 3 | FB-260316-065755 | bug | customer positions | IDN-SKU label wrong — вывести отдельно артикул | ✅ Already fixed — tab-positions.tsx has separate Артикул + IDN-SKU columns |
+| 4 | FB-260316-065839 | suggestion | customer positions | Responsive scaling при уменьшении экрана | ✅ Already has ScrollableTable wrapper |
+| 5 | FB-260316-111518 | suggestion | procurement | Мега-фидбек: (1) таблица закупок redesign, (2) IDN-SKU убрать, (3) чат на все страницы, (4) подсветка артикулов, (5) маршрутизация ✅, (6) ОС по отклонённым, (7) реестр позиций | 🔄 1/7 done. Design notes saved → `.kiro/specs/procurement-logistics-redesign-notes.md` |
+
+---
+
+## Already Resolved (16 + 7 newly resolved items)
 
 | ID | Description | Page |
 |----|-------------|------|
@@ -271,39 +292,50 @@ Global CSS changes applied project-wide:
 
 ---
 
-## Cross-cutting observations
+## Cross-cutting observations (updated 2026-03-19)
 
-1. **Margin/markup discrepancy** — 3 separate reports (FB-260306074237, FB-260226060145, FB-260224112206) say margin is wrong. May be calculation engine bug or display issue. Investigate before touching calc engine.
+1. **Margin/markup discrepancy** — ✅ RESOLVED (b5b96ec). Formula aligned: margin=profit÷revenue_no_vat, markup=profit÷COGS.
 
-2. **Multiple managers per customer** — 3 items (FB-260225103127, FB-260227105317, FB-260310111855) request multi-manager support. Currently single manager_id on customers table.
+2. **Multiple managers per customer** — 3 items (FB-260225103127, FB-260227105317, FB-260310111855) request multi-manager support. Currently single manager_id on customers table. **Still open.**
 
-3. **Contact deduplication** — 3 items (FB-260310091220, FB-260310112224, FB-260310112145) about duplicate contacts and cross-company contacts.
+3. **Contact deduplication** — Duplicate check added (b5b96ec). Cross-company contact linking still open (FB-260310112145).
 
-4. **SVH/additional expenses in logistics** — 3 items (FB-260310081358, FB-260310083213, FB-260224103929) requesting the same feature.
+4. **SVH/additional expenses in logistics** — 3 reports consolidated into E1.1. **Still open.**
 
-5. **Chat broken** — 3 reports (FB-260310083243, FB-260310082744, FB-260303133417) all say chat is broken.
+5. **Chat** — ✅ RESOLVED. Chat tab implemented (6906770), empty state fixed (60728d3). New request: extend chat to all department pages (FB-260316-111518).
 
-6. **Telegram connection** — 2 reports of failed connection (FB-260310083630, FB-260310083600).
+6. **Telegram connection** — ✅ RESOLVED. Simplified to one-click deep link (368f817).
 
-7. **Font/spacing consistency** — addressed globally in Batch 0, but page-specific tweaks needed per batch.
+7. **Font/spacing consistency** — addressed globally in Batch 0, page-specific tweaks done for customers + quotes.
+
+8. **Procurement table redesign** — NEW. FB-260316-111518 requests comprehensive column changes (бренд, артикул запроса/производителя, наименование, цена, готовность, вес, габариты мм, НДС, инвойс). Remove IDN-SKU. Highlight article mismatches.
+
+9. **Cancelled/rejected deals feedback** — NEW. FB-260316-111518 requests ОС by reason: (a) cancelled — why client refused, (b) rejected — why team can't supply.
+
+10. **Positions registry with prices** — NEW. FB-260316-111518 requests table with filters (бренд, МОЗ, дата), columns (дата, статус, бренд, артикул, наименование, цена+валюта, МОЗ, инвойс/офер).
 
 ---
 
-## Recommended Execution Order
+## Recommended Execution Order (updated 2026-03-19)
 
-**Phase 1 (UX quick wins):** Items from all batches that are purely CSS/layout (no DB changes):
-- C3 items (changelog width) — trivial CSS
-- C4 item (training top padding) — trivial CSS
-- C1.3 (hover lift on tasks) — already done globally, verify
-- A3.16-18 (font sizes on customer tabs) — CSS tweaks
-- B1.1 points 3-6 (quote list column fixes) — CSS/template
+**Done (Phase 1 UX quick wins):** ✅ C3 changelog, C4 training, C2.3 hover lift, A3.16-18 fonts, B1.1 columns
 
-**Phase 2 (Customer pages):** Batch A — biggest user pain, most items
+**In progress:**
+- **Batch A** (Customer pages) — 🔄 list + detail tabs done, contacts/addresses partial
+- **Batch B** (Quote pages) — 🔄 list + overview + summary done, PHMB/other partial
 
-**Phase 3 (Quote pages):** Batch B — core business flow
+**Next up:**
+1. **Admin routing** (separate spec) — combines new functionality with existing brands/groups migration
+2. **C1** Dashboard redesign — address during Next.js migration
+3. **D** Customer calls tab UX (3 items) — after customer detail migration stabilizes
+4. **E** Logistics SVH + procurement file upload (4 unique items)
+5. **G5** Procurement table redesign (comprehensive — from FB-260316-111518)
 
-**Phase 4 (Dashboard + calls):** Batches C1-C2 + D
-
-**Phase 5 (Logistics/Procurement):** Batch E — less urgent
-
-**Defer:** Margin investigation, multi-manager, contact dedup, Excel import, chat fix, telegram
+**Backlog (feature requests):**
+- Multi-manager per customer (A2.12-14)
+- Contract management (G1)
+- Cancelled/rejected deals feedback loop (G5.6)
+- Positions registry with prices (G5.7)
+- Spec-contract relationships (C5.9)
+- Contact Excel import (A4.28)
+- Cross-company contact linking (A4.27)
