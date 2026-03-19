@@ -10,8 +10,8 @@ import {
   FileText,
   Building2,
   ClipboardList,
-  Phone,
   Building,
+  MapPin,
   Calendar,
   User,
   MessageSquare,
@@ -120,25 +120,25 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/suppliers",
     });
   }
+  if (hasRole("finance", "procurement")) {
+    registries.push({
+      icon: Building,
+      label: "Юрлица",
+      href: "/companies",
+    });
+  }
+  if (hasRole("logistics", "customs", "procurement")) {
+    registries.push({
+      icon: MapPin,
+      label: "Локации",
+      href: "/locations",
+    });
+  }
   if (hasRole("customs", "finance")) {
     registries.push({
       icon: FileText,
       label: "Таможенные декларации",
       href: "/customs/declarations",
-    });
-  }
-  if (hasRole("sales", "sales_manager", "top_manager")) {
-    registries.push({
-      icon: Phone,
-      label: "Журнал звонков",
-      href: "/calls",
-    });
-  }
-  if (isAdmin) {
-    registries.push({
-      icon: Building,
-      label: "Юрлица",
-      href: "/companies",
     });
   }
   if (registries.length > 0) {
@@ -170,16 +170,27 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
   }
 
   // === ADMIN ===
-  if (isAdmin) {
-    sections.push({
-      title: "Администрирование",
-      items: [
+  if (isAdmin || hasRole("head_of_procurement")) {
+    const adminItems: MenuItem[] = [];
+    if (isAdmin) {
+      adminItems.push(
         { icon: User, label: "Пользователи", href: "/admin" },
         { icon: MessageSquare, label: "Обращения", href: "/admin/feedback" },
-        { icon: GitBranch, label: "Маршрутизация закупок", href: "/admin/procurement-groups" },
-        { icon: Settings, label: "Настройки", href: "/settings" },
-      ],
+      );
+    }
+    adminItems.push({
+      icon: GitBranch,
+      label: "Маршруты закупок",
+      href: "/admin/routing",
     });
+    if (isAdmin) {
+      adminItems.push({
+        icon: Settings,
+        label: "Настройки",
+        href: "/settings",
+      });
+    }
+    sections.push({ title: "Администрирование", items: adminItems });
   }
 
   return sections;
