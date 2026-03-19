@@ -91,10 +91,12 @@ export function CIDetail({ invoice, sellers, buyers, userRoles, orgId }: CIDetai
     setSaving(true);
     try {
       const markup = parseFloat(markupPercent);
+      const sellerOption = sellers.find((s) => s.id === sellerEntityId);
+      const buyerOption = buyers.find((b) => b.id === buyerEntityId);
       await saveCurrencyInvoice(invoice.id, orgId, {
-        seller_entity_type: sellerEntityId ? "seller_company" : null,
+        seller_entity_type: sellerOption?.type ?? null,
         seller_entity_id: sellerEntityId || null,
-        buyer_entity_type: buyerEntityId ? "buyer_company" : null,
+        buyer_entity_type: buyerOption?.type ?? null,
         buyer_entity_id: buyerEntityId || null,
         markup_percent: isNaN(markup) ? invoice.markup_percent : markup,
       });

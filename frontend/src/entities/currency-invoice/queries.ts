@@ -101,36 +101,33 @@ export async function fetchCurrencyInvoices(
   );
 
   // Step 5: Batch-resolve seller/buyer company names
-  const sellerIds = Array.from(
-    new Set(
-      ciRows
-        .filter((r) => r.seller_entity_type === "seller_company" && r.seller_entity_id)
-        .map((r) => r.seller_entity_id!)
-    )
-  );
-  const buyerIds = Array.from(
-    new Set(
-      ciRows
-        .filter((r) => r.buyer_entity_type === "buyer_company" && r.buyer_entity_id)
-        .map((r) => r.buyer_entity_id!)
-    )
-  );
+  // Collect all entity IDs that need resolution, grouped by table
+  const sellerCompanyIds = new Set<string>();
+  const buyerCompanyIds = new Set<string>();
+  for (const r of ciRows) {
+    if (r.seller_entity_id) {
+      if (r.seller_entity_type === "buyer_company") buyerCompanyIds.add(r.seller_entity_id);
+      else sellerCompanyIds.add(r.seller_entity_id);
+    }
+    if (r.buyer_entity_id) {
+      if (r.buyer_entity_type === "seller_company") sellerCompanyIds.add(r.buyer_entity_id);
+      else buyerCompanyIds.add(r.buyer_entity_id);
+    }
+  }
 
   const [sellersResult, buyersResult] = await Promise.all([
-    sellerIds.length > 0
-      ? admin.from("seller_companies").select("id, name").in("id", sellerIds)
+    sellerCompanyIds.size > 0
+      ? admin.from("seller_companies").select("id, name").in("id", Array.from(sellerCompanyIds))
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-    buyerIds.length > 0
-      ? admin.from("buyer_companies").select("id, name").in("id", buyerIds)
+    buyerCompanyIds.size > 0
+      ? admin.from("buyer_companies").select("id, name").in("id", Array.from(buyerCompanyIds))
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
 
-  const sellerMap = new Map(
-    (sellersResult.data ?? []).map((s) => [s.id, s.name])
-  );
-  const buyerMap = new Map(
-    (buyersResult.data ?? []).map((b) => [b.id, b.name])
-  );
+  // Unified name map across both tables
+  const companyNameMap = new Map<string, string>();
+  for (const s of sellersResult.data ?? []) companyNameMap.set(s.id, s.name);
+  for (const b of buyersResult.data ?? []) companyNameMap.set(b.id, b.name);
 
   // Step 6: Assemble results
   const items: CurrencyInvoice[] = ciRows.map((row) => {
@@ -148,10 +145,10 @@ export async function fetchCurrencyInvoices(
       total_amount: row.total_amount,
       currency: row.currency,
       seller_name: row.seller_entity_id
-        ? sellerMap.get(row.seller_entity_id) ?? null
+        ? companyNameMap.get(row.seller_entity_id) ?? null
         : null,
       buyer_name: row.buyer_entity_id
-        ? buyerMap.get(row.buyer_entity_id) ?? null
+        ? companyNameMap.get(row.buyer_entity_id) ?? null
         : null,
       markup_percent: row.markup_percent,
       created_at: row.created_at ?? "",
@@ -227,18 +224,20 @@ export async function fetchCurrencyInvoiceDetail(
   let sellerName: string | null = null;
   let buyerName: string | null = null;
 
-  if (row.seller_entity_type === "seller_company" && row.seller_entity_id) {
+  if (row.seller_entity_id) {
+    const table = row.seller_entity_type === "buyer_company" ? "buyer_companies" : "seller_companies";
     const { data: seller } = await admin
-      .from("seller_companies")
+      .from(table)
       .select("name")
       .eq("id", row.seller_entity_id)
       .single();
     sellerName = seller?.name ?? null;
   }
 
-  if (row.buyer_entity_type === "buyer_company" && row.buyer_entity_id) {
+  if (row.buyer_entity_id) {
+    const table = row.buyer_entity_type === "seller_company" ? "seller_companies" : "buyer_companies";
     const { data: buyer } = await admin
-      .from("buyer_companies")
+      .from(table)
       .select("name")
       .eq("id", row.buyer_entity_id)
       .single();
@@ -303,8 +302,14 @@ export async function fetchCompanyOptions(
       .order("name"),
   ]);
 
+  // Both seller and buyer positions can reference either table,
+  // so provide all companies in both lists
+  const allCompanies = [
+    ...(sellersResult.data ?? []).map((s) => ({ id: s.id, name: s.name, type: "seller_company" as const })),
+    ...(buyersResult.data ?? []).map((b) => ({ id: b.id, name: b.name, type: "buyer_company" as const })),
+  ];
   return {
-    sellers: (sellersResult.data ?? []).map((s) => ({ id: s.id, name: s.name })),
-    buyers: (buyersResult.data ?? []).map((b) => ({ id: b.id, name: b.name })),
+    sellers: allCompanies,
+    buyers: allCompanies,
   };
 }

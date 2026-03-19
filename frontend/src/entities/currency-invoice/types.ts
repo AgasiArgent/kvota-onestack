@@ -55,6 +55,7 @@ export interface CIListResult {
 export interface CompanyOption {
   id: string;
   name: string;
+  type: "seller_company" | "buyer_company";
 }
 
 export const SEGMENT_LABELS: Record<string, string> = {
