@@ -160,14 +160,12 @@ export function CITable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-[90px]">Дата</TableHead>
-            <TableHead className="w-[140px]">Номер</TableHead>
+            <TableHead className="w-[180px]">Номер</TableHead>
             <TableHead className="w-[80px]">Сегмент</TableHead>
-            <TableHead className="w-[120px]">КП</TableHead>
-            <TableHead className="w-[160px]">Клиент</TableHead>
-            <TableHead className="w-[140px]">Продавец</TableHead>
-            <TableHead className="w-[140px]">Покупатель</TableHead>
+            <TableHead>Продавец</TableHead>
+            <TableHead>Покупатель</TableHead>
             <TableHead className="text-right w-[120px]">Сумма</TableHead>
-            <TableHead className="w-[110px]">Статус</TableHead>
+            <TableHead className="w-[100px]">Статус</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -180,8 +178,10 @@ export function CITable({
               <TableCell className="text-muted-foreground tabular-nums">
                 {formatDate(ci.created_at)}
               </TableCell>
-              <TableCell>
-                <span className="text-accent font-medium">{ci.invoice_number}</span>
+              <TableCell className="max-w-[180px]">
+                <span className="text-accent font-medium truncate block" title={ci.invoice_number}>
+                  {ci.invoice_number}
+                </span>
               </TableCell>
               <TableCell>
                 <span
@@ -192,17 +192,11 @@ export function CITable({
                   {ci.segment}
                 </span>
               </TableCell>
-              <TableCell className="text-muted-foreground truncate" title={ci.quote_idn ?? ""}>
-                {ci.quote_idn ?? "\u2014"}
+              <TableCell className="truncate" title={ci.seller_name ?? ""}>
+                {ci.seller_name ?? "—"}
               </TableCell>
-              <TableCell className="truncate max-w-[160px]" title={ci.customer_name ?? ""}>
-                {ci.customer_name ?? "\u2014"}
-              </TableCell>
-              <TableCell className="truncate max-w-[140px]" title={ci.seller_name ?? ""}>
-                {ci.seller_name ?? "\u2014"}
-              </TableCell>
-              <TableCell className="truncate max-w-[140px]" title={ci.buyer_name ?? ""}>
-                {ci.buyer_name ?? "\u2014"}
+              <TableCell className="truncate" title={ci.buyer_name ?? ""}>
+                {ci.buyer_name ?? "—"}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatAmount(ci.total_amount, ci.currency)}
@@ -221,7 +215,7 @@ export function CITable({
           {invoices.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={9}
+                colSpan={7}
                 className="text-center py-12 text-muted-foreground"
               >
                 <div className="space-y-2">
