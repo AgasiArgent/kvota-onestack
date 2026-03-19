@@ -274,7 +274,7 @@ export function CIDetail({ invoice, sellers, buyers, userRoles, orgId }: CIDetai
           >
             <MoreVertical size={16} />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="min-w-[220px]">
             {canManage && (
               <DropdownMenuItem
                 onClick={handleRegenerate}
