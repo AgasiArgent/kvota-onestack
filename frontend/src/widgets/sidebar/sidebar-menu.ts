@@ -119,6 +119,11 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       label: "Поставщики",
       href: "/suppliers",
     });
+    registries.push({
+      icon: ClipboardList,
+      label: "Позиции",
+      href: "/positions",
+    });
   }
   if (hasRole("finance", "procurement")) {
     registries.push({
