@@ -15,26 +15,6 @@ interface Props {
   locations: LocationListItem[];
 }
 
-function TypeBadges({ location }: { location: LocationListItem }) {
-  const badges: React.ReactNode[] = [];
-  if (location.is_hub) {
-    badges.push(
-      <Badge key="hub" variant="default" className="text-xs">
-        Хаб
-      </Badge>
-    );
-  }
-  if (location.is_customs_point) {
-    badges.push(
-      <Badge key="customs" variant="secondary" className="text-xs">
-        Таможня
-      </Badge>
-    );
-  }
-  if (badges.length === 0) return <span className="text-text-subtle">&mdash;</span>;
-  return <div className="flex gap-1">{badges}</div>;
-}
-
 export function LocationsTable({ locations }: Props) {
   return (
     <Table>
@@ -43,7 +23,6 @@ export function LocationsTable({ locations }: Props) {
           <TableHead className="w-[100px]">Код</TableHead>
           <TableHead>Город</TableHead>
           <TableHead>Страна</TableHead>
-          <TableHead>Тип</TableHead>
           <TableHead>Статус</TableHead>
         </TableRow>
       </TableHeader>
@@ -56,9 +35,6 @@ export function LocationsTable({ locations }: Props) {
             <TableCell>{loc.city ?? <span className="text-text-subtle">&mdash;</span>}</TableCell>
             <TableCell className="text-text-muted">{loc.country}</TableCell>
             <TableCell>
-              <TypeBadges location={loc} />
-            </TableCell>
-            <TableCell>
               <Badge variant={loc.is_active ? "default" : "secondary"}>
                 {loc.is_active ? "Активна" : "Неактивна"}
               </Badge>
@@ -67,7 +43,7 @@ export function LocationsTable({ locations }: Props) {
         ))}
         {locations.length === 0 && (
           <TableRow>
-            <TableCell colSpan={5} className="text-center py-8 text-text-subtle">
+            <TableCell colSpan={4} className="text-center py-8 text-text-subtle">
               Локации не найдены
             </TableCell>
           </TableRow>

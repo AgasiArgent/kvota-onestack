@@ -19,7 +19,6 @@ interface Props {
   countries: string[];
   initialSearch?: string;
   initialCountry?: string;
-  initialType?: string;
   initialStatus?: string;
 }
 
@@ -29,28 +28,18 @@ const STATUS_OPTIONS = [
   { value: "inactive", label: "Неактивные" },
 ] as const;
 
-const TYPE_OPTIONS = [
-  { value: "all", label: "Все типы" },
-  { value: "hub", label: "Хабы" },
-  { value: "customs", label: "Таможенные пункты" },
-] as const;
-
 export function LocationsPage({
   locations,
   stats,
   countries,
   initialSearch = "",
   initialCountry = "",
-  initialType = "",
   initialStatus = "",
 }: Props) {
   const getStatusLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
-  const getTypeLabel = (v: string) =>
-    TYPE_OPTIONS.find((o) => o.value === v)?.label ?? "Все типы";
 
   const [statusLabel, setStatusLabel] = useState(getStatusLabel(initialStatus || "all"));
-  const [typeLabel, setTypeLabel] = useState(getTypeLabel(initialType || "all"));
 
   const countryOptions = [
     { value: "all", label: "Все страны" },
@@ -94,23 +83,6 @@ export function LocationsPage({
         </Select>
 
         <Select
-          name="type"
-          defaultValue={initialType || "all"}
-          onValueChange={(v) => setTypeLabel(getTypeLabel(v ?? "all"))}
-        >
-          <SelectTrigger className="w-[180px]">
-            <span className="flex flex-1 text-left">{typeLabel}</span>
-          </SelectTrigger>
-          <SelectContent>
-            {TYPE_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
           name="status"
           defaultValue={initialStatus || "all"}
           onValueChange={(v) => setStatusLabel(getStatusLabel(v ?? "all"))}
@@ -137,8 +109,6 @@ export function LocationsPage({
       <div className="flex gap-4 text-sm text-text-muted">
         <span>Всего: {stats.total}</span>
         <span>Активные: {stats.active}</span>
-        <span>Хабы: {stats.hubs}</span>
-        <span>Таможенные: {stats.customs_points}</span>
       </div>
 
       <LocationsTable locations={locations} />
