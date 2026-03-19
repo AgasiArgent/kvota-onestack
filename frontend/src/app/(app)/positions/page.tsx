@@ -34,8 +34,8 @@ export default async function PositionsPage({ searchParams }: Props) {
     user.orgId,
     {
       availability: availability === "available" || availability === "unavailable" ? availability : undefined,
-      brand: brand || undefined,
-      mozId: mozId || undefined,
+      brand: brand && brand !== "all" ? brand : undefined,
+      mozId: mozId && mozId !== "all" ? mozId : undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       page,
