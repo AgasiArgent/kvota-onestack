@@ -11,7 +11,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -187,7 +186,9 @@ export function CIDetail({ invoice, sellers, buyers, userRoles, orgId }: CIDetai
             disabled={!isEditable}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Выберите продавца" />
+              <span className="truncate">
+                {sellerEntityId ? (sellers.find((s) => s.id === sellerEntityId)?.name ?? "Выберите продавца") : "Не выбрано"}
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE_VALUE}>Не выбрано</SelectItem>
@@ -208,7 +209,9 @@ export function CIDetail({ invoice, sellers, buyers, userRoles, orgId }: CIDetai
             disabled={!isEditable}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Выберите покупателя" />
+              <span className="truncate">
+                {buyerEntityId ? (buyers.find((b) => b.id === buyerEntityId)?.name ?? "Выберите покупателя") : "Не выбрано"}
+              </span>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE_VALUE}>Не выбрано</SelectItem>
