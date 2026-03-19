@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { Search, Plus, List, LayoutGrid } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Toggle } from "@/components/ui/toggle";
 import { CreateCustomerDialog } from "./create-customer-dialog";
 import {
   Select,
@@ -79,13 +79,42 @@ export function CustomersTable({
   orgId,
   financials,
 }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   const getLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
   const [statusLabel, setStatusLabel] = useState(getLabel(initialStatus || "all"));
+  const [searchValue, setSearchValue] = useState(initialSearch);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { mode, toggle } = useViewMode();
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
   const isExpanded = mode === "expanded";
+
+  function pushParams(overrides: Record<string, string>) {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v && v !== "all") params.set(k, v);
+      else params.delete(k);
+    }
+    params.delete("page"); // reset pagination on filter change
+    router.push(`/customers?${params.toString()}`);
+  }
+
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      pushParams({ q: value });
+    }, 300);
+  }
+
+  function handleStatusChange(value: string | null) {
+    const v = value ?? "all";
+    setStatusLabel(getLabel(v));
+    pushParams({ status: v });
+  }
 
   function formatDate(dateStr: string | null) {
     if (!dateStr) return "—";
@@ -105,20 +134,19 @@ export function CustomersTable({
   return (
     <div className="space-y-4">
       {/* Search + Filter bar */}
-      <form className="flex items-center gap-3" method="GET">
+      <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" size={16} />
           <Input
-            name="q"
-            defaultValue={initialSearch}
+            value={searchValue}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Поиск по названию или ИНН..."
             className="pl-9"
           />
         </div>
         <Select
-          name="status"
           defaultValue={initialStatus || "all"}
-          onValueChange={(v) => setStatusLabel(getLabel(v ?? "all"))}
+          onValueChange={handleStatusChange}
         >
           <SelectTrigger className="w-[160px]">
             <span className="flex flex-1 text-left">{statusLabel}</span>
@@ -131,20 +159,29 @@ export function CustomersTable({
             ))}
           </SelectContent>
         </Select>
-        <Button type="submit" size="sm" variant="outline">
-          <Search size={16} />
-          Найти
-        </Button>
 
-        <Toggle
-          pressed={isExpanded}
-          onPressedChange={toggle}
-          size="sm"
-          aria-label="Переключить вид"
-          className="ml-2"
-        >
-          {isExpanded ? <LayoutGrid size={16} /> : <List size={16} />}
-        </Toggle>
+        <div className="flex rounded-md border border-border-light overflow-hidden text-sm">
+          <button
+            onClick={isExpanded ? toggle : undefined}
+            className={`px-3 py-1.5 transition-colors ${
+              !isExpanded
+                ? "bg-accent text-white"
+                : "text-text-muted hover:bg-sidebar"
+            }`}
+          >
+            Компакт
+          </button>
+          <button
+            onClick={!isExpanded ? toggle : undefined}
+            className={`px-3 py-1.5 transition-colors ${
+              isExpanded
+                ? "bg-accent text-white"
+                : "text-text-muted hover:bg-sidebar"
+            }`}
+          >
+            Подробно
+          </button>
+        </div>
 
         <Button
           size="sm"
@@ -154,7 +191,7 @@ export function CustomersTable({
           <Plus size={16} />
           Новый клиент
         </Button>
-      </form>
+      </div>
 
       {/* Stats row */}
       <div className="flex gap-4 text-sm text-text-muted">
