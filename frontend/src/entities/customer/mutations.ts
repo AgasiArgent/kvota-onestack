@@ -172,6 +172,18 @@ export async function createCall(
   return call;
 }
 
+export async function updateCall(
+  callId: string,
+  data: Partial<CallFormData>
+) {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("calls")
+    .update(data)
+    .eq("id", callId);
+  if (error) throw error;
+}
+
 // ---------- Customer creation ----------
 
 export async function createCustomer(

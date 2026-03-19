@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Users, MapPin, Star, Phone, Plus, Pencil, Save, X, Trash2,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,7 +18,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toast } from "sonner";
 import type { Customer, CustomerContact, CustomerCall } from "@/entities/customer";
+import { updateCall } from "@/entities/customer";
 import { updateCustomerAddresses } from "@/entities/customer/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
 import { ContactFormModal } from "./contact-form-modal";
@@ -486,6 +489,11 @@ function CallsSection({
   calls: CustomerCall[];
   onAdd: () => void;
 }) {
+  const router = useRouter();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [meetingNotes, setMeetingNotes] = useState("");
+
   function formatDate(d: string | null) {
     if (!d) return "—";
     return new Date(d).toLocaleDateString("ru-RU", {
@@ -496,6 +504,31 @@ function CallsSection({
       minute: "2-digit",
     });
   }
+
+  function toggleRow(id: string) {
+    setExpandedId((prev) => (prev === id ? null : id));
+    setMeetingNotes("");
+  }
+
+  async function handleCompleteMeeting(call: CustomerCall) {
+    setCompletingId(call.id);
+    try {
+      await updateCall(call.id, {
+        call_type: "call",
+        meeting_notes: meetingNotes.trim() || call.meeting_notes || undefined,
+      });
+      toast.success("Встреча завершена");
+      setExpandedId(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ошибка обновления");
+    } finally {
+      setCompletingId(null);
+    }
+  }
+
+  const hasDetails = (call: CustomerCall) =>
+    call.comment || call.customer_needs || call.meeting_notes;
 
   return (
     <div>
@@ -526,44 +559,117 @@ function CallsSection({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {calls.map((call) => (
-              <TableRow key={call.id}>
-                <TableCell className="text-text-muted tabular-nums whitespace-nowrap">
-                  {call.call_type === "scheduled" && call.scheduled_date
-                    ? formatDate(call.scheduled_date)
-                    : formatDate(call.created_at)}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">
-                    {CALL_TYPE_LABELS[call.call_type] ?? call.call_type}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-text-muted">
-                  {call.call_category
-                    ? CALL_CATEGORY_LABELS[call.call_category] ?? call.call_category
-                    : "—"}
-                </TableCell>
-                <TableCell className="text-text-muted">
-                  {call.contact_name ?? "—"}
-                </TableCell>
-                <TableCell className="text-text-muted">
-                  {call.contact_phone ? (
-                    <a href={`tel:${call.contact_phone}`} className="text-accent hover:underline">
-                      {call.contact_phone}
-                    </a>
-                  ) : "—"}
-                </TableCell>
-                <TableCell className="text-text-muted">
-                  <ManagerCell
-                    userName={call.user_name}
-                    assignedUserName={call.assigned_user_name}
-                  />
-                </TableCell>
-                <TableCell className="text-text-muted max-w-[250px] truncate">
-                  {call.comment ?? call.meeting_notes ?? "—"}
-                </TableCell>
-              </TableRow>
-            ))}
+            {calls.map((call) => {
+              const isExpanded = expandedId === call.id;
+              const isScheduled = call.call_type === "scheduled";
+
+              return (
+                <React.Fragment key={call.id}>
+                  <TableRow
+                    onClick={() => toggleRow(call.id)}
+                    className={cn(
+                      "cursor-pointer",
+                      isExpanded && "bg-sidebar/50",
+                      (hasDetails(call) || isScheduled) && "hover:bg-sidebar/30"
+                    )}
+                  >
+                    <TableCell className="text-text-muted tabular-nums whitespace-nowrap">
+                      {isScheduled && call.scheduled_date
+                        ? formatDate(call.scheduled_date)
+                        : formatDate(call.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        {CALL_TYPE_LABELS[call.call_type] ?? call.call_type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-text-muted">
+                      {call.call_category
+                        ? CALL_CATEGORY_LABELS[call.call_category] ?? call.call_category
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-text-muted">
+                      {call.contact_name ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-text-muted">
+                      {call.contact_phone ? (
+                        <a
+                          href={`tel:${call.contact_phone}`}
+                          className="text-accent hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {call.contact_phone}
+                        </a>
+                      ) : "—"}
+                    </TableCell>
+                    <TableCell className="text-text-muted">
+                      <ManagerCell
+                        userName={call.user_name}
+                        assignedUserName={call.assigned_user_name}
+                      />
+                    </TableCell>
+                    <TableCell className="text-text-muted max-w-[250px] truncate">
+                      {call.comment ?? call.meeting_notes ?? "—"}
+                    </TableCell>
+                  </TableRow>
+
+                  {isExpanded && (
+                    <TableRow className="bg-sidebar/50 hover:bg-sidebar/50">
+                      <TableCell colSpan={7} className="py-4 px-6">
+                        <div className="space-y-3 text-sm">
+                          {call.comment && (
+                            <div>
+                              <span className="text-xs font-semibold uppercase text-text-subtle">Комментарий</span>
+                              <p className="mt-1 text-text whitespace-pre-wrap">{call.comment}</p>
+                            </div>
+                          )}
+                          {call.customer_needs && (
+                            <div>
+                              <span className="text-xs font-semibold uppercase text-text-subtle">Потребности клиента</span>
+                              <p className="mt-1 text-text whitespace-pre-wrap">{call.customer_needs}</p>
+                            </div>
+                          )}
+                          {call.meeting_notes && (
+                            <div>
+                              <span className="text-xs font-semibold uppercase text-text-subtle">Заметки о встрече</span>
+                              <p className="mt-1 text-text whitespace-pre-wrap">{call.meeting_notes}</p>
+                            </div>
+                          )}
+                          {!hasDetails(call) && !isScheduled && (
+                            <p className="text-text-subtle">Нет дополнительной информации</p>
+                          )}
+
+                          {isScheduled && (
+                            <div className="pt-2 border-t border-border-light space-y-2">
+                              <span className="text-xs font-semibold uppercase text-text-subtle">Завершить встречу</span>
+                              <textarea
+                                value={meetingNotes}
+                                onChange={(e) => setMeetingNotes(e.target.value)}
+                                placeholder="Результаты встречи, договорённости..."
+                                rows={2}
+                                className="w-full rounded-md border border-border-light bg-background px-3 py-2 text-sm placeholder:text-text-subtle focus:outline-none focus:ring-1 focus:ring-accent"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <Button
+                                size="sm"
+                                className="bg-accent text-white hover:bg-accent-hover"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCompleteMeeting(call);
+                                }}
+                                disabled={completingId === call.id}
+                              >
+                                {completingId === call.id ? "..." : "Завершить"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       )}
