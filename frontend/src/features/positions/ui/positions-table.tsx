@@ -239,7 +239,7 @@ export function PositionsTable({
         </TableHeader>
         <TableBody>
           {products.map((product) => {
-            const key = `${product.brand}::${product.idnSku}`;
+            const key = `${product.brand}::${product.productCode}`;
             const isExpanded = expandedProducts.has(key);
             const hasDetails = product.entryCount > 1;
             const entries = details[key] ?? [];
@@ -336,7 +336,7 @@ function ProductRow({
         <td className="px-3 py-3 font-medium">{product.brand || "—"}</td>
         {/* SKU */}
         <td className="px-3 py-3 text-text-muted tabular-nums">
-          {product.idnSku || "—"}
+          {product.productCode || "—"}
         </td>
         {/* Product name */}
         <td className="px-3 py-3">{product.productName || "—"}</td>

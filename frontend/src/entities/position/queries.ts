@@ -39,7 +39,7 @@ export interface PositionsListResult {
 
 interface ViewRow {
   brand: string;
-  idn_sku: string;
+  product_code: string;
   product_name: string;
   latest_price: number | null;
   latest_currency: string | null;
@@ -115,7 +115,7 @@ export async function fetchPositionsList(
   // Map master rows to ProductListItem
   const products: ProductListItem[] = rows.map((row) => ({
     brand: row.brand,
-    idnSku: row.idn_sku,
+    productCode: row.product_code,
     productName: row.product_name ?? "",
     latestPrice: row.latest_price,
     latestCurrency: row.latest_currency,
@@ -137,7 +137,7 @@ export async function fetchPositionsList(
     let detailQuery = supabase
       .from("quote_items")
       .select(
-        `id, quote_id, brand, idn_sku, updated_at, is_unavailable,
+        `id, quote_id, brand, product_code, updated_at, is_unavailable,
          purchase_price_original, purchase_currency, assigned_procurement_user,
          proforma_number,
          quotes!inner(idn, organization_id)`
@@ -157,7 +157,7 @@ export async function fetchPositionsList(
       id: string;
       quote_id: string;
       brand: string;
-      idn_sku: string | null;
+      product_code: string | null;
       updated_at: string;
       is_unavailable: boolean | null;
       purchase_price_original: number | null;
@@ -188,12 +188,12 @@ export async function fetchPositionsList(
 
     // Build product key set for current page
     const pageProductKeys = new Set(
-      products.map((p) => `${p.brand}::${p.idnSku}`)
+      products.map((p) => `${p.brand}::${p.productCode}`)
     );
 
     // Group detail rows by product key, filtering to current page products
     for (const row of detailRows) {
-      const key = `${row.brand}::${row.idn_sku ?? ""}`;
+      const key = `${row.brand}::${row.product_code ?? ""}`;
       if (!pageProductKeys.has(key)) continue;
 
       const entry: SourcingEntry = {

@@ -2,7 +2,7 @@ export type AvailabilityStatus = "available" | "unavailable" | "mixed";
 
 export interface ProductListItem {
   brand: string;
-  idnSku: string;
+  productCode: string;
   productName: string;
   latestPrice: number | null;
   latestCurrency: string | null;
