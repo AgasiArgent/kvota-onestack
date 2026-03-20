@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
 import type {
   SupplierInvoiceItem,
   CurrencyTotal,
@@ -169,31 +168,13 @@ export function SupplierInvoicesTab({
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildFilterUrl(filters, { page: page - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                ← Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildFilterUrl(filters, { page: page + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд →
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="инвойсов"
+        buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
     </div>
   );
 }

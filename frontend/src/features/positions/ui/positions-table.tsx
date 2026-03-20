@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { ChevronRight, ChevronDown, Search } from "lucide-react";
+import { useState, useRef } from "react";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -19,6 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
+import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type { ProductListItem, SourcingEntry } from "@/entities/position/types";
 import { PositionHistory } from "./position-history";
 import { formatDate, formatPrice } from "./format";
@@ -108,6 +108,8 @@ export function PositionsTable({
   );
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { navigate, searchParams } = useFilterNavigation();
 
   function toggleExpanded(key: string) {
     setExpandedProducts((prev) => {
@@ -121,33 +123,46 @@ export function PositionsTable({
     });
   }
 
-  function buildQueryString(overrides: Record<string, string | number>) {
-    const params = new URLSearchParams();
-    const merged = {
-      availability: initialAvailability,
-      brand: initialBrand,
-      moz: initialMozId,
-      dateFrom: initialDateFrom,
-      dateTo: initialDateTo,
-      page: String(initialPage),
-      ...Object.fromEntries(
-        Object.entries(overrides).map(([k, v]) => [k, String(v)])
-      ),
-    };
-    Object.entries(merged).forEach(([k, v]) => {
-      if (v && v !== "all") params.set(k, v);
-    });
-    return params.toString();
+  function handleAvailabilityChange(value: string | null) {
+    const v = value ?? "all";
+    setAvailabilityLabel(getAvailabilityLabel(v));
+    navigate({ availability: v });
+  }
+
+  function handleBrandChange(value: string | null) {
+    const v = value ?? "all";
+    setBrandLabel(getBrandLabel(v));
+    navigate({ brand: v });
+  }
+
+  function handleMozChange(value: string | null) {
+    const v = value ?? "all";
+    setMozLabel(getMozLabel(v));
+    navigate({ moz: v });
+  }
+
+  function handleDateChange(field: "dateFrom" | "dateTo", value: string) {
+    clearTimeout(debounceRef.current);
+    navigate({ [field]: value || undefined });
+  }
+
+  function buildPaginationHref(page: number): string {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (page > 1) {
+      params.set("page", String(page));
+    } else {
+      params.delete("page");
+    }
+    return `/positions?${params.toString()}`;
   }
 
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <form className="flex items-center gap-3 flex-wrap" method="GET">
+      <div className="flex items-center gap-3 flex-wrap">
         <Select
-          name="availability"
           defaultValue={initialAvailability || "all"}
-          onValueChange={(v) => setAvailabilityLabel(getAvailabilityLabel(v ?? "all"))}
+          onValueChange={handleAvailabilityChange}
         >
           <SelectTrigger className="w-[150px]">
             <span className="flex flex-1 text-left">{availabilityLabel}</span>
@@ -162,9 +177,8 @@ export function PositionsTable({
         </Select>
 
         <Select
-          name="brand"
           defaultValue={initialBrand || "all"}
-          onValueChange={(v) => setBrandLabel(getBrandLabel(v ?? "all"))}
+          onValueChange={handleBrandChange}
         >
           <SelectTrigger className="w-[180px]">
             <span className="flex flex-1 text-left truncate">{brandLabel}</span>
@@ -180,9 +194,8 @@ export function PositionsTable({
         </Select>
 
         <Select
-          name="moz"
           defaultValue={initialMozId || "all"}
-          onValueChange={(v) => setMozLabel(getMozLabel(v ?? "all"))}
+          onValueChange={handleMozChange}
         >
           <SelectTrigger className="w-[180px]">
             <span className="flex flex-1 text-left truncate">{mozLabel}</span>
@@ -198,25 +211,20 @@ export function PositionsTable({
         </Select>
 
         <Input
-          name="dateFrom"
           type="date"
           defaultValue={initialDateFrom}
           className="w-[150px]"
           placeholder="С"
+          onChange={(e) => handleDateChange("dateFrom", e.target.value)}
         />
         <Input
-          name="dateTo"
           type="date"
           defaultValue={initialDateTo}
           className="w-[150px]"
           placeholder="По"
+          onChange={(e) => handleDateChange("dateTo", e.target.value)}
         />
-
-        <Button type="submit" size="sm" variant="outline">
-          <Search size={16} />
-          Найти
-        </Button>
-      </form>
+      </div>
 
       {/* Stats */}
       <div className="text-sm text-text-muted">
@@ -266,31 +274,13 @@ export function PositionsTable({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">
-            Страница {initialPage} из {totalPages} | Всего: {total}
-          </span>
-          <div className="flex gap-2">
-            {initialPage > 1 && (
-              <Link
-                href={`/positions?${buildQueryString({ page: initialPage - 1 })}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Назад
-              </Link>
-            )}
-            {initialPage < totalPages && (
-              <Link
-                href={`/positions?${buildQueryString({ page: initialPage + 1 })}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={initialPage}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="позиций"
+        buildHref={buildPaginationHref}
+      />
     </div>
   );
 }

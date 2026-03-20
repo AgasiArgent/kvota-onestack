@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -11,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
 import type { CurrencyInvoice, CIFilterParams } from "@/entities/currency-invoice/types";
 import {
   SEGMENT_COLORS,
@@ -239,31 +239,13 @@ export function CITable({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildFilterUrl(filters, { page: page - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                &larr; Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildFilterUrl(filters, { page: page + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд &rarr;
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="инвойсов"
+        buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
     </div>
   );
 }

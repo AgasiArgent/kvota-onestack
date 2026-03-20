@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Plus, FileSpreadsheet } from "lucide-react";
 import { Toaster } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -22,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
+import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type {
   PhmbQuoteListItem,
   PhmbQuoteStatus,
@@ -102,43 +104,39 @@ export function PhmbRegistry({
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchValue, setSearchValue] = useState(initialSearch);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { navigate, searchParams } = useFilterNavigation();
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  const buildUrl = useCallback(
-    (overrides: { search?: string; status?: string; page?: number }) => {
-      const params = new URLSearchParams();
-      const search =
-        overrides.search !== undefined ? overrides.search : initialSearch;
-      const status =
-        overrides.status !== undefined
-          ? overrides.status
-          : initialStatus ?? "";
-      const page =
-        overrides.page !== undefined ? overrides.page : initialPage;
-
-      if (search) params.set("search", search);
-      if (status && status !== "all") params.set("status", status);
-      if (page > 1) params.set("page", String(page));
-
-      const qs = params.toString();
-      return qs ? `/phmb?${qs}` : "/phmb";
-    },
-    [initialSearch, initialStatus, initialPage]
-  );
-
-  function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    router.push(buildUrl({ search: searchValue, page: 1 }));
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      navigate({ search: value || undefined });
+    }, 300);
   }
 
   function handleStatusChange(value: string | null) {
-    router.push(buildUrl({ status: value ?? "all", page: 1 }));
+    navigate({ status: value ?? "all" });
   }
 
   function handleRowClick(id: string) {
     router.push(`/phmb/${id}`);
   }
+
+  const buildPaginationHref = useCallback(
+    (page: number): string => {
+      const params = new URLSearchParams(searchParams?.toString() ?? "");
+      if (page > 1) {
+        params.set("page", String(page));
+      } else {
+        params.delete("page");
+      }
+      return `/phmb?${params.toString()}`;
+    },
+    [searchParams]
+  );
 
   const isEmpty = quotes.length === 0 && !initialSearch && !initialStatus;
 
@@ -197,10 +195,7 @@ export function PhmbRegistry({
       </div>
 
       {/* Search + Filter bar */}
-      <form
-        className="flex items-center gap-3 flex-wrap"
-        onSubmit={handleSearch}
-      >
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
@@ -208,7 +203,7 @@ export function PhmbRegistry({
           />
           <Input
             value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Поиск по клиенту или IDN..."
             className="pl-9"
           />
@@ -228,11 +223,7 @@ export function PhmbRegistry({
             ))}
           </SelectContent>
         </Select>
-        <Button type="submit" size="sm" variant="outline">
-          <Search size={16} />
-          Найти
-        </Button>
-      </form>
+      </div>
 
       {/* Stats row */}
       <div className="text-sm text-text-muted">Всего: {total}</div>
@@ -295,31 +286,13 @@ export function PhmbRegistry({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">
-            Страница {initialPage} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {initialPage > 1 && (
-              <a
-                href={buildUrl({ page: initialPage - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Назад
-              </a>
-            )}
-            {initialPage < totalPages && (
-              <a
-                href={buildUrl({ page: initialPage + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд
-              </a>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={initialPage}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="КП"
+        buildHref={buildPaginationHref}
+      />
 
       {/* Create dialog */}
       <CreatePhmbDialog

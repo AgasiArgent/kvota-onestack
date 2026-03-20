@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Plus } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/select";
 import { StatusGroupFilter } from "./status-group-filter";
 import { CreateQuoteDialog } from "./create-quote-dialog";
+import { Pagination } from "@/shared/ui/pagination";
+import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type { QuoteListItem, QuotesFilterParams } from "@/entities/quote/types";
 import { getGroupForStatus } from "@/entities/quote/types";
 
@@ -188,6 +190,7 @@ export function QuotesTable({
 }: QuotesTableProps) {
   const router = useRouter();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const { navigate, searchParams } = useFilterNavigation();
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
   const canFilterByManager = hasAnyRole(userRoles, ADMIN_ROLES);
@@ -235,10 +238,22 @@ export function QuotesTable({
     router.push(`/customers/${customerId}`);
   }
 
+  function handleCustomerChange(value: string | null) {
+    const v = value ?? "all";
+    setCustomerLabel(!v || v === "all" ? "Все клиенты" : getCustomerLabel(v));
+    navigate({ customer: v });
+  }
+
+  function handleManagerChange(value: string | null) {
+    const v = value ?? "all";
+    setManagerLabel(!v || v === "all" ? "Все менеджеры" : getManagerLabel(v));
+    navigate({ manager: v });
+  }
+
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <form className="space-y-3" method="GET" action="/quotes">
+      <div className="space-y-3">
         {/* Status group pills */}
         <StatusGroupFilter
           activeGroup={resolvedActiveGroup}
@@ -248,9 +263,8 @@ export function QuotesTable({
         {/* Dropdown filters row */}
         <div className="flex items-center gap-3">
           <Select
-            name="customer"
             defaultValue={filters.customer ?? "all"}
-            onValueChange={(v) => setCustomerLabel(!v || v === "all" ? "Все клиенты" : getCustomerLabel(v))}
+            onValueChange={handleCustomerChange}
           >
             <SelectTrigger className="w-[220px]">
               <span className="flex flex-1 text-left truncate">{customerLabel}</span>
@@ -267,9 +281,8 @@ export function QuotesTable({
 
           {canFilterByManager && (
             <Select
-              name="manager"
               defaultValue={filters.manager ?? "all"}
-              onValueChange={(v) => setManagerLabel(!v || v === "all" ? "Все менеджеры" : getManagerLabel(v))}
+              onValueChange={handleManagerChange}
             >
               <SelectTrigger className="w-[200px]">
                 <span className="flex flex-1 text-left truncate">{managerLabel}</span>
@@ -285,10 +298,6 @@ export function QuotesTable({
             </Select>
           )}
 
-          <Button type="submit" size="sm" variant="outline">
-            Применить
-          </Button>
-
           {canCreate && (
             <Button
               type="button"
@@ -301,7 +310,7 @@ export function QuotesTable({
             </Button>
           )}
         </div>
-      </form>
+      </div>
 
       {/* Stats row */}
       <div className="flex gap-4 text-sm text-muted-foreground">
@@ -390,31 +399,13 @@ export function QuotesTable({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildFilterUrl(filters, { page: page - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                ← Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildFilterUrl(filters, { page: page + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд →
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="КП"
+        buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
 
       {/* Create quote dialog */}
       {canCreate && (

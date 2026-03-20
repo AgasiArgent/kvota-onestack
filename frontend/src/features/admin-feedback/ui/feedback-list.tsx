@@ -1,9 +1,9 @@
 "use client";
 
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -13,6 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ExternalLink, Search } from "lucide-react";
+import { Pagination } from "@/shared/ui/pagination";
+import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type { FeedbackItem } from "@/entities/admin/types";
 import {
   FEEDBACK_TYPE_LABELS,
@@ -71,6 +73,21 @@ export function FeedbackList({
 }: FeedbackListProps) {
   const router = useRouter();
   const totalPages = Math.ceil(total / pageSize);
+  const [searchValue, setSearchValue] = useState(searchQuery);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { navigate } = useFilterNavigation();
+
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      navigate({ search: value || undefined });
+    }, 300);
+  }
+
+  function buildPaginationHref(p: number): string {
+    return buildUrl(activeStatus, searchQuery, p);
+  }
 
   return (
     <div className="space-y-4">
@@ -97,26 +114,20 @@ export function FeedbackList({
       </div>
 
       {/* Search */}
-      <form method="GET" action="/admin/feedback" className="flex gap-2 max-w-md">
-        {activeStatus && (
-          <input type="hidden" name="status" value={activeStatus} />
-        )}
+      <div className="flex gap-2 max-w-md">
         <div className="relative flex-1">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            name="search"
+            value={searchValue}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Поиск по описанию, email или ID..."
-            defaultValue={searchQuery}
             className="pl-9"
           />
         </div>
-        <Button type="submit" variant="outline" size="sm">
-          Найти
-        </Button>
-      </form>
+      </div>
 
       {/* Stats */}
       <div className="text-sm text-muted-foreground">
@@ -224,31 +235,13 @@ export function FeedbackList({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildUrl(activeStatus, searchQuery, page - 1)}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                \u2190 Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildUrl(activeStatus, searchQuery, page + 1)}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд \u2192
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="обращений"
+        buildHref={buildPaginationHref}
+      />
     </div>
   );
 }

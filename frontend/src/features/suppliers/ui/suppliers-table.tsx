@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateSupplierDialog } from "./create-supplier-dialog";
 import {
@@ -21,6 +21,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
+import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import type { SupplierListItem } from "@/entities/supplier/types";
 
 interface Props {
@@ -57,47 +59,56 @@ export function SuppliersTable({
   const getLabel = (v: string) =>
     STATUS_OPTIONS.find((o) => o.value === v)?.label ?? "Все статусы";
   const [statusLabel, setStatusLabel] = useState(getLabel(initialStatus || "all"));
+  const [searchValue, setSearchValue] = useState(initialSearch);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { navigate, searchParams } = useFilterNavigation();
   const totalPages = Math.ceil(initialTotal / PAGE_SIZE);
 
   function truncate(str: string, max: number) {
     return str.length > max ? str.slice(0, max) + "..." : str;
   }
 
-  function buildQueryString(overrides: Record<string, string | number>) {
-    const params = new URLSearchParams();
-    const merged = {
-      q: initialSearch,
-      country: initialCountry,
-      status: initialStatus,
-      page: String(initialPage),
-      ...Object.fromEntries(
-        Object.entries(overrides).map(([k, v]) => [k, String(v)])
-      ),
-    };
-    Object.entries(merged).forEach(([k, v]) => {
-      if (v) params.set(k, v);
-    });
-    return params.toString();
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      navigate({ q: value || undefined });
+    }, 300);
+  }
+
+  function handleStatusChange(value: string | null) {
+    const v = value ?? "all";
+    setStatusLabel(getLabel(v));
+    navigate({ status: v });
+  }
+
+  function buildPaginationHref(page: number): string {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    if (page > 1) {
+      params.set("page", String(page));
+    } else {
+      params.delete("page");
+    }
+    return `/suppliers?${params.toString()}`;
   }
 
   return (
     <div className="space-y-4">
       {/* Search + Filter bar */}
-      <form className="flex items-center gap-3" method="GET">
+      <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" size={16} />
           <Input
-            name="q"
-            defaultValue={initialSearch}
+            value={searchValue}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Поиск по названию или коду..."
             className="pl-9"
           />
         </div>
         <Select
-          name="status"
           defaultValue={initialStatus || "all"}
-          onValueChange={(v) => setStatusLabel(getLabel(v ?? "all"))}
+          onValueChange={handleStatusChange}
         >
           <SelectTrigger className="w-[160px]">
             <span className="flex flex-1 text-left">{statusLabel}</span>
@@ -110,13 +121,6 @@ export function SuppliersTable({
             ))}
           </SelectContent>
         </Select>
-        {initialCountry && (
-          <input type="hidden" name="country" value={initialCountry} />
-        )}
-        <Button type="submit" size="sm" variant="outline">
-          <Search size={16} />
-          Найти
-        </Button>
         <Button
           size="sm"
           className="ml-auto bg-accent text-white hover:bg-accent-hover"
@@ -126,7 +130,7 @@ export function SuppliersTable({
           <Plus size={16} />
           Добавить
         </Button>
-      </form>
+      </div>
 
       {/* Stats row */}
       <div className="flex gap-4 text-sm text-text-muted">
@@ -193,31 +197,14 @@ export function SuppliersTable({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">
-            Страница {initialPage} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {initialPage > 1 && (
-              <Link
-                href={`/suppliers?${buildQueryString({ page: initialPage - 1 })}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Назад
-              </Link>
-            )}
-            {initialPage < totalPages && (
-              <Link
-                href={`/suppliers?${buildQueryString({ page: initialPage + 1 })}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={initialPage}
+        totalPages={totalPages}
+        totalItems={initialTotal}
+        itemLabel="поставщиков"
+        buildHref={buildPaginationHref}
+      />
+
       <CreateSupplierDialog
         orgId={orgId}
         open={createDialogOpen}

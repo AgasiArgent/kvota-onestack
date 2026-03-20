@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CreateCustomerDialog } from "./create-customer-dialog";
 import {
@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
 import type { CustomerListItem, CustomerFinancials } from "@/entities/customer";
 
 type ViewMode = "compact" | "expanded";
@@ -274,31 +275,18 @@ export function CustomersTable({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-text-muted">
-            Страница {initialPage} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {initialPage > 1 && (
-              <Link
-                href={`/customers?page=${initialPage - 1}&q=${initialSearch}&status=${initialStatus}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Назад
-              </Link>
-            )}
-            {initialPage < totalPages && (
-              <Link
-                href={`/customers?page=${initialPage + 1}&q=${initialSearch}&status=${initialStatus}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={initialPage}
+        totalPages={totalPages}
+        totalItems={initialTotal}
+        itemLabel="клиентов"
+        buildHref={(p) => {
+          const params = new URLSearchParams(searchParams?.toString() ?? "");
+          if (p > 1) params.set("page", String(p));
+          else params.delete("page");
+          return `/customers?${params.toString()}`;
+        }}
+      />
       <CreateCustomerDialog
         orgId={orgId}
         open={createDialogOpen}

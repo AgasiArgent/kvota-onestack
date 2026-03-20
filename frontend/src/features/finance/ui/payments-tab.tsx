@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -10,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
 import type {
   PaymentRecord,
   PaymentTotals,
@@ -126,6 +126,11 @@ export function PaymentsTab({
 }: PaymentsTabProps) {
   const totalPages = Math.ceil(total / pageSize);
 
+  function handleDateChange(field: "date_from" | "date_to", value: string) {
+    const url = buildFilterUrl(filters, { [field]: value || undefined, page: 1 });
+    window.location.href = url;
+  }
+
   return (
     <div className="space-y-4">
       {/* Filter bar */}
@@ -156,35 +161,22 @@ export function PaymentsTab({
           <span className="text-xs text-muted-foreground font-medium w-20 shrink-0">
             Период:
           </span>
-          <form className="flex items-center gap-2" method="GET" action="/finance">
-            <input type="hidden" name="tab" value="payments" />
-            {filters.type && (
-              <input type="hidden" name="type" value={filters.type} />
-            )}
-            {filters.payment_status && (
-              <input type="hidden" name="payment_status" value={filters.payment_status} />
-            )}
+          <div className="flex items-center gap-2">
             <label className="text-xs text-muted-foreground">С:</label>
             <input
               type="date"
-              name="date_from"
               defaultValue={filters.date_from ?? ""}
               className="h-8 rounded-md border px-2 text-xs"
+              onChange={(e) => handleDateChange("date_from", e.target.value)}
             />
             <label className="text-xs text-muted-foreground">По:</label>
             <input
               type="date"
-              name="date_to"
               defaultValue={filters.date_to ?? ""}
               className="h-8 rounded-md border px-2 text-xs"
+              onChange={(e) => handleDateChange("date_to", e.target.value)}
             />
-            <button
-              type="submit"
-              className="h-8 rounded-md border px-3 text-xs font-medium hover:bg-muted transition-colors"
-            >
-              Применить
-            </button>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -325,31 +317,13 @@ export function PaymentsTab({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildFilterUrl(filters, { page: page - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                ← Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildFilterUrl(filters, { page: page + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд →
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="записей"
+        buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
     </div>
   );
 }

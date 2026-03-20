@@ -276,6 +276,38 @@ Active:     text-text font-semibold bg-[rgba(87,83,78,0.08)]
 
 ---
 
+## Interaction Patterns
+
+### Filters: Auto-Submit (No "Найти" Button)
+
+Filters apply **immediately** on change — no submit button needed.
+
+- **Dropdowns (Select):** `onValueChange` triggers `router.push()` with updated URL params
+- **Text inputs (search):** debounce 300ms, then `router.push()`
+- **Date inputs:** `onChange` triggers `router.push()`
+- **URL is the source of truth** — all filter state persists in search params (bookmarkable, shareable)
+- **No `<form method="GET">`** — use `useRouter().push()` for instant navigation
+- **No "Найти"/"Поиск" buttons** — they add friction for zero value
+- **Shared component:** `frontend/src/shared/ui/pagination.tsx` (see below)
+
+### Pagination: Numbered Pages, Centered
+
+Pagination uses **numbered page links**, not just prev/next.
+
+```
+← 1  2  [3]  4  5  ...  12 →
+```
+
+- **Centered** below the table (not right-aligned — avoids overlap with floating buttons)
+- **Show page numbers** as clickable links — max 5 visible, with ellipsis for gaps
+- **Current page** highlighted with accent background
+- **←/→ arrows** for prev/next (no text labels "Назад"/"Вперёд")
+- **Total count** shown left: "59 позиций" (or "84 клиента", etc.)
+- **Preserve all filters** when navigating pages
+- **Shared component:** `frontend/src/shared/ui/pagination.tsx`
+
+---
+
 ## Anti-Patterns (NEVER do these)
 
 - No `transition: all` — animate specific properties only
@@ -288,3 +320,6 @@ Active:     text-text font-semibold bg-[rgba(87,83,78,0.08)]
 - No more than 4 distinct colors carrying meaning per page
 - No arbitrary spacing (`gap-[13px]`) — use scale values only
 - No mixing border-radius values outside the 3-value system
+- No "Найти"/"Search" buttons on filter bars — filters auto-apply on change
+- No prev/next-only pagination — always show numbered page links
+- No right-aligned pagination — center it below the table

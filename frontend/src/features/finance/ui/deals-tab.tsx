@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Pagination } from "@/shared/ui/pagination";
 import type {
   DealListItem,
   DealSummary,
@@ -344,31 +345,13 @@ export function DealsTab({
       </Table>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            Страница {page} из {totalPages}
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildFilterUrl(filters, { page: page - 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                ← Назад
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildFilterUrl(filters, { page: page + 1 })}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Вперёд →
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        totalItems={total}
+        itemLabel="сделок"
+        buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
     </div>
   );
 }
