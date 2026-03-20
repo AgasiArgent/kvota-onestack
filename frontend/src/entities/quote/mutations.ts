@@ -351,6 +351,32 @@ export async function completeLogistics(quoteId: string) {
   });
 }
 
+export async function completeCustoms(quoteId: string) {
+  const supabase = createClient();
+
+  // Set customs_completed_at
+  const { error } = await supabase
+    .from("quotes")
+    .update({ customs_completed_at: new Date().toISOString() })
+    .eq("id", quoteId);
+
+  if (error) throw error;
+
+  // Check if logistics is also complete to auto-transition to pending_sales_review
+  const { data: quote } = await supabase
+    .from("quotes")
+    .select("logistics_completed_at, workflow_status")
+    .eq("id", quoteId)
+    .single();
+
+  if (quote?.logistics_completed_at) {
+    await supabase
+      .from("quotes")
+      .update({ workflow_status: "pending_sales_review" })
+      .eq("id", quoteId);
+  }
+}
+
 export async function sendToClient(quoteId: string) {
   return updateQuoteWorkflowStatus(quoteId, "sent_to_client", {
     sent_at: new Date().toISOString(),

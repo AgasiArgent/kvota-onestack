@@ -9,6 +9,7 @@ import type { QuoteStep } from "@/entities/quote/types";
 import { SalesStep } from "./sales-step/sales-step";
 import { ProcurementStep } from "./procurement-step/procurement-step";
 import { LogisticsStep } from "./logistics-step/logistics-step";
+import { CustomsStep } from "./customs-step/customs-step";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -48,9 +49,12 @@ export function QuoteStepContent({
       );
     case "customs":
       return (
-        <div className="flex-1 p-6 text-sm text-muted-foreground">
-          Таможня &mdash; Phase 5
-        </div>
+        <CustomsStep
+          quote={quote}
+          items={items}
+          invoices={invoices}
+          userRoles={userRoles}
+        />
       );
     case "control":
       return (
