@@ -109,15 +109,7 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
         {items.length === 0 && (
           <TableRow>
             <TableCell colSpan={7} className="text-center py-8">
-              <p className="text-muted-foreground mb-3">Нет позиций</p>
-              {quoteId && (
-                <a
-                  href={`https://kvotaflow.ru/quotes/${quoteId}?tab=overview`}
-                  className="text-sm text-accent hover:underline"
-                >
-                  Добавить позиции →
-                </a>
-              )}
+              <p className="text-muted-foreground">Нет позиций</p>
             </TableCell>
           </TableRow>
         )}

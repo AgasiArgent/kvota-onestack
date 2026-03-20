@@ -225,9 +225,7 @@ export function QuotesTable({
   );
 
   function handleRowClick(quoteId: string) {
-    // Quote detail page is still in FastHTML — navigate to legacy app
-    // TODO: Change to router.push() when /quotes/[id] is migrated to Next.js
-    window.location.href = `https://kvotaflow.ru/quotes/${quoteId}`;
+    router.push(`/quotes/${quoteId}`);
   }
 
   function handleCustomerClick(
