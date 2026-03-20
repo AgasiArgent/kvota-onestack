@@ -31,7 +31,7 @@ export function CustomsActionBar({
   }).length;
   const itemsWithDuty = items.filter((item) => {
     const extras = ext<ItemExtras>(item);
-    return extras.customs_duty != null && extras.customs_duty > 0;
+    return extras.customs_duty != null;
   }).length;
 
   const allHaveHsCode = totalItems > 0 && itemsWithHsCode === totalItems;

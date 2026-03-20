@@ -167,10 +167,10 @@ export function CustomsExpenses({ quoteId }: CustomsExpensesProps) {
         Укажите общие расходы на всю квоту. Выберите валюту для каждого поля.
       </p>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
         {EXPENSE_FIELDS.map((field) => (
-          <div key={field.key} className="flex items-center gap-2">
-            <span className="text-sm text-amber-900 min-w-[140px] shrink-0">
+          <div key={field.key} className="grid grid-cols-[160px_1fr_auto] items-center gap-2">
+            <span className="text-sm text-amber-900">
               {field.label}
             </span>
             <input

@@ -220,13 +220,13 @@ export function CustomsHandsontable({
           { data: "quantity", type: "numeric", width: 40, readOnly: true },
           { data: "supplier_country", type: "text", width: 65, readOnly: true },
           { data: "hs_code", type: "text", width: 85 },
-          { data: "customs_duty", type: "numeric", width: 55 },
+          { data: "customs_duty", type: "numeric", width: 55, allowEmpty: true },
           { data: "license_ds_required", type: "checkbox", width: 30 },
-          { data: "license_ds_cost", type: "numeric", width: 55 },
+          { data: "license_ds_cost", type: "numeric", width: 55, allowEmpty: true },
           { data: "license_ss_required", type: "checkbox", width: 30 },
-          { data: "license_ss_cost", type: "numeric", width: 55 },
+          { data: "license_ss_cost", type: "numeric", width: 55, allowEmpty: true },
           { data: "license_sgr_required", type: "checkbox", width: 30 },
-          { data: "license_sgr_cost", type: "numeric", width: 55 },
+          { data: "license_sgr_cost", type: "numeric", width: 55, allowEmpty: true },
         ]}
         rowHeaders={false}
         stretchH="all"
@@ -239,6 +239,9 @@ export function CustomsHandsontable({
         afterChange={handleAfterChange}
         className="htLeft"
       />
+      <p className="text-xs text-muted-foreground mt-2 px-1">
+        * Стоимость ДС, СС, СГР указана в рублях (RUB)
+      </p>
     </div>
   );
 }
