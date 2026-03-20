@@ -85,6 +85,12 @@ export function LogisticsInvoiceRow({
           {numberFmt.format(totalWeight)} кг
         </span>
 
+        {invoice.total_volume_m3 != null && invoice.total_volume_m3 > 0 && (
+          <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+            {numberFmt.format(invoice.total_volume_m3)} м³
+          </span>
+        )}
+
         <span
           className={cn(
             "ml-auto text-sm font-mono tabular-nums shrink-0",
