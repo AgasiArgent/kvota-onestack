@@ -50,7 +50,7 @@ export function CalculationActionBar({
   }
 
   function handleExportPdf() {
-    window.open(`/quotes/${quoteId}/export-kp`, "_blank");
+    window.open(`/export/kp/${quoteId}`, "_blank");
   }
 
   return (
