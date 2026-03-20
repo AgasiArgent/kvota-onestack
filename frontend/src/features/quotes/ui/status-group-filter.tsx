@@ -8,11 +8,13 @@ import type { StatusGroup } from "@/entities/quote/types";
 interface StatusGroupFilterProps {
   activeGroup: string | null;
   activeStatus: string | null;
+  onFilterChange: (status: string | null) => void;
 }
 
 export function StatusGroupFilter({
   activeGroup,
   activeStatus,
+  onFilterChange,
 }: StatusGroupFilterProps) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(
     activeStatus ? activeGroup : null
@@ -20,19 +22,25 @@ export function StatusGroupFilter({
 
   function handleGroupClick(group: StatusGroup) {
     if (group.key === activeGroup && !activeStatus) {
-      // Clicking active group deselects it — let the form submit with no status
+      // Clicking active group deselects it
+      onFilterChange(null);
       return;
     }
-    if (group.key === activeGroup) {
-      // Clicking active group when a sub-status is selected — collapse to group level
-      setExpandedGroup(null);
+    // Select this group
+    onFilterChange(group.key);
+    setExpandedGroup(null);
+  }
+
+  function handleStatusClick(status: string) {
+    if (status === activeStatus) {
+      // Clicking active sub-status goes back to group level
+      onFilterChange(activeGroup);
+    } else {
+      onFilterChange(status);
     }
   }
 
-  function toggleExpansion(
-    e: React.MouseEvent,
-    groupKey: string
-  ) {
+  function toggleExpansion(e: React.MouseEvent, groupKey: string) {
     e.preventDefault();
     e.stopPropagation();
     setExpandedGroup(expandedGroup === groupKey ? null : groupKey);
@@ -46,12 +54,10 @@ export function StatusGroupFilter({
           return (
             <button
               key={group.key}
-              type="submit"
-              name="status"
-              value={isActive && !activeStatus ? "" : group.key}
+              type="button"
               onClick={() => handleGroupClick(group)}
               title={group.statuses.map((s) => formatStatusLabel(s)).join(", ")}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium transition-colors cursor-pointer ${
                 group.color
               } ${
                 isActive
@@ -96,10 +102,9 @@ export function StatusGroupFilter({
             return (
               <button
                 key={status}
-                type="submit"
-                name="status"
-                value={isActiveStatus ? expandedGroup : status}
-                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                type="button"
+                onClick={() => handleStatusClick(status)}
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
                   parentGroup?.color ?? "bg-slate-100 text-slate-700"
                 } ${
                   isActiveStatus

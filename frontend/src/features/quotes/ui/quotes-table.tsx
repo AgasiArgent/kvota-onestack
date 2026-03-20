@@ -256,6 +256,7 @@ export function QuotesTable({
         <StatusGroupFilter
           activeGroup={resolvedActiveGroup}
           activeStatus={resolvedActiveStatus}
+          onFilterChange={(status) => navigate({ status: status ?? undefined })}
         />
 
         {/* Dropdown filters row */}
