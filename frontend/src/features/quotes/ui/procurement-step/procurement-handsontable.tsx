@@ -35,7 +35,6 @@ const COLUMN_KEYS = [
   "product_name",
   "quantity",
   "purchase_price_original",
-  "purchase_currency",
   "production_time_days",
   "weight_in_kg",
   "dimensions",
@@ -126,12 +125,8 @@ export function ProcurementHandsontable({
   const rowIdsRef = useRef<string[]>(items.map((i) => i.id));
 
   const initialData = useMemo(
-    () => items.map((item) => {
-      const row = itemToRow(item);
-      row.purchase_currency = invoiceCurrency || row.purchase_currency;
-      return row;
-    }),
-    [items, invoiceCurrency]
+    () => items.map(itemToRow),
+    [items]
   );
 
   // Keep rowIds in sync with items
@@ -259,7 +254,6 @@ export function ProcurementHandsontable({
           "Наименование",
           "Кол-во",
           "Цена",
-          "Валюта",
           "Готовность",
           "Вес, кг",
           "Габариты",
@@ -277,13 +271,7 @@ export function ProcurementHandsontable({
           },
           { data: "product_name", type: "text", width: 140, readOnly: true },
           { data: "quantity", type: "numeric", width: 40, readOnly: true },
-          { data: "purchase_price_original", type: "numeric", width: 65 },
-          {
-            data: "purchase_currency",
-            type: "text",
-            width: 45,
-            readOnly: true,
-          },
+          { data: "purchase_price_original", type: "numeric", width: 70 },
           { data: "production_time_days", type: "numeric", width: 50 },
           { data: "weight_in_kg", type: "numeric", width: 50 },
           { data: "dimensions", type: "text", width: 70 },
