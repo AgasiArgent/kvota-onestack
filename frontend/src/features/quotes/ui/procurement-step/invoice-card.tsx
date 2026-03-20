@@ -40,6 +40,9 @@ export function InvoiceCard({
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
+  const buyerName =
+    (invoice.buyer_company as { name: string; company_code: string } | null)?.name ?? null;
+  const pickupCity = invoice.pickup_city ?? null;
   const totalAmount = items.reduce((sum, item) => {
     const price = item.purchase_price_original ?? 0;
     return sum + price * item.quantity;
@@ -88,6 +91,18 @@ export function InvoiceCard({
             {supplierName}
           </span>
 
+          {buyerName && (
+            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+              → {buyerName}
+            </span>
+          )}
+
+          {pickupCity && (
+            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+              {pickupCity}
+            </span>
+          )}
+
           <Badge variant="secondary" className="ml-auto shrink-0">
             {items.length} поз.
           </Badge>
@@ -121,7 +136,7 @@ export function InvoiceCard({
 
       {expanded && (
         <div className="border-t border-border overflow-x-auto">
-          <ProcurementItemsEditor items={items} invoiceId={invoice.id} />
+          <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} />
         </div>
       )}
     </Card>

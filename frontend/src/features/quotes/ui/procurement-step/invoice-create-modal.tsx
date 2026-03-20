@@ -61,6 +61,7 @@ export function InvoiceCreateModal({
   const [totalWeight, setTotalWeight] = useState("");
   const [totalVolume, setTotalVolume] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   function handleClose() {
     resetForm();
@@ -74,9 +75,20 @@ export function InvoiceCreateModal({
     setCurrency("USD");
     setTotalWeight("");
     setTotalVolume("");
+    setErrors({});
+  }
+
+  function validate(): boolean {
+    const e: Record<string, string> = {};
+    if (!supplierId) e.supplier = "Выберите поставщика";
+    if (!buyerCompanyId) e.buyer = "Выберите компанию-покупателя";
+    if (!currency) e.currency = "Выберите валюту";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   async function handleSubmit() {
+    if (!validate()) return;
     setSubmitting(true);
     try {
       const invoice = await createInvoice({
@@ -107,7 +119,7 @@ export function InvoiceCreateModal({
     }
   }
 
-  const canSubmit = supplierId !== "" && !submitting;
+  const canSubmit = !submitting;
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
@@ -126,8 +138,8 @@ export function InvoiceCreateModal({
             </Label>
             <select
               value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
-              className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
+              onChange={(e) => { setSupplierId(e.target.value); setErrors((prev) => { const { supplier, ...rest } = prev; return rest; }); }}
+              className={`w-full h-8 px-2.5 text-sm border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring ${errors.supplier ? "border-destructive" : "border-input"}`}
             >
               <option value="">Выберите поставщика</option>
               {suppliers.map((s) => (
@@ -136,14 +148,17 @@ export function InvoiceCreateModal({
                 </option>
               ))}
             </select>
+            {errors.supplier && <p className="text-xs text-destructive">{errors.supplier}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label>Компания-покупатель</Label>
+            <Label>
+              Компания-покупатель <span className="text-destructive">*</span>
+            </Label>
             <select
               value={buyerCompanyId}
-              onChange={(e) => setBuyerCompanyId(e.target.value)}
-              className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
+              onChange={(e) => { setBuyerCompanyId(e.target.value); setErrors((prev) => { const { buyer, ...rest } = prev; return rest; }); }}
+              className={`w-full h-8 px-2.5 text-sm border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring ${errors.buyer ? "border-destructive" : "border-input"}`}
             >
               <option value="">Выберите компанию</option>
               {buyerCompanies.map((b) => (
@@ -152,6 +167,7 @@ export function InvoiceCreateModal({
                 </option>
               ))}
             </select>
+            {errors.buyer && <p className="text-xs text-destructive">{errors.buyer}</p>}
           </div>
 
           <div className="space-y-1.5">

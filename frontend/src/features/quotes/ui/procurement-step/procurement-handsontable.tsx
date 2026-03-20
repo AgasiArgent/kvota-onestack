@@ -26,11 +26,11 @@ function ext<T>(row: unknown): T {
   return row as T;
 }
 
-const CURRENCY_OPTIONS = ["USD", "EUR", "CNY", "RUB"];
+
 
 const COLUMN_KEYS = [
   "brand",
-  "idn_sku",
+  "product_code",
   "supplier_sku",
   "product_name",
   "quantity",
@@ -46,7 +46,7 @@ const COLUMN_KEYS = [
 interface RowData {
   id: string;
   brand: string;
-  idn_sku: string;
+  product_code: string;
   supplier_sku: string;
   product_name: string;
   quantity: number | null;
@@ -91,7 +91,7 @@ function itemToRow(item: QuoteItemRow): RowData {
   return {
     id: item.id,
     brand: item.brand ?? "",
-    idn_sku: item.idn_sku ?? "",
+    product_code: item.product_code ?? "",
     supplier_sku: item.supplier_sku ?? "",
     product_name: item.product_name ?? "",
     quantity: item.quantity,
@@ -112,10 +112,12 @@ function itemToRow(item: QuoteItemRow): RowData {
 interface ProcurementHandsontableProps {
   items: QuoteItemRow[];
   invoiceId: string;
+  invoiceCurrency: string;
 }
 
 export function ProcurementHandsontable({
   items,
+  invoiceCurrency,
 }: ProcurementHandsontableProps) {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,7 +125,14 @@ export function ProcurementHandsontable({
   const pendingOps = useRef(new Set<string>());
   const rowIdsRef = useRef<string[]>(items.map((i) => i.id));
 
-  const initialData = useMemo(() => items.map(itemToRow), [items]);
+  const initialData = useMemo(
+    () => items.map((item) => {
+      const row = itemToRow(item);
+      row.purchase_currency = invoiceCurrency || row.purchase_currency;
+      return row;
+    }),
+    [items, invoiceCurrency]
+  );
 
   // Keep rowIds in sync with items
   if (rowIdsRef.current.length !== initialData.length) {
@@ -151,7 +160,7 @@ export function ProcurementHandsontable({
         cellProperties
       );
 
-      const idnSku = instance.getDataAtRowProp(row, "idn_sku") as string;
+      const idnSku = instance.getDataAtRowProp(row, "product_code") as string;
       const supplierSku = value as string;
 
       if (supplierSku && idnSku && supplierSku !== idnSku) {
@@ -259,7 +268,7 @@ export function ProcurementHandsontable({
         ]}
         columns={[
           { data: "brand", type: "text", width: 90, readOnly: true },
-          { data: "idn_sku", type: "text", width: 120, readOnly: true },
+          { data: "product_code", type: "text", width: 120, readOnly: true },
           {
             data: "supplier_sku",
             type: "text",
@@ -271,9 +280,9 @@ export function ProcurementHandsontable({
           { data: "purchase_price_original", type: "numeric", width: 90 },
           {
             data: "purchase_currency",
-            type: "dropdown",
-            source: CURRENCY_OPTIONS,
+            type: "text",
             width: 70,
+            readOnly: true,
           },
           { data: "production_time_days", type: "numeric", width: 80 },
           { data: "weight_in_kg", type: "numeric", width: 70 },

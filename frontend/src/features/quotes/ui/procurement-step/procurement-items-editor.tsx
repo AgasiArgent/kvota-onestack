@@ -21,11 +21,19 @@ const ProcurementHandsontable = dynamic(
 interface ProcurementItemsEditorProps {
   items: QuoteItemRow[];
   invoiceId: string;
+  invoiceCurrency: string;
 }
 
 export function ProcurementItemsEditor({
   items,
   invoiceId,
+  invoiceCurrency,
 }: ProcurementItemsEditorProps) {
-  return <ProcurementHandsontable items={items} invoiceId={invoiceId} />;
+  return (
+    <ProcurementHandsontable
+      items={items}
+      invoiceId={invoiceId}
+      invoiceCurrency={invoiceCurrency}
+    />
+  );
 }
