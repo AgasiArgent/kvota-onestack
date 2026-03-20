@@ -88,7 +88,7 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
                 {item.brand ?? "\u2014"}
               </TableCell>
               <TableCell className="truncate max-w-32 font-mono text-xs">
-                {item.idn_sku ?? "\u2014"}
+                {item.product_code ?? "\u2014"}
               </TableCell>
               <TableCell>{item.product_name}</TableCell>
               <TableCell className="text-right font-mono">
