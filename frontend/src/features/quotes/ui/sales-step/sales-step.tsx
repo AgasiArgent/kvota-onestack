@@ -26,6 +26,7 @@ export function SalesStep({ quote, items }: SalesStepProps) {
         <SalesItemsTable
           items={items}
           currency={quote.currency ?? "USD"}
+          quoteId={quote.id}
         />
         <SalesCollapsible quote={quote} />
       </div>

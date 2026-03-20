@@ -28,9 +28,10 @@ const qtyFmt = new Intl.NumberFormat("ru-RU", {
 interface SalesItemsTableProps {
   items: QuoteItemRow[];
   currency: string;
+  quoteId?: string;
 }
 
-export function SalesItemsTable({ items, currency }: SalesItemsTableProps) {
+export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTableProps) {
   const symbol = CURRENCY_SYMBOLS[currency] ?? currency;
 
   const totalQty = items.reduce((sum, item) => sum + item.quantity, 0);
@@ -107,8 +108,16 @@ export function SalesItemsTable({ items, currency }: SalesItemsTableProps) {
 
         {items.length === 0 && (
           <TableRow>
-            <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-              Нет позиций
+            <TableCell colSpan={7} className="text-center py-8">
+              <p className="text-muted-foreground mb-3">Нет позиций</p>
+              {quoteId && (
+                <a
+                  href={`https://kvotaflow.ru/quotes/${quoteId}?tab=overview`}
+                  className="text-sm text-accent hover:underline"
+                >
+                  Добавить позиции →
+                </a>
+              )}
             </TableCell>
           </TableRow>
         )}
