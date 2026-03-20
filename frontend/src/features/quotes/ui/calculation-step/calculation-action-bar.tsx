@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calculator, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { config } from "@/shared/config";
+
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -25,19 +25,15 @@ export function CalculationActionBar({
     setLoading(true);
     try {
       const body = new URLSearchParams(formValues).toString();
-      const res = await fetch(
-        `${config.legacyAppUrl}/quotes/${quoteId}/calculate`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          credentials: "include",
-          body,
-        }
-      );
+      const res = await fetch(`/proxy/calculate/${quoteId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `HTTP ${res.status}`);
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
 
       toast.success("Расчёт выполнен");

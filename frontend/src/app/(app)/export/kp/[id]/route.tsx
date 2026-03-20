@@ -91,13 +91,16 @@ export async function GET(
   // Build filename: KP_{customer}_{date}.pdf
   const customerName = (quote.customer_id ? quoteDetail.customer?.name : null)
     ?? "Client";
-  const safeName = customerName.replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, "_");
+  const asciiName = customerName.replace(/[^a-zA-Z0-9]/g, "_");
+  const utfName = customerName.replace(/[^\w\u0400-\u04FF]/g, "_");
   const dateStr = new Date().toISOString().split("T")[0];
+  const filename = `KP_${asciiName}_${dateStr}.pdf`;
+  const filenameUtf = `KP_${utfName}_${dateStr}.pdf`;
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="KP_${safeName}_${dateStr}.pdf"`,
+      "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filenameUtf)}`,
     },
   });
 }
