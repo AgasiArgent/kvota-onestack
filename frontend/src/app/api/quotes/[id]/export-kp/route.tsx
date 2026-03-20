@@ -5,9 +5,20 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { createClient } from "@/shared/lib/supabase/server";
 import { KPDocument } from "@/features/quotes/ui/pdf/kp-document";
 
-// Read logo at module level (cached across requests in the same process)
-const logoPath = path.join(process.cwd(), "public", "logo-master-bearing.png");
-const logoBase64 = `data:image/png;base64,${fs.readFileSync(logoPath).toString("base64")}`;
+// Lazy-load logo (avoid build-time fs.readFileSync which fails in Docker)
+let logoBase64Cache: string | null = null;
+function getLogoBase64(): string | null {
+  if (logoBase64Cache) return logoBase64Cache;
+  try {
+    const logoPath = path.join(process.cwd(), "public", "logo-master-bearing.png");
+    logoBase64Cache = `data:image/png;base64,${fs.readFileSync(logoPath).toString("base64")}`;
+    return logoBase64Cache;
+  } catch {
+    return null;
+  }
+}
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   _req: Request,
@@ -74,7 +85,7 @@ export async function GET(
   const items = itemsRes.data ?? [];
 
   const buffer = await renderToBuffer(
-    <KPDocument quote={quoteDetail} items={items} logoBase64={logoBase64} />
+    <KPDocument quote={quoteDetail} items={items} logoBase64={getLogoBase64() ?? ""} />
   );
 
   // Build filename: KP_{customer}_{date}.pdf
