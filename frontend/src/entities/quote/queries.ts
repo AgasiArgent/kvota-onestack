@@ -159,6 +159,185 @@ export async function fetchQuotesList(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Quote Detail queries (for quote detail page migration)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Inferred return types for query functions (derived from actual DB schema)
+// ---------------------------------------------------------------------------
+
+export type QuoteDetailRow = NonNullable<
+  Awaited<ReturnType<typeof fetchQuoteDetail>>
+>;
+export type QuoteItemRow = Awaited<
+  ReturnType<typeof fetchQuoteItems>
+>[number];
+export type QuoteInvoiceRow = Awaited<
+  ReturnType<typeof fetchQuoteInvoices>
+>[number];
+
+export async function fetchQuoteDetail(quoteId: string) {
+  const supabase = await createClient();
+
+  const { data: quote, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .single();
+
+  if (error || !quote) return null;
+
+  // Resolve FKs in parallel (same pattern as customer detail)
+  const [customerRes, contactRes, sellerRes, creatorRes] = await Promise.all([
+    quote.customer_id
+      ? supabase
+          .from("customers")
+          .select("id, name, inn")
+          .eq("id", quote.customer_id)
+          .single()
+      : null,
+    quote.contact_person_id
+      ? supabase
+          .from("customer_contacts")
+          .select("id, name, phone, email")
+          .eq("id", quote.contact_person_id)
+          .single()
+      : null,
+    quote.seller_company_id
+      ? supabase
+          .from("buyer_companies")
+          .select("id, name, company_code")
+          .eq("id", quote.seller_company_id)
+          .single()
+      : null,
+    quote.created_by
+      ? supabase
+          .from("user_profiles")
+          .select("user_id, full_name")
+          .eq("user_id", quote.created_by)
+          .single()
+      : null,
+  ]);
+
+  return {
+    ...quote,
+    customer: customerRes?.data ?? null,
+    contact_person: contactRes?.data ?? null,
+    seller_company: sellerRes?.data ?? null,
+    created_by_profile: creatorRes?.data
+      ? { id: creatorRes.data.user_id, full_name: creatorRes.data.full_name ?? "" }
+      : null,
+  };
+}
+
+export async function fetchQuoteItems(quoteId: string) {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("quote_items")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  return data ?? [];
+}
+
+export async function fetchQuoteInvoices(quoteId: string) {
+  const supabase = await createClient();
+
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  if (!invoices?.length) return [];
+
+  // Batch-resolve supplier + buyer FKs
+  const supplierIds = [
+    ...new Set(invoices.map((i) => i.supplier_id).filter(Boolean)),
+  ] as string[];
+  const buyerIds = [
+    ...new Set(invoices.map((i) => i.buyer_company_id).filter(Boolean)),
+  ] as string[];
+
+  const [suppliersRes, buyersRes] = await Promise.all([
+    supplierIds.length
+      ? supabase.from("suppliers").select("id, name").in("id", supplierIds)
+      : null,
+    buyerIds.length
+      ? supabase
+          .from("buyer_companies")
+          .select("id, name, company_code")
+          .in("id", buyerIds)
+      : null,
+  ]);
+
+  const supplierMap = new Map(
+    (suppliersRes?.data ?? []).map((s) => [s.id, s])
+  );
+  const buyerMap = new Map((buyersRes?.data ?? []).map((b) => [b.id, b]));
+
+  return invoices.map((inv) => ({
+    ...inv,
+    supplier:
+      (inv.supplier_id && supplierMap.get(inv.supplier_id)) || null,
+    buyer_company:
+      (inv.buyer_company_id && buyerMap.get(inv.buyer_company_id)) || null,
+  }));
+}
+
+export async function fetchQuoteComments(quoteId: string) {
+  const supabase = await createClient();
+
+  const { data: comments } = await supabase
+    .from("quote_comments")
+    .select("*")
+    .eq("quote_id", quoteId)
+    .order("created_at", { ascending: true });
+
+  if (!comments?.length) return [];
+
+  // Batch-resolve user profiles + role slugs
+  const userIds = [...new Set(comments.map((c) => c.user_id))];
+
+  const [profilesRes, membersRes] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("user_id, full_name")
+      .in("user_id", userIds),
+    supabase
+      .from("organization_members")
+      .select("user_id, roles!inner(slug)")
+      .in("user_id", userIds),
+  ]);
+
+  const profileMap = new Map(
+    (profilesRes.data ?? []).map((p) => [p.user_id, p])
+  );
+  const roleMap = new Map(
+    (membersRes.data ?? []).map((m) => [
+      m.user_id,
+      (m.roles as unknown as { slug: string })?.slug ?? "unknown",
+    ])
+  );
+
+  return comments.map((c) => {
+    const profile = profileMap.get(c.user_id);
+    return {
+      ...c,
+      user_profile: profile
+        ? {
+            id: profile.user_id,
+            full_name: profile.full_name ?? "",
+            role_slug: roleMap.get(c.user_id) ?? "unknown",
+          }
+        : null,
+    };
+  });
+}
+
 export async function fetchFilterOptions(
   orgId: string,
   user?: { id: string; roles: string[] }

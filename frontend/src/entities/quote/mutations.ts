@@ -124,3 +124,61 @@ export async function fetchSellerCompanies(
     name: row.name,
   }));
 }
+
+// ---------------------------------------------------------------------------
+// Quote Detail mutations (for quote detail page migration)
+// ---------------------------------------------------------------------------
+
+export async function sendQuoteComment(
+  quoteId: string,
+  userId: string,
+  body: string,
+  mentions?: string[]
+) {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("quote_comments")
+    .insert({
+      quote_id: quoteId,
+      user_id: userId,
+      body,
+      mentions: mentions ?? [],
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateQuoteItem(
+  itemId: string,
+  updates: Record<string, unknown>
+) {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("quote_items")
+    .update(updates)
+    .eq("id", itemId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function assignItemsToInvoice(
+  itemIds: string[],
+  invoiceId: string
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quote_items")
+    .update({ invoice_id: invoiceId })
+    .in("id", itemIds);
+
+  if (error) throw error;
+}

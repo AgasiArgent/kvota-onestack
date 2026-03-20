@@ -119,3 +119,172 @@ export function getActionStatusesForUser(roles: string[]): string[] {
   }
   return Array.from(statuses);
 }
+
+// ---------------------------------------------------------------------------
+// Quote Detail types (for quote detail page migration)
+// ---------------------------------------------------------------------------
+
+export interface QuoteDetail {
+  id: string;
+  idn_quote: string;
+  workflow_status: string;
+  status: string;
+  customer_id: string;
+  contact_person_id: string | null;
+  seller_company_id: string | null;
+  currency_of_quote: string;
+  delivery_city: string | null;
+  delivery_method: string | null;
+  offer_incoterms: string | null;
+  payment_terms: string | null;
+  tender_type: string | null;
+  competitors: string | null;
+  cancellation_reason: string | null;
+  cancellation_comment: string | null;
+  total_amount: number | null;
+  margin_percent: number | null;
+  markup_percent: number | null;
+  profit_amount: number | null;
+  created_at: string;
+  updated_at: string | null;
+  created_by: string | null;
+  // FK resolved
+  customer?: { id: string; name: string; inn: string | null } | null;
+  contact_person?: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  seller_company?: {
+    id: string;
+    name: string;
+    company_code: string;
+  } | null;
+  created_by_profile?: { id: string; full_name: string } | null;
+}
+
+export interface QuoteItem {
+  id: string;
+  quote_id: string;
+  invoice_id: string | null;
+  brand: string | null;
+  sku: string | null;
+  supplier_sku: string | null;
+  supplier_sku_note: string | null;
+  product_name: string;
+  manufacturer_product_name: string | null;
+  quantity: number;
+  unit: string | null;
+  purchase_price_original: number | null;
+  purchase_currency: string | null;
+  sale_price: number | null;
+  weight_in_kg: number | null;
+  dimension_height_mm: number | null;
+  dimension_width_mm: number | null;
+  dimension_length_mm: number | null;
+  vat_rate: number | null;
+  price_includes_vat: boolean;
+  is_unavailable: boolean;
+  production_time_days: number | null;
+  procurement_status: string | null;
+  created_at: string;
+}
+
+export interface QuoteInvoice {
+  id: string;
+  quote_id: string;
+  invoice_number: string;
+  supplier_id: string | null;
+  buyer_company_id: string | null;
+  pickup_country: string | null;
+  pickup_city: string | null;
+  currency: string | null;
+  total_weight_kg: number | null;
+  total_volume_m3: number | null;
+  package_count: number | null;
+  status: string | null;
+  invoice_file_url: string | null;
+  created_at: string;
+  // FK resolved
+  supplier?: { id: string; name: string } | null;
+  buyer_company?: { id: string; name: string; company_code: string } | null;
+}
+
+export interface QuoteComment {
+  id: string;
+  quote_id: string;
+  user_id: string;
+  body: string;
+  mentions: string[] | null;
+  created_at: string;
+  // FK resolved
+  user_profile?: {
+    id: string;
+    full_name: string;
+    role_slug: string;
+  } | null;
+}
+
+export interface QuoteVersion {
+  id: string;
+  quote_id: string;
+  version: number;
+  status: string | null;
+  input_variables: Record<string, unknown>;
+  created_at: string;
+  created_by: string | null;
+}
+
+// Step type for the status rail
+export type QuoteStep =
+  | "sales"
+  | "procurement"
+  | "logistics"
+  | "customs"
+  | "control"
+  | "cost-analysis";
+
+// Role to allowed steps mapping
+export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
+  admin: [
+    "sales",
+    "procurement",
+    "logistics",
+    "customs",
+    "control",
+    "cost-analysis",
+  ],
+  sales: ["sales"],
+  head_of_sales: ["sales"],
+  procurement: ["procurement"],
+  head_of_procurement: ["procurement"],
+  logistics: ["logistics"],
+  head_of_logistics: ["logistics"],
+  customs: ["customs"],
+  quote_controller: ["control", "cost-analysis"],
+  spec_controller: ["control", "cost-analysis"],
+  finance: ["cost-analysis"],
+  top_manager: [
+    "sales",
+    "procurement",
+    "logistics",
+    "customs",
+    "control",
+    "cost-analysis",
+  ],
+};
+
+// Workflow status to step mapping (for rail highlighting)
+export const STATUS_TO_STEP: Record<string, QuoteStep> = {
+  draft: "sales",
+  pending_procurement: "procurement",
+  procurement_complete: "control",
+  pending_calculation: "control",
+  calculated: "control",
+  pending_approval: "control",
+  approved: "sales",
+  sent_to_client: "sales",
+  accepted: "sales",
+  rejected: "sales",
+};
