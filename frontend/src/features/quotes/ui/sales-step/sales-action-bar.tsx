@@ -1,6 +1,16 @@
 "use client";
 
-import { Calculator, FileDown, ChevronDown, ArrowRight, Send } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Calculator,
+  FileDown,
+  ChevronDown,
+  ArrowRight,
+  Send,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { config } from "@/shared/config";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 
 export type ClientResponseModal =
@@ -24,22 +35,44 @@ interface SalesActionBarProps {
 }
 
 export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
+  const router = useRouter();
   const status = quote.workflow_status ?? "draft";
+  const [loading, setLoading] = useState<string | null>(null);
 
   function handleSubmitToProcurement() {
-    console.log("Submit to procurement:", quote.id);
+    // Procurement submission requires a checklist form — redirect to legacy page
+    window.location.href = `${config.legacyAppUrl}/quotes/${quote.id}`;
   }
 
   function handleCalculate() {
-    console.log("Calculate:", quote.id);
+    // Calculation requires a complex form with many parameters — redirect to legacy page
+    window.location.href = `${config.legacyAppUrl}/quotes/${quote.id}/calculate`;
   }
 
   function handleExportPdf() {
-    console.log("Export PDF:", quote.id);
+    window.open(
+      `${config.legacyAppUrl}/quotes/${quote.id}/export/specification`,
+      "_blank"
+    );
   }
 
-  function handleSendToClient() {
-    console.log("Send to client:", quote.id);
+  async function handleSendToClient() {
+    setLoading("send");
+    try {
+      const res = await fetch(
+        `${config.legacyAppUrl}/quotes/${quote.id}/send-to-client`,
+        { method: "POST", credentials: "include" }
+      );
+      if (!res.ok && res.status !== 303) {
+        throw new Error(`Failed: ${res.status}`);
+      }
+      toast.success("КП отправлено клиенту");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось отправить КП клиенту");
+    } finally {
+      setLoading(null);
+    }
   }
 
   // Workflow-aware action bar: only show relevant actions per status
@@ -87,8 +120,13 @@ export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
             size="sm"
             className="bg-accent text-white hover:bg-accent-hover"
             onClick={handleSendToClient}
+            disabled={loading === "send"}
           >
-            <Send size={14} />
+            {loading === "send" ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Send size={14} />
+            )}
             Отправить клиенту
           </Button>
         </>

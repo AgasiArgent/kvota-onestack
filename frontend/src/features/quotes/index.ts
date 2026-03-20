@@ -4,3 +4,8 @@ export { StatusGroupFilter } from "./ui/status-group-filter";
 export { QuoteStepContent } from "./ui/quote-step-content";
 export { QuoteStickyHeader } from "./ui/quote-sticky-header";
 export { QuoteStatusRail } from "./ui/quote-status-rail";
+export { ChatWrapper } from "./ui/chat-panel/chat-wrapper";
+export { ChatPanel } from "./ui/chat-panel/chat-panel";
+export { ChatFab } from "./ui/chat-panel/chat-fab";
+export { ChatMessage } from "./ui/chat-panel/chat-message";
+export { ChatInput } from "./ui/chat-panel/chat-input";

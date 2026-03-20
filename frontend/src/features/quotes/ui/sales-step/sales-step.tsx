@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Toaster } from "sonner";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { SalesActionBar } from "./sales-action-bar";
 import type { ClientResponseModal } from "./sales-action-bar";
@@ -36,6 +37,7 @@ export function SalesStep({ quote, items }: SalesStepProps) {
         activeModal={activeModal}
         onClose={() => setActiveModal(null)}
       />
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

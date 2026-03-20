@@ -7,6 +7,8 @@ import type {
 } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
 import { SalesStep } from "./sales-step/sales-step";
+import { ProcurementStep } from "./procurement-step/procurement-step";
+import { LogisticsStep } from "./logistics-step/logistics-step";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -19,6 +21,7 @@ interface QuoteStepContentProps {
 export function QuoteStepContent({
   quote,
   items,
+  invoices,
   activeStep,
   userRoles,
 }: QuoteStepContentProps) {
@@ -27,15 +30,21 @@ export function QuoteStepContent({
       return <SalesStep quote={quote} items={items} userRoles={userRoles} />;
     case "procurement":
       return (
-        <div className="flex-1 p-6 text-sm text-muted-foreground">
-          Закупки &mdash; Phase 2
-        </div>
+        <ProcurementStep
+          quote={quote}
+          items={items}
+          invoices={invoices}
+          userRoles={userRoles}
+        />
       );
     case "logistics":
       return (
-        <div className="flex-1 p-6 text-sm text-muted-foreground">
-          Логистика &mdash; Phase 3
-        </div>
+        <LogisticsStep
+          quote={quote}
+          items={items}
+          invoices={invoices}
+          userRoles={userRoles}
+        />
       );
     case "customs":
       return (

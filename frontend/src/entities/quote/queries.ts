@@ -327,6 +327,7 @@ export async function fetchQuoteComments(quoteId: string) {
     const profile = profileMap.get(c.user_id);
     return {
       ...c,
+      mentions: (c.mentions ?? null) as string[] | null,
       user_profile: profile
         ? {
             id: profile.user_id,

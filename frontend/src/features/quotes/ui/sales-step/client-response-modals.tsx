@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -11,19 +14,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { config } from "@/shared/config";
 import type { ClientResponseModal } from "./sales-action-bar";
 
+// Match Python backend change_type values (see /quotes/{id}/client-change-request)
 const CHANGE_TYPES = [
-  { value: "change_quantity", label: "Изменить количество" },
-  { value: "change_items", label: "Изменить позиции" },
-  { value: "request_discount", label: "Запросить скидку" },
+  { value: "add_item", label: "Добавить/изменить позицию" },
+  { value: "logistics", label: "Изменить логистику" },
+  { value: "price", label: "Изменить цену/скидку" },
+  { value: "full", label: "Полный пересчёт" },
 ] as const;
 
+// Match Python backend rejection_reason values (see /quotes/{id}/client-rejected)
 const DECLINE_REASONS = [
-  { value: "price_higher", label: "Цена выше конкурентов" },
-  { value: "deadlines", label: "Сроки не устраивают" },
-  { value: "lost_tender", label: "Проиграли тендер" },
-  { value: "client_cancelled", label: "Клиент отменил закупку" },
+  { value: "price_too_high", label: "Цена слишком высокая" },
+  { value: "delivery_time", label: "Сроки не устраивают" },
+  { value: "competitor", label: "Выбрали другого поставщика" },
+  { value: "project_cancelled", label: "Проект отменён / заморожен" },
+  { value: "no_budget", label: "Нет бюджета" },
+  { value: "requirements_changed", label: "Изменились требования" },
   { value: "other", label: "Другое" },
 ] as const;
 
@@ -68,6 +77,20 @@ export function ClientResponseModals({
   );
 }
 
+/** POST form data to a legacy Python endpoint. */
+async function postLegacyForm(
+  path: string,
+  data: Record<string, string>
+): Promise<Response> {
+  const body = new URLSearchParams(data);
+  return fetch(`${config.legacyAppUrl}${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Accept Modal
 // ---------------------------------------------------------------------------
@@ -83,9 +106,27 @@ function AcceptModal({
   quoteId: string;
   idnQuote: string;
 }) {
-  function handleConfirm() {
-    console.log("Accept quote:", quoteId);
-    onClose();
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await postLegacyForm(
+        `/quotes/${quoteId}/submit-spec-control`,
+        {}
+      );
+      if (!res.ok && res.status !== 303) {
+        throw new Error(`Failed: ${res.status}`);
+      }
+      toast.success("КП принято клиентом");
+      onClose();
+      router.refresh();
+    } catch {
+      toast.error("Не удалось обновить статус");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -98,13 +139,15 @@ function AcceptModal({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Отмена
           </Button>
           <Button
             className="bg-success text-white hover:bg-success/90"
             onClick={handleConfirm}
+            disabled={submitting}
           >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             Подтвердить
           </Button>
         </DialogFooter>
@@ -126,14 +169,34 @@ function ChangesModal({
   onClose: () => void;
   quoteId: string;
 }) {
+  const router = useRouter();
   const [changeType, setChangeType] = useState<string>("");
   const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleConfirm() {
-    console.log("Changes requested:", { quoteId, changeType, comment });
-    setChangeType("");
-    setComment("");
-    onClose();
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await postLegacyForm(
+        `/quotes/${quoteId}/client-change-request`,
+        {
+          change_type: changeType,
+          client_comment: comment,
+        }
+      );
+      if (!res.ok && res.status !== 303) {
+        throw new Error(`Failed: ${res.status}`);
+      }
+      toast.success("Запрос на изменения отправлен");
+      setChangeType("");
+      setComment("");
+      onClose();
+      router.refresh();
+    } catch {
+      toast.error("Не удалось отправить запрос");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleClose() {
@@ -185,14 +248,15 @@ function ChangesModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Отмена
           </Button>
           <Button
             className="bg-accent text-white hover:bg-accent-hover"
             onClick={handleConfirm}
-            disabled={!changeType}
+            disabled={!changeType || submitting}
           >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             Отправить
           </Button>
         </DialogFooter>
@@ -214,14 +278,34 @@ function DeclineModal({
   onClose: () => void;
   quoteId: string;
 }) {
+  const router = useRouter();
   const [reason, setReason] = useState<string>("");
   const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleConfirm() {
-    console.log("Quote declined:", { quoteId, reason, comment });
-    setReason("");
-    setComment("");
-    onClose();
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await postLegacyForm(
+        `/quotes/${quoteId}/client-rejected`,
+        {
+          rejection_reason: reason,
+          rejection_comment: comment,
+        }
+      );
+      if (!res.ok && res.status !== 303) {
+        throw new Error(`Failed: ${res.status}`);
+      }
+      toast.success("КП отмечена как отклонённая");
+      setReason("");
+      setComment("");
+      onClose();
+      router.refresh();
+    } catch {
+      toast.error("Не удалось обновить статус");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleClose() {
@@ -271,14 +355,15 @@ function DeclineModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Отмена
           </Button>
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            disabled={!reason}
+            disabled={!reason || submitting}
           >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             Подтвердить отказ
           </Button>
         </DialogFooter>
@@ -302,9 +387,30 @@ function CancelModal({
   quoteId: string;
   idnQuote: string;
 }) {
-  function handleConfirm() {
-    console.log("Cancel quote:", quoteId);
-    onClose();
+  const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    setSubmitting(true);
+    try {
+      const res = await fetch(
+        `${config.legacyAppUrl}/quotes/${quoteId}/cancel`,
+        { method: "POST", credentials: "include" }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? `Failed: ${res.status}`);
+      }
+      toast.success("КП отменена");
+      onClose();
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось отменить КП"
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -317,10 +423,15 @@ function CancelModal({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={submitting}>
             Отмена
           </Button>
-          <Button variant="destructive" onClick={handleConfirm}>
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            disabled={submitting}
+          >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             Отменить КП
           </Button>
         </DialogFooter>

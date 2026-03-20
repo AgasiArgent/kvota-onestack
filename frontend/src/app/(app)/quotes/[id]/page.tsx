@@ -4,6 +4,7 @@ import {
   fetchQuoteDetail,
   fetchQuoteItems,
   fetchQuoteInvoices,
+  fetchQuoteComments,
   ROLE_ALLOWED_STEPS,
   STATUS_TO_STEP,
 } from "@/entities/quote";
@@ -11,6 +12,7 @@ import type { QuoteStep } from "@/entities/quote";
 import { QuoteStickyHeader } from "@/features/quotes/ui/quote-sticky-header";
 import { QuoteStatusRail } from "@/features/quotes/ui/quote-status-rail";
 import { QuoteStepContent } from "@/features/quotes/ui/quote-step-content";
+import { ChatWrapper } from "@/features/quotes/ui/chat-panel/chat-wrapper";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -32,10 +34,11 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [quote, items, invoices] = await Promise.all([
+  const [quote, items, invoices, comments] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
+    fetchQuoteComments(id),
   ]);
 
   if (!quote) notFound();
@@ -79,6 +82,12 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           workflowStatus={workflowStatus}
         />
       </div>
+      <ChatWrapper
+        quoteId={id}
+        idnQuote={quote.idn_quote}
+        userId={user.id}
+        initialComments={comments}
+      />
     </div>
   );
 }
