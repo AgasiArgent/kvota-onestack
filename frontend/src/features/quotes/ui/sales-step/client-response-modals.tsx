@@ -14,7 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { config } from "@/shared/config";
+import {
+  acceptQuote,
+  requestChanges,
+  rejectQuote,
+  cancelQuote,
+} from "@/entities/quote/mutations";
 import type { ClientResponseModal } from "./sales-action-bar";
 
 // Match Python backend change_type values (see /quotes/{id}/client-change-request)
@@ -77,20 +82,6 @@ export function ClientResponseModals({
   );
 }
 
-/** POST form data to a legacy Python endpoint. */
-async function postLegacyForm(
-  path: string,
-  data: Record<string, string>
-): Promise<Response> {
-  const body = new URLSearchParams(data);
-  return fetch(`${config.legacyAppUrl}${path}`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Accept Modal
 // ---------------------------------------------------------------------------
@@ -112,13 +103,7 @@ function AcceptModal({
   async function handleConfirm() {
     setSubmitting(true);
     try {
-      const res = await postLegacyForm(
-        `/quotes/${quoteId}/submit-spec-control`,
-        {}
-      );
-      if (!res.ok && res.status !== 303) {
-        throw new Error(`Failed: ${res.status}`);
-      }
+      await acceptQuote(quoteId);
       toast.success("КП принято клиентом");
       onClose();
       router.refresh();
@@ -177,16 +162,7 @@ function ChangesModal({
   async function handleConfirm() {
     setSubmitting(true);
     try {
-      const res = await postLegacyForm(
-        `/quotes/${quoteId}/client-change-request`,
-        {
-          change_type: changeType,
-          client_comment: comment,
-        }
-      );
-      if (!res.ok && res.status !== 303) {
-        throw new Error(`Failed: ${res.status}`);
-      }
+      await requestChanges(quoteId, changeType, comment);
       toast.success("Запрос на изменения отправлен");
       setChangeType("");
       setComment("");
@@ -286,16 +262,7 @@ function DeclineModal({
   async function handleConfirm() {
     setSubmitting(true);
     try {
-      const res = await postLegacyForm(
-        `/quotes/${quoteId}/client-rejected`,
-        {
-          rejection_reason: reason,
-          rejection_comment: comment,
-        }
-      );
-      if (!res.ok && res.status !== 303) {
-        throw new Error(`Failed: ${res.status}`);
-      }
+      await rejectQuote(quoteId, reason, comment);
       toast.success("КП отмечена как отклонённая");
       setReason("");
       setComment("");
@@ -393,14 +360,7 @@ function CancelModal({
   async function handleConfirm() {
     setSubmitting(true);
     try {
-      const res = await fetch(
-        `${config.legacyAppUrl}/quotes/${quoteId}/cancel`,
-        { method: "POST", credentials: "include" }
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? `Failed: ${res.status}`);
-      }
+      await cancelQuote(quoteId);
       toast.success("КП отменена");
       onClose();
       router.refresh();

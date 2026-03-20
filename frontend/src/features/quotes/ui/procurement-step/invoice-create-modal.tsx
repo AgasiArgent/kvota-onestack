@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  createInvoice,
+  assignItemsToInvoice,
+} from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
 const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
@@ -30,6 +37,8 @@ interface BuyerCompany {
 interface InvoiceCreateModalProps {
   open: boolean;
   onClose: () => void;
+  quoteId: string;
+  idnQuote: string;
   selectedItems: QuoteItemRow[];
   suppliers: Supplier[];
   buyerCompanies: BuyerCompany[];
@@ -38,16 +47,20 @@ interface InvoiceCreateModalProps {
 export function InvoiceCreateModal({
   open,
   onClose,
+  quoteId,
+  idnQuote,
   selectedItems,
   suppliers,
   buyerCompanies,
 }: InvoiceCreateModalProps) {
+  const router = useRouter();
   const [supplierId, setSupplierId] = useState("");
   const [buyerCompanyId, setBuyerCompanyId] = useState("");
   const [city, setCity] = useState("");
   const [currency, setCurrency] = useState<string>("USD");
   const [totalWeight, setTotalWeight] = useState("");
   const [totalVolume, setTotalVolume] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   function handleClose() {
     resetForm();
@@ -63,20 +76,38 @@ export function InvoiceCreateModal({
     setTotalVolume("");
   }
 
-  function handleSubmit() {
-    console.log("Create invoice:", {
-      supplierId,
-      buyerCompanyId,
-      city,
-      currency,
-      totalWeight: totalWeight ? parseFloat(totalWeight) : null,
-      totalVolume: totalVolume ? parseFloat(totalVolume) : null,
-      itemIds: selectedItems.map((i) => i.id),
-    });
-    handleClose();
+  async function handleSubmit() {
+    setSubmitting(true);
+    try {
+      const invoice = await createInvoice({
+        quote_id: quoteId,
+        idn_quote: idnQuote,
+        supplier_id: supplierId || undefined,
+        buyer_company_id: buyerCompanyId || undefined,
+        pickup_city: city || undefined,
+        currency,
+        total_weight_kg: totalWeight ? parseFloat(totalWeight) : undefined,
+        total_volume_m3: totalVolume ? parseFloat(totalVolume) : undefined,
+      });
+
+      if (selectedItems.length > 0) {
+        await assignItemsToInvoice(
+          selectedItems.map((i) => i.id),
+          invoice.id
+        );
+      }
+
+      toast.success("Инвойс создан");
+      handleClose();
+      router.refresh();
+    } catch {
+      toast.error("Не удалось создать инвойс");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
-  const canSubmit = supplierId !== "";
+  const canSubmit = supplierId !== "" && !submitting;
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
@@ -210,7 +241,7 @@ export function InvoiceCreateModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>
             Отмена
           </Button>
           <Button
@@ -218,6 +249,7 @@ export function InvoiceCreateModal({
             onClick={handleSubmit}
             disabled={!canSubmit}
           >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
             Создать
           </Button>
         </DialogFooter>

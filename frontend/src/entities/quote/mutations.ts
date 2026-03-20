@@ -182,3 +182,279 @@ export async function assignItemsToInvoice(
 
   if (error) throw error;
 }
+
+// ---------------------------------------------------------------------------
+// Quote Item CRUD
+// ---------------------------------------------------------------------------
+
+export async function createQuoteItem(
+  quoteId: string,
+  item: {
+    product_name: string;
+    brand?: string;
+    idn_sku?: string;
+    quantity: number;
+    unit?: string;
+  }
+) {
+  const supabase = createClient();
+
+  // Determine next position
+  const { data: existing } = await supabase
+    .from("quote_items")
+    .select("position")
+    .eq("quote_id", quoteId)
+    .order("position", { ascending: false })
+    .limit(1);
+
+  const nextPosition = (existing?.[0]?.position ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("quote_items")
+    .insert({
+      quote_id: quoteId,
+      product_name: item.product_name,
+      brand: item.brand || null,
+      idn_sku: item.idn_sku || null,
+      quantity: item.quantity,
+      unit: item.unit || null,
+      position: nextPosition,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteQuoteItem(itemId: string) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quote_items")
+    .delete()
+    .eq("id", itemId);
+
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Invoice CRUD
+// ---------------------------------------------------------------------------
+
+export async function createInvoice(data: {
+  quote_id: string;
+  idn_quote: string;
+  supplier_id?: string;
+  buyer_company_id?: string;
+  pickup_city?: string;
+  currency?: string;
+  total_weight_kg?: number;
+  total_volume_m3?: number;
+}) {
+  const supabase = createClient();
+
+  // Generate invoice number: INV-{idx}-{idn_quote}
+  const { count } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("quote_id", data.quote_id);
+
+  const idx = (count ?? 0) + 1;
+  const invoiceNumber = `INV-${String(idx).padStart(2, "0")}-${data.idn_quote}`;
+
+  const { data: invoice, error } = await supabase
+    .from("invoices")
+    .insert({
+      quote_id: data.quote_id,
+      invoice_number: invoiceNumber,
+      supplier_id: data.supplier_id || null,
+      buyer_company_id: data.buyer_company_id || null,
+      pickup_city: data.pickup_city || null,
+      currency: data.currency || "USD",
+      total_weight_kg: data.total_weight_kg ?? 0,
+      total_volume_m3: data.total_volume_m3 ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return invoice;
+}
+
+export async function updateInvoice(
+  invoiceId: string,
+  updates: Record<string, unknown>
+) {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("invoices")
+    .update(updates)
+    .eq("id", invoiceId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteInvoice(invoiceId: string) {
+  const supabase = createClient();
+
+  // Unassign items first
+  await supabase
+    .from("quote_items")
+    .update({ invoice_id: null })
+    .eq("invoice_id", invoiceId);
+
+  const { error } = await supabase
+    .from("invoices")
+    .delete()
+    .eq("id", invoiceId);
+
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Workflow status transitions
+// ---------------------------------------------------------------------------
+
+export async function updateQuoteWorkflowStatus(
+  quoteId: string,
+  status: string,
+  extras?: Record<string, unknown>
+) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quotes")
+    .update({ workflow_status: status, ...extras })
+    .eq("id", quoteId);
+
+  if (error) throw error;
+}
+
+export async function submitToProcurement(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "pending_procurement");
+}
+
+export async function completeProcurement(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "procurement_complete", {
+    procurement_completed_at: new Date().toISOString(),
+  });
+}
+
+export async function completeLogistics(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "pending_customs", {
+    logistics_completed_at: new Date().toISOString(),
+  });
+}
+
+export async function sendToClient(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "sent_to_client", {
+    sent_at: new Date().toISOString(),
+  });
+}
+
+export async function acceptQuote(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "accepted");
+}
+
+export async function rejectQuote(
+  quoteId: string,
+  reason: string,
+  comment: string
+) {
+  return updateQuoteWorkflowStatus(quoteId, "rejected", {
+    rejection_reason: reason,
+    rejection_comment: comment,
+    rejected_at: new Date().toISOString(),
+  });
+}
+
+export async function cancelQuote(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "cancelled", {
+    cancellation_reason: "cancelled_by_user",
+  });
+}
+
+export async function requestChanges(
+  quoteId: string,
+  changeType: string,
+  comment: string
+) {
+  return updateQuoteWorkflowStatus(quoteId, "draft", {
+    revision_department: changeType,
+    revision_comment: comment,
+    revision_returned_at: new Date().toISOString(),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Logistics expenses CRUD
+// ---------------------------------------------------------------------------
+
+export async function createLogisticsExpense(data: {
+  invoice_id: string;
+  expense_type: string;
+  description?: string;
+  amount: number;
+  currency: string;
+}) {
+  const supabase = createClient();
+
+  const { data: expense, error } = await supabase
+    .from("logistics_additional_expenses")
+    .insert({
+      invoice_id: data.invoice_id,
+      expense_type: data.expense_type,
+      description: data.description || null,
+      amount: data.amount,
+      currency: data.currency,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return expense;
+}
+
+export async function updateLogisticsExpense(
+  expenseId: string,
+  updates: Record<string, unknown>
+) {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("logistics_additional_expenses")
+    .update(updates)
+    .eq("id", expenseId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteLogisticsExpense(expenseId: string) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("logistics_additional_expenses")
+    .delete()
+    .eq("id", expenseId);
+
+  if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Logistics route segment updates (on invoices table)
+// ---------------------------------------------------------------------------
+
+export async function updateInvoiceLogistics(
+  invoiceId: string,
+  updates: Record<string, unknown>
+) {
+  return updateInvoice(invoiceId, updates);
+}

@@ -1,6 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { updateInvoiceLogistics } from "@/entities/quote/mutations";
 import type { QuoteInvoiceRow } from "@/entities/quote/queries";
 
 const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
@@ -12,6 +15,8 @@ interface Segment {
   price: number | null;
   currency: string;
   days: number | null;
+  priceColumn: string;
+  currencyColumn: string;
 }
 
 function buildSegments(invoice: QuoteInvoiceRow, deliveryCity: string | null): Segment[] {
@@ -28,6 +33,8 @@ function buildSegments(invoice: QuoteInvoiceRow, deliveryCity: string | null): S
       price: invoice.logistics_supplier_to_hub ?? null,
       currency: invoice.logistics_supplier_to_hub_currency ?? "USD",
       days: null,
+      priceColumn: "logistics_supplier_to_hub",
+      currencyColumn: "logistics_supplier_to_hub_currency",
     },
     {
       key: "hub_to_customs",
@@ -36,6 +43,8 @@ function buildSegments(invoice: QuoteInvoiceRow, deliveryCity: string | null): S
       price: invoice.logistics_hub_to_customs ?? null,
       currency: invoice.logistics_hub_to_customs_currency ?? "USD",
       days: null,
+      priceColumn: "logistics_hub_to_customs",
+      currencyColumn: "logistics_hub_to_customs_currency",
     },
     {
       key: "customs_to_customer",
@@ -44,6 +53,8 @@ function buildSegments(invoice: QuoteInvoiceRow, deliveryCity: string | null): S
       price: invoice.logistics_customs_to_customer ?? null,
       currency: invoice.logistics_customs_to_customer_currency ?? "USD",
       days: null,
+      priceColumn: "logistics_customs_to_customer",
+      currencyColumn: "logistics_customs_to_customer_currency",
     },
   ];
 }
@@ -54,6 +65,7 @@ interface RouteSegmentsProps {
 }
 
 export function RouteSegments({ invoice, deliveryCity }: RouteSegmentsProps) {
+  const router = useRouter();
   const initial = buildSegments(invoice, deliveryCity);
   const [segments, setSegments] = useState<Segment[]>(initial);
 
@@ -77,9 +89,37 @@ export function RouteSegments({ invoice, deliveryCity }: RouteSegmentsProps) {
     });
   }
 
-  function handleBlur(index: number, field: keyof Segment) {
+  const saveToDb = useCallback(
+    async (seg: Segment, field: "price" | "currency" | "days") => {
+      const updates: Record<string, unknown> = {};
+
+      if (field === "price") {
+        updates[seg.priceColumn] = seg.price;
+      } else if (field === "currency") {
+        updates[seg.currencyColumn] = seg.currency;
+      } else if (field === "days") {
+        // Days are stored at the invoice level as logistics_total_days
+        // Recalculate total days from all segments
+        const totalDays = segments.reduce(
+          (sum, s) => sum + (s.days ?? 0),
+          0
+        );
+        updates.logistics_total_days = totalDays > 0 ? totalDays : null;
+      }
+
+      try {
+        await updateInvoiceLogistics(invoice.id, updates);
+        router.refresh();
+      } catch {
+        toast.error("Не удалось сохранить маршрут");
+      }
+    },
+    [invoice.id, segments, router]
+  );
+
+  function handleBlur(index: number, field: "price" | "currency" | "days") {
     const seg = segments[index];
-    console.log(`[logistics] segment ${seg.key}.${field} =`, seg[field], "invoice:", invoice.id);
+    saveToDb(seg, field);
   }
 
   return (
@@ -124,7 +164,12 @@ export function RouteSegments({ invoice, deliveryCity }: RouteSegmentsProps) {
                     value={seg.currency}
                     onChange={(e) => {
                       handleChange(idx, "currency", e.target.value);
-                      handleBlur(idx, "currency");
+                      // Save immediately on currency change (no blur needed for selects)
+                      const updated = [...segments];
+                      const s = { ...updated[idx], currency: e.target.value };
+                      updated[idx] = s;
+                      setSegments(updated);
+                      saveToDb(s, "currency");
                     }}
                   >
                     {CURRENCIES.map((c) => (

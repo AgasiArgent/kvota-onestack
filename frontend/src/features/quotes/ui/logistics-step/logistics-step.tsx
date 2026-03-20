@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { completeLogistics } from "@/entities/quote/mutations";
 import type {
   QuoteDetailRow,
   QuoteItemRow,
@@ -21,6 +24,9 @@ export function LogisticsStep({
   items,
   invoices,
 }: LogisticsStepProps) {
+  const router = useRouter();
+  const [completing, setCompleting] = useState(false);
+
   const invoiceItemsMap = useMemo(() => {
     const map = new Map<string, QuoteItemRow[]>();
     for (const item of items) {
@@ -35,8 +41,17 @@ export function LogisticsStep({
 
   const deliveryCity = quote.delivery_city ?? null;
 
-  function handleCompleteLogistics() {
-    console.log("Complete logistics for quote:", quote.id);
+  async function handleCompleteLogistics() {
+    setCompleting(true);
+    try {
+      await completeLogistics(quote.id);
+      toast.success("Логистика завершена");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось завершить логистику");
+    } finally {
+      setCompleting(false);
+    }
   }
 
   return (
@@ -44,6 +59,7 @@ export function LogisticsStep({
       <LogisticsActionBar
         invoices={invoices}
         onCompleteLogistics={handleCompleteLogistics}
+        completing={completing}
       />
 
       <div className="p-6 space-y-4">

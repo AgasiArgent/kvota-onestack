@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, CheckCircle } from "lucide-react";
+import { Plus, CheckCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
@@ -8,12 +8,14 @@ interface ProcurementActionBarProps {
   items: QuoteItemRow[];
   onCreateInvoice: () => void;
   onCompleteProcurement: () => void;
+  completing?: boolean;
 }
 
 export function ProcurementActionBar({
   items,
   onCreateInvoice,
   onCompleteProcurement,
+  completing = false,
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
   const assignedCount = items.filter((i) => i.invoice_id != null).length;
@@ -37,10 +39,14 @@ export function ProcurementActionBar({
       <Button
         size="sm"
         className="bg-success text-white hover:bg-success/90"
-        disabled={!allPriced}
+        disabled={!allPriced || completing}
         onClick={onCompleteProcurement}
       >
-        <CheckCircle size={14} />
+        {completing ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <CheckCircle size={14} />
+        )}
         Закупка завершена
       </Button>
 

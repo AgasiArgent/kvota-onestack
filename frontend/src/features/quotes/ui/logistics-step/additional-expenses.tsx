@@ -1,34 +1,78 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/shared/lib/supabase/client";
+import {
+  createLogisticsExpense,
+  updateLogisticsExpense,
+  deleteLogisticsExpense,
+} from "@/entities/quote/mutations";
 
 const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
 
 interface ExpenseRow {
   id: string;
   description: string;
+  expense_type: string;
   amount: number | null;
   currency: string;
+  isNew?: boolean;
 }
-
-function createId(): string {
-  return crypto.randomUUID();
-}
-
-const DEFAULT_EXPENSES: ExpenseRow[] = [
-  { id: createId(), description: "\u0421\u0412\u0425", amount: null, currency: "USD" },
-  { id: createId(), description: "\u0421\u0442\u0440\u0430\u0445\u043E\u0432\u043A\u0430", amount: null, currency: "USD" },
-];
 
 interface AdditionalExpensesProps {
   invoiceId: string;
 }
 
 export function AdditionalExpenses({ invoiceId }: AdditionalExpensesProps) {
-  const [expenses, setExpenses] = useState<ExpenseRow[]>(() =>
-    DEFAULT_EXPENSES.map((e) => ({ ...e, id: createId() }))
+  const router = useRouter();
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [adding, setAdding] = useState(false);
+
+  // Load existing expenses from DB
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("logistics_additional_expenses")
+      .select("id, expense_type, description, amount, currency")
+      .eq("invoice_id", invoiceId)
+      .order("created_at", { ascending: true })
+      .then(({ data }) => {
+        setExpenses(
+          (data ?? []).map((row) => ({
+            id: row.id,
+            description: row.description ?? "",
+            expense_type: row.expense_type,
+            amount: row.amount,
+            currency: row.currency,
+          }))
+        );
+        setLoaded(true);
+      });
+  }, [invoiceId]);
+
+  const saveField = useCallback(
+    async (expenseId: string, field: string, rawValue: string) => {
+      let value: unknown;
+      if (field === "amount") {
+        const parsed = parseFloat(rawValue);
+        value = isNaN(parsed) ? 0 : parsed;
+      } else {
+        value = rawValue;
+      }
+
+      try {
+        await updateLogisticsExpense(expenseId, { [field]: value });
+        router.refresh();
+      } catch {
+        toast.error("Не удалось сохранить расход");
+      }
+    },
+    [router]
   );
 
   function handleChange(id: string, field: keyof ExpenseRow, value: string) {
@@ -44,22 +88,62 @@ export function AdditionalExpenses({ invoiceId }: AdditionalExpensesProps) {
     );
   }
 
-  function handleBlur(id: string, field: keyof ExpenseRow) {
+  function handleBlur(id: string, field: string) {
     const exp = expenses.find((e) => e.id === id);
-    if (exp) {
-      console.log(`[logistics] expense ${field} =`, exp[field], "invoice:", invoiceId);
+    if (!exp || exp.isNew) return;
+
+    const rawValue =
+      field === "amount" ? String(exp.amount ?? 0) : String(exp[field as keyof ExpenseRow] ?? "");
+    saveField(id, field, rawValue);
+  }
+
+  async function handleAdd() {
+    setAdding(true);
+    try {
+      const expense = await createLogisticsExpense({
+        invoice_id: invoiceId,
+        expense_type: "other",
+        description: "",
+        amount: 0,
+        currency: "USD",
+      });
+
+      setExpenses((prev) => [
+        ...prev,
+        {
+          id: expense.id,
+          description: expense.description ?? "",
+          expense_type: expense.expense_type,
+          amount: expense.amount,
+          currency: expense.currency,
+        },
+      ]);
+      router.refresh();
+    } catch {
+      toast.error("Не удалось добавить расход");
+    } finally {
+      setAdding(false);
     }
   }
 
-  function handleAdd() {
-    setExpenses((prev) => [
-      ...prev,
-      { id: createId(), description: "", amount: null, currency: "USD" },
-    ]);
+  async function handleRemove(id: string) {
+    try {
+      await deleteLogisticsExpense(id);
+      setExpenses((prev) => prev.filter((e) => e.id !== id));
+      toast.success("Расход удалён");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось удалить расход");
+    }
   }
 
-  function handleRemove(id: string) {
-    setExpenses((prev) => prev.filter((e) => e.id !== id));
+  if (!loaded) {
+    return (
+      <div className="px-4 py-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 size={14} className="animate-spin" />
+        Загрузка расходов...
+      </div>
+    );
   }
 
   return (
@@ -111,7 +195,7 @@ export function AdditionalExpenses({ invoiceId }: AdditionalExpensesProps) {
                     value={exp.currency}
                     onChange={(e) => {
                       handleChange(exp.id, "currency", e.target.value);
-                      handleBlur(exp.id, "currency");
+                      saveField(exp.id, "currency", e.target.value);
                     }}
                   >
                     {CURRENCIES.map((c) => (
@@ -142,8 +226,13 @@ export function AdditionalExpenses({ invoiceId }: AdditionalExpensesProps) {
           size="sm"
           className="text-xs text-muted-foreground"
           onClick={handleAdd}
+          disabled={adding}
         >
-          <Plus size={14} />
+          {adding ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Plus size={14} />
+          )}
           Добавить расход
         </Button>
       </div>

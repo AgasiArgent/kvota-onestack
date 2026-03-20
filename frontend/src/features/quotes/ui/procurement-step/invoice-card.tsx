@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Paperclip } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -13,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { updateQuoteItem } from "@/entities/quote/mutations";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 
 // Columns from migration 188 (may not exist in DB types yet)
@@ -140,36 +143,13 @@ function ProcurementTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {items.map((item) => {
-          const extras = ext<ItemExtras>(item);
-          const hasMismatch =
-            item.supplier_sku != null &&
-            item.idn_sku != null &&
-            item.supplier_sku !== item.idn_sku;
-
-          const dimensions = formatDimensions(
-            extras.dimension_height_mm,
-            extras.dimension_width_mm,
-            extras.dimension_length_mm
-          );
-
-          const readiness = formatReadiness(item.production_time_days);
-          const vatRate = extras.vat_rate;
-          const skuNote = extras.supplier_sku_note;
-
-          return (
-            <MismatchRow
-              key={item.id}
-              item={item}
-              hasMismatch={hasMismatch}
-              dimensions={dimensions}
-              readiness={readiness}
-              vatRate={vatRate}
-              skuNote={skuNote}
-              invoiceNumber={invoiceNumber}
-            />
-          );
-        })}
+        {items.map((item) => (
+          <EditableRow
+            key={item.id}
+            item={item}
+            invoiceNumber={invoiceNumber}
+          />
+        ))}
 
         {items.length === 0 && (
           <TableRow>
@@ -183,23 +163,60 @@ function ProcurementTable({
   );
 }
 
-function MismatchRow({
+function EditableRow({
   item,
-  hasMismatch,
-  dimensions,
-  readiness,
-  vatRate,
-  skuNote,
   invoiceNumber,
 }: {
   item: QuoteItemRow;
-  hasMismatch: boolean;
-  dimensions: string;
-  readiness: string;
-  vatRate: number | null | undefined;
-  skuNote: string | null | undefined;
   invoiceNumber: string;
 }) {
+  const router = useRouter();
+  const extras = ext<ItemExtras>(item);
+  const hasMismatch =
+    item.supplier_sku != null &&
+    item.idn_sku != null &&
+    item.supplier_sku !== item.idn_sku;
+
+  const dimensions = formatDimensions(
+    extras.dimension_height_mm,
+    extras.dimension_width_mm,
+    extras.dimension_length_mm
+  );
+  const readiness = formatReadiness(item.production_time_days);
+  const vatRate = extras.vat_rate;
+  const skuNote = extras.supplier_sku_note;
+
+  // Local state for editable fields (optimistic)
+  const [price, setPrice] = useState(
+    item.purchase_price_original != null
+      ? String(item.purchase_price_original)
+      : ""
+  );
+  const [weight, setWeight] = useState(
+    item.weight_in_kg != null ? String(item.weight_in_kg) : ""
+  );
+  const [supplierSku, setSupplierSku] = useState(item.supplier_sku ?? "");
+
+  const saveField = useCallback(
+    async (field: string, rawValue: string) => {
+      let value: unknown;
+      if (field === "purchase_price_original" || field === "weight_in_kg") {
+        const parsed = parseFloat(rawValue);
+        value = isNaN(parsed) ? null : parsed;
+      } else {
+        value = rawValue || null;
+      }
+
+      try {
+        await updateQuoteItem(item.id, { [field]: value });
+        router.refresh();
+      } catch {
+        toast.error("Не удалось сохранить изменение");
+      }
+    },
+    [item.id, router]
+  );
+
   return (
     <>
       <TableRow
@@ -211,8 +228,15 @@ function MismatchRow({
         <TableCell className="truncate max-w-28 font-mono text-xs">
           {item.idn_sku ?? "\u2014"}
         </TableCell>
-        <TableCell className="truncate max-w-28 font-mono text-xs">
-          {item.supplier_sku ?? "\u2014"}
+        <TableCell className="max-w-28">
+          <input
+            type="text"
+            className="w-full h-7 px-1 font-mono text-xs border border-transparent rounded bg-transparent hover:border-border focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/50"
+            value={supplierSku}
+            onChange={(e) => setSupplierSku(e.target.value)}
+            onBlur={() => saveField("supplier_sku", supplierSku)}
+            placeholder="\u2014"
+          />
         </TableCell>
         <TableCell className="truncate max-w-48">
           {item.product_name}
@@ -220,19 +244,31 @@ function MismatchRow({
         <TableCell className="text-right font-mono">
           {qtyFmt.format(item.quantity)}
         </TableCell>
-        <TableCell className="text-right font-mono">
-          {item.purchase_price_original != null
-            ? numberFmt.format(item.purchase_price_original)
-            : "\u2014"}
+        <TableCell>
+          <input
+            type="number"
+            step="0.01"
+            className="w-full h-7 px-1 text-right font-mono text-sm border border-transparent rounded bg-transparent hover:border-border focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            onBlur={() => saveField("purchase_price_original", price)}
+            placeholder="0.00"
+          />
         </TableCell>
         <TableCell className="text-xs">
           {item.purchase_currency ?? "\u2014"}
         </TableCell>
         <TableCell>{readiness}</TableCell>
-        <TableCell className="text-right font-mono">
-          {item.weight_in_kg != null
-            ? numberFmt.format(item.weight_in_kg)
-            : "\u2014"}
+        <TableCell>
+          <input
+            type="number"
+            step="0.01"
+            className="w-full h-7 px-1 text-right font-mono text-sm border border-transparent rounded bg-transparent hover:border-border focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            onBlur={() => saveField("weight_in_kg", weight)}
+            placeholder="0.00"
+          />
         </TableCell>
         <TableCell className="text-xs font-mono">{dimensions}</TableCell>
         <TableCell className="text-right font-mono">

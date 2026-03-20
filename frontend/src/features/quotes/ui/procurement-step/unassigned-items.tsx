@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Plus, ArrowRight, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, ArrowRight, ChevronDown, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { assignItemsToInvoice } from "@/entities/quote/mutations";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 
 const qtyFmt = new Intl.NumberFormat("ru-RU", {
@@ -29,15 +32,19 @@ const qtyFmt = new Intl.NumberFormat("ru-RU", {
 interface UnassignedItemsProps {
   items: QuoteItemRow[];
   invoices: QuoteInvoiceRow[];
+  onCreateInvoiceWithItems?: (itemIds: string[]) => void;
 }
 
-export function UnassignedItems({ items, invoices }: UnassignedItemsProps) {
+export function UnassignedItems({
+  items,
+  invoices,
+  onCreateInvoiceWithItems,
+}: UnassignedItemsProps) {
+  const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [assigning, setAssigning] = useState(false);
 
-  const unassigned = useMemo(
-    () => items.filter((i) => i.invoice_id == null),
-    [items]
-  );
+  const unassigned = items.filter((i) => i.invoice_id == null);
 
   if (unassigned.length === 0) return null;
 
@@ -65,18 +72,21 @@ export function UnassignedItems({ items, invoices }: UnassignedItemsProps) {
   }
 
   function handleCreateWithSelected() {
-    console.log(
-      "Create invoice with items:",
-      Array.from(selectedIds)
-    );
+    onCreateInvoiceWithItems?.(Array.from(selectedIds));
   }
 
-  function handleAssignToInvoice(invoiceId: string) {
-    console.log(
-      "Assign items to invoice:",
-      invoiceId,
-      Array.from(selectedIds)
-    );
+  async function handleAssignToInvoice(invoiceId: string) {
+    setAssigning(true);
+    try {
+      await assignItemsToInvoice(Array.from(selectedIds), invoiceId);
+      toast.success(`${selectedIds.size} поз. назначено в инвойс`);
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch {
+      toast.error("Не удалось назначить позиции");
+    } finally {
+      setAssigning(false);
+    }
   }
 
   const hasSelection = selectedIds.size > 0;
@@ -142,6 +152,7 @@ export function UnassignedItems({ items, invoices }: UnassignedItemsProps) {
             size="sm"
             className="bg-accent text-white hover:bg-accent-hover"
             onClick={handleCreateWithSelected}
+            disabled={assigning}
           >
             <Plus size={14} />
             Создать инвойс с выбранными
@@ -151,8 +162,12 @@ export function UnassignedItems({ items, invoices }: UnassignedItemsProps) {
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="sm" variant="outline">
-                    <ArrowRight size={14} />
+                  <Button size="sm" variant="outline" disabled={assigning}>
+                    {assigning ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <ArrowRight size={14} />
+                    )}
                     Назначить в инвойс
                     <ChevronDown size={14} />
                   </Button>

@@ -1,6 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { createClient } from "@/shared/lib/supabase/client";
+import { completeProcurement } from "@/entities/quote/mutations";
 import type {
   QuoteDetailRow,
   QuoteItemRow,
@@ -11,6 +15,17 @@ import { UnassignedItems } from "./unassigned-items";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
 
+interface Supplier {
+  id: string;
+  name: string;
+}
+
+interface BuyerCompany {
+  id: string;
+  name: string;
+  company_code: string;
+}
+
 interface ProcurementStepProps {
   quote: QuoteDetailRow;
   items: QuoteItemRow[];
@@ -19,10 +34,35 @@ interface ProcurementStepProps {
 }
 
 export function ProcurementStep({
+  quote,
   items,
   invoices,
 }: ProcurementStepProps) {
+  const router = useRouter();
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [preselectedItemIds, setPreselectedItemIds] = useState<string[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [buyerCompanies, setBuyerCompanies] = useState<BuyerCompany[]>([]);
+  const [completing, setCompleting] = useState(false);
+
+  // Load suppliers and buyer companies for the invoice creation modal
+  useEffect(() => {
+    const supabase = createClient();
+
+    supabase
+      .from("suppliers")
+      .select("id, name")
+      .eq("organization_id", quote.organization_id)
+      .order("name")
+      .then(({ data }) => setSuppliers(data ?? []));
+
+    supabase
+      .from("buyer_companies")
+      .select("id, name, company_code")
+      .eq("organization_id", quote.organization_id)
+      .order("name")
+      .then(({ data }) => setBuyerCompanies(data ?? []));
+  }, [quote.organization_id]);
 
   const invoiceItemsMap = useMemo(() => {
     const map = new Map<string, QuoteItemRow[]>();
@@ -37,12 +77,31 @@ export function ProcurementStep({
   }, [items]);
 
   function handleCreateInvoice() {
+    setPreselectedItemIds([]);
     setCreateModalOpen(true);
   }
 
-  function handleCompleteProcurement() {
-    console.log("Complete procurement");
+  function handleCreateInvoiceWithItems(itemIds: string[]) {
+    setPreselectedItemIds(itemIds);
+    setCreateModalOpen(true);
   }
+
+  async function handleCompleteProcurement() {
+    setCompleting(true);
+    try {
+      await completeProcurement(quote.id);
+      toast.success("Закупка завершена");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось завершить закупку");
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  const preselectedItems = items.filter((i) =>
+    preselectedItemIds.includes(i.id)
+  );
 
   return (
     <div className="flex-1 min-w-0">
@@ -50,10 +109,15 @@ export function ProcurementStep({
         items={items}
         onCreateInvoice={handleCreateInvoice}
         onCompleteProcurement={handleCompleteProcurement}
+        completing={completing}
       />
 
       <div className="p-6 space-y-4">
-        <UnassignedItems items={items} invoices={invoices} />
+        <UnassignedItems
+          items={items}
+          invoices={invoices}
+          onCreateInvoiceWithItems={handleCreateInvoiceWithItems}
+        />
 
         {invoices.map((invoice, idx) => (
           <InvoiceCard
@@ -74,9 +138,11 @@ export function ProcurementStep({
       <InvoiceCreateModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        selectedItems={[]}
-        suppliers={[]}
-        buyerCompanies={[]}
+        quoteId={quote.id}
+        idnQuote={quote.idn_quote}
+        selectedItems={preselectedItems}
+        suppliers={suppliers}
+        buyerCompanies={buyerCompanies}
       />
     </div>
   );

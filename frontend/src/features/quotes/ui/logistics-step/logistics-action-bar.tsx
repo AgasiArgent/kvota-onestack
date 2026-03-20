@@ -1,17 +1,19 @@
 "use client";
 
-import { CheckCircle } from "lucide-react";
+import { CheckCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { QuoteInvoiceRow } from "@/entities/quote/queries";
 
 interface LogisticsActionBarProps {
   invoices: QuoteInvoiceRow[];
   onCompleteLogistics: () => void;
+  completing?: boolean;
 }
 
 export function LogisticsActionBar({
   invoices,
   onCompleteLogistics,
+  completing = false,
 }: LogisticsActionBarProps) {
   const totalInvoices = invoices.length;
   const routedCount = invoices.filter(
@@ -28,10 +30,14 @@ export function LogisticsActionBar({
       <Button
         size="sm"
         className="bg-success text-white hover:bg-success/90"
-        disabled={!allRouted}
+        disabled={!allRouted || completing}
         onClick={onCompleteLogistics}
       >
-        <CheckCircle size={14} />
+        {completing ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <CheckCircle size={14} />
+        )}
         Логистика завершена
       </Button>
 
