@@ -1308,6 +1308,39 @@ export type Database = {
         }
         Relationships: []
       }
+      logistics_additional_expenses: {
+        Row: {
+          id: string
+          invoice_id: string
+          expense_type: string
+          description: string | null
+          amount: number
+          currency: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          expense_type: string
+          description?: string | null
+          amount?: number
+          currency?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          expense_type?: string
+          description?: string | null
+          amount?: number
+          currency?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       logistics_stages: {
         Row: {
           id: string
@@ -1558,6 +1591,7 @@ export type Database = {
           joined_at: string | null
           created_at: string | null
           updated_at: string | null
+          supervisor_id: string | null
         }
         Insert: {
           id?: string
@@ -1571,6 +1605,7 @@ export type Database = {
           joined_at?: string | null
           created_at?: string | null
           updated_at?: string | null
+          supervisor_id?: string | null
         }
         Update: {
           id?: string
@@ -1584,6 +1619,7 @@ export type Database = {
           joined_at?: string | null
           created_at?: string | null
           updated_at?: string | null
+          supervisor_id?: string | null
         }
         Relationships: []
       }
@@ -3084,6 +3120,12 @@ export type Database = {
           weight_kg: number | null
           customs_duty_percent: number | null
           customs_extra_cost: number | null
+          supplier_sku_note: string | null
+          manufacturer_product_name: string | null
+          dimension_height_mm: number | null
+          dimension_width_mm: number | null
+          dimension_length_mm: number | null
+          vat_rate: number | null
         }
         Insert: {
           id?: string
@@ -3153,6 +3195,12 @@ export type Database = {
           weight_kg?: number | null
           customs_duty_percent?: number | null
           customs_extra_cost?: number | null
+          supplier_sku_note?: string | null
+          manufacturer_product_name?: string | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          vat_rate?: number | null
         }
         Update: {
           id?: string
@@ -3222,6 +3270,12 @@ export type Database = {
           weight_kg?: number | null
           customs_duty_percent?: number | null
           customs_extra_cost?: number | null
+          supplier_sku_note?: string | null
+          manufacturer_product_name?: string | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          vat_rate?: number | null
         }
         Relationships: []
       }
@@ -3490,6 +3544,10 @@ export type Database = {
           cogs_quote_currency: number | null
           revenue_no_vat_quote_currency: number | null
           idn: string | null
+          tender_type: string | null
+          competitors: string | null
+          cancellation_reason: string | null
+          cancellation_comment: string | null
         }
         Insert: {
           id?: string
@@ -3602,6 +3660,10 @@ export type Database = {
           cogs_quote_currency?: number | null
           revenue_no_vat_quote_currency?: number | null
           idn?: string | null
+          tender_type?: string | null
+          competitors?: string | null
+          cancellation_reason?: string | null
+          cancellation_comment?: string | null
         }
         Update: {
           id?: string
@@ -3714,6 +3776,10 @@ export type Database = {
           cogs_quote_currency?: number | null
           revenue_no_vat_quote_currency?: number | null
           idn?: string | null
+          tender_type?: string | null
+          competitors?: string | null
+          cancellation_reason?: string | null
+          cancellation_comment?: string | null
         }
         Relationships: []
       }
@@ -4500,6 +4566,36 @@ export type Database = {
           verification_code_expires_at?: string | null
           created_at?: string | null
           verified_at?: string | null
+        }
+        Relationships: []
+      }
+      tender_routing_chain: {
+        Row: {
+          id: string
+          organization_id: string
+          step_order: number
+          user_id: string
+          role_label: string
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          step_order: number
+          user_id: string
+          role_label: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          step_order?: number
+          user_id?: string
+          role_label?: string
+          created_at?: string
+          created_by?: string | null
         }
         Relationships: []
       }
