@@ -87,6 +87,28 @@ export function Sidebar({
     setMobileOpen(false);
   }, [pathname]);
 
+  // Listen for force-collapse events (e.g., from quote detail page)
+  useEffect(() => {
+    function handleForceCollapse(e: Event) {
+      const shouldCollapse = (e as CustomEvent).detail;
+      if (shouldCollapse) {
+        setCollapsed(true);
+        setCollapsedSections(new Set()); // Expand all sections so icons are visible
+        document.documentElement.setAttribute("data-sidebar-collapsed", "true");
+      } else {
+        setCollapsed(false);
+        // Restore saved collapsed sections
+        try {
+          const saved = localStorage.getItem("sidebar-collapsed-sections");
+          setCollapsedSections(saved ? new Set(JSON.parse(saved)) : new Set());
+        } catch { /* ignore */ }
+        document.documentElement.setAttribute("data-sidebar-collapsed", "false");
+      }
+    }
+    window.addEventListener("sidebar-force-collapse", handleForceCollapse);
+    return () => window.removeEventListener("sidebar-force-collapse", handleForceCollapse);
+  }, []);
+
   function toggleCollapsed() {
     const next = !collapsed;
     setCollapsed(next);
