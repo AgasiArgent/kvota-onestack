@@ -192,7 +192,7 @@ export async function createQuoteItem(
   item: {
     product_name: string;
     brand?: string;
-    idn_sku?: string;
+    product_code?: string;
     quantity: number;
     unit?: string;
   }
@@ -215,7 +215,7 @@ export async function createQuoteItem(
       quote_id: quoteId,
       product_name: item.product_name,
       brand: item.brand || null,
-      idn_sku: item.idn_sku || null,
+      product_code: item.product_code || null,
       quantity: item.quantity,
       unit: item.unit || null,
       position: nextPosition,

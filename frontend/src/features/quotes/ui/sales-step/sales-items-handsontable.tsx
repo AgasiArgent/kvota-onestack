@@ -29,7 +29,7 @@ interface SalesItemsHandsontableProps {
 /** Column field keys in display order */
 const COLUMN_KEYS = [
   "brand",
-  "idn_sku",
+  "product_code",
   "product_name",
   "quantity",
   "unit",
@@ -38,7 +38,7 @@ const COLUMN_KEYS = [
 interface RowData {
   id: string | null;
   brand: string;
-  idn_sku: string;
+  product_code: string;
   product_name: string;
   quantity: number | null;
   unit: string;
@@ -48,7 +48,7 @@ function itemToRow(item: QuoteItemRow): RowData {
   return {
     id: item.id,
     brand: item.brand ?? "",
-    idn_sku: item.idn_sku ?? "",
+    product_code: item.product_code ?? "",
     product_name: item.product_name ?? "",
     quantity: item.quantity,
     unit: item.unit ?? "",
@@ -59,7 +59,7 @@ function emptyRow(): RowData {
   return {
     id: null,
     brand: "",
-    idn_sku: "",
+    product_code: "",
     product_name: "",
     quantity: null,
     unit: "",
@@ -69,7 +69,7 @@ function emptyRow(): RowData {
 function hasContent(row: RowData): boolean {
   return !!(
     row.brand ||
-    row.idn_sku ||
+    row.product_code ||
     row.product_name ||
     (row.quantity != null && row.quantity > 0) ||
     row.unit
@@ -80,7 +80,7 @@ function rowToCreatePayload(row: RowData) {
   return {
     product_name: row.product_name || "",
     brand: row.brand || undefined,
-    idn_sku: row.idn_sku || undefined,
+    product_code: row.product_code || undefined,
     quantity: row.quantity != null && row.quantity > 0 ? row.quantity : 1,
     unit: row.unit || undefined,
   };
@@ -304,7 +304,7 @@ export function SalesItemsHandsontable({
           colHeaders={["Бренд", "Артикул", "Наименование", "Кол-во", "Ед."]}
           columns={[
             { data: "brand", type: "text", width: 120 },
-            { data: "idn_sku", type: "text", width: 150 },
+            { data: "product_code", type: "text", width: 150 },
             { data: "product_name", type: "text", width: 300 },
             { data: "quantity", type: "numeric", width: 80 },
             {
