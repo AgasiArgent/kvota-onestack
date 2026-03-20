@@ -239,6 +239,7 @@ export interface QuoteVersion {
 // Step type for the status rail
 export type QuoteStep =
   | "sales"
+  | "calculation"
   | "procurement"
   | "logistics"
   | "customs"
@@ -249,14 +250,15 @@ export type QuoteStep =
 export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
   admin: [
     "sales",
+    "calculation",
     "procurement",
     "logistics",
     "customs",
     "control",
     "cost-analysis",
   ],
-  sales: ["sales"],
-  head_of_sales: ["sales"],
+  sales: ["sales", "calculation"],
+  head_of_sales: ["sales", "calculation"],
   procurement: ["procurement"],
   head_of_procurement: ["procurement"],
   logistics: ["logistics"],
@@ -267,6 +269,7 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
   finance: ["cost-analysis"],
   top_manager: [
     "sales",
+    "calculation",
     "procurement",
     "logistics",
     "customs",
@@ -279,9 +282,10 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
 export const STATUS_TO_STEP: Record<string, QuoteStep> = {
   draft: "sales",
   pending_procurement: "procurement",
-  procurement_complete: "control",
-  pending_calculation: "control",
-  calculated: "control",
+  procurement_complete: "calculation",
+  pending_calculation: "calculation",
+  calculated: "calculation",
+  pending_sales_review: "calculation",
   pending_approval: "control",
   approved: "sales",
   sent_to_client: "sales",

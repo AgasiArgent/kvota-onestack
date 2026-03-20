@@ -25,11 +25,13 @@ export {
   fetchQuoteItems,
   fetchQuoteInvoices,
   fetchQuoteComments,
+  fetchQuoteCalcVariables,
 } from "./queries";
 export type {
   QuoteDetailRow,
   QuoteItemRow,
   QuoteInvoiceRow,
+  CalcVariablesRow,
 } from "./queries";
 export {
   createQuote,

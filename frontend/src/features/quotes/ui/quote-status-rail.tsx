@@ -40,9 +40,9 @@ const STEPS: StepDef[] = [
     statuses: ["pending_customs"],
   },
   {
-    key: "sales",
+    key: "calculation",
     label: "Расчёт",
-    statuses: ["calculated", "pending_sales_review"],
+    statuses: ["procurement_complete", "calculated", "pending_sales_review"],
   },
   {
     key: "control",

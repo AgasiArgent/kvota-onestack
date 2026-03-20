@@ -5,6 +5,7 @@ import {
   fetchQuoteItems,
   fetchQuoteInvoices,
   fetchQuoteComments,
+  fetchQuoteCalcVariables,
   ROLE_ALLOWED_STEPS,
   STATUS_TO_STEP,
 } from "@/entities/quote";
@@ -35,11 +36,12 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [quote, items, invoices, comments] = await Promise.all([
+  const [quote, items, invoices, comments, calcVariables] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
     fetchQuoteComments(id),
+    fetchQuoteCalcVariables(id),
   ]);
 
   if (!quote) notFound();
@@ -74,6 +76,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           invoices={invoices}
           activeStep={activeStep}
           userRoles={userRoles}
+          calcVariables={calcVariables}
         />
         <QuoteStatusRail
           activeStep={activeStep}

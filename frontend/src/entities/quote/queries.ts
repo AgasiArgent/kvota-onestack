@@ -288,6 +288,22 @@ export async function fetchQuoteInvoices(quoteId: string) {
   }));
 }
 
+export type CalcVariablesRow = Awaited<
+  ReturnType<typeof fetchQuoteCalcVariables>
+>;
+
+export async function fetchQuoteCalcVariables(quoteId: string) {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("quote_calculation_variables")
+    .select("variables")
+    .eq("quote_id", quoteId)
+    .maybeSingle();
+
+  return (data?.variables ?? null) as Record<string, unknown> | null;
+}
+
 export async function fetchQuoteComments(quoteId: string) {
   const supabase = await createClient();
 

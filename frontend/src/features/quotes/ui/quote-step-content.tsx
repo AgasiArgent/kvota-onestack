@@ -10,6 +10,7 @@ import { SalesStep } from "./sales-step/sales-step";
 import { ProcurementStep } from "./procurement-step/procurement-step";
 import { LogisticsStep } from "./logistics-step/logistics-step";
 import { CustomsStep } from "./customs-step/customs-step";
+import { CalculationStep } from "./calculation-step/calculation-step";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -17,6 +18,7 @@ interface QuoteStepContentProps {
   invoices: QuoteInvoiceRow[];
   activeStep: QuoteStep;
   userRoles: string[];
+  calcVariables?: Record<string, unknown> | null;
 }
 
 export function QuoteStepContent({
@@ -25,10 +27,20 @@ export function QuoteStepContent({
   invoices,
   activeStep,
   userRoles,
+  calcVariables,
 }: QuoteStepContentProps) {
   switch (activeStep) {
     case "sales":
       return <SalesStep quote={quote} items={items} userRoles={userRoles} />;
+    case "calculation":
+      return (
+        <CalculationStep
+          quote={quote}
+          items={items}
+          userRoles={userRoles}
+          savedVariables={calcVariables ?? null}
+        />
+      );
     case "procurement":
       return (
         <ProcurementStep
