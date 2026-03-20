@@ -86,23 +86,23 @@ function getPaymentStatus(payment: PaymentRecord): PaymentStatus {
 
 const STATUS_STYLES: Record<PaymentStatus, { dot: string; badge: string; text: string }> = {
   overdue: {
-    dot: "bg-[var(--error)]",
-    badge: "bg-[var(--error-bg)] text-[var(--error)]",
+    dot: "bg-red-500",
+    badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     text: "Просрочен",
   },
   upcoming: {
-    dot: "bg-[var(--warning)]",
-    badge: "bg-[var(--warning-bg)] text-[var(--warning)]",
+    dot: "bg-amber-500",
+    badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     text: "Скоро",
   },
   completed: {
-    dot: "bg-[var(--success)]",
-    badge: "bg-[var(--success-bg)] text-[var(--success)]",
+    dot: "bg-green-500",
+    badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     text: "Оплачен",
   },
   future: {
     dot: "bg-gray-300 dark:bg-gray-600",
-    badge: "bg-gray-100 dark:bg-gray-800 text-[var(--text-muted)]",
+    badge: "bg-gray-100 dark:bg-gray-800 text-muted-foreground",
     text: "Запланирован",
   },
 };
@@ -210,10 +210,10 @@ export function PaymentsCalendar({ payments }: PaymentsCalendarProps) {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CalendarDays className="h-7 w-7 text-[var(--accent)]" />
+          <CalendarDays className="h-7 w-7 text-accent" />
           Календарь платежей
         </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Плановые и фактические платежи по спецификациям
         </p>
       </div>
@@ -222,26 +222,26 @@ export function PaymentsCalendar({ payments }: PaymentsCalendarProps) {
       <div className="grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="text-center py-2">
-            <div className="text-xl font-bold text-[var(--accent)]">
+            <div className="text-xl font-bold text-accent">
               {formatMoney(summary.totalDue, "USD")}
             </div>
-            <div className="text-sm text-[var(--text-muted)]">К оплате</div>
+            <div className="text-sm text-muted-foreground">К оплате</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="text-center py-2">
-            <div className="text-3xl font-bold text-[var(--error)]">
+            <div className="text-3xl font-bold text-red-600">
               {summary.overdueCount}
             </div>
-            <div className="text-sm text-[var(--text-muted)]">Просрочено</div>
+            <div className="text-sm text-muted-foreground">Просрочено</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="text-center py-2">
-            <div className="text-3xl font-bold text-[var(--success)]">
+            <div className="text-3xl font-bold text-green-600">
               {summary.completedCount}
             </div>
-            <div className="text-sm text-[var(--text-muted)]">Оплачено</div>
+            <div className="text-sm text-muted-foreground">Оплачено</div>
           </CardContent>
         </Card>
       </div>
@@ -278,7 +278,7 @@ export function PaymentsCalendar({ payments }: PaymentsCalendarProps) {
             <Button
               variant="link"
               size="sm"
-              className="ml-2 text-[var(--accent)]"
+              className="ml-2 text-accent"
               onClick={() => setSelectedDay(null)}
             >
               Показать все
@@ -287,7 +287,7 @@ export function PaymentsCalendar({ payments }: PaymentsCalendarProps) {
         </h2>
         {filteredPayments.length === 0 ? (
           <Card>
-            <CardContent className="py-8 text-center text-[var(--text-muted)]">
+            <CardContent className="py-8 text-center text-muted-foreground">
               Нет платежей за выбранный период
             </CardContent>
           </Card>
@@ -323,7 +323,7 @@ function CalendarGrid({
         {WEEKDAYS.map((wd) => (
           <div
             key={wd}
-            className="py-2 text-center text-xs font-medium text-[var(--text-muted)]"
+            className="py-2 text-center text-xs font-medium text-muted-foreground"
           >
             {wd}
           </div>
@@ -352,12 +352,12 @@ function CalendarGrid({
               type="button"
               onClick={() => onSelectDay(isSelected ? null : day)}
               className={`min-h-[72px] border-t border-r p-1.5 text-left transition-colors
-                ${isSelected ? "bg-[var(--accent-subtle)] ring-1 ring-[var(--accent)]" : "hover:bg-gray-50 dark:hover:bg-gray-800/30"}
+                ${isSelected ? "bg-accent/10 ring-1 ring-accent" : "hover:bg-gray-50 dark:hover:bg-gray-800/30"}
               `}
             >
               <span
                 className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium
-                  ${isToday ? "bg-[var(--accent)] text-white" : ""}
+                  ${isToday ? "bg-accent text-accent-foreground" : ""}
                 `}
               >
                 {day}
@@ -375,7 +375,7 @@ function CalendarGrid({
                     );
                   })}
                   {dayP.length > 3 && (
-                    <span className="text-[10px] text-[var(--text-muted)]">
+                    <span className="text-[10px] text-muted-foreground">
                       +{dayP.length - 3}
                     </span>
                   )}
@@ -413,11 +413,11 @@ function PaymentCard({ payment }: { payment: PaymentRecord }) {
     <Card
       className={`border-l-4 ${
         status === "overdue"
-          ? "border-l-[var(--error)]"
+          ? "border-l-red-500"
           : status === "upcoming"
-            ? "border-l-[var(--warning)]"
+            ? "border-l-amber-500"
             : status === "completed"
-              ? "border-l-[var(--success)]"
+              ? "border-l-green-500"
               : "border-l-gray-300 dark:border-l-gray-600"
       }`}
     >
@@ -431,7 +431,7 @@ function PaymentCard({ payment }: { payment: PaymentRecord }) {
               {style.text}
             </Badge>
             {purpose && (
-              <span className="text-xs text-[var(--text-muted)]">
+              <span className="text-xs text-muted-foreground">
                 {purpose}
               </span>
             )}
@@ -440,7 +440,7 @@ function PaymentCard({ payment }: { payment: PaymentRecord }) {
         </div>
 
         {/* Details row */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--text-muted)]">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {payment.expected_payment_date && (
             <span>
               Ожидается: {formatDate(payment.expected_payment_date)}
@@ -459,7 +459,7 @@ function PaymentCard({ payment }: { payment: PaymentRecord }) {
 
         {/* Comment */}
         {payment.comment && (
-          <p className="text-sm text-[var(--text-muted)] bg-gray-50 dark:bg-gray-800/30 rounded px-2 py-1">
+          <p className="text-sm text-muted-foreground bg-gray-50 dark:bg-gray-800/30 rounded px-2 py-1">
             {payment.comment}
           </p>
         )}
@@ -473,18 +473,18 @@ function EmptyState() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CalendarDays className="h-7 w-7 text-[var(--accent)]" />
+          <CalendarDays className="h-7 w-7 text-accent" />
           Календарь платежей
         </h1>
-        <p className="text-sm text-[var(--text-muted)] mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Плановые и фактические платежи по спецификациям
         </p>
       </div>
       <Card>
         <CardContent className="flex flex-col items-center py-10 text-center">
-          <CalendarDays className="h-12 w-12 text-[var(--text-muted)] mb-3" />
+          <CalendarDays className="h-12 w-12 text-muted-foreground mb-3" />
           <h3 className="text-lg font-semibold mb-1">Нет платежей</h3>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-sm text-muted-foreground">
             Календарь платежей пуст. Платежи появятся после создания графика в
             спецификациях.
           </p>
