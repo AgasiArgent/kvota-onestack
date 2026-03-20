@@ -190,7 +190,7 @@ export function QuotesTable({
 }: QuotesTableProps) {
   const router = useRouter();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const { navigate, searchParams } = useFilterNavigation();
+  const { navigate } = useFilterNavigation();
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
   const canFilterByManager = hasAnyRole(userRoles, ADMIN_ROLES);
