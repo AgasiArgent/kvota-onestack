@@ -76,6 +76,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           allowedSteps={allowedSteps}
           isAdmin={isAdmin}
           quoteId={id}
+          workflowStatus={workflowStatus}
         />
       </div>
     </div>

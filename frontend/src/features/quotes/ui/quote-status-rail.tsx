@@ -6,19 +6,59 @@ import { cn } from "@/lib/utils";
 import type { QuoteStep } from "@/entities/quote/types";
 
 // ---------------------------------------------------------------------------
-// Step definitions (ordered as they appear in the rail)
+// Steps reflect the REAL business process sequence.
+// "sales" appears twice: once at the start (filling items) and once at the
+// end (calculation review + client negotiation).
 // ---------------------------------------------------------------------------
 
-const STEPS: { key: QuoteStep; label: string }[] = [
-  { key: "sales", label: "Продажи" },
-  { key: "procurement", label: "Закупки" },
-  { key: "logistics", label: "Логистика" },
-  { key: "customs", label: "Таможня" },
-  { key: "control", label: "Контроль" },
-  { key: "cost-analysis", label: "Кост-анализ" },
-];
+interface StepDef {
+  key: QuoteStep;
+  label: string;
+  /** Workflow statuses that map to this step being "current" */
+  statuses: string[];
+}
 
-const STEP_ORDER = new Map(STEPS.map((s, i) => [s.key, i]));
+const STEPS: StepDef[] = [
+  {
+    key: "sales",
+    label: "Заявка",
+    statuses: ["draft"],
+  },
+  {
+    key: "procurement",
+    label: "Закупки",
+    statuses: ["pending_procurement", "procurement_complete"],
+  },
+  {
+    key: "logistics",
+    label: "Логистика",
+    statuses: ["pending_logistics"],
+  },
+  {
+    key: "customs",
+    label: "Таможня",
+    statuses: ["pending_customs"],
+  },
+  {
+    key: "control",
+    label: "Контроль",
+    statuses: [
+      "pending_quote_control",
+      "pending_spec_control",
+      "pending_approval",
+    ],
+  },
+  {
+    key: "sales",
+    label: "Расчёт",
+    statuses: ["calculated", "pending_sales_review"],
+  },
+  {
+    key: "sales",
+    label: "Переговоры",
+    statuses: ["sent_to_client", "approved", "accepted"],
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Component
@@ -30,17 +70,22 @@ interface QuoteStatusRailProps {
   allowedSteps: QuoteStep[];
   isAdmin: boolean;
   quoteId: string;
+  workflowStatus: string;
 }
 
 export function QuoteStatusRail({
   activeStep,
-  currentWorkflowStep,
   allowedSteps,
   isAdmin,
   quoteId,
+  workflowStatus,
 }: QuoteStatusRailProps) {
   const router = useRouter();
-  const currentIdx = STEP_ORDER.get(currentWorkflowStep) ?? 0;
+
+  // Find which step index the current workflow status maps to
+  const currentStepIdx = STEPS.findIndex((s) =>
+    s.statuses.includes(workflowStatus)
+  );
 
   function handleStepClick(stepKey: QuoteStep) {
     router.replace(`/quotes/${quoteId}?step=${stepKey}`, { scroll: false });
@@ -48,50 +93,51 @@ export function QuoteStatusRail({
 
   return (
     <nav
-      className="w-24 shrink-0 border-l border-border py-4 px-2"
+      className="w-28 shrink-0 border-l border-border py-4 px-1"
       aria-label="Этапы КП"
     >
-      <ul className="flex flex-col gap-1">
-        {STEPS.map((step) => {
-          const stepIdx = STEP_ORDER.get(step.key) ?? 0;
-          const isCompleted = stepIdx < currentIdx;
-          const isCurrent = step.key === currentWorkflowStep;
+      <ul className="flex flex-col gap-0.5">
+        {STEPS.map((step, idx) => {
+          const isCompleted = currentStepIdx >= 0 && idx < currentStepIdx;
+          const isCurrent = idx === currentStepIdx;
           const isActive = step.key === activeStep;
           const isClickable = isAdmin || allowedSteps.includes(step.key);
 
           return (
-            <li key={step.key}>
+            <li key={`${step.key}-${idx}`}>
               <button
                 type="button"
                 disabled={!isClickable}
                 onClick={() => handleStepClick(step.key)}
                 className={cn(
-                  "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                  "flex items-center gap-2 w-full rounded-md px-2.5 py-2 text-left text-xs transition-colors",
                   isActive && "bg-accent/10",
                   isClickable
-                    ? "cursor-pointer hover:bg-muted"
-                    : "cursor-default opacity-60"
+                    ? "cursor-pointer hover:bg-muted/50"
+                    : "cursor-default opacity-50"
                 )}
               >
-                {/* Step indicator icon */}
                 {isCompleted ? (
-                  <Check size={14} className="text-success shrink-0" />
+                  <Check
+                    size={12}
+                    className="text-green-600 shrink-0"
+                    strokeWidth={3}
+                  />
                 ) : isCurrent ? (
                   <Circle
-                    size={14}
+                    size={12}
                     className="text-accent fill-accent shrink-0"
                   />
                 ) : (
-                  <Circle size={14} className="text-text-subtle shrink-0" />
+                  <Circle size={12} className="text-border shrink-0" />
                 )}
 
-                {/* Step label */}
                 <span
                   className={cn(
                     "leading-tight",
-                    isCompleted && "text-text-muted",
+                    isCompleted && "text-muted-foreground",
                     isCurrent && "font-semibold text-foreground",
-                    !isCompleted && !isCurrent && "text-text-muted"
+                    !isCompleted && !isCurrent && "text-muted-foreground"
                   )}
                 >
                   {step.label}

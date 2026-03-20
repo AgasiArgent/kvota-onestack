@@ -1,15 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
-
-// ---------------------------------------------------------------------------
-// Status badge color mapping
-// ---------------------------------------------------------------------------
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -43,40 +38,16 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменено",
 };
 
-// ---------------------------------------------------------------------------
-// CTA button text based on workflow status
-// ---------------------------------------------------------------------------
-
-function getCTALabel(status: string): string | null {
-  switch (status) {
-    case "draft":
-    case "pending_procurement":
-      return null;
-    case "procurement_complete":
-    case "calculated":
-      return "Рассчитать";
-    case "approved":
-    case "sent_to_client":
-      return "Скачать PDF";
-    default:
-      return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
   isAdmin: boolean;
 }
 
-export function QuoteStickyHeader({ quote, isAdmin }: QuoteStickyHeaderProps) {
+export function QuoteStickyHeader({ quote }: QuoteStickyHeaderProps) {
   const workflowStatus = quote.workflow_status ?? "draft";
-  const statusStyle = STATUS_BADGE_STYLES[workflowStatus] ?? "bg-slate-100 text-slate-700";
+  const statusStyle =
+    STATUS_BADGE_STYLES[workflowStatus] ?? "bg-slate-100 text-slate-700";
   const statusLabel = STATUS_LABELS[workflowStatus] ?? workflowStatus;
-  const ctaLabel = getCTALabel(workflowStatus);
 
   const totalAmount = quote.total_amount_quote ?? null;
   const formattedAmount =
@@ -87,9 +58,7 @@ export function QuoteStickyHeader({ quote, isAdmin }: QuoteStickyHeaderProps) {
         }).format(totalAmount)
       : null;
 
-  // Compute margin: profit / (total - profit) * 100 if we have both values
   const profit = quote.profit_quote_currency ?? null;
-  const cogs = quote.cogs_quote_currency ?? null;
   const revenue = quote.revenue_no_vat_quote_currency ?? null;
   const marginPercent =
     profit != null && revenue != null && revenue !== 0
@@ -103,11 +72,11 @@ export function QuoteStickyHeader({ quote, isAdmin }: QuoteStickyHeaderProps) {
   return (
     <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3">
       <div className="flex items-center justify-between gap-4">
-        {/* Left side */}
+        {/* Left: navigation + identification */}
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/quotes"
-            className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text shrink-0"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
           >
             <ArrowLeft size={16} />
             КП
@@ -124,36 +93,26 @@ export function QuoteStickyHeader({ quote, isAdmin }: QuoteStickyHeaderProps) {
           {quote.customer && (
             <Link
               href={`/customers/${quote.customer.id}`}
-              className="text-sm text-text-muted hover:text-accent truncate"
+              className="text-sm text-muted-foreground hover:text-accent truncate"
             >
               {quote.customer.name}
             </Link>
           )}
         </div>
 
-        {/* Right side */}
+        {/* Right: amount + margin (info only, no action buttons) */}
         <div className="flex items-center gap-4 shrink-0">
           {formattedAmount && (
             <span className="text-sm font-medium">
               {formattedAmount}{" "}
-              <span className="text-text-muted">{currency}</span>
+              <span className="text-muted-foreground">{currency}</span>
             </span>
           )}
 
           {marginDisplay && (
-            <span className="text-sm text-text-muted">
+            <span className="text-sm text-muted-foreground">
               Маржа {marginDisplay}
             </span>
-          )}
-
-          {ctaLabel && (
-            <Button
-              size="sm"
-              className="bg-accent text-white hover:bg-accent-hover"
-            >
-              <FileText size={14} />
-              {ctaLabel}
-            </Button>
           )}
         </div>
       </div>
