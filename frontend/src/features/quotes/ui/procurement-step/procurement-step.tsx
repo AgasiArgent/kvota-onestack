@@ -114,6 +114,7 @@ export function ProcurementStep({
 
       <div className="p-6 space-y-4">
         <UnassignedItems
+          key={invoices.length}
           items={items}
           invoices={invoices}
           onCreateInvoiceWithItems={handleCreateInvoiceWithItems}
@@ -137,7 +138,7 @@ export function ProcurementStep({
 
       <InvoiceCreateModal
         open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
+        onClose={() => { setCreateModalOpen(false); setPreselectedItemIds([]); }}
         quoteId={quote.id}
         idnQuote={quote.idn_quote}
         selectedItems={preselectedItems}

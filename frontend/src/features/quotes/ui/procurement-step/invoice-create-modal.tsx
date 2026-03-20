@@ -111,7 +111,7 @@ export function InvoiceCreateModal({
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg z-[200]">
         <DialogHeader>
           <DialogTitle>Создать инвойс</DialogTitle>
           <DialogDescription>
