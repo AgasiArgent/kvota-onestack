@@ -267,28 +267,28 @@ export function ProcurementHandsontable({
           "Примечание",
         ]}
         columns={[
-          { data: "brand", type: "text", width: 90, readOnly: true },
-          { data: "product_code", type: "text", width: 120, readOnly: true },
+          { data: "brand", type: "text", width: 70, readOnly: true },
+          { data: "product_code", type: "text", width: 85, readOnly: true },
           {
             data: "supplier_sku",
             type: "text",
-            width: 120,
+            width: 85,
             renderer: skuMismatchRenderer,
           },
-          { data: "product_name", type: "text", width: 200, readOnly: true },
-          { data: "quantity", type: "numeric", width: 60, readOnly: true },
-          { data: "purchase_price_original", type: "numeric", width: 90 },
+          { data: "product_name", type: "text", width: 160, readOnly: true },
+          { data: "quantity", type: "numeric", width: 45, readOnly: true },
+          { data: "purchase_price_original", type: "numeric", width: 75 },
           {
             data: "purchase_currency",
             type: "text",
-            width: 70,
+            width: 50,
             readOnly: true,
           },
-          { data: "production_time_days", type: "numeric", width: 80 },
-          { data: "weight_in_kg", type: "numeric", width: 70 },
-          { data: "dimensions", type: "text", width: 100 },
-          { data: "vat_rate", type: "numeric", width: 60 },
-          { data: "supplier_sku_note", type: "text", width: 150 },
+          { data: "production_time_days", type: "numeric", width: 55 },
+          { data: "weight_in_kg", type: "numeric", width: 55 },
+          { data: "dimensions", type: "text", width: 80 },
+          { data: "vat_rate", type: "numeric", width: 45 },
+          { data: "supplier_sku_note", type: "text", width: 120 },
         ]}
         rowHeaders={false}
         stretchH="all"

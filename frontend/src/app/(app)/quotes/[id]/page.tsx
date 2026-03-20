@@ -13,6 +13,7 @@ import { QuoteStickyHeader } from "@/features/quotes/ui/quote-sticky-header";
 import { QuoteStatusRail } from "@/features/quotes/ui/quote-status-rail";
 import { QuoteStepContent } from "@/features/quotes/ui/quote-step-content";
 import { ChatWrapper } from "@/features/quotes/ui/chat-panel/chat-wrapper";
+import { UseCollapsedSidebar } from "@/features/quotes/ui/use-collapsed-sidebar";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -64,6 +65,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
 
   return (
     <div className="flex flex-col h-full">
+      <UseCollapsedSidebar />
       <QuoteStickyHeader quote={quote} isAdmin={isAdmin} />
       <div className="flex flex-1 min-h-0">
         <QuoteStepContent
