@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { QuoteComment } from "@/entities/quote";
+import type { QuoteComment } from "@/entities/quote/types";
 import { ChatFab } from "./chat-fab";
 import { ChatPanel } from "./chat-panel";
 

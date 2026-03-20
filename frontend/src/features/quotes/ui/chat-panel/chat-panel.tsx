@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { QuoteComment } from "@/entities/quote";
+import type { QuoteComment } from "@/entities/quote/types";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { useRealtimeComments } from "./use-realtime-comments";

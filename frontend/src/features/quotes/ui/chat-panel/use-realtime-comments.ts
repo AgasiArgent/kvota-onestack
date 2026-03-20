@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/shared/lib/supabase/client";
-import { sendQuoteComment } from "@/entities/quote";
-import type { QuoteComment } from "@/entities/quote";
+import { sendQuoteComment } from "@/entities/quote/mutations";
+import type { QuoteComment } from "@/entities/quote/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface UseRealtimeCommentsReturn {

@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { QuoteComment } from "@/entities/quote";
+import type { QuoteComment } from "@/entities/quote/types";
 
 const ROLE_BADGE_COLORS: Record<string, string> = {
   sales: "bg-blue-100 text-blue-700",
