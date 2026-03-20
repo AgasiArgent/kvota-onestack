@@ -40,6 +40,11 @@ const STEPS: StepDef[] = [
     statuses: ["pending_customs"],
   },
   {
+    key: "sales",
+    label: "Расчёт",
+    statuses: ["calculated", "pending_sales_review"],
+  },
+  {
     key: "control",
     label: "Контроль",
     statuses: [
@@ -47,11 +52,6 @@ const STEPS: StepDef[] = [
       "pending_spec_control",
       "pending_approval",
     ],
-  },
-  {
-    key: "sales",
-    label: "Расчёт",
-    statuses: ["calculated", "pending_sales_review"],
   },
   {
     key: "sales",
