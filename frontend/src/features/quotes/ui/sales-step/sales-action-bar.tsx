@@ -76,10 +76,7 @@ export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
   }
 
   function handleExportPdf() {
-    window.open(
-      `${config.legacyAppUrl}/quotes/${quote.id}/export/specification`,
-      "_blank"
-    );
+    window.open(`/api/quotes/${quote.id}/export-kp`, "_blank");
   }
 
   async function handleSendToClient() {
