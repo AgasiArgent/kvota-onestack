@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Calculator, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { config } from "@/shared/config";
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -21,21 +20,30 @@ export function CalculationActionBar({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  function handleCalculate() {
-    // Open Python calculation page — it has its own session auth
-    // When user completes calculation there and returns, page refreshes
-    const calcUrl = `${config.legacyAppUrl}/quotes/${quoteId}?tab=overview`;
-    const popup = window.open(calcUrl, "calculate", "width=1200,height=800");
+  async function handleCalculate() {
+    setLoading(true);
+    try {
+      const supabase = (await import("@/shared/lib/supabase/client")).createClient();
+      const { data: { session } } = await supabase.auth.getSession();
 
-    // Poll for popup close, then refresh data
-    if (popup) {
-      const interval = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(interval);
-          router.refresh();
-          toast.success("Данные обновлены");
-        }
-      }, 500);
+      const res = await fetch(`/api/quotes/${quoteId}/calculate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify(formValues),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Calculation failed");
+
+      toast.success("Расчёт выполнен");
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось выполнить расчёт");
+    } finally {
+      setLoading(false);
     }
   }
 
