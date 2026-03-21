@@ -26,6 +26,7 @@ export type {
   ContactFormData,
   CallFormData,
   AddressFormData,
+  CreateCustomerData,
 } from "./mutations";
 export {
   createCustomer,

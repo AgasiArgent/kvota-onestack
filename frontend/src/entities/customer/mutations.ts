@@ -186,9 +186,17 @@ export async function updateCall(
 
 // ---------- Customer creation ----------
 
+export interface CreateCustomerData {
+  name: string;
+  inn?: string;
+  kpp?: string;
+  ogrn?: string;
+  legal_address?: string;
+}
+
 export async function createCustomer(
   orgId: string,
-  data: { name: string; inn?: string }
+  data: CreateCustomerData
 ): Promise<{ id: string }> {
   const supabase = createClient();
   const userId = await getCurrentUserId();
@@ -198,6 +206,9 @@ export async function createCustomer(
     .insert({
       name: data.name,
       inn: data.inn || null,
+      kpp: data.kpp || null,
+      ogrn: data.ogrn || null,
+      legal_address: data.legal_address || null,
       organization_id: orgId,
       status: "active",
       created_by: userId,
