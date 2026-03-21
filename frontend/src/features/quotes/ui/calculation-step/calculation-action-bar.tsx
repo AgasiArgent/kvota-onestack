@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calculator, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-
+import { config } from "@/shared/config";
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -21,27 +21,21 @@ export function CalculationActionBar({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  async function handleCalculate() {
-    setLoading(true);
-    try {
-      const body = new URLSearchParams(formValues).toString();
-      const res = await fetch(`/proxy/calculate/${quoteId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
+  function handleCalculate() {
+    // Open Python calculation page — it has its own session auth
+    // When user completes calculation there and returns, page refreshes
+    const calcUrl = `${config.legacyAppUrl}/quotes/${quoteId}?tab=overview`;
+    const popup = window.open(calcUrl, "calculate", "width=1200,height=800");
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.error || `HTTP ${res.status}`);
-      }
-
-      toast.success("Расчёт выполнен");
-      router.refresh();
-    } catch {
-      toast.error("Не удалось выполнить расчёт");
-    } finally {
-      setLoading(false);
+    // Poll for popup close, then refresh data
+    if (popup) {
+      const interval = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(interval);
+          router.refresh();
+          toast.success("Данные обновлены");
+        }
+      }, 500);
     }
   }
 
