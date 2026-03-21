@@ -40,5 +40,8 @@ export {
   sendQuoteComment,
   updateQuoteItem,
   assignItemsToInvoice,
+  approveQuote,
+  returnQuoteForRevision,
+  escalateQuote,
 } from "./mutations";
 export type { CreateQuoteInput } from "./mutations";

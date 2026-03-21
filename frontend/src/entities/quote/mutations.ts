@@ -484,3 +484,77 @@ export async function updateInvoiceLogistics(
 ) {
   return updateInvoice(invoiceId, updates);
 }
+
+// ---------------------------------------------------------------------------
+// Quote control workflow mutations
+// ---------------------------------------------------------------------------
+
+export async function approveQuote(
+  quoteId: string,
+  userId: string
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quotes")
+    .update({
+      workflow_status: "approved",
+      quote_controller_id: userId,
+      quote_control_completed_at: new Date().toISOString(),
+    })
+    .eq("id", quoteId);
+
+  if (error) throw error;
+}
+
+export async function returnQuoteForRevision(
+  quoteId: string,
+  userId: string,
+  comment: string
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error: updateError } = await supabase
+    .from("quotes")
+    .update({ workflow_status: "revision" })
+    .eq("id", quoteId);
+
+  if (updateError) throw updateError;
+
+  const { error: commentError } = await supabase
+    .from("quote_comments")
+    .insert({
+      quote_id: quoteId,
+      user_id: userId,
+      body: `[Возврат на доработку] ${comment}`,
+      created_at: new Date().toISOString(),
+    });
+
+  if (commentError) throw commentError;
+}
+
+export async function escalateQuote(
+  quoteId: string,
+  userId: string,
+  comment: string
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error: updateError } = await supabase
+    .from("quotes")
+    .update({ workflow_status: "pending_approval" })
+    .eq("id", quoteId);
+
+  if (updateError) throw updateError;
+
+  const { error: commentError } = await supabase
+    .from("quote_comments")
+    .insert({
+      quote_id: quoteId,
+      user_id: userId,
+      body: `[На согласование] ${comment}`,
+      created_at: new Date().toISOString(),
+    });
+
+  if (commentError) throw commentError;
+}
