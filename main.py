@@ -14590,11 +14590,15 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
     # Dual auth: JWT (Next.js) or session (FastHTML)
     api_user = getattr(request.state, 'api_user', None)
     if api_user:
-        user_meta = api_user.user_metadata or {}
+        user_id = str(api_user.id)
+        # Look up org_id from organization_members (not in JWT metadata)
+        supabase = get_supabase()
+        om = supabase.table("organization_members").select("organization_id").eq("user_id", user_id).limit(1).execute()
+        org_id = om.data[0]["organization_id"] if om.data else None
         user = {
-            "id": str(api_user.id),
+            "id": user_id,
             "email": api_user.email or "",
-            "org_id": user_meta.get("org_id"),
+            "org_id": org_id,
         }
     else:
         redirect = require_login(session)
