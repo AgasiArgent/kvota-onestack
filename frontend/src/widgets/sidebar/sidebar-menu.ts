@@ -1,6 +1,5 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Inbox,
   PlayCircle,
   Newspaper,
   PlusCircle,
@@ -51,7 +50,6 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
 
   // === MAIN ===
   const mainItems: MenuItem[] = [
-    { icon: Inbox, label: "Мои задачи", href: "/tasks" },
     { icon: PlayCircle, label: "Обучение", href: "/training" },
     {
       icon: Newspaper,
@@ -179,7 +177,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     const adminItems: MenuItem[] = [];
     if (isAdmin) {
       adminItems.push(
-        { icon: User, label: "Пользователи", href: "/admin" },
+        { icon: User, label: "Пользователи", href: "/admin/users" },
         { icon: MessageSquare, label: "Обращения", href: "/admin/feedback" },
       );
     }
