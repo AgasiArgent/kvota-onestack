@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calculator, FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { config } from "@/shared/config";
 
 interface CalculationActionBarProps {
   quoteId: string;
@@ -51,6 +52,10 @@ export function CalculationActionBar({
     window.open(`/export/kp/${quoteId}`, "_blank");
   }
 
+  function handleExportValidation() {
+    window.open(`${config.legacyAppUrl}/quotes/${quoteId}/export/validation`, "_blank");
+  }
+
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-2">
       <Button
@@ -68,10 +73,16 @@ export function CalculationActionBar({
       </Button>
 
       {hasCalculation && (
-        <Button size="sm" variant="outline" onClick={handleExportPdf}>
-          <FileDown size={14} />
-          КП PDF
-        </Button>
+        <>
+          <Button size="sm" variant="outline" onClick={handleExportPdf}>
+            <FileDown size={14} />
+            КП PDF
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleExportValidation}>
+            <FileDown size={14} />
+            Validation Excel
+          </Button>
+        </>
       )}
     </div>
   );

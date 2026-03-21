@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, RotateCcw, Clock, Loader2 } from "lucide-react";
+import { Check, RotateCcw, Clock, Loader2, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { config } from "@/shared/config";
 import {
   approveQuote,
   escalateQuote,
@@ -112,6 +113,25 @@ export function ControlActionBar({
               )}
             </>
           )}
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => window.open(`/export/kp/${quoteId}`, "_blank")}
+            >
+              <FileDown size={14} />
+              КП PDF
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => window.open(`${config.legacyAppUrl}/quotes/${quoteId}/export/validation`, "_blank")}
+            >
+              <FileDown size={14} />
+              Validation Excel
+            </Button>
+          </div>
         </div>
       </div>
 
