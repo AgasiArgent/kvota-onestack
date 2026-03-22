@@ -249,7 +249,7 @@ export function InvoiceComparisonPanel({
               {activeDoc ? (
                 signedUrl ? (
                   <iframe
-                    src={signedUrl}
+                    src={`${signedUrl}#toolbar=0&navpanes=0`}
                     title={activeDoc.original_filename}
                     className="h-[500px] w-full rounded-lg border"
                   />
