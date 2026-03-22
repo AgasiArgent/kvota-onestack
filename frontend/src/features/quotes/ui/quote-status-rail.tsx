@@ -54,7 +54,7 @@ const STEPS: StepDef[] = [
     ],
   },
   {
-    key: "sales",
+    key: "negotiation",
     label: "Переговоры",
     statuses: ["sent_to_client", "approved", "accepted"],
   },

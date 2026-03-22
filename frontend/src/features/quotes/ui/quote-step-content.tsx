@@ -32,6 +32,7 @@ export function QuoteStepContent({
 }: QuoteStepContentProps) {
   switch (activeStep) {
     case "sales":
+    case "negotiation":
       return <SalesStep quote={quote} items={items} userRoles={userRoles} />;
     case "calculation":
       return (

@@ -2,6 +2,13 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 
+const DELIVERY_METHOD_LABELS: Record<string, string> = {
+  air: "Авиа",
+  auto: "Авто",
+  sea: "Море",
+  multimodal: "Мультимодально",
+};
+
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "\u20AC",
   USD: "$",
@@ -87,7 +94,7 @@ export function SalesInfoGrid({ quote }: SalesInfoGridProps) {
             </InfoRow>
             <InfoRow label="Способ доставки">
               <span className="text-sm font-medium">
-                {quote.delivery_method ?? "\u2014"}
+                {DELIVERY_METHOD_LABELS[quote.delivery_method ?? ""] ?? quote.delivery_method ?? "\u2014"}
               </span>
             </InfoRow>
             <InfoRow label="Оплата">
