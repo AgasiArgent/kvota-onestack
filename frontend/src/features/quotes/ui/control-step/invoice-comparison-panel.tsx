@@ -78,7 +78,7 @@ export function InvoiceComparisonPanel({
 
     async function fetchSignedUrl(storagePath: string) {
       const { data, error } = await supabase.storage
-        .from("documents")
+        .from("kvota-documents")
         .createSignedUrl(storagePath, 3600);
 
       if (cancelled) return;
