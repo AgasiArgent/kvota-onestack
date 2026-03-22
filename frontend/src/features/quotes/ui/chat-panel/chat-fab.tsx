@@ -13,9 +13,9 @@ export function ChatFab({ unreadCount, onClick }: ChatFabProps) {
     <button
       onClick={onClick}
       className={cn(
-        "fixed bottom-6 right-6 z-40",
-        "flex items-center justify-center w-14 h-14 rounded-full",
-        "bg-primary text-primary-foreground shadow-lg",
+        "fixed bottom-24 right-4 z-[60]",
+        "flex items-center justify-center w-12 h-12 rounded-full",
+        "bg-accent text-white shadow-lg",
         "hover:bg-primary/90 transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
       )}
