@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import type { QuoteComment } from "@/entities/quote/types";
+import type { OrgMember } from "./chat-input";
 import { ChatFab } from "./chat-fab";
 import { ChatPanel } from "./chat-panel";
 
@@ -10,6 +11,7 @@ interface ChatWrapperProps {
   idnQuote: string;
   userId: string;
   initialComments: QuoteComment[];
+  orgMembers?: OrgMember[];
 }
 
 export function ChatWrapper({
@@ -17,6 +19,7 @@ export function ChatWrapper({
   idnQuote,
   userId,
   initialComments,
+  orgMembers,
 }: ChatWrapperProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -58,6 +61,7 @@ export function ChatWrapper({
         userId={userId}
         initialComments={initialComments}
         onNewMessage={handleNewMessage}
+        orgMembers={orgMembers}
       />
     </>
   );

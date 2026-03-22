@@ -14,6 +14,7 @@ import {
   Calendar,
   User,
   MessageSquare,
+  MessageCircle,
   GitBranch,
   Settings,
 } from "lucide-react";
@@ -51,6 +52,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
   // === MAIN ===
   const mainItems: MenuItem[] = [
     { icon: PlayCircle, label: "Обучение", href: "/training" },
+    { icon: MessageCircle, label: "Сообщения", href: "/messages" },
     {
       icon: Newspaper,
       label: "Обновления",

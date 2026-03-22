@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QuoteComment } from "@/entities/quote/types";
+import type { OrgMember } from "./chat-input";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { useRealtimeComments } from "./use-realtime-comments";
@@ -16,6 +17,7 @@ interface ChatPanelProps {
   userId: string;
   initialComments: QuoteComment[];
   onNewMessage?: () => void;
+  orgMembers?: OrgMember[];
 }
 
 export function ChatPanel({
@@ -26,6 +28,7 @@ export function ChatPanel({
   userId,
   initialComments,
   onNewMessage,
+  orgMembers,
 }: ChatPanelProps) {
   const { messages, sendMessage, isConnected } = useRealtimeComments(
     quoteId,
@@ -111,7 +114,7 @@ export function ChatPanel({
         </div>
 
         {/* Input */}
-        <ChatInput onSend={sendMessage} />
+        <ChatInput onSend={sendMessage} orgMembers={orgMembers} />
       </div>
     </>
   );

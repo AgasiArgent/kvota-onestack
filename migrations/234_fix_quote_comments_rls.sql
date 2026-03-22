@@ -1,0 +1,4 @@
+-- NOTE: quote_comments RLS uses USING(true) for SELECT intentionally.
+-- Complex org-based policies break Supabase Realtime postgres_changes.
+-- Security is handled at the application level (auth check in queries).
+-- DO NOT change to org-based policy without testing realtime.

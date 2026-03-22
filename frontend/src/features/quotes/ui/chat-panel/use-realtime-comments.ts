@@ -9,7 +9,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface UseRealtimeCommentsReturn {
   messages: QuoteComment[];
-  sendMessage: (body: string) => Promise<void>;
+  sendMessage: (body: string, mentions?: string[]) => Promise<void>;
   isConnected: boolean;
 }
 
@@ -113,7 +113,7 @@ export function useRealtimeComments(
   }, [quoteId]);
 
   const sendMessage = useCallback(
-    async (body: string) => {
+    async (body: string, mentionIds?: string[]) => {
       const trimmed = body.trim();
       if (!trimmed) return;
 
@@ -124,7 +124,7 @@ export function useRealtimeComments(
         quote_id: quoteId,
         user_id: userId,
         body: trimmed,
-        mentions: null,
+        mentions: mentionIds ?? null,
         created_at: new Date().toISOString(),
         user_profile: null, // Will be resolved when realtime event arrives
       };
@@ -132,7 +132,7 @@ export function useRealtimeComments(
       setMessages((prev) => [...prev, optimisticMessage]);
 
       try {
-        const result = await sendQuoteComment(quoteId, userId, trimmed);
+        const result = await sendQuoteComment(quoteId, userId, trimmed, mentionIds);
         // Track this ID so realtime event is skipped
         sentIdsRef.current.add(result.id);
         // Replace optimistic message with server result
