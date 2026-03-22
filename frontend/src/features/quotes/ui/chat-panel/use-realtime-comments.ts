@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/shared/lib/supabase/client";
 import { sendQuoteComment } from "@/entities/quote/mutations";
+import { apiClient } from "@/shared/lib/api";
 import type { QuoteComment } from "@/entities/quote/types";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -146,6 +147,17 @@ export function useRealtimeComments(
               : m
           )
         );
+
+        // Fire-and-forget: send Telegram notification (best-effort)
+        const mentions = (result.mentions ?? []) as string[];
+        apiClient("/chat/notify", {
+          method: "POST",
+          body: JSON.stringify({
+            quote_id: quoteId,
+            body: trimmed,
+            mentions,
+          }),
+        }).catch(() => {});
       } catch {
         // Remove optimistic message on failure
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));

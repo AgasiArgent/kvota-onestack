@@ -26169,6 +26169,8 @@ from services.telegram_service import (
     get_user_telegram_id,
     send_feedback_resolved_notification,
     TELEGRAM_BOT_USERNAME,
+    # Chat message notifications
+    send_chat_message_notification,
 )
 
 from services.clickup_service import create_clickup_bug_task
@@ -26277,6 +26279,56 @@ async def telegram_webhook(request):
 
     # Always return 200 OK to Telegram
     return {"ok": True}
+
+
+# ============================================================================
+# CHAT NOTIFICATION API
+# ============================================================================
+
+@rt("/api/chat/notify", methods=["POST"])
+async def api_chat_notify(session, request: Request):
+    """Send Telegram notifications for new chat messages. Dual auth: JWT or session."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_id = str(api_user.id)
+    else:
+        redirect = require_login(session)
+        if redirect:
+            return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+        user = session.get("user", {})
+        user_id = user.get("id")
+
+    if not user_id:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    # Parse JSON body
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
+
+    quote_id = body.get("quote_id", "").strip()
+    message_body = body.get("body", "").strip()
+    mentions = body.get("mentions") or []
+
+    if not quote_id or not message_body:
+        return JSONResponse({"success": False, "error": "quote_id and body are required"}, status_code=400)
+
+    try:
+        result = await send_chat_message_notification(
+            quote_id=quote_id,
+            sender_user_id=user_id,
+            message_body=message_body,
+            mentions=mentions,
+        )
+        return JSONResponse({"success": True, "data": result})
+    except Exception as e:
+        logger.error(f"Chat notification error: {e}")
+        return JSONResponse({"success": True, "data": {"notified_count": 0, "error": str(e)}})
 
 
 # ============================================================================

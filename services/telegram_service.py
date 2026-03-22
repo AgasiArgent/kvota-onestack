@@ -204,6 +204,13 @@ NOTIFICATION_TEMPLATES = {
 [Открыть в системе]({quote_url})
 """,
 
+    NotificationType.COMMENT_ADDED: """
+💬 *[{quote_idn}] {sender_name}:*
+{comment_body}
+
+[Открыть в системе]({quote_url})
+""",
+
     NotificationType.SYSTEM_MESSAGE: """
 ℹ️ *Системное уведомление*
 
@@ -261,6 +268,8 @@ def format_notification(
         "price_display": "N/A",
         "priced_count": 0,
         "total_count": 0,
+        "sender_name": "Система",
+        "comment_body": "",
     }
     defaults.update(kwargs)
 
@@ -3803,6 +3812,120 @@ async def send_phmb_price_set_notification(
         "telegram_id": telegram_id,
         "error": telegram_error,
     }
+
+
+# ============================================================================
+# Chat Message Notifications
+# ============================================================================
+
+
+async def send_chat_message_notification(
+    quote_id: str,
+    sender_user_id: str,
+    message_body: str,
+    mentions: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Send Telegram notifications for a new chat message on a quote.
+
+    Notifies:
+    1. The sales manager (quote.created_by) — always
+    2. @mentioned users — if mentions list is not empty
+    Skips the message author in all cases.
+
+    Args:
+        quote_id: UUID of the quote
+        sender_user_id: UUID of the user who sent the message
+        message_body: The chat message text
+        mentions: Optional list of user UUIDs who were mentioned
+
+    Returns:
+        Dict with summary: notified_count, errors
+    """
+    supabase = get_supabase()
+    if not supabase:
+        return {"success": False, "error": "Database unavailable", "notified_count": 0}
+
+    # 1. Get quote info (idn_quote, created_by)
+    quote_result = supabase.table("quotes").select(
+        "idn_quote, created_by"
+    ).eq("id", quote_id).limit(1).execute()
+
+    if not quote_result.data:
+        return {"success": False, "error": "Quote not found", "notified_count": 0}
+
+    quote = quote_result.data[0]
+    idn_quote = quote.get("idn_quote", "N/A")
+    sales_manager_id = quote.get("created_by")
+
+    # 2. Get sender name
+    sender_profile = supabase.table("user_profiles").select(
+        "full_name"
+    ).eq("user_id", sender_user_id).limit(1).execute()
+    sender_name = (
+        sender_profile.data[0].get("full_name", "")
+        if sender_profile.data
+        else ""
+    ) or "Пользователь"
+
+    # 3. Collect unique recipient user IDs (excluding sender)
+    recipient_ids: set[str] = set()
+
+    if sales_manager_id and sales_manager_id != sender_user_id:
+        recipient_ids.add(sales_manager_id)
+
+    if mentions:
+        for uid in mentions:
+            if uid != sender_user_id:
+                recipient_ids.add(uid)
+
+    if not recipient_ids:
+        return {"success": True, "notified_count": 0, "errors": []}
+
+    # 4. Truncate long messages for Telegram
+    truncated_body = message_body[:300]
+    if len(message_body) > 300:
+        truncated_body += "…"
+
+    # 5. Send notifications
+    quote_url = f"{APP_BASE_URL}/quotes/{quote_id}"
+    notified = 0
+    errors = []
+
+    for recipient_id in recipient_ids:
+        telegram_id = await get_user_telegram_id(recipient_id)
+        if not telegram_id:
+            continue
+
+        text = format_notification(
+            NotificationType.COMMENT_ADDED,
+            quote_idn=idn_quote,
+            sender_name=sender_name,
+            comment_body=truncated_body,
+            quote_url=quote_url,
+        )
+
+        reply_markup = build_open_quote_keyboard(quote_id)
+        message_id = await send_message(
+            telegram_id=telegram_id,
+            text=text,
+            reply_markup=reply_markup,
+        )
+
+        if message_id:
+            notified += 1
+            record_notification(
+                user_id=recipient_id,
+                notification_type="comment_added",
+                title=f"Сообщение в чате [{idn_quote}]",
+                message=f"{sender_name}: {truncated_body}",
+                channel="telegram",
+                quote_id=quote_id,
+                sent=True,
+            )
+        else:
+            errors.append(f"Failed to send to user {recipient_id}")
+
+    return {"success": True, "notified_count": notified, "errors": errors}
 
 
 # ============================================================================
