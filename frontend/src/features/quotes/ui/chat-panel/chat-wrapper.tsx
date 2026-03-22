@@ -19,19 +19,36 @@ export function ChatWrapper({
   initialComments,
 }: ChatWrapperProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const toggleChat = useCallback(() => {
-    setIsOpen((prev) => !prev);
+    setIsOpen((prev) => {
+      if (!prev) {
+        // Opening — clear unread
+        setUnreadCount(0);
+      }
+      return !prev;
+    });
   }, []);
 
   const closeChat = useCallback(() => {
     setIsOpen(false);
   }, []);
 
+  // Track new messages for unread badge (when panel is closed)
+  const handleNewMessage = useCallback(() => {
+    setIsOpen((open) => {
+      if (!open) {
+        setUnreadCount((c) => c + 1);
+      }
+      return open;
+    });
+  }, []);
+
   return (
     <>
       {!isOpen && (
-        <ChatFab unreadCount={0} onClick={toggleChat} />
+        <ChatFab unreadCount={unreadCount} onClick={toggleChat} />
       )}
       <ChatPanel
         isOpen={isOpen}
@@ -40,6 +57,7 @@ export function ChatWrapper({
         idnQuote={idnQuote}
         userId={userId}
         initialComments={initialComments}
+        onNewMessage={handleNewMessage}
       />
     </>
   );

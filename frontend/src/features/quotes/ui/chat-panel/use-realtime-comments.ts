@@ -15,12 +15,18 @@ interface UseRealtimeCommentsReturn {
 export function useRealtimeComments(
   quoteId: string,
   userId: string,
-  initialComments: QuoteComment[]
+  initialComments: QuoteComment[],
+  onNewMessage?: () => void
 ): UseRealtimeCommentsReturn {
+  const onNewMessageRef = useRef(onNewMessage);
+  onNewMessageRef.current = onNewMessage;
   const [messages, setMessages] = useState<QuoteComment[]>(initialComments);
   const [isConnected, setIsConnected] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const supabaseRef = useRef(createClient());
+
+  // Track IDs of messages we sent (to skip realtime duplicates)
+  const sentIdsRef = useRef(new Set<string>());
 
   // Sync initial comments when they change (e.g. server re-fetch)
   useEffect(() => {
@@ -50,9 +56,18 @@ export function useRealtimeComments(
             created_at: string;
           };
 
-          // Skip if we already have this message (optimistic add)
+          // Skip if this is our own message (already added optimistically)
+          if (sentIdsRef.current.has(newRow.id)) {
+            sentIdsRef.current.delete(newRow.id);
+            return;
+          }
+
+          // Skip if we already have this message
           setMessages((prev) => {
             if (prev.some((m) => m.id === newRow.id)) return prev;
+
+            // Notify wrapper about new message (for unread badge)
+            onNewMessageRef.current?.();
 
             // Fetch user profile for the new message
             resolveUserProfile(supabase, newRow.user_id).then((profile) => {
@@ -117,6 +132,8 @@ export function useRealtimeComments(
 
       try {
         const result = await sendQuoteComment(quoteId, userId, trimmed);
+        // Track this ID so realtime event is skipped
+        sentIdsRef.current.add(result.id);
         // Replace optimistic message with server result
         setMessages((prev) =>
           prev.map((m) =>

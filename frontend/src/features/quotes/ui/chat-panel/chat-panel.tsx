@@ -15,6 +15,7 @@ interface ChatPanelProps {
   idnQuote: string;
   userId: string;
   initialComments: QuoteComment[];
+  onNewMessage?: () => void;
 }
 
 export function ChatPanel({
@@ -24,11 +25,13 @@ export function ChatPanel({
   idnQuote,
   userId,
   initialComments,
+  onNewMessage,
 }: ChatPanelProps) {
   const { messages, sendMessage, isConnected } = useRealtimeComments(
     quoteId,
     userId,
-    initialComments
+    initialComments,
+    onNewMessage
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
