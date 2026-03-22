@@ -1158,6 +1158,7 @@ export type Database = {
           width_m: number | null
           package_count: number | null
           procurement_notes: string | null
+          invoice_file_url: string | null
         }
         Insert: {
           id?: string
@@ -1194,6 +1195,7 @@ export type Database = {
           width_m?: number | null
           package_count?: number | null
           procurement_notes?: string | null
+          invoice_file_url?: string | null
         }
         Update: {
           id?: string
@@ -1230,6 +1232,7 @@ export type Database = {
           width_m?: number | null
           package_count?: number | null
           procurement_notes?: string | null
+          invoice_file_url?: string | null
         }
         Relationships: []
       }
