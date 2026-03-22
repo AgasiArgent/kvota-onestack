@@ -63,7 +63,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     mainItems.push({
       icon: PlusCircle,
       label: "Новый КП",
-      href: "/quotes/new",
+      href: "/quotes?create=true",
     });
   }
   if (

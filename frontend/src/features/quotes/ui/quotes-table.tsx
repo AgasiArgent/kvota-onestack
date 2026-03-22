@@ -189,8 +189,12 @@ export function QuotesTable({
   orgId,
 }: QuotesTableProps) {
   const router = useRouter();
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const { navigate } = useFilterNavigation();
+
+  // Auto-open create dialog when ?create=true
+  const [createDialogOpen, setCreateDialogOpen] = useState(
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("create") === "true"
+  );
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
   const canFilterByManager = hasAnyRole(userRoles, ADMIN_ROLES);
