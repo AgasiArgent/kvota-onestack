@@ -80,8 +80,12 @@ export function useRealtimeComments(
           });
         }
       )
-      .subscribe((status) => {
-        setIsConnected(status === "SUBSCRIBED");
+      .subscribe((status, _err) => {
+        if (status === "SUBSCRIBED") {
+          setIsConnected(true);
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+          setIsConnected(false);
+        }
       });
 
     channelRef.current = channel;
