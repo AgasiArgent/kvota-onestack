@@ -39,6 +39,8 @@ export function CalculationStep({
         quoteId={quote.id}
         formValues={formValues}
         hasCalculation={hasCalculation}
+        workflowStatus={quote.workflow_status ?? "draft"}
+        isApproved={["approved", "sent_to_client", "accepted"].includes(quote.workflow_status ?? "")}
       />
       <div className="p-6 space-y-6">
         <CalculationForm

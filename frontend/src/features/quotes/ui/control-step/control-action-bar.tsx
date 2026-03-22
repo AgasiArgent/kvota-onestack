@@ -119,6 +119,8 @@ export function ControlActionBar({
               size="sm"
               variant="outline"
               onClick={() => window.open(`/export/kp/${quoteId}`, "_blank")}
+              disabled
+              title="Доступно после одобрения"
             >
               <FileDown size={14} />
               КП PDF
@@ -127,6 +129,8 @@ export function ControlActionBar({
               size="sm"
               variant="outline"
               onClick={() => window.open(`${config.legacyAppUrl}/quotes/${quoteId}/export/validation`, "_blank")}
+              disabled
+              title="Доступно после одобрения"
             >
               <FileDown size={14} />
               Validation Excel
