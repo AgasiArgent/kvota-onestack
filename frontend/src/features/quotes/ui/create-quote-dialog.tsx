@@ -129,7 +129,7 @@ export function CreateQuoteDialog({
         try {
           const results = await searchCustomers(value, orgId);
           setCustomerResults(results);
-          setShowDropdown(results.length > 0);
+          setShowDropdown(true);
         } catch {
           setCustomerResults([]);
           setShowDropdown(false);
@@ -208,22 +208,39 @@ export function CreateQuoteDialog({
                 />
               )}
               {showDropdown && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border-light bg-background shadow-md max-h-48 overflow-y-auto">
-                  {customerResults.map((customer) => (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent-subtle transition-colors"
-                      onClick={() => handleSelectCustomer(customer)}
-                    >
-                      <div className="font-medium">{customer.name}</div>
-                      {customer.inn && (
-                        <div className="text-text-muted text-xs">
-                          ИНН: {customer.inn}
-                        </div>
-                      )}
-                    </button>
-                  ))}
+                <div className="absolute z-[300] mt-1 w-full rounded-md border border-border-light bg-background shadow-md max-h-48 overflow-y-auto">
+                  {customerResults.length > 0 ? (
+                    customerResults.map((customer) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent-subtle transition-colors"
+                        onClick={() => handleSelectCustomer(customer)}
+                      >
+                        <div className="font-medium">{customer.name}</div>
+                        {customer.inn && (
+                          <div className="text-text-muted text-xs">
+                            ИНН: {customer.inn}
+                          </div>
+                        )}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-3 text-sm text-text-muted">
+                      <div>Клиент не найден</div>
+                      <div className="text-xs mt-1">
+                        Создайте клиента на странице{" "}
+                        <a
+                          href="/customers"
+                          target="_blank"
+                          className="underline text-accent hover:text-accent-hover"
+                        >
+                          Клиенты
+                        </a>
+                        , затем выберите здесь
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
