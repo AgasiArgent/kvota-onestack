@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -26,6 +26,20 @@ import {
   searchCustomers,
   fetchSellerCompanies,
 } from "@/entities/quote/mutations";
+import { createCustomer } from "@/entities/customer/mutations";
+
+interface DaDataResult {
+  found: boolean;
+  name?: string;
+  kpp?: string | null;
+  ogrn?: string | null;
+  address?: string | null;
+}
+
+function isInnQuery(query: string): boolean {
+  const cleaned = query.replace(/\D/g, "");
+  return cleaned.length >= 10 && cleaned.length <= 12 && /^\d+$/.test(cleaned);
+}
 
 const DELIVERY_METHODS = [
   { value: "air", label: "Авиа" },
@@ -63,6 +77,11 @@ export function CreateQuoteDialog({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // DaData lookup for new customers
+  const [dadataResult, setDadataResult] = useState<DaDataResult | null>(null);
+  const [lookingUpDadata, setLookingUpDadata] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+
   // Seller companies
   const [sellerCompanies, setSellerCompanies] = useState<
     Array<{ id: string; name: string }>
@@ -84,6 +103,9 @@ export function CreateQuoteDialog({
     setSelectedCustomer(null);
     setCustomerQuery("");
     setCustomerResults([]);
+    setDadataResult(null);
+    setLookingUpDadata(false);
+    setCreatingCustomer(false);
     setSellerCompanyId("");
     setDeliveryCountry("Россия");
     setDeliveryCity("Москва");
@@ -115,6 +137,7 @@ export function CreateQuoteDialog({
     (value: string) => {
       setCustomerQuery(value);
       setSelectedCustomer(null);
+      setDadataResult(null);
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -130,6 +153,26 @@ export function CreateQuoteDialog({
           const results = await searchCustomers(value, orgId);
           setCustomerResults(results);
           setShowDropdown(true);
+
+          // If no DB results and query looks like INN, look up in DaData
+          if (results.length === 0 && isInnQuery(value)) {
+            setLookingUpDadata(true);
+            try {
+              const res = await fetch("/proxy/dadata", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ inn: value.replace(/\D/g, "") }),
+              });
+              if (res.ok) {
+                const data: DaDataResult = await res.json();
+                setDadataResult(data);
+              }
+            } catch {
+              // DaData unavailable — not critical
+            } finally {
+              setLookingUpDadata(false);
+            }
+          }
         } catch {
           setCustomerResults([]);
           setShowDropdown(false);
@@ -140,6 +183,35 @@ export function CreateQuoteDialog({
     },
     [orgId]
   );
+
+  async function handleCreateFromDadata() {
+    if (!dadataResult?.found || !dadataResult.name) return;
+
+    setCreatingCustomer(true);
+    try {
+      const innValue = customerQuery.replace(/\D/g, "");
+      const newCustomer = await createCustomer(orgId, {
+        name: dadataResult.name,
+        inn: innValue,
+        kpp: dadataResult.kpp ?? undefined,
+        ogrn: dadataResult.ogrn ?? undefined,
+        legal_address: dadataResult.address ?? undefined,
+      });
+
+      handleSelectCustomer({ id: newCustomer.id, name: dadataResult.name });
+      toast.success(`Клиент "${dadataResult.name}" создан`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Ошибка создания клиента";
+      if (message.includes("duplicate") || message.includes("unique")) {
+        toast.error("Клиент с таким ИНН уже существует");
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setCreatingCustomer(false);
+    }
+  }
 
   function handleSelectCustomer(customer: { id: string; name: string }) {
     setSelectedCustomer(customer);
@@ -201,33 +273,77 @@ export function CreateQuoteDialog({
                 placeholder="Введите название или ИНН..."
                 autoFocus
               />
-              {searchingCustomers && (
+              {(searchingCustomers || lookingUpDadata) && (
                 <Loader2
                   size={14}
                   className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-text-subtle"
                 />
               )}
+              {selectedCustomer && (
+                <CheckCircle2
+                  size={14}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-green-600"
+                />
+              )}
               {showDropdown && (
                 <div className="absolute z-[300] mt-1 w-full rounded-md border border-border-light bg-background shadow-md max-h-48 overflow-y-auto">
-                  {customerResults.length > 0 ? (
-                    customerResults.map((customer) => (
-                      <button
-                        key={customer.id}
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent-subtle transition-colors"
-                        onClick={() => handleSelectCustomer(customer)}
-                      >
-                        <div className="font-medium">{customer.name}</div>
-                        {customer.inn && (
-                          <div className="text-text-muted text-xs">
-                            ИНН: {customer.inn}
-                          </div>
-                        )}
-                      </button>
-                    ))
-                  ) : (
+                  {customerResults.map((customer) => (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent-subtle transition-colors"
+                      onClick={() => handleSelectCustomer(customer)}
+                    >
+                      <div className="font-medium">{customer.name}</div>
+                      {customer.inn && (
+                        <div className="text-text-muted text-xs">
+                          ИНН: {customer.inn}
+                        </div>
+                      )}
+                    </button>
+                  ))}
+
+                  {customerResults.length === 0 && !lookingUpDadata && !dadataResult && (
                     <div className="px-3 py-3 text-sm text-text-muted">
-                      <div>Клиент не найден</div>
+                      Клиент не найден
+                    </div>
+                  )}
+
+                  {lookingUpDadata && (
+                    <div className="px-3 py-3 text-sm text-text-muted flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      Поиск по ИНН в DaData...
+                    </div>
+                  )}
+
+                  {dadataResult?.found && dadataResult.name && (
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-green-50 transition-colors border-t border-border-light"
+                      onClick={handleCreateFromDadata}
+                      disabled={creatingCustomer}
+                    >
+                      <div className="flex items-center gap-2">
+                        {creatingCustomer ? (
+                          <Loader2 size={14} className="animate-spin text-green-600" />
+                        ) : (
+                          <Plus size={14} className="text-green-600" />
+                        )}
+                        <span className="font-medium text-green-700">
+                          Создать: {dadataResult.name}
+                        </span>
+                      </div>
+                      {dadataResult.address && (
+                        <div className="text-text-muted text-xs mt-0.5 ml-6">
+                          {dadataResult.address}
+                        </div>
+                      )}
+                    </button>
+                  )}
+
+                  {dadataResult && !dadataResult.found && (
+                    <div className="px-3 py-3 text-sm text-text-muted">
+                      <div>ИНН не найден в DaData</div>
                       <div className="text-xs mt-1">
                         Создайте клиента на странице{" "}
                         <a
@@ -237,7 +353,6 @@ export function CreateQuoteDialog({
                         >
                           Клиенты
                         </a>
-                        , затем выберите здесь
                       </div>
                     </div>
                   )}
