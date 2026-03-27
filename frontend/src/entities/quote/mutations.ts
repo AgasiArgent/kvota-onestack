@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/client";
+import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 
 export interface CreateQuoteInput {
   customer_id: string;
@@ -92,7 +93,7 @@ export async function searchCustomers(
     .from("customers")
     .select("id, name, inn")
     .eq("organization_id", orgId)
-    .or(`name.ilike.%${query}%,inn.ilike.%${query}%`)
+    .or(`name.ilike.%${escapePostgrestFilter(query)}%,inn.ilike.%${escapePostgrestFilter(query)}%`)
     .order("name")
     .limit(10);
 

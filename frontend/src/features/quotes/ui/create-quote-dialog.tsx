@@ -38,7 +38,7 @@ interface DaDataResult {
 
 function isInnQuery(query: string): boolean {
   const cleaned = query.replace(/\D/g, "");
-  return cleaned.length >= 10 && cleaned.length <= 12 && /^\d+$/.test(cleaned);
+  return (cleaned.length === 10 || cleaned.length === 12) && !/^0+$/.test(cleaned);
 }
 
 const DELIVERY_METHODS = [
@@ -75,6 +75,7 @@ export function CreateQuoteDialog({
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchingCustomers, setSearchingCustomers] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // DaData lookup for new customers
@@ -96,9 +97,13 @@ export function CreateQuoteDialog({
   // Submit
   const [submitting, setSubmitting] = useState(false);
 
-  // Load seller companies on open
+  // Load seller companies on open; cleanup debounce and abort on close
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+      return;
+    }
 
     setSelectedCustomer(null);
     setCustomerQuery("");
@@ -111,12 +116,14 @@ export function CreateQuoteDialog({
     setDeliveryCity("Москва");
     setDeliveryMethod("");
 
-    fetchSellerCompanies(orgId).then((companies) => {
-      setSellerCompanies(companies);
-      if (companies.length === 1) {
-        setSellerCompanyId(companies[0].id);
-      }
-    });
+    fetchSellerCompanies(orgId)
+      .then((companies) => {
+        setSellerCompanies(companies);
+        if (companies.length === 1) {
+          setSellerCompanyId(companies[0].id);
+        }
+      })
+      .catch(() => toast.error("Не удалось загрузить юрлица"));
   }, [open, orgId]);
 
   // Close dropdown on outside click
@@ -140,6 +147,7 @@ export function CreateQuoteDialog({
       setDadataResult(null);
 
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
 
       if (value.length < 2) {
         setCustomerResults([]);
@@ -149,6 +157,8 @@ export function CreateQuoteDialog({
 
       debounceRef.current = setTimeout(async () => {
         setSearchingCustomers(true);
+        const controller = new AbortController();
+        abortRef.current = controller;
         try {
           const results = await searchCustomers(value, orgId);
           setCustomerResults(results);
@@ -162,20 +172,32 @@ export function CreateQuoteDialog({
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ inn: value.replace(/\D/g, "") }),
+                signal: controller.signal,
               });
               if (res.ok) {
                 const data: DaDataResult = await res.json();
                 setDadataResult(data);
+              } else {
+                toast.error("Не удалось проверить ИНН в DaData");
               }
-            } catch {
-              // DaData unavailable — not critical
+            } catch (err) {
+              if (err instanceof DOMException && err.name === "AbortError") {
+                // Expected — request was cancelled
+              } else {
+                toast.error("Не удалось проверить ИНН в DaData");
+              }
             } finally {
               setLookingUpDadata(false);
             }
           }
-        } catch {
-          setCustomerResults([]);
-          setShowDropdown(false);
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            // Expected — request was cancelled
+          } else {
+            toast.error("Ошибка поиска клиентов");
+            setCustomerResults([]);
+            setShowDropdown(false);
+          }
         } finally {
           setSearchingCustomers(false);
         }
@@ -185,7 +207,7 @@ export function CreateQuoteDialog({
   );
 
   async function handleCreateFromDadata() {
-    if (!dadataResult?.found || !dadataResult.name) return;
+    if (!dadataResult?.found || !dadataResult.name || creatingCustomer) return;
 
     setCreatingCustomer(true);
     try {

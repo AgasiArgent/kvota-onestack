@@ -38,7 +38,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
   const inn = String(body.inn ?? "").trim();
 
   if (!inn || !/^\d{10}$|^\d{12}$/.test(inn) || /^0+$/.test(inn)) {
@@ -68,6 +74,7 @@ export async function POST(req: Request) {
     });
 
     if (!res.ok) {
+      console.error(`DaData API error: status=${res.status}, inn=${inn}`);
       return NextResponse.json(
         { error: "DaData API error" },
         { status: 502 }
@@ -99,7 +106,8 @@ export async function POST(req: Request) {
       director: management.name ?? null,
       is_active: state.status === "ACTIVE",
     });
-  } catch {
+  } catch (err) {
+    console.error("DaData request failed:", err);
     return NextResponse.json(
       { error: "Failed to reach DaData" },
       { status: 502 }

@@ -222,7 +222,7 @@ export function CreatePhmbDialog({
                 />
               )}
               {showDropdown && (
-                <div className="absolute z-50 mt-1 w-full rounded-md border border-border-light bg-background shadow-md max-h-48 overflow-y-auto">
+                <div className="absolute z-[300] mt-1 w-full rounded-md border border-border-light bg-background shadow-md max-h-48 overflow-y-auto">
                   {customerResults.map((customer) => (
                     <button
                       key={customer.id}

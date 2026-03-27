@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/server";
+import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import type {
   CustomerListItem,
   CustomerFinancials,
@@ -28,7 +29,8 @@ export async function fetchCustomersList(params: {
     .range(from, to);
 
   if (search) {
-    query = query.or(`name.ilike.%${search}%,inn.ilike.%${search}%`);
+    const escaped = escapePostgrestFilter(search);
+    query = query.or(`name.ilike.%${escaped}%,inn.ilike.%${escaped}%`);
   }
   if (status === "active") query = query.eq("status", "active");
   if (status === "inactive") query = query.neq("status", "active");

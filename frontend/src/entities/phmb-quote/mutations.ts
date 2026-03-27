@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/client";
+import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import type {
   CreatePhmbQuoteInput,
   CustomerSearchResult,
@@ -81,7 +82,7 @@ export async function searchCustomers(
     .from("customers")
     .select("id, name, inn")
     .eq("organization_id", orgId)
-    .ilike("name", `%${query}%`)
+    .ilike("name", `%${escapePostgrestFilter(query)}%`)
     .order("name")
     .limit(10);
 
@@ -284,7 +285,7 @@ export async function searchPriceList(
       "id, cat_number, product_name, brand, product_classification, list_price_rmb"
     )
     .eq("org_id", orgId)
-    .or(`cat_number.ilike.%${query}%,product_name.ilike.%${query}%`)
+    .or(`cat_number.ilike.%${escapePostgrestFilter(query)}%,product_name.ilike.%${escapePostgrestFilter(query)}%`)
     .order("cat_number")
     .limit(10);
 

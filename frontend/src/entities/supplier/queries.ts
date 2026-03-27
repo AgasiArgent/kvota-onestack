@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/shared/lib/supabase/server";
+import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import type {
   SupplierListItem,
   SupplierDetail,
@@ -62,7 +63,8 @@ export async function fetchSuppliersList(
     .range(from, to);
 
   if (search) {
-    query = query.or(`name.ilike.%${search}%,supplier_code.ilike.%${search}%`);
+    const escaped = escapePostgrestFilter(search);
+    query = query.or(`name.ilike.%${escaped}%,supplier_code.ilike.%${escaped}%`);
   }
   if (country) {
     query = query.eq("country", country);
