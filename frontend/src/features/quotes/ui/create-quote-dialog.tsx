@@ -392,6 +392,7 @@ export function CreateQuoteDialog({
               <Select
                 value={sellerCompanyId}
                 onValueChange={(val) => setSellerCompanyId(val ?? "")}
+                items={Object.fromEntries(sellerCompanies.map((c) => [c.id, c.name]))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="-- Не указано --" />
@@ -435,7 +436,11 @@ export function CreateQuoteDialog({
             <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
               Способ доставки
             </Label>
-            <Select value={deliveryMethod} onValueChange={(val) => setDeliveryMethod(val ?? "")}>
+            <Select
+              value={deliveryMethod}
+              onValueChange={(val) => setDeliveryMethod(val ?? "")}
+              items={Object.fromEntries(DELIVERY_METHODS.map((m) => [m.value, m.label]))}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="-- Не указан --" />
               </SelectTrigger>
