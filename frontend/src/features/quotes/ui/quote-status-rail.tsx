@@ -47,22 +47,29 @@ const STEPS: StepDef[] = [
   {
     key: "control",
     label: "Контроль",
-    statuses: [
-      "pending_quote_control",
-      "pending_spec_control",
-      "pending_approval",
-    ],
+    statuses: ["pending_quote_control", "pending_approval"],
   },
   {
     key: "negotiation",
     label: "Переговоры",
     statuses: ["sent_to_client", "approved", "accepted"],
   },
+  {
+    key: "specification",
+    label: "Спецификация",
+    statuses: ["pending_spec_control", "spec_draft", "spec_signed"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+const SPEC_STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  pending_spec_control: { label: "Черновик", className: "bg-amber-100 text-amber-700" },
+  spec_draft: { label: "Черновик", className: "bg-amber-100 text-amber-700" },
+  spec_signed: { label: "Подписана", className: "bg-green-100 text-green-700" },
+};
 
 interface QuoteStatusRailProps {
   activeStep: QuoteStep;
@@ -141,6 +148,14 @@ export function QuoteStatusRail({
                   )}
                 >
                   {step.label}
+                  {step.key === "specification" && isCurrent && SPEC_STATUS_BADGES[workflowStatus] && (
+                    <span className={cn(
+                      "ml-1 inline-block text-[9px] px-1 py-0.5 rounded font-medium leading-none",
+                      SPEC_STATUS_BADGES[workflowStatus].className
+                    )}>
+                      {SPEC_STATUS_BADGES[workflowStatus].label}
+                    </span>
+                  )}
                 </span>
               </button>
             </li>

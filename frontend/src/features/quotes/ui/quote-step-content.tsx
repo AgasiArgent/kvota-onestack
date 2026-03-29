@@ -12,6 +12,7 @@ import { LogisticsStep } from "./logistics-step/logistics-step";
 import { CustomsStep } from "./customs-step/customs-step";
 import { CalculationStep } from "./calculation-step/calculation-step";
 import { ControlStep } from "./control-step/control-step";
+import { SpecificationStep } from "./specification-step/specification-step";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -78,6 +79,14 @@ export function QuoteStepContent({
           invoices={invoices}
           userRoles={userRoles}
           calcVariables={calcVariables ?? null}
+        />
+      );
+    case "specification":
+      return (
+        <SpecificationStep
+          quote={quote}
+          items={items}
+          userRoles={userRoles}
         />
       );
     case "cost-analysis":

@@ -245,7 +245,8 @@ export type QuoteStep =
   | "customs"
   | "control"
   | "cost-analysis"
-  | "negotiation";
+  | "negotiation"
+  | "specification";
 
 // Role to allowed steps mapping
 export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
@@ -258,16 +259,17 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
     "control",
     "cost-analysis",
     "negotiation",
+    "specification",
   ],
-  sales: ["sales", "calculation", "negotiation"],
-  head_of_sales: ["sales", "calculation", "negotiation"],
+  sales: ["sales", "calculation", "negotiation", "specification"],
+  head_of_sales: ["sales", "calculation", "negotiation", "specification"],
   procurement: ["procurement"],
   head_of_procurement: ["procurement"],
   logistics: ["logistics"],
   head_of_logistics: ["logistics"],
   customs: ["customs"],
   quote_controller: ["control", "cost-analysis"],
-  spec_controller: ["control", "cost-analysis"],
+  spec_controller: ["specification", "control", "cost-analysis"],
   finance: ["cost-analysis"],
   top_manager: [
     "sales",
@@ -278,6 +280,7 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
     "control",
     "cost-analysis",
     "negotiation",
+    "specification",
   ],
 };
 
@@ -294,4 +297,7 @@ export const STATUS_TO_STEP: Record<string, QuoteStep> = {
   sent_to_client: "negotiation",
   accepted: "negotiation",
   rejected: "negotiation",
+  pending_spec_control: "specification",
+  spec_draft: "specification",
+  spec_signed: "specification",
 };
