@@ -325,18 +325,20 @@ export function SpecificationStep({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("customer_contacts") as any).insert({
         customer_id: customerId,
+        organization_id: orgId,
         name: newSignatoryName,
         position: newSignatoryPosition || null,
         is_signatory: true,
       });
-      if (error) throw error;
+      if (error) throw new Error(error.message);
       toast.success(`Подписант ${newSignatoryName} добавлен`);
       setShowSignatoryForm(false);
       setNewSignatoryName("");
       setNewSignatoryPosition("");
       loadData();
-    } catch {
-      toast.error("Не удалось добавить подписанта");
+    } catch (err) {
+      toast.error(`Не удалось добавить подписанта: ${err instanceof Error ? err.message : "unknown"}`);
+      console.error("Signatory creation error:", err);
     } finally {
       setCreatingSignatory(false);
     }
