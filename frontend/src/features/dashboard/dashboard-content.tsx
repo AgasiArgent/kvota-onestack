@@ -109,7 +109,7 @@ function DashboardContentInner({
           <CardTitle>Коммерческие предложения</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-6">
             <MetricCard
               value={numberFmt.format(proposals.count)}
               label="Кол-во КП"
@@ -123,10 +123,6 @@ function DashboardContentInner({
               label="Валовая прибыль"
               variant="accent"
             />
-            <MetricCard
-              value={`${proposals.conversionPct}%`}
-              label="Конверсия КП -> Сделка"
-            />
           </div>
         </CardContent>
       </Card>
@@ -137,7 +133,7 @@ function DashboardContentInner({
           <CardTitle>Сделки</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
             <MetricCard
               value={numberFmt.format(deals.count)}
               label="Кол-во сделок"
@@ -150,6 +146,10 @@ function DashboardContentInner({
               value={currencyFmt.format(deals.profitUsd)}
               label="Прибыль"
               variant="accent"
+            />
+            <MetricCard
+              value={`${deals.conversionPct}%`}
+              label="Конверсия КП → Сделка"
             />
           </div>
         </CardContent>

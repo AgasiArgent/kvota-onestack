@@ -42,13 +42,13 @@ export interface ProposalsMetrics {
   count: number;
   totalUsd: number;
   profitUsd: number;
-  conversionPct: number;
 }
 
 export interface DealsMetrics {
   count: number;
   totalAmount: number;
   profitUsd: number;
+  conversionPct: number;
 }
 
 export async function fetchQuotesMetrics(
@@ -118,41 +118,21 @@ export async function fetchProposalsMetrics(
 ): Promise<ProposalsMetrics> {
   const admin = createAdminClient();
 
-  const [proposalsRes, allQuotesRes, dealsInPeriodRes] = await Promise.all([
-    admin
-      .from("quotes")
-      .select("total_amount_usd, total_profit_usd")
-      .eq("organization_id", orgId)
-      .is("deleted_at", null)
-      .in("workflow_status", NEGOTIATION_STATUSES)
-      .gte("created_at", range.from)
-      .lte("created_at", range.to),
-    admin
-      .from("quotes")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId)
-      .is("deleted_at", null)
-      .gte("created_at", range.from)
-      .lte("created_at", range.to),
-    admin
-      .from("deals")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", orgId)
-      .gte("created_at", range.from)
-      .lte("created_at", range.to),
-  ]);
+  const { data: proposalsData } = await admin
+    .from("quotes")
+    .select("total_amount_usd, total_profit_usd")
+    .eq("organization_id", orgId)
+    .is("deleted_at", null)
+    .in("workflow_status", NEGOTIATION_STATUSES)
+    .gte("created_at", range.from)
+    .lte("created_at", range.to);
 
-  const rows = proposalsRes.data ?? [];
+  const rows = proposalsData ?? [];
   const count = rows.length;
   const totalUsd = rows.reduce((sum, r) => sum + (r.total_amount_usd ?? 0), 0);
   const profitUsd = rows.reduce((sum, r) => sum + (r.total_profit_usd ?? 0), 0);
 
-  const allQuotes = allQuotesRes.count ?? 0;
-  const dealsCount = dealsInPeriodRes.count ?? 0;
-  const conversionPct =
-    allQuotes > 0 ? Math.round((dealsCount / allQuotes) * 100) : 0;
-
-  return { count, totalUsd, profitUsd, conversionPct };
+  return { count, totalUsd, profitUsd };
 }
 
 export async function fetchDealsMetrics(
@@ -172,16 +152,30 @@ export async function fetchDealsMetrics(
   const count = dealsRows.length;
   const totalAmount = dealsRows.reduce((sum, d) => sum + (d.total_amount ?? 0), 0);
 
-  // Get profit from linked quotes
+  // Get profit from linked quotes + cohort conversion
   const quoteIds = dealsRows.map((d) => d.quote_id).filter(Boolean);
-  let profitUsd = 0;
-  if (quoteIds.length > 0) {
-    const { data: quotes } = await admin
-      .from("quotes")
-      .select("total_profit_usd")
-      .in("id", quoteIds);
-    profitUsd = (quotes ?? []).reduce((sum, q) => sum + (q.total_profit_usd ?? 0), 0);
-  }
 
-  return { count, totalAmount, profitUsd };
+  const [profitRes, cohortRes] = await Promise.all([
+    quoteIds.length > 0
+      ? admin.from("quotes").select("total_profit_usd").in("id", quoteIds)
+      : Promise.resolve({ data: [] }),
+    // Cohort: how many quotes created in this period ever became deals?
+    admin
+      .from("quotes")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", orgId)
+      .is("deleted_at", null)
+      .gte("created_at", range.from)
+      .lte("created_at", range.to),
+  ]);
+
+  const profitUsd = (profitRes.data ?? []).reduce(
+    (sum: number, q: { total_profit_usd: number | null }) => sum + (q.total_profit_usd ?? 0), 0
+  );
+  const cohortQuotes = cohortRes.count ?? 0;
+  // count = deals whose quotes were created in this period (cohort deals)
+  const conversionPct =
+    cohortQuotes > 0 ? Math.round((count / cohortQuotes) * 100) : 0;
+
+  return { count, totalAmount, profitUsd, conversionPct };
 }
