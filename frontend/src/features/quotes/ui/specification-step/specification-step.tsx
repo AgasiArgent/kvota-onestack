@@ -640,6 +640,14 @@ export function SpecificationStep({
                     <Download size={14} />
                     Скачать PDF
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`https://kvotaflow.ru/spec-control/${spec.id}/export-docx`, "_blank")}
+                  >
+                    <Download size={14} />
+                    Скачать DOCX
+                  </Button>
                 </div>
               </div>
             </div>
@@ -711,40 +719,46 @@ export function SpecificationStep({
 
       {/* Sticky action bar */}
       <div className="border-t border-border px-6 py-3 flex items-center justify-between bg-background">
-        {!spec && canEdit && (
-          <Button
-            onClick={handleCreate}
-            disabled={creating}
-            className="bg-accent text-white hover:bg-accent-hover"
-          >
-            {creating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-            Создать спецификацию
-          </Button>
-        )}
+        {/* Left side */}
+        <div>
+          {!spec && canEdit && (
+            <Button
+              onClick={handleCreate}
+              disabled={creating}
+              className="bg-accent text-white hover:bg-accent-hover"
+            >
+              {creating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+              Создать спецификацию
+            </Button>
+          )}
 
-        {spec && canEdit && !isReadOnly && (
-          <Button onClick={handleSave} disabled={saving} variant="outline">
-            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
-            Сохранить черновик
-          </Button>
-        )}
+          {spec && canEdit && !isReadOnly && (
+            <Button onClick={handleSave} disabled={saving} variant="outline">
+              {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+              Сохранить черновик
+            </Button>
+          )}
 
-        {spec && hasScan && spec.status !== "signed" && canEdit && (
-          <Button
-            onClick={handleCreateDeal}
-            disabled={creatingDeal}
-            className="bg-green-600 text-white hover:bg-green-700"
-          >
-            {creatingDeal ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            Подтвердить и создать сделку
-          </Button>
-        )}
+          {!canEdit && !canExportAndUpload && (
+            <span className="text-sm text-muted-foreground">
+              Нет прав для работы со спецификацией
+            </span>
+          )}
+        </div>
 
-        {!canEdit && !canExportAndUpload && (
-          <span className="text-sm text-muted-foreground">
-            Нет прав для работы со спецификацией
-          </span>
-        )}
+        {/* Right side */}
+        <div>
+          {spec && hasScan && spec.status !== "signed" && canEdit && (
+            <Button
+              onClick={handleCreateDeal}
+              disabled={creatingDeal}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              {creatingDeal ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+              Подтвердить и создать сделку
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
