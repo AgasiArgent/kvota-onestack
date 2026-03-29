@@ -276,7 +276,7 @@ export async function createInvoice(data: {
       total_weight_kg: data.total_weight_kg ?? 0,
       total_volume_m3: data.total_volume_m3 ?? null,
     })
-    .select()
+    .select("id, invoice_number")
     .single();
 
   if (error) throw error;

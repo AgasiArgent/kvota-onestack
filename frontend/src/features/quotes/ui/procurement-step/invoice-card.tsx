@@ -23,6 +23,13 @@ const numberFmt = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 2,
 });
 
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  pending_procurement: "Ожидает закупки",
+  pending_logistics: "Ожидает логистики",
+  pending_customs: "Ожидает таможни",
+  completed: "Завершён",
+};
+
 interface InvoiceCardProps {
   invoice: QuoteInvoiceRow;
   items: QuoteItemRow[];
@@ -113,7 +120,7 @@ export function InvoiceCard({
 
           {invoice.status && (
             <Badge variant="outline" className="shrink-0">
-              {invoice.status}
+              {INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status}
             </Badge>
           )}
 

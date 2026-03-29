@@ -80,6 +80,13 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           userRoles={userRoles}
           calcVariables={calcVariables}
         />
+        <ChatWrapper
+          quoteId={id}
+          idnQuote={quote.idn_quote}
+          userId={user.id}
+          initialComments={comments}
+          orgMembers={orgMembers}
+        />
         <QuoteStatusRail
           activeStep={activeStep}
           currentWorkflowStep={currentWorkflowStep}
@@ -89,13 +96,6 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           workflowStatus={workflowStatus}
         />
       </div>
-      <ChatWrapper
-        quoteId={id}
-        idnQuote={quote.idn_quote}
-        userId={user.id}
-        initialComments={comments}
-        orgMembers={orgMembers}
-      />
     </div>
   );
 }

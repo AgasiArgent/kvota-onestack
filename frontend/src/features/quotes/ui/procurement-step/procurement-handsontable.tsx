@@ -261,22 +261,22 @@ export function ProcurementHandsontable({
           "Примечание",
         ]}
         columns={[
-          { data: "brand", type: "text", width: 60, readOnly: true },
-          { data: "product_code", type: "text", width: 75, readOnly: true },
+          { data: "brand", type: "text", width: 55, readOnly: true },
+          { data: "product_code", type: "text", width: 70, readOnly: true },
           {
             data: "supplier_sku",
             type: "text",
-            width: 75,
+            width: 70,
             renderer: skuMismatchRenderer,
           },
-          { data: "product_name", type: "text", width: 140, readOnly: true },
-          { data: "quantity", type: "numeric", width: 40, readOnly: true },
-          { data: "purchase_price_original", type: "numeric", width: 70 },
-          { data: "production_time_days", type: "numeric", width: 50 },
-          { data: "weight_in_kg", type: "numeric", width: 50 },
-          { data: "dimensions", type: "text", width: 70 },
+          { data: "product_name", type: "text", width: 120, readOnly: true },
+          { data: "quantity", type: "numeric", width: 35, readOnly: true },
+          { data: "purchase_price_original", type: "numeric", width: 55 },
+          { data: "production_time_days", type: "numeric", width: 45 },
+          { data: "weight_in_kg", type: "numeric", width: 45 },
+          { data: "dimensions", type: "text", width: 60 },
           { data: "vat_rate", type: "numeric", width: 40 },
-          { data: "supplier_sku_note", type: "text", width: 100 },
+          { data: "supplier_sku_note", type: "text", width: 80 },
         ]}
         rowHeaders={false}
         stretchH="all"
