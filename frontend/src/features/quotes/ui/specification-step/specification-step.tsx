@@ -240,50 +240,24 @@ export function SpecificationStep({
     }
   }
 
-  // Create deal
+  // Create deal via single RPC call
   async function handleCreateDeal() {
     if (!spec) return;
     setCreatingDeal(true);
     try {
       const supabase = createClient();
 
-      // Generate deal number
-      const year = new Date().getFullYear();
-      const { count } = await supabase
-        .from("deals")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", `${year}-01-01`);
-      const seq = (count ?? 0) + 1;
-      const dealNumber = `DEAL-${year}-${String(seq).padStart(4, "0")}`;
-
-      // Update spec
-      await supabase
-        .from("specifications")
-        .update({ status: "signed", updated_at: new Date().toISOString() })
-        .eq("id", spec.id);
-
-      // Create deal
-      const dealData = {
-        specification_id: spec.id,
-        quote_id: quote.id,
-        organization_id: orgId,
-        deal_number: dealNumber,
-        signed_at: spec.sign_date ?? new Date().toISOString().slice(0, 10),
-        total_amount: quoteAny.total_amount as number ?? 0,
-        currency: quote.currency ?? "USD",
-        status: "active",
-      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: dealError } = await (supabase.from("deals") as any).insert(dealData);
-      if (dealError) throw dealError;
+      const { data, error } = await (supabase.rpc as any)("create_deal_from_specification", {
+        p_spec_id: spec.id,
+        p_quote_id: quote.id,
+        p_organization_id: orgId,
+      });
 
-      // Update quote workflow
-      await supabase
-        .from("quotes")
-        .update({ workflow_status: "spec_signed" })
-        .eq("id", quote.id);
+      if (error) throw error;
 
-      toast.success(`Сделка ${dealNumber} создана!`);
+      const dealNumber = Array.isArray(data) ? data[0]?.deal_number : (data as { deal_number: string })?.deal_number;
+      toast.success(`Сделка ${dealNumber ?? ""} создана!`);
       router.push("/quotes");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown";
