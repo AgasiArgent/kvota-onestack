@@ -13,6 +13,7 @@ import { CustomsStep } from "./customs-step/customs-step";
 import { CalculationStep } from "./calculation-step/calculation-step";
 import { ControlStep } from "./control-step/control-step";
 import { SpecificationStep } from "./specification-step/specification-step";
+import { DocumentsStep } from "./documents-step/documents-step";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -20,6 +21,7 @@ interface QuoteStepContentProps {
   invoices: QuoteInvoiceRow[];
   activeStep: QuoteStep;
   userRoles: string[];
+  userId: string;
   calcVariables?: Record<string, unknown> | null;
 }
 
@@ -29,6 +31,7 @@ export function QuoteStepContent({
   invoices,
   activeStep,
   userRoles,
+  userId,
   calcVariables,
 }: QuoteStepContentProps) {
   switch (activeStep) {
@@ -89,6 +92,8 @@ export function QuoteStepContent({
           userRoles={userRoles}
         />
       );
+    case "documents":
+      return <DocumentsStep quote={quote} userId={userId} />;
     case "cost-analysis":
       return (
         <div className="flex-1 p-6 text-sm text-muted-foreground">

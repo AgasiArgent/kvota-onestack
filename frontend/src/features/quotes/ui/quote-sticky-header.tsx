@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Paperclip } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
+import type { QuoteStep } from "@/entities/quote/types";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -43,9 +44,12 @@ const STATUS_LABELS: Record<string, string> = {
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
   isAdmin: boolean;
+  documentCount?: number;
+  activeStep?: QuoteStep;
 }
 
-export function QuoteStickyHeader({ quote }: QuoteStickyHeaderProps) {
+export function QuoteStickyHeader({ quote, documentCount, activeStep }: QuoteStickyHeaderProps) {
+  const isDocumentsActive = activeStep === "documents";
   const workflowStatus = quote.workflow_status ?? "draft";
   const statusStyle =
     STATUS_BADGE_STYLES[workflowStatus] ?? "bg-slate-100 text-slate-700";
@@ -102,8 +106,28 @@ export function QuoteStickyHeader({ quote }: QuoteStickyHeaderProps) {
           )}
         </div>
 
-        {/* Right: amount + margin (info only, no action buttons) */}
+        {/* Right: documents button + amount + margin */}
         <div className="flex items-center gap-4 shrink-0">
+          <Link
+            href={`/quotes/${quote.id}?step=documents`}
+            className={cn(
+              "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
+              isDocumentsActive
+                ? "text-foreground bg-muted"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <Paperclip size={16} />
+            {documentCount != null && documentCount > 0 && (
+              <Badge
+                variant="secondary"
+                className="h-5 min-w-5 px-1 text-[10px] font-semibold leading-none"
+              >
+                {documentCount}
+              </Badge>
+            )}
+          </Link>
+
           {formattedAmount && (
             <span className="text-sm font-medium">
               {formattedAmount}{" "}

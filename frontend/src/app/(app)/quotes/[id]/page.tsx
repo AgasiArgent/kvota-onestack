@@ -16,6 +16,7 @@ import { QuoteStepContent } from "@/features/quotes/ui/quote-step-content";
 import { ChatWrapper } from "@/features/quotes/ui/chat-panel/chat-wrapper";
 import { UseCollapsedSidebar } from "@/features/quotes/ui/use-collapsed-sidebar";
 import { fetchOrgMembers } from "@/features/messages/queries";
+import { fetchDocumentCount } from "@/features/quotes/ui/documents-step/queries";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -37,13 +38,14 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [quote, items, invoices, comments, calcVariables, orgMembers] = await Promise.all([
+  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
     fetchQuoteComments(id),
     fetchQuoteCalcVariables(id),
     fetchOrgMembers(user.orgId),
+    fetchDocumentCount(id),
   ]);
 
   if (!quote) notFound();
@@ -70,7 +72,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   return (
     <div className="flex flex-col h-full">
       <UseCollapsedSidebar />
-      <QuoteStickyHeader quote={quote} isAdmin={isAdmin} />
+      <QuoteStickyHeader quote={quote} isAdmin={isAdmin} documentCount={documentCount} activeStep={activeStep} />
       <div className="flex flex-1 min-h-0">
         <QuoteStepContent
           quote={quote}
@@ -78,6 +80,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           invoices={invoices}
           activeStep={activeStep}
           userRoles={userRoles}
+          userId={user.id}
           calcVariables={calcVariables}
         />
         <ChatWrapper
