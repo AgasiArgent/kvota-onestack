@@ -635,7 +635,7 @@ export function SpecificationStep({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(`/export/specification/${spec.id}`, "_blank")}
+                    onClick={() => window.open(`https://kvotaflow.ru/spec-control/${spec.id}/export-pdf`, "_blank")}
                   >
                     <Download size={14} />
                     Скачать PDF
