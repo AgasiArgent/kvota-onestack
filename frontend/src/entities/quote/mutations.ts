@@ -396,7 +396,7 @@ export async function sendToClient(quoteId: string) {
 }
 
 export async function acceptQuote(quoteId: string) {
-  return updateQuoteWorkflowStatus(quoteId, "accepted");
+  return updateQuoteWorkflowStatus(quoteId, "pending_spec_control");
 }
 
 export async function rejectQuote(

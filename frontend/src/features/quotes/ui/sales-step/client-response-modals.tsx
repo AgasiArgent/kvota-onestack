@@ -104,7 +104,7 @@ function AcceptModal({
     setSubmitting(true);
     try {
       await acceptQuote(quoteId);
-      toast.success("КП принято клиентом");
+      toast.success("Клиент принял — спецификация заказана");
       onClose();
       router.refresh();
     } catch {
@@ -118,9 +118,9 @@ function AcceptModal({
     <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Клиент принимает</DialogTitle>
+          <DialogTitle>Клиент принимает — заказать спецификацию</DialogTitle>
           <DialogDescription>
-            КП {idnQuote} будет переведена в статус &laquo;Принято&raquo;
+            КП {idnQuote} будет переведена на этап оформления спецификации
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

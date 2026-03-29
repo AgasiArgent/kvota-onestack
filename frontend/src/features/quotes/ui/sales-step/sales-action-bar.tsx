@@ -177,7 +177,7 @@ export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
             />
             <DropdownMenuContent align="start" sideOffset={4}>
               <DropdownMenuItem onClick={() => onOpenModal?.("accept")}>
-                Клиент принимает
+                Клиент принимает → Спецификация
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onOpenModal?.("changes")}>
                 Клиент просит изменения
