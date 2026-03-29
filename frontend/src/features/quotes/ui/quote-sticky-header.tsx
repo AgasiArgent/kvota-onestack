@@ -18,6 +18,7 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   approved: "bg-green-100 text-green-700",
   sent_to_client: "bg-green-100 text-green-700",
   accepted: "bg-green-200 text-green-800 font-semibold",
+  spec_signed: "bg-green-200 text-green-800 font-semibold",
   rejected: "bg-red-100 text-red-700",
   cancelled: "bg-red-100 text-red-700",
 };
@@ -34,6 +35,7 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Одобрено",
   sent_to_client: "Отправлено клиенту",
   accepted: "Принято",
+  spec_signed: "Сделка",
   rejected: "Отклонено",
   cancelled: "Отменено",
 };

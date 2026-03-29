@@ -61,7 +61,7 @@ export const STATUS_GROUPS: StatusGroup[] = [
   {
     key: "deal",
     label: "Сделка",
-    statuses: ["approved", "sent_to_client", "deal"],
+    statuses: ["approved", "sent_to_client", "accepted", "spec_signed", "deal"],
     color: "bg-green-100 text-green-700",
   },
   {
