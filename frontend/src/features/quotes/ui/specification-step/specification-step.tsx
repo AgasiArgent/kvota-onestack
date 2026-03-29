@@ -284,9 +284,10 @@ export function SpecificationStep({
         .eq("id", quote.id);
 
       toast.success(`Сделка ${dealNumber} создана!`);
-      router.refresh();
-    } catch {
-      toast.error("Не удалось создать сделку");
+      router.push("/quotes");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      toast.error(`Не удалось создать сделку: ${msg}`);
     } finally {
       setCreatingDeal(false);
     }
