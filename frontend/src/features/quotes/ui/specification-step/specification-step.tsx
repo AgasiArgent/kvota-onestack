@@ -135,6 +135,12 @@ export function SpecificationStep({
       setReadinessPeriod(specData.readiness_period ?? "");
     }
 
+    // Auto-select single contract
+    const contractList = (contractsRes.data as CustomerContractRow[]) ?? [];
+    if (!specData?.contract_id && contractList.length === 1) {
+      setContractId(contractList[0].id);
+    }
+
     setLoading(false);
   }, [quote.id, customerId]);
 
@@ -611,52 +617,83 @@ export function SpecificationStep({
           </Card>
         )}
 
-        {/* Documents section */}
+        {/* Workflow guidance + Documents */}
         {spec && canExportAndUpload && (
-          <Card className="p-4 space-y-3">
-            <h4 className="text-sm font-semibold">Документы</h4>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(`/export/specification/${spec.id}`, "_blank")}
-              >
-                <Download size={14} />
-                Скачать PDF
-              </Button>
+          <Card className="p-5 space-y-4">
+            <h4 className="text-sm font-semibold">Оформление спецификации</h4>
+
+            {/* Step 1: Export */}
+            <div className="flex items-start gap-3">
+              <span className={cn(
+                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
+                hasScan ? "bg-green-100 text-green-700" : "bg-accent/10 text-accent"
+              )}>1</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Скачать и отправить клиенту</p>
+                <p className="text-xs text-muted-foreground mb-2">Экспортируйте спецификацию и отправьте на подпись</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/export/specification/${spec.id}`, "_blank")}
+                  >
+                    <Download size={14} />
+                    Скачать PDF
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            {/* Signed scan upload */}
-            <div
-              className={cn(
-                "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
-                hasScan ? "border-green-200 bg-green-50" : "border-border hover:border-accent/50"
-              )}
-            >
-              {hasScan ? (
-                <div className="flex items-center justify-center gap-2 text-green-700">
-                  <Check size={16} />
-                  <span className="text-sm font-medium">Подписанный скан загружен</span>
+            <div className="border-t border-border" />
+
+            {/* Step 2: Upload signed scan */}
+            <div className="flex items-start gap-3">
+              <span className={cn(
+                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
+                hasScan ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
+              )}>2</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Загрузить подписанный скан</p>
+                <p className="text-xs text-muted-foreground mb-2">После подписания клиентом загрузите скан</p>
+                <div
+                  className={cn(
+                    "border-2 border-dashed rounded-lg p-4 text-center transition-colors",
+                    hasScan ? "border-green-200 bg-green-50" : "border-border hover:border-accent/50"
+                  )}
+                >
+                  {hasScan ? (
+                    <div className="flex items-center justify-center gap-2 text-green-700">
+                      <Check size={16} />
+                      <span className="text-sm font-medium">Скан загружен</span>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors">
+                      {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                      Выбрать файл (PDF, JPG, PNG)
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={handleUploadScan}
+                      />
+                    </label>
+                  )}
                 </div>
-              ) : (
-                <>
-                  <Upload size={24} className="mx-auto text-muted-foreground mb-2" />
-                  <p className="text-sm text-muted-foreground mb-2">
-                    Загрузите скан подписанной спецификации
-                  </p>
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm hover:bg-muted transition-colors">
-                    {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                    Выбрать файл
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={handleUploadScan}
-                    />
-                  </label>
-                  <p className="text-xs text-muted-foreground mt-1">PDF, JPG, PNG до 10 МБ</p>
-                </>
-              )}
+              </div>
+            </div>
+
+            <div className="border-t border-border" />
+
+            {/* Step 3: Create deal */}
+            <div className="flex items-start gap-3">
+              <span className={cn(
+                "flex items-center justify-center w-6 h-6 rounded-full text-xs font-semibold shrink-0",
+                spec.status === "signed" ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
+              )}>3</span>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Подтвердить и создать сделку</p>
+                <p className="text-xs text-muted-foreground">Проверьте скан и переведите в сделку</p>
+              </div>
             </div>
           </Card>
         )}
