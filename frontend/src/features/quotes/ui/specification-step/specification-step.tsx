@@ -229,6 +229,21 @@ export function SpecificationStep({
         .update({ signed_scan_url: urlData.publicUrl, status: "approved", updated_at: new Date().toISOString() })
         .eq("id", spec.id);
 
+      // Also create a record in documents table for the documents panel
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from("documents") as any).insert({
+        organization_id: orgId,
+        entity_type: "specification",
+        entity_id: spec.id,
+        parent_quote_id: quote.id,
+        storage_path: path,
+        original_filename: file.name,
+        file_size_bytes: file.size,
+        mime_type: file.type || "application/pdf",
+        document_type: "specification_signed_scan",
+        description: "Подписанный скан спецификации",
+      });
+
       toast.success("Скан загружен");
       loadData();
     } catch (err) {
