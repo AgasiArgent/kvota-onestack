@@ -74,6 +74,12 @@ export function SpecificationStep({
   const [newContractDate, setNewContractDate] = useState("");
   const [creatingContract, setCreatingContract] = useState(false);
 
+  // Inline signatory creation
+  const [showSignatoryForm, setShowSignatoryForm] = useState(false);
+  const [newSignatoryName, setNewSignatoryName] = useState("");
+  const [newSignatoryPosition, setNewSignatoryPosition] = useState("");
+  const [creatingSignatory, setCreatingSignatory] = useState(false);
+
   const isSpecController = userRoles.some((r) =>
     ["spec_controller", "admin"].includes(r)
   );
@@ -311,6 +317,32 @@ export function SpecificationStep({
     }
   }
 
+  // Inline signatory creation
+  async function handleCreateSignatory() {
+    if (!customerId || !newSignatoryName) return;
+    setCreatingSignatory(true);
+    try {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("customer_contacts") as any).insert({
+        customer_id: customerId,
+        name: newSignatoryName,
+        position: newSignatoryPosition || null,
+        is_signatory: true,
+      });
+      if (error) throw error;
+      toast.success(`Подписант ${newSignatoryName} добавлен`);
+      setShowSignatoryForm(false);
+      setNewSignatoryName("");
+      setNewSignatoryPosition("");
+      loadData();
+    } catch {
+      toast.error("Не удалось добавить подписанта");
+    } finally {
+      setCreatingSignatory(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-6">
@@ -375,7 +407,13 @@ export function SpecificationStep({
               {contracts.length > 0 && !isReadOnly && (
                 <Select value={contractId} onValueChange={(v) => setContractId(v ?? "")}>
                   <SelectTrigger className="mt-1 h-8 text-xs">
-                    <SelectValue placeholder="Выберите договор" />
+                    <SelectValue placeholder="Выберите договор">
+                      {contractId
+                        ? contracts.find((c) => c.id === contractId)
+                          ? `${contracts.find((c) => c.id === contractId)!.contract_number} от ${contracts.find((c) => c.id === contractId)!.contract_date}`
+                          : contractId
+                        : "Выберите договор"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {contracts.map((c) => (
@@ -457,6 +495,60 @@ export function SpecificationStep({
                 <p className="text-xs text-muted-foreground">
                   {signatories.map((s) => `${s.name}${s.position ? ` (${s.position})` : ""}`).join(", ")}
                 </p>
+              ) : !isReadOnly ? (
+                <>
+                  {!showSignatoryForm ? (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="p-0 h-auto text-xs"
+                      onClick={() => setShowSignatoryForm(true)}
+                    >
+                      <Plus size={12} /> Добавить подписанта
+                    </Button>
+                  ) : (
+                    <div className="mt-2 space-y-2 p-3 bg-muted/50 rounded-md">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-xs">ФИО</Label>
+                          <Input
+                            value={newSignatoryName}
+                            onChange={(e) => setNewSignatoryName(e.target.value)}
+                            placeholder="Иванов Иван Иванович"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Должность</Label>
+                          <Input
+                            value={newSignatoryPosition}
+                            onChange={(e) => setNewSignatoryPosition(e.target.value)}
+                            placeholder="Генеральный директор"
+                            className="h-8 text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleCreateSignatory}
+                          disabled={creatingSignatory || !newSignatoryName}
+                        >
+                          {creatingSignatory ? <Loader2 size={12} className="animate-spin" /> : "Добавить"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={() => setShowSignatoryForm(false)}
+                        >
+                          Отмена
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <p className="text-xs text-muted-foreground">
                   Не указан в контактах клиента
