@@ -8,7 +8,6 @@ import {
   Check,
   X,
   Download,
-  Plus,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -383,35 +382,49 @@ export function SpecificationStep({
         )}
 
         {/* Prerequisites checklist */}
-        <Card className="p-4 space-y-3">
-          <h4 className="text-sm font-semibold">Предварительные условия</h4>
+        <Card className="p-5 space-y-4">
+          <h4 className="text-sm font-semibold text-foreground">Предварительные условия</h4>
 
-          <div className="flex items-center gap-2 text-sm">
+          {/* Items */}
+          <div className="flex items-center gap-3">
             {items.length > 0 ? (
-              <Check size={14} className="text-green-600" />
+              <Check size={16} className="text-green-600 shrink-0" />
             ) : (
-              <X size={14} className="text-red-500" />
+              <X size={16} className="text-red-500 shrink-0" />
             )}
-            <span>Позиции КП: {items.length} шт.</span>
+            <span className="text-sm">Позиции КП</span>
+            <span className="text-sm text-muted-foreground ml-auto">{items.length} шт.</span>
           </div>
 
+          <div className="border-t border-border" />
+
           {/* Contract */}
-          <div className="flex items-start gap-2 text-sm">
-            {hasContract ? (
-              <Check size={14} className="text-green-600 mt-0.5" />
-            ) : (
-              <X size={14} className="text-red-500 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <span>Договор клиента</span>
-              {contracts.length > 0 && !isReadOnly && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              {hasContract ? (
+                <Check size={16} className="text-green-600 shrink-0" />
+              ) : (
+                <X size={16} className="text-red-500 shrink-0" />
+              )}
+              <span className="text-sm">Договор клиента</span>
+              {contracts.length === 0 && !isReadOnly && !showContractForm && (
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-accent hover:underline"
+                  onClick={() => setShowContractForm(true)}
+                >
+                  + Создать
+                </button>
+              )}
+            </div>
+
+            {contracts.length > 0 && !isReadOnly && (
+              <div className="pl-7">
                 <Select value={contractId} onValueChange={(v) => setContractId(v ?? "")}>
-                  <SelectTrigger className="mt-1 h-8 text-xs">
+                  <SelectTrigger className="h-9 text-sm w-full">
                     <SelectValue placeholder="Выберите договор">
                       {contractId
-                        ? contracts.find((c) => c.id === contractId)
-                          ? `${contracts.find((c) => c.id === contractId)!.contract_number} от ${contracts.find((c) => c.id === contractId)!.contract_date}`
-                          : contractId
+                        ? (() => { const c = contracts.find((c) => c.id === contractId); return c ? `${c.contract_number} от ${c.contract_date}` : "Выберите договор"; })()
                         : "Выберите договор"}
                     </SelectValue>
                   </SelectTrigger>
@@ -423,138 +436,115 @@ export function SpecificationStep({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-              {contracts.length === 0 && !isReadOnly && (
-                <>
-                  {!showContractForm ? (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 h-auto text-xs"
-                      onClick={() => setShowContractForm(true)}
-                    >
-                      <Plus size={12} /> Создать договор
-                    </Button>
-                  ) : (
-                    <div className="mt-2 space-y-2 p-3 bg-muted/50 rounded-md">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">Номер договора</Label>
-                          <Input
-                            value={newContractNumber}
-                            onChange={(e) => setNewContractNumber(e.target.value)}
-                            placeholder="Д-2026-001"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Дата договора</Label>
-                          <Input
-                            type="date"
-                            value={newContractDate}
-                            onChange={(e) => setNewContractDate(e.target.value)}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={handleCreateContract}
-                          disabled={creatingContract || !newContractNumber || !newContractDate}
-                        >
-                          {creatingContract ? <Loader2 size={12} className="animate-spin" /> : "Создать"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs"
-                          onClick={() => setShowContractForm(false)}
-                        >
-                          Отмена
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+              </div>
+            )}
+
+            {showContractForm && (
+              <div className="pl-7 p-3 bg-muted/50 rounded-lg space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Номер договора</Label>
+                    <Input
+                      value={newContractNumber}
+                      onChange={(e) => setNewContractNumber(e.target.value)}
+                      placeholder="Д-2026-001"
+                      className="h-9 text-sm mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Дата договора</Label>
+                    <Input
+                      type="date"
+                      value={newContractDate}
+                      onChange={(e) => setNewContractDate(e.target.value)}
+                      className="h-9 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleCreateContract}
+                    disabled={creatingContract || !newContractNumber || !newContractDate}
+                  >
+                    {creatingContract ? <Loader2 size={14} className="animate-spin" /> : "Создать"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowContractForm(false)}>
+                    Отмена
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
+          <div className="border-t border-border" />
+
           {/* Signatory */}
-          <div className="flex items-start gap-2 text-sm">
-            {hasSignatory ? (
-              <Check size={14} className="text-green-600 mt-0.5" />
-            ) : (
-              <X size={14} className="text-amber-500 mt-0.5" />
-            )}
-            <div className="flex-1">
-              <span>Подписант клиента</span>
-              {signatories.length > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {signatories.map((s) => `${s.name}${s.position ? ` (${s.position})` : ""}`).join(", ")}
-                </p>
-              ) : !isReadOnly ? (
-                <>
-                  {!showSignatoryForm ? (
-                    <Button
-                      variant="link"
-                      size="sm"
-                      className="p-0 h-auto text-xs"
-                      onClick={() => setShowSignatoryForm(true)}
-                    >
-                      <Plus size={12} /> Добавить подписанта
-                    </Button>
-                  ) : (
-                    <div className="mt-2 space-y-2 p-3 bg-muted/50 rounded-md">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">ФИО</Label>
-                          <Input
-                            value={newSignatoryName}
-                            onChange={(e) => setNewSignatoryName(e.target.value)}
-                            placeholder="Иванов Иван Иванович"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">Должность</Label>
-                          <Input
-                            value={newSignatoryPosition}
-                            onChange={(e) => setNewSignatoryPosition(e.target.value)}
-                            placeholder="Генеральный директор"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={handleCreateSignatory}
-                          disabled={creatingSignatory || !newSignatoryName}
-                        >
-                          {creatingSignatory ? <Loader2 size={12} className="animate-spin" /> : "Добавить"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 text-xs"
-                          onClick={() => setShowSignatoryForm(false)}
-                        >
-                          Отмена
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              {hasSignatory ? (
+                <Check size={16} className="text-green-600 shrink-0" />
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Не указан в контактах клиента
-                </p>
+                <X size={16} className="text-amber-500 shrink-0" />
+              )}
+              <span className="text-sm">Подписант клиента</span>
+              {!hasSignatory && !isReadOnly && !showSignatoryForm && (
+                <button
+                  type="button"
+                  className="ml-auto text-xs text-accent hover:underline"
+                  onClick={() => setShowSignatoryForm(true)}
+                >
+                  + Добавить
+                </button>
               )}
             </div>
+
+            {signatories.length > 0 && (
+              <p className="pl-7 text-sm text-muted-foreground">
+                {signatories.map((s) => `${s.name}${s.position ? ` — ${s.position}` : ""}`).join(", ")}
+              </p>
+            )}
+
+            {!hasSignatory && isReadOnly && (
+              <p className="pl-7 text-xs text-muted-foreground">Не указан</p>
+            )}
+
+            {showSignatoryForm && (
+              <div className="pl-7 p-3 bg-muted/50 rounded-lg space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">ФИО</Label>
+                    <Input
+                      value={newSignatoryName}
+                      onChange={(e) => setNewSignatoryName(e.target.value)}
+                      placeholder="Иванов Иван Иванович"
+                      className="h-9 text-sm mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Должность</Label>
+                    <Input
+                      value={newSignatoryPosition}
+                      onChange={(e) => setNewSignatoryPosition(e.target.value)}
+                      placeholder="Генеральный директор"
+                      className="h-9 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleCreateSignatory}
+                    disabled={creatingSignatory || !newSignatoryName}
+                  >
+                    {creatingSignatory ? <Loader2 size={14} className="animate-spin" /> : "Добавить"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowSignatoryForm(false)}>
+                    Отмена
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </Card>
 
