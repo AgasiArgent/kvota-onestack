@@ -214,6 +214,7 @@ export function CreateCustomerDialog({
 
       onOpenChange(false);
       router.push(`/customers/${result.id}`);
+      router.refresh();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Ошибка создания клиента";

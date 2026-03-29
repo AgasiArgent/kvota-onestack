@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Plus } from "lucide-react";
@@ -191,10 +191,13 @@ export function QuotesTable({
   const router = useRouter();
   const { navigate } = useFilterNavigation();
 
-  // Auto-open create dialog when ?create=true
-  const [createDialogOpen, setCreateDialogOpen] = useState(
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("create") === "true"
-  );
+  // Auto-open create dialog when ?create=true (deferred to avoid hydration mismatch)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("create") === "true") {
+      setCreateDialogOpen(true);
+    }
+  }, []);
 
   const canCreate = hasAnyRole(userRoles, CREATE_ROLES);
   const canFilterByManager = hasAnyRole(userRoles, ADMIN_ROLES);
