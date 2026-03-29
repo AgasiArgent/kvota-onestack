@@ -137,7 +137,7 @@ function DashboardContentInner({
           <CardTitle>Сделки</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-5">
+          <div className="grid grid-cols-3 gap-6">
             <MetricCard
               value={numberFmt.format(deals.count)}
               label="Кол-во сделок"
@@ -147,18 +147,9 @@ function DashboardContentInner({
               label="Сумма"
             />
             <MetricCard
-              value={currencyFmt.format(deals.paidAmount)}
-              label="Оплачено"
+              value={currencyFmt.format(deals.profitUsd)}
+              label="Прибыль"
               variant="accent"
-            />
-            <MetricCard
-              value={currencyFmt.format(deals.plannedAmount)}
-              label="План"
-            />
-            <MetricCard
-              value={numberFmt.format(deals.overdueCount)}
-              label="Просрочки"
-              variant={deals.overdueCount > 0 ? "warning" : "default"}
             />
           </div>
         </CardContent>

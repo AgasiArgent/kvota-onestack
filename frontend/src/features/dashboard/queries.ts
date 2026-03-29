@@ -48,9 +48,7 @@ export interface ProposalsMetrics {
 export interface DealsMetrics {
   count: number;
   totalAmount: number;
-  paidAmount: number;
-  plannedAmount: number;
-  overdueCount: number;
+  profitUsd: number;
 }
 
 export async function fetchQuotesMetrics(
@@ -165,7 +163,7 @@ export async function fetchDealsMetrics(
 
   const { data: deals } = await admin
     .from("deals")
-    .select("id, total_amount")
+    .select("id, total_amount, quote_id")
     .eq("organization_id", orgId)
     .gte("created_at", range.from)
     .lte("created_at", range.to);
@@ -174,35 +172,16 @@ export async function fetchDealsMetrics(
   const count = dealsRows.length;
   const totalAmount = dealsRows.reduce((sum, d) => sum + (d.total_amount ?? 0), 0);
 
-  const dealIds = dealsRows.map((d) => d.id);
-
-  if (dealIds.length === 0) {
-    return { count, totalAmount, paidAmount: 0, plannedAmount: 0, overdueCount: 0 };
+  // Get profit from linked quotes
+  const quoteIds = dealsRows.map((d) => d.quote_id).filter(Boolean);
+  let profitUsd = 0;
+  if (quoteIds.length > 0) {
+    const { data: quotes } = await admin
+      .from("quotes")
+      .select("total_profit_usd")
+      .in("id", quoteIds);
+    profitUsd = (quotes ?? []).reduce((sum, q) => sum + (q.total_profit_usd ?? 0), 0);
   }
 
-  const [pfiRes, overdueRes] = await Promise.all([
-    admin
-      .from("plan_fact_items")
-      .select("planned_amount, actual_amount")
-      .in("deal_id", dealIds),
-    admin
-      .from("plan_fact_items")
-      .select("id", { count: "exact", head: true })
-      .in("deal_id", dealIds)
-      .lt("planned_date", new Date().toISOString())
-      .or("actual_amount.is.null,actual_amount.eq.0"),
-  ]);
-
-  const pfiRows = pfiRes.data ?? [];
-  const paidAmount = pfiRows.reduce(
-    (sum, r) => sum + (r.actual_amount ?? 0),
-    0
-  );
-  const plannedAmount = pfiRows.reduce(
-    (sum, r) => sum + (r.planned_amount ?? 0),
-    0
-  );
-  const overdueCount = overdueRes.count ?? 0;
-
-  return { count, totalAmount, paidAmount, plannedAmount, overdueCount };
+  return { count, totalAmount, profitUsd };
 }
