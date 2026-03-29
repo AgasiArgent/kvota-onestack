@@ -6,7 +6,7 @@ import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
 import { toast } from "sonner";
-import { updateQuoteItem } from "@/entities/quote/mutations";
+import { updateQuoteItem, unassignItemFromInvoice } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
 import "handsontable/styles/handsontable.css";
@@ -165,6 +165,41 @@ export function ProcurementHandsontable({
     []
   );
 
+  const unassignRenderer = useCallback(
+    (
+      _instance: Handsontable,
+      td: HTMLTableCellElement,
+      row: number,
+    ) => {
+      td.innerHTML = "";
+      td.style.textAlign = "center";
+      td.style.verticalAlign = "middle";
+      td.style.cursor = "pointer";
+      td.style.padding = "0";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "✕";
+      btn.title = "Убрать из инвойса";
+      btn.style.cssText =
+        "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;";
+      btn.onmouseenter = () => { btn.style.color = "#dc2626"; btn.style.backgroundColor = "#fee2e2"; };
+      btn.onmouseleave = () => { btn.style.color = "#a1a1aa"; btn.style.backgroundColor = "transparent"; };
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const rowId = rowIdsRef.current[row];
+        if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
+        pendingOps.current.add(`unassign-${rowId}`);
+        unassignItemFromInvoice(rowId)
+          .then(() => { toast.success("Позиция убрана из инвойса"); router.refresh(); })
+          .catch(() => toast.error("Не удалось убрать позицию"))
+          .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
+      };
+      td.appendChild(btn);
+    },
+    [router]
+  );
+
   const handleAfterChange = useCallback(
     (changes: Handsontable.CellChange[] | null, source: string) => {
       if (!changes || source === "loadData") return;
@@ -249,16 +284,17 @@ export function ProcurementHandsontable({
         licenseKey="non-commercial-and-evaluation"
         colHeaders={[
           "Бренд",
-          "Арт.(запрос)",
-          "Арт.(произв.)",
+          "Арт.запр.",
+          "Арт.произ.",
           "Наименование",
-          "Кол-во",
+          "Кол",
           "Цена",
-          "Готовность",
-          "Вес, кг",
-          "Габариты",
-          "НДС %",
-          "Примечание",
+          "Готов.",
+          "Вес",
+          "Габар.",
+          "НДС",
+          "Прим.",
+          "",
         ]}
         columns={[
           { data: "brand", type: "text", width: 55, readOnly: true },
@@ -277,6 +313,7 @@ export function ProcurementHandsontable({
           { data: "dimensions", type: "text", width: 60 },
           { data: "vat_rate", type: "numeric", width: 40 },
           { data: "supplier_sku_note", type: "text", width: 80 },
+          { data: "id", readOnly: true, width: 28, renderer: unassignRenderer },
         ]}
         rowHeaders={false}
         stretchH="all"

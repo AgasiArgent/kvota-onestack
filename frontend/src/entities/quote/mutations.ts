@@ -184,6 +184,17 @@ export async function assignItemsToInvoice(
   if (error) throw error;
 }
 
+export async function unassignItemFromInvoice(itemId: string) {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quote_items")
+    .update({ invoice_id: null })
+    .eq("id", itemId);
+
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Quote Item CRUD
 // ---------------------------------------------------------------------------
