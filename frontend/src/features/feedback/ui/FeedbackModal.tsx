@@ -168,7 +168,7 @@ export function FeedbackModal({
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Опишите проблему или предложение..."
                 rows={4}
-                className="w-full px-3 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent resize-y"
+                className="w-full px-3 py-2 text-sm border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent resize-y min-h-[100px] max-h-[300px]"
                 required
               />
             </div>

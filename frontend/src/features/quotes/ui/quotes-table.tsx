@@ -340,7 +340,7 @@ export function QuotesTable({
         <TableBody>
           {actionQuotes.length > 0 && (
             <>
-              <TableRow className="hover:bg-transparent">
+              <TableRow className="hover:bg-transparent bg-accent-subtle/50">
                 <TableCell colSpan={8} className="py-3 px-0">
                   <div className="border-l-4 border-accent pl-3 flex items-center gap-2 text-sm font-semibold text-foreground">
                     <AlertCircle size={16} className="text-accent shrink-0" />
@@ -363,7 +363,7 @@ export function QuotesTable({
               </TableRow>
               <TableRow className="hover:bg-transparent">
                 <TableCell colSpan={8} className="py-2 px-0">
-                  <span className="text-sm text-muted-foreground font-medium">
+                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
                     Остальные КП
                   </span>
                 </TableCell>

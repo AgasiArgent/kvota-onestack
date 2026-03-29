@@ -20,7 +20,7 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-screen">
       <Sidebar user={user} appContext={appContext} />
-      <main className="flex-1 sidebar-margin p-6 max-w-[1200px]">
+      <main className="flex-1 sidebar-margin p-6">
         {children}
       </main>
       <FeedbackButton />

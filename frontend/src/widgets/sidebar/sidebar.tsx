@@ -251,53 +251,54 @@ export function Sidebar({
       </ScrollArea>
 
       {/* Footer */}
-      <div className="border-t border-border-light p-3 space-y-2">
-        <Link
-          href="/profile"
-          prefetch={false}
-          className="flex items-center gap-3"
-        >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="bg-accent-subtle text-accent text-sm">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          {showLabels && (
-            <div className="min-w-0">
-              <p className="text-sm truncate">{user.email}</p>
-              <p className="text-xs text-accent">Профиль</p>
-            </div>
-          )}
-        </Link>
-        <div className={cn(
-          "flex items-center",
-          showLabels ? "justify-between" : "justify-center gap-1"
-        )}>
-          {showLabels ? (
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 text-text-subtle hover:text-text-muted text-xs px-1"
-              title="Выйти из системы"
-            >
-              <LogOut size={16} />
-              <span>Выйти</span>
-            </button>
-          ) : (
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
-              title="Выйти из системы"
-            >
-              <LogOut size={16} />
-            </button>
-          )}
-          {!isMobile && (
+      <div className="border-t border-border-light">
+        {/* Collapse toggle — separated from logout */}
+        {!isMobile && (
+          <div className="flex justify-end px-3 pt-2">
             <button
               onClick={toggleCollapsed}
               className="p-1.5 rounded-md text-text-subtle hover:text-text-muted hover:bg-background"
               title={collapsed ? "Развернуть панель" : "Свернуть панель"}
             >
               {collapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          </div>
+        )}
+        {/* Profile + Logout */}
+        <div className="p-3 pt-1 space-y-2">
+          <Link
+            href="/profile"
+            prefetch={false}
+            className="flex items-center gap-3"
+          >
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-accent-subtle text-accent text-sm">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            {showLabels && (
+              <div className="min-w-0">
+                <p className="text-sm truncate">{user.email}</p>
+                <p className="text-xs text-accent">Профиль</p>
+              </div>
+            )}
+          </Link>
+          {showLabels ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 text-text-subtle hover:text-error text-xs px-1"
+              title="Выйти из системы"
+            >
+              <LogOut size={14} />
+              <span>Выйти</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-md text-text-subtle hover:text-error hover:bg-error-bg"
+              title="Выйти из системы"
+            >
+              <LogOut size={14} />
             </button>
           )}
         </div>
