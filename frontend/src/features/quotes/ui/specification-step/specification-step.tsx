@@ -231,8 +231,10 @@ export function SpecificationStep({
 
       toast.success("Скан загружен");
       loadData();
-    } catch {
-      toast.error("Не удалось загрузить скан");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      toast.error(`Не удалось загрузить скан: ${msg}`);
+      console.error("Upload error:", err);
     } finally {
       setUploading(false);
     }
