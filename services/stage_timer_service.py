@@ -134,7 +134,8 @@ def get_overdue_quotes(org_id: str) -> list[dict]:
         client.table("quotes")
         .select("id, idn, workflow_status, stage_entered_at, "
                 "stage_deadline_override_hours, overdue_notified_at, "
-                "assigned_user_id, manager_id")
+                "assigned_procurement_users, assigned_logistics_user, "
+                "assigned_customs_user, created_by_user_id")
         .eq("organization_id", org_id)
         .is_("overdue_notified_at", "null")
         .execute()
@@ -145,16 +146,29 @@ def get_overdue_quotes(org_id: str) -> list[dict]:
     for q in (resp.data or []):
         timer = _build_timer(q, deadlines_map)
         if timer["status"] == "overdue":
+            assigned = _get_assigned_user_for_stage(q, timer["stage"])
             overdue.append({
                 "quote_id": q["id"],
                 "idn": q.get("idn", ""),
                 "stage": timer["stage"],
                 "elapsed_hours": timer["elapsed_hours"],
                 "deadline_hours": timer["deadline_hours"],
-                "assigned_user_id": q.get("assigned_user_id"),
-                "manager_id": q.get("manager_id"),
+                "assigned_user_id": assigned,
+                "manager_id": q.get("created_by_user_id"),
             })
     return overdue
+
+
+def _get_assigned_user_for_stage(quote: dict, stage: str) -> str | None:
+    """Get the assigned user ID for the current stage."""
+    if stage in ("pending_procurement",):
+        users = quote.get("assigned_procurement_users") or []
+        return users[0] if users else None
+    elif stage in ("pending_logistics", "pending_logistics_and_customs"):
+        return quote.get("assigned_logistics_user")
+    elif stage in ("pending_customs",):
+        return quote.get("assigned_customs_user")
+    return quote.get("created_by_user_id")
 
 
 def format_elapsed(hours: float) -> str:
