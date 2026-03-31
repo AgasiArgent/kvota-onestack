@@ -26,12 +26,14 @@ export {
   fetchQuoteInvoices,
   fetchQuoteComments,
   fetchQuoteCalcVariables,
+  fetchStageDeadline,
 } from "./queries";
 export type {
   QuoteDetailRow,
   QuoteItemRow,
   QuoteInvoiceRow,
   CalcVariablesRow,
+  StageDeadlineData,
 } from "./queries";
 export {
   createQuote,

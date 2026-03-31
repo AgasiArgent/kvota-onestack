@@ -6,10 +6,11 @@ import {
   fetchQuoteInvoices,
   fetchQuoteComments,
   fetchQuoteCalcVariables,
+  fetchStageDeadline,
   ROLE_ALLOWED_STEPS,
   STATUS_TO_STEP,
 } from "@/entities/quote";
-import type { QuoteStep } from "@/entities/quote";
+import type { QuoteStep, StageDeadlineData } from "@/entities/quote";
 import { QuoteStickyHeader } from "@/features/quotes/ui/quote-sticky-header";
 import { QuoteStatusRail } from "@/features/quotes/ui/quote-status-rail";
 import { QuoteStepContent } from "@/features/quotes/ui/quote-step-content";
@@ -52,6 +53,14 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
 
   const userRoles = user.roles;
   const isAdmin = userRoles.includes("admin");
+
+  // Fetch stage deadline data (depends on quote being loaded)
+  const workflowStatusForDeadline = quote.workflow_status ?? "draft";
+  const stageDeadline: StageDeadlineData = await fetchStageDeadline(
+    id,
+    user.orgId,
+    workflowStatusForDeadline
+  );
 
   // Determine allowed steps for this user
   const allowedSteps = isAdmin
@@ -97,6 +106,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           isAdmin={isAdmin}
           quoteId={id}
           workflowStatus={workflowStatus}
+          stageDeadline={stageDeadline}
         />
       </div>
     </div>

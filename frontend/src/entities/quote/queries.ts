@@ -355,6 +355,71 @@ export async function fetchQuoteComments(quoteId: string) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Stage deadline for a specific workflow status (for timer badge)
+// ---------------------------------------------------------------------------
+
+export interface StageDeadlineData {
+  deadlineHours: number | null;
+  stageEnteredAt: string | null;
+  overrideHours: number | null;
+}
+
+const TERMINAL_STATUSES = new Set(["draft", "deal", "rejected", "cancelled"]);
+
+/**
+ * Fetch stage deadline data for the timer badge.
+ *
+ * `stage_entered_at`, `stage_deadline_override_hours` (on quotes) and
+ * `stage_deadlines` table were added in migrations 238-240. The generated
+ * types don't include them yet -- we cast through Record<string, unknown>
+ * for the new columns until `npm run db:types` is re-run.
+ */
+export async function fetchStageDeadline(
+  quoteId: string,
+  orgId: string,
+  workflowStatus: string
+): Promise<StageDeadlineData> {
+  if (TERMINAL_STATUSES.has(workflowStatus)) {
+    return { deadlineHours: null, stageEnteredAt: null, overrideHours: null };
+  }
+
+  const supabase = await createClient();
+
+  // quotes.select("*") returns all columns including the new ones,
+  // but the TS type doesn't know about them yet.
+  const quoteRes = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("id", quoteId)
+    .single();
+
+  const quoteRow = quoteRes.data as Record<string, unknown> | null;
+
+  // stage_deadlines table isn't in generated types yet.
+  // PostgREST still serves it -- use the client with a type assertion.
+  let deadlineHours: number | null = null;
+  try {
+    const fromFn = supabase.from.bind(supabase) as (
+      table: string
+    ) => ReturnType<typeof supabase.from>;
+    const { data } = await fromFn("stage_deadlines")
+      .select("deadline_hours")
+      .eq("organization_id", orgId)
+      .eq("stage", workflowStatus)
+      .maybeSingle();
+    deadlineHours = (data as Record<string, unknown> | null)?.deadline_hours as number ?? null;
+  } catch {
+    deadlineHours = null;
+  }
+
+  return {
+    deadlineHours,
+    stageEnteredAt: (quoteRow?.stage_entered_at as string) ?? null,
+    overrideHours: (quoteRow?.stage_deadline_override_hours as number) ?? null,
+  };
+}
+
 export async function fetchFilterOptions(
   orgId: string,
   user?: { id: string; roles: string[] }

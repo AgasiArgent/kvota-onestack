@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { Check, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { QuoteStep } from "@/entities/quote/types";
+import type { StageDeadlineData } from "@/entities/quote/queries";
+import { StageTimerBadge, type TimerStatus } from "./stage-timer-badge";
+import { DeadlineOverride } from "./deadline-override";
 
 // ---------------------------------------------------------------------------
 // Steps reflect the REAL business process sequence.
@@ -71,6 +74,29 @@ const SPEC_STATUS_BADGES: Record<string, { label: string; className: string }> =
   spec_signed: { label: "Подписана", className: "bg-green-100 text-green-700" },
 };
 
+const TERMINAL_STATUSES = new Set(["draft", "deal", "rejected", "cancelled"]);
+
+function getTimerStatus(
+  stageDeadline: StageDeadlineData,
+  workflowStatus: string
+): TimerStatus {
+  if (TERMINAL_STATUSES.has(workflowStatus)) return "no_timer";
+  if (!stageDeadline.stageEnteredAt) return "no_timer";
+  if (stageDeadline.deadlineHours === null && stageDeadline.overrideHours === null) {
+    return "no_deadline";
+  }
+
+  const effectiveDeadline = stageDeadline.overrideHours ?? stageDeadline.deadlineHours;
+  if (effectiveDeadline === null) return "no_deadline";
+
+  const elapsedMs = Date.now() - new Date(stageDeadline.stageEnteredAt).getTime();
+  const elapsedHours = elapsedMs / 3_600_000;
+
+  if (elapsedHours >= effectiveDeadline) return "overdue";
+  if (elapsedHours >= effectiveDeadline * 0.8) return "warning";
+  return "ok";
+}
+
 interface QuoteStatusRailProps {
   activeStep: QuoteStep;
   currentWorkflowStep: QuoteStep;
@@ -78,6 +104,7 @@ interface QuoteStatusRailProps {
   isAdmin: boolean;
   quoteId: string;
   workflowStatus: string;
+  stageDeadline: StageDeadlineData;
 }
 
 export function QuoteStatusRail({
@@ -86,6 +113,7 @@ export function QuoteStatusRail({
   isAdmin,
   quoteId,
   workflowStatus,
+  stageDeadline,
 }: QuoteStatusRailProps) {
   const router = useRouter();
 
@@ -93,6 +121,8 @@ export function QuoteStatusRail({
   const currentStepIdx = STEPS.findIndex((s) =>
     s.statuses.includes(workflowStatus)
   );
+
+  const timerStatus = getTimerStatus(stageDeadline, workflowStatus);
 
   function handleStepClick(stepKey: QuoteStep) {
     router.replace(`/quotes/${quoteId}?step=${stepKey}`, { scroll: false });
@@ -111,7 +141,7 @@ export function QuoteStatusRail({
           const isClickable = isAdmin || allowedSteps.includes(step.key);
 
           return (
-            <li key={`${step.key}-${idx}`}>
+            <li key={`${step.key}-${idx}`} className="group/step">
               <button
                 type="button"
                 disabled={!isClickable}
@@ -158,6 +188,23 @@ export function QuoteStatusRail({
                   )}
                 </span>
               </button>
+              {isCurrent && timerStatus !== "no_timer" && stageDeadline.stageEnteredAt && (
+                <div className="flex items-center gap-0.5 pl-[26px] pb-1">
+                  <StageTimerBadge
+                    stageEnteredAt={stageDeadline.stageEnteredAt}
+                    deadlineHours={stageDeadline.deadlineHours}
+                    overrideHours={stageDeadline.overrideHours}
+                    status={timerStatus}
+                  />
+                  {isAdmin && (
+                    <DeadlineOverride
+                      quoteId={quoteId}
+                      currentOverrideHours={stageDeadline.overrideHours}
+                      globalDeadlineHours={stageDeadline.deadlineHours}
+                    />
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

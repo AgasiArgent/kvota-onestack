@@ -6,7 +6,7 @@ Run with: python main.py
 """
 
 from fasthtml.common import *
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
 import os
@@ -12160,7 +12160,11 @@ def cancel_quote(quote_id: str, session):
 
     try:
         result = supabase.table("quotes") \
-            .update({"workflow_status": "cancelled"}) \
+            .update({
+                "workflow_status": "cancelled",
+                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "overdue_notified_at": None,
+            }) \
             .eq("id", quote_id) \
             .execute()
 
@@ -49296,6 +49300,15 @@ async def post_phmb_export_pdf(request):
 @rt("/api/phmb/notify-price-set", methods=["POST"])
 async def post_phmb_notify_price_set(request):
     return await phmb_notify_price_set(request)
+
+
+# --- Cron JSON API (for scheduled background tasks) ---
+
+from api.cron import cron_check_overdue
+
+@rt("/api/cron/check-overdue", methods=["GET"])
+async def get_cron_check_overdue(request):
+    return await cron_check_overdue(request)
 
 
 # ============================================================================

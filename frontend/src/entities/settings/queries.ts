@@ -5,6 +5,7 @@ import type {
   PhmbSettings,
   BrandDiscount,
   BrandGroup,
+  StageDeadline,
 } from "./types";
 
 export async function fetchSettingsPageData(
@@ -12,7 +13,7 @@ export async function fetchSettingsPageData(
 ): Promise<SettingsPageData> {
   const supabase = await createClient();
 
-  const [orgResult, calcResult, phmbResult, discountsResult, groupsResult] =
+  const [orgResult, calcResult, phmbResult, discountsResult, groupsResult, deadlinesResult] =
     await Promise.all([
       supabase
         .from("organizations")
@@ -41,6 +42,11 @@ export async function fetchSettingsPageData(
         .select("id, name")
         .eq("org_id", orgId)
         .order("sort_order"),
+      supabase
+        .from("stage_deadlines" as never)
+        .select("id, organization_id, stage, deadline_hours")
+        .eq("organization_id", orgId)
+        .order("stage"),
     ]);
 
   if (orgResult.error || !orgResult.data) {
@@ -54,5 +60,6 @@ export async function fetchSettingsPageData(
     phmbSettings: (phmbResult.data as PhmbSettings) ?? null,
     brandDiscounts: (discountsResult.data ?? []) as BrandDiscount[],
     brandGroups: (groupsResult.data ?? []) as BrandGroup[],
+    stageDeadlines: ((deadlinesResult as { data: StageDeadline[] | null }).data ?? []) as StageDeadline[],
   };
 }

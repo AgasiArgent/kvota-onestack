@@ -4,6 +4,7 @@ import { Settings } from "lucide-react";
 import { Toaster } from "sonner";
 import type { SettingsPageData } from "@/entities/settings";
 import { CalcRatesForm } from "./calc-rates-form";
+import { StageDeadlinesForm } from "./stage-deadlines-form";
 
 interface SettingsTabsProps {
   data: SettingsPageData;
@@ -24,9 +25,15 @@ export function SettingsTabs({ data }: SettingsTabsProps) {
         <span className="text-sm text-text-muted">{data.organization.name}</span>
       </div>
 
-      {/* Single content: Calc rates */}
+      {/* Calc rates */}
       <CalcRatesForm
         settings={data.calcSettings}
+        orgId={data.organization.id}
+      />
+
+      {/* Stage deadlines */}
+      <StageDeadlinesForm
+        deadlines={data.stageDeadlines}
         orgId={data.organization.id}
       />
     </div>

@@ -204,6 +204,17 @@ NOTIFICATION_TEMPLATES = {
 [Открыть в системе]({quote_url})
 """,
 
+    NotificationType.DEADLINE_REMINDER: """
+⏰ *Просрочен дедлайн*
+
+КП: {quote_idn}
+Стадия: {stage_name}
+Время на стадии: {elapsed}
+Норматив: {deadline}ч
+
+[Открыть в системе]({quote_url})
+""",
+
     NotificationType.COMMENT_ADDED: """
 💬 *[{quote_idn}] {sender_name}:*
 {comment_body}
@@ -270,6 +281,9 @@ def format_notification(
         "total_count": 0,
         "sender_name": "Система",
         "comment_body": "",
+        "stage_name": "",
+        "elapsed": "",
+        "deadline": "",
     }
     defaults.update(kwargs)
 
@@ -3926,6 +3940,61 @@ async def send_chat_message_notification(
             errors.append(f"Failed to send to user {recipient_id}")
 
     return {"success": True, "notified_count": notified, "errors": errors}
+
+
+# ============================================================================
+# Overdue Deadline Notifications
+# ============================================================================
+
+
+async def send_overdue_notification(
+    user_id: str,
+    quote_id: str,
+    quote_idn: str,
+    stage_name: str,
+    elapsed: str,
+    deadline_hours: int,
+) -> bool:
+    """Send an overdue deadline notification to a user via Telegram.
+
+    Args:
+        user_id: UUID of the user to notify.
+        quote_id: UUID of the overdue quote.
+        quote_idn: Quote display identifier (e.g. "Q-202603-0015").
+        stage_name: Russian name of the current workflow stage.
+        elapsed: Formatted elapsed time string (e.g. "3д 5ч").
+        deadline_hours: The deadline in hours.
+
+    Returns:
+        True if the Telegram message was sent, False otherwise.
+    """
+    telegram_id = await get_user_telegram_id(user_id)
+    if not telegram_id:
+        logger.info(f"User {user_id} has no linked Telegram — skipping overdue notification")
+        return False
+
+    message_id = await send_notification(
+        telegram_id=telegram_id,
+        notification_type=NotificationType.DEADLINE_REMINDER,
+        quote_id=quote_id,
+        quote_idn=quote_idn,
+        stage_name=stage_name,
+        elapsed=elapsed,
+        deadline=str(deadline_hours),
+    )
+
+    sent = message_id is not None
+    if sent:
+        record_notification(
+            user_id=user_id,
+            notification_type="deadline_reminder",
+            title="Просрочен дедлайн",
+            message=f"{quote_idn} — стадия «{stage_name}», {elapsed} (норматив {deadline_hours}ч)",
+            channel="telegram",
+            quote_id=quote_id,
+            sent=True,
+        )
+    return sent
 
 
 # ============================================================================

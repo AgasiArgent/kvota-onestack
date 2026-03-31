@@ -4,6 +4,7 @@ export type {
   PhmbSettings,
   BrandDiscount,
   BrandGroup,
+  StageDeadline,
   SettingsPageData,
 } from "./types";
 export {
@@ -13,4 +14,5 @@ export {
   deleteBrandDiscount,
   createBrandGroup,
   deleteBrandGroup,
+  upsertStageDeadlines,
 } from "./mutations";

@@ -39,10 +39,18 @@ export interface BrandGroup {
   name: string;
 }
 
+export interface StageDeadline {
+  id: string;
+  organization_id: string;
+  stage: string;
+  deadline_hours: number;
+}
+
 export interface SettingsPageData {
   organization: OrganizationInfo;
   calcSettings: CalcSettings | null;
   phmbSettings: PhmbSettings | null;
   brandDiscounts: BrandDiscount[];
   brandGroups: BrandGroup[];
+  stageDeadlines: StageDeadline[];
 }

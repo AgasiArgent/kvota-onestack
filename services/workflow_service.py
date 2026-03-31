@@ -1334,7 +1334,11 @@ def transition_quote_status(
     # Step 4: Update the quote's workflow_status
     try:
         update_response = supabase.table("quotes") \
-            .update({"workflow_status": to_status_enum.value}) \
+            .update({
+                "workflow_status": to_status_enum.value,
+                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "overdue_notified_at": None,
+            }) \
             .eq("id", quote_id) \
             .execute()
 
@@ -2528,7 +2532,9 @@ def transition_to_pending_procurement(
                 # Note: Don't update legacy "status" field - it has different valid values
                 # Only update workflow_status which tracks the actual workflow state
                 "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
-                "procurement_completed_at": None  # Reset in case of re-evaluation
+                "procurement_completed_at": None,  # Reset in case of re-evaluation
+                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "overdue_notified_at": None,
             }) \
             .eq("id", quote_id) \
             .execute()
@@ -2861,7 +2867,9 @@ def complete_procurement(
         update_response = supabase.table("quotes") \
             .update({
                 "procurement_completed_at": datetime.now(timezone.utc).isoformat(),
-                "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value
+                "workflow_status": WorkflowStatus.PENDING_LOGISTICS_AND_CUSTOMS.value,
+                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "overdue_notified_at": None,
             }) \
             .eq("id", quote_id) \
             .execute()
