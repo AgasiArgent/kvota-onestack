@@ -54,11 +54,23 @@ class TestAmountInWordsTRY:
 
     def test_try_singular(self):
         result = amount_in_words_russian(1.00, "TRY")
-        assert "турецкая лира" in result
+        assert "Одна турецкая лира" in result
 
     def test_try_few(self):
         result = amount_in_words_russian(3.00, "TRY")
         assert "турецкие лиры" in result
+
+    def test_try_feminine_two(self):
+        result = amount_in_words_russian(2.00, "TRY")
+        assert "Две турецкие лиры" in result
+
+    def test_try_feminine_twenty_one(self):
+        result = amount_in_words_russian(21.00, "TRY")
+        assert "одна турецкая лира" in result
+
+    def test_try_feminine_twenty_two(self):
+        result = amount_in_words_russian(22.00, "TRY")
+        assert "две турецкие лиры" in result
 
 
 class TestAmountInWordsRUB:

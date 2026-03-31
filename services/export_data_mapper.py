@@ -274,16 +274,17 @@ def amount_in_words_russian(amount: float, currency: str = "RUB") -> str:
         rubles = int(amount)
         kopecks = int(round((amount - rubles) * 100))
 
-        # Currency-specific suffixes
+        # Currency-specific suffixes: (sing, few, plural, cent_sing, cent_few, cent_plural, feminine)
         currency_words = {
-            "RUB": ("рубль", "рубля", "рублей", "копейка", "копейки", "копеек"),
-            "USD": ("доллар США", "доллара США", "долларов США", "цент", "цента", "центов"),
-            "EUR": ("евро", "евро", "евро", "евроцент", "евроцента", "евроцентов"),
-            "CNY": ("юань", "юаня", "юаней", "фэнь", "фэня", "фэней"),
-            "TRY": ("турецкая лира", "турецкие лиры", "турецких лир", "куруш", "куруша", "курушей"),
+            "RUB": ("рубль", "рубля", "рублей", "копейка", "копейки", "копеек", False),
+            "USD": ("доллар США", "доллара США", "долларов США", "цент", "цента", "центов", False),
+            "EUR": ("евро", "евро", "евро", "евроцент", "евроцента", "евроцентов", False),
+            "CNY": ("юань", "юаня", "юаней", "фэнь", "фэня", "фэней", False),
+            "TRY": ("турецкая лира", "турецкие лиры", "турецких лир", "куруш", "куруша", "курушей", True),
         }
 
         words = currency_words.get(currency, currency_words["RUB"])
+        is_feminine = words[6]
 
         # Convert rubles to words
         rubles_word = num2words(rubles, lang='ru')
@@ -313,6 +314,14 @@ def amount_in_words_russian(amount: float, currency: str = "RUB") -> str:
             kopeck_form = words[4]  # копейки
         else:
             kopeck_form = words[5]  # копеек
+
+        # Convert to feminine form if needed (e.g., "один" → "одна" for лира)
+        if is_feminine:
+            rubles_word = rubles_word.replace("один ", "одна ").replace("два ", "две ")
+            if rubles_word.endswith("один"):
+                rubles_word = rubles_word[:-4] + "одна"
+            elif rubles_word.endswith("два"):
+                rubles_word = rubles_word[:-3] + "две"
 
         # Capitalize first letter
         rubles_word = rubles_word.capitalize()
