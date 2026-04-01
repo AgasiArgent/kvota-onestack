@@ -13,6 +13,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Layers, UserPlus, CheckCircle2 } from "lucide-react";
+import { submitRegistration } from "../actions";
 
 interface FormData {
   first_name: string;
@@ -50,15 +51,10 @@ export function RegistrationForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const data = await res.json();
+      const result = await submitRegistration(form);
 
-      if (!data.success) {
-        setError(data.error ?? "Ошибка отправки");
+      if (!result.success) {
+        setError(result.error ?? "Ошибка отправки");
         return;
       }
 
