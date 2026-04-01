@@ -53,8 +53,14 @@ def _get_api_user(request):
 
     user_meta = api_user.user_metadata or {}
     org_id = user_meta.get("org_id")
-    import sys
-    print(f"[plan_fact] user_id={api_user.id}, email={api_user.email}, org_id={org_id}, meta_keys={list(user_meta.keys())}", flush=True, file=sys.stderr)
+
+    # Fallback: look up org_id from organization_members if not in JWT metadata
+    if not org_id:
+        sb = get_supabase()
+        om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).limit(1).execute()
+        if om.data:
+            org_id = om.data[0].get("organization_id")
+
     if not org_id:
         return None, JSONResponse(
             {"success": False, "error": {"code": "FORBIDDEN", "message": "User has no organization"}},
@@ -79,14 +85,12 @@ def _get_user_roles(user_id: str, org_id: str) -> set[str]:
         .execute()
     )
     roles = set()
-    print(f"[plan_fact] role query result: {result.data}")
     for row in result.data or []:
         role_data = row.get("roles")
         if isinstance(role_data, dict):
             slug = role_data.get("slug")
             if slug:
                 roles.add(slug)
-    print(f"[plan_fact] resolved roles: {roles}")
     return roles
 
 
