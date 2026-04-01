@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/shared/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,12 @@ export function LoginForm() {
               <LogIn size={18} />
               {loading ? "Вход..." : "Войти в систему"}
             </Button>
+            <p className="text-center text-sm text-muted-foreground">
+              Нет аккаунта?{" "}
+              <Link href="/register" className="text-accent hover:underline">
+                Оставить заявку
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>
