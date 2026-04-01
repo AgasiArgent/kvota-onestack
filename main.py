@@ -29823,15 +29823,18 @@ def render_payments_grouped(items):
 
             rows.append(
                 Tr(
-                    Td(format_date_russian(planned_date_str) if planned_date_str else "—"),
-                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
+                    Td(format_date_russian(planned_date_str) if planned_date_str else "—", style="white-space: nowrap;"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number, style="white-space: nowrap;"),
                     Td(""),  # customer already shown in header
-                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
-                    Td(item.get("description") or "—"),
-                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right;"),
-                    Td(actual_amt_str, style="text-align: right;"),
-                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—"),
-                    Td(variance_str, style="text-align: right;"),
+                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—"),
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
+                    Td(item.get("description") or "—",
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                       title=item.get("description") or ""),
+                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right; white-space: nowrap;"),
+                    Td(actual_amt_str, style="text-align: right; white-space: nowrap;"),
+                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—", style="white-space: nowrap;"),
+                    Td(variance_str, style="text-align: right; white-space: nowrap;"),
                     style=row_style,
                     onclick=f"window.location='/finance/{deal_id}'" if deal_id else "",
                 )
@@ -30036,15 +30039,18 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
 
             table_rows.append(
                 Tr(
-                    Td(format_date_russian(planned_date_str) if planned_date_str else "—"),
-                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number),
-                    Td(customer_name),
-                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—")),
-                    Td(item.get("description") or "—"),
-                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right;"),
-                    Td(actual_amt_str, style="text-align: right;"),
-                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—"),
-                    Td(variance_str, style="text-align: right;"),
+                    Td(format_date_russian(planned_date_str) if planned_date_str else "—", style="white-space: nowrap;"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number, style="white-space: nowrap;"),
+                    Td(customer_name, style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;", title=customer_name),
+                    Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—"),
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
+                    Td(item.get("description") or "—",
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                       title=item.get("description") or ""),
+                    Td(f"{planned_amt:,.0f} ₽", style="text-align: right; white-space: nowrap;"),
+                    Td(actual_amt_str, style="text-align: right; white-space: nowrap;"),
+                    Td(item.get("actual_date", "—") if item.get("actual_date") else "—", style="white-space: nowrap;"),
+                    Td(variance_str, style="text-align: right; white-space: nowrap;"),
                     style=row_style,
                     onclick=f"window.location='/finance/{deal_id}'" if deal_id else "",
                 )
@@ -30054,21 +30060,22 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
     table = Table(
         Thead(
             Tr(
-                Th("План. дата"),
-                Th("Сделка"),
-                Th("Клиент"),
-                Th("Категория"),
+                Th("План. дата", style="width: 90px;"),
+                Th("Сделка", style="width: 130px;"),
+                Th("Клиент", style="width: 130px;"),
+                Th("Категория", style="width: 180px;"),
                 Th("Описание"),
-                Th("Сумма план", style="text-align: right;"),
-                Th("Сумма факт", style="text-align: right;"),
-                Th("Дата факт"),
-                Th("Отклонение", style="text-align: right;"),
+                Th("Сумма план", style="text-align: right; width: 110px;"),
+                Th("Сумма факт", style="text-align: right; width: 110px;"),
+                Th("Дата факт", style="width: 90px;"),
+                Th("Отклонение", style="text-align: right; width: 110px;"),
             )
         ),
         Tbody(*table_rows) if table_rows else Tbody(
             Tr(Td("Нет данных", colspan="9", style="text-align: center; padding: 2rem; color: #666;"))
         ),
-        cls="unified-table"
+        cls="unified-table",
+        style="min-width: 1100px; table-layout: fixed;"
     )
 
     # Summary footer with Итого
