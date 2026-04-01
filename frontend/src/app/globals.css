@@ -215,8 +215,9 @@
   }
 }
 
-/* Chat panel open — reserve space so content doesn't slide under the overlay.
-   Must be outside @layer base to beat Tailwind's p-6 utility. */
+/* Chat panel open — shrink main content so nothing renders under the overlay.
+   Uses margin (not padding) because Handsontable overflow ignores padding.
+   Must be outside @layer base to beat Tailwind utilities. */
 html[data-chat-open="true"] .sidebar-margin {
-  padding-right: 340px;
+  margin-right: 340px;
 }
