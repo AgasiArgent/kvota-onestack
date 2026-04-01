@@ -53,7 +53,8 @@ def _get_api_user(request):
 
     user_meta = api_user.user_metadata or {}
     org_id = user_meta.get("org_id")
-    print(f"[plan_fact] user_id={api_user.id}, email={api_user.email}, org_id={org_id}, meta_keys={list(user_meta.keys())}")
+    import sys
+    print(f"[plan_fact] user_id={api_user.id}, email={api_user.email}, org_id={org_id}, meta_keys={list(user_meta.keys())}", flush=True, file=sys.stderr)
     if not org_id:
         return None, JSONResponse(
             {"success": False, "error": {"code": "FORBIDDEN", "message": "User has no organization"}},
