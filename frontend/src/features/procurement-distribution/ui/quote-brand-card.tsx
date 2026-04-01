@@ -145,7 +145,7 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
                       <SelectItem key={u.user_id} value={u.user_id}>
                         {u.full_name ?? u.user_id}
                         <span className="text-text-subtle ml-1">
-                          ({u.active_items})
+                          ({u.active_quotes})
                         </span>
                       </SelectItem>
                     ))}

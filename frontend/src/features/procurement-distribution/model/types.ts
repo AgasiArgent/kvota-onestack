@@ -30,9 +30,9 @@ export interface QuoteWithBrandGroups {
   brandGroups: BrandGroup[];
 }
 
-/** Procurement user with current workload */
+/** Procurement user with current workload (counted in quotes, not items) */
 export interface ProcurementUserWorkload {
   user_id: string;
   full_name: string | null;
-  active_items: number;
+  active_quotes: number;
 }

@@ -32,7 +32,7 @@ export function WorkloadCards({ users }: Props) {
               {shortName(u.full_name)}
             </span>
             <span className="font-semibold text-accent min-w-[14px] text-center">
-              {u.active_items}
+              {u.active_quotes}
             </span>
           </div>
         ))}

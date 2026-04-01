@@ -169,7 +169,7 @@ export async function fetchProcurementWorkload(
     profileMap.set(p.user_id, p.full_name);
   }
 
-  // 3. Count active items per user
+  // 3. Count active quotes (not items) per user
   const { data: countRows } = await supabase
     .from("quote_items")
     .select("assigned_procurement_user, quote_id")
@@ -190,19 +190,22 @@ export async function fetchProcurementWorkload(
     }
   }
 
-  const countMap = new Map<string, number>();
+  // Count unique quote_ids per user (not individual items)
+  const quotesPerUser = new Map<string, Set<string>>();
   for (const row of countRows ?? []) {
     if (!activeQuoteIds.has(row.quote_id)) continue;
     const uid = row.assigned_procurement_user;
     if (uid) {
-      countMap.set(uid, (countMap.get(uid) ?? 0) + 1);
+      const quotes = quotesPerUser.get(uid) ?? new Set();
+      quotes.add(row.quote_id);
+      quotesPerUser.set(uid, quotes);
     }
   }
 
   return userIdArr.map((uid) => ({
     user_id: uid,
     full_name: profileMap.get(uid) ?? null,
-    active_items: countMap.get(uid) ?? 0,
+    active_quotes: quotesPerUser.get(uid)?.size ?? 0,
   }));
 }
 
