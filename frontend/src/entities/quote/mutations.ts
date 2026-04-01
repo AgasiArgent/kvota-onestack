@@ -1,6 +1,37 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 
+// ---------------------------------------------------------------------------
+// Workflow transition via Python API (handles validation, audit log, timestamps)
+// ---------------------------------------------------------------------------
+
+async function callWorkflowTransition(
+  quoteId: string,
+  body: Record<string, unknown>
+): Promise<{ from_status: string; to_status: string }> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/workflow/transition`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Workflow transition failed");
+  }
+  return data;
+}
+
 export interface CreateQuoteInput {
   customer_id: string;
   seller_company_id?: string;
@@ -364,33 +395,13 @@ export async function completeLogistics(quoteId: string) {
 }
 
 export async function completeCustoms(quoteId: string) {
-  const supabase = createClient();
-
-  // Set customs_completed_at
-  const { error } = await supabase
-    .from("quotes")
-    .update({ customs_completed_at: new Date().toISOString() })
-    .eq("id", quoteId);
-
-  if (error) throw error;
-
-  // Check if logistics is also complete to auto-transition to pending_sales_review
-  const { data: quote } = await supabase
-    .from("quotes")
-    .select("logistics_completed_at, workflow_status")
-    .eq("id", quoteId)
-    .single();
-
-  if (quote?.logistics_completed_at) {
-    await supabase
-      .from("quotes")
-      .update({ workflow_status: "pending_sales_review" })
-      .eq("id", quoteId);
-  }
+  await callWorkflowTransition(quoteId, { action: "complete_customs" });
 }
 
 export async function skipCustoms(quoteId: string) {
-  return updateQuoteWorkflowStatus(quoteId, "pending_sales_review");
+  await callWorkflowTransition(quoteId, {
+    to_status: "pending_sales_review",
+  });
 }
 
 export async function sendToClient(quoteId: string) {

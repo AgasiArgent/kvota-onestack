@@ -174,6 +174,75 @@ function headerWithTooltip(label: string, tooltip: string): string {
   return `<span title="${tooltip}">${label}</span>`;
 }
 
+const numericTooltip = "Значение за единицу товара";
+
+/**
+ * Static column headers — defined at module level to prevent
+ * Handsontable re-initialization issues on React re-renders.
+ */
+const COL_HEADERS: string[] = [
+  "No",
+  "Бренд",
+  "Артикул",
+  "Наименование",
+  "Кол-во",
+  "Страна",
+  "Код ТН ВЭД",
+  headerWithTooltip("Пошлина %", numericTooltip),
+  headerWithTooltip("Пошлина, $/кг", numericTooltip),
+  "ДС/СС/СГР",
+  headerWithTooltip("Утильсбор", numericTooltip),
+  headerWithTooltip("Акциз", numericTooltip),
+  "ПСН/ПТС",
+  "Нотификация",
+  "Лицензии",
+  "Маркировка",
+  headerWithTooltip("Экосбор", numericTooltip),
+  "Честный знак",
+  "Запрет ввоза",
+  "Причина запрета",
+  "ДС",
+  headerWithTooltip("Ст-ть ДС", numericTooltip),
+  "СС",
+  headerWithTooltip("Ст-ть СС", numericTooltip),
+  "СГР",
+  headerWithTooltip("Ст-ть СГР", numericTooltip),
+];
+
+/**
+ * Static column definitions — defined at module level so Handsontable
+ * always receives the same column count regardless of React re-render timing.
+ * The `readOnly` for import_banned is handled dynamically in the cells callback.
+ */
+const COLUMNS: Handsontable.ColumnSettings[] = [
+  { data: "position", type: "numeric", width: 30, readOnly: true },
+  { data: "brand", type: "text", width: 55, readOnly: true },
+  { data: "product_code", type: "text", width: 70, readOnly: true },
+  { data: "product_name", type: "text", width: 130, readOnly: true },
+  { data: "quantity", type: "numeric", width: 40, readOnly: true },
+  { data: "supplier_country", type: "text", width: 65, readOnly: true },
+  { data: "hs_code", type: "text", width: 85 },
+  { data: "customs_duty", type: "numeric", width: 55, allowEmpty: true },
+  { data: "customs_duty_per_kg", type: "numeric", width: 80, allowEmpty: true },
+  { data: "customs_ds_sgr", type: "text", width: 80 },
+  { data: "customs_util_fee", type: "numeric", width: 70, allowEmpty: true },
+  { data: "customs_excise", type: "numeric", width: 65, allowEmpty: true },
+  { data: "customs_psn_pts", type: "text", width: 70 },
+  { data: "customs_notification", type: "text", width: 90 },
+  { data: "customs_licenses", type: "text", width: 80 },
+  { data: "customs_marking", type: "text", width: 80 },
+  { data: "customs_eco_fee", type: "numeric", width: 65, allowEmpty: true },
+  { data: "customs_honest_mark", type: "text", width: 85 },
+  { data: "import_banned", type: "checkbox", width: 50 },
+  { data: "import_ban_reason", type: "text", width: 120 },
+  { data: "license_ds_required", type: "checkbox", width: 30 },
+  { data: "license_ds_cost", type: "numeric", width: 55, allowEmpty: true },
+  { data: "license_ss_required", type: "checkbox", width: 30 },
+  { data: "license_ss_cost", type: "numeric", width: 55, allowEmpty: true },
+  { data: "license_sgr_required", type: "checkbox", width: 30 },
+  { data: "license_sgr_cost", type: "numeric", width: 55, allowEmpty: true },
+];
+
 interface CustomsHandsontableProps {
   items: QuoteItemRow[];
   invoiceCountryMap: Map<string, string>;
@@ -260,74 +329,7 @@ export function CustomsHandsontable({
     [userRoles]
   );
 
-  const numericTooltip = "Значение за единицу товара";
-
-  const colHeaders = useMemo(
-    () => [
-      "No",
-      "Бренд",
-      "Артикул",
-      "Наименование",
-      "Кол-во",
-      "Страна",
-      "Код ТН ВЭД",
-      headerWithTooltip("Пошлина %", numericTooltip),
-      headerWithTooltip("Пошлина, $/кг", numericTooltip),
-      "ДС/СС/СГР",
-      headerWithTooltip("Утильсбор", numericTooltip),
-      headerWithTooltip("Акциз", numericTooltip),
-      "ПСН/ПТС",
-      "Нотификация",
-      "Лицензии",
-      "Маркировка",
-      headerWithTooltip("Экосбор", numericTooltip),
-      "Честный знак",
-      "Запрет ввоза",
-      "Причина запрета",
-      "ДС",
-      headerWithTooltip("Ст-ть ДС", numericTooltip),
-      "СС",
-      headerWithTooltip("Ст-ть СС", numericTooltip),
-      "СГР",
-      headerWithTooltip("Ст-ть СГР", numericTooltip),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
-
-  const columns: Handsontable.ColumnSettings[] = useMemo(
-    () => [
-      { data: "position", type: "numeric", width: 30, readOnly: true },
-      { data: "brand", type: "text", width: 55, readOnly: true },
-      { data: "product_code", type: "text", width: 70, readOnly: true },
-      { data: "product_name", type: "text", width: 130, readOnly: true },
-      { data: "quantity", type: "numeric", width: 40, readOnly: true },
-      { data: "supplier_country", type: "text", width: 65, readOnly: true },
-      { data: "hs_code", type: "text", width: 85 },
-      { data: "customs_duty", type: "numeric", width: 55, allowEmpty: true },
-      { data: "customs_duty_per_kg", type: "numeric", width: 80, allowEmpty: true },
-      { data: "customs_ds_sgr", type: "text", width: 80 },
-      { data: "customs_util_fee", type: "numeric", width: 70, allowEmpty: true },
-      { data: "customs_excise", type: "numeric", width: 65, allowEmpty: true },
-      { data: "customs_psn_pts", type: "text", width: 70 },
-      { data: "customs_notification", type: "text", width: 90 },
-      { data: "customs_licenses", type: "text", width: 80 },
-      { data: "customs_marking", type: "text", width: 80 },
-      { data: "customs_eco_fee", type: "numeric", width: 65, allowEmpty: true },
-      { data: "customs_honest_mark", type: "text", width: 85 },
-      { data: "import_banned", type: "checkbox", width: 50, readOnly: !canToggleBan },
-      { data: "import_ban_reason", type: "text", width: 120 },
-      { data: "license_ds_required", type: "checkbox", width: 30 },
-      { data: "license_ds_cost", type: "numeric", width: 55, allowEmpty: true },
-      { data: "license_ss_required", type: "checkbox", width: 30 },
-      { data: "license_ss_cost", type: "numeric", width: 55, allowEmpty: true },
-      { data: "license_sgr_required", type: "checkbox", width: 30 },
-      { data: "license_sgr_cost", type: "numeric", width: 55, allowEmpty: true },
-    ],
-    [canToggleBan]
-  );
-
-  /** Per-cell config: banned row styling + import_ban_reason read-only when not banned */
+  /** Per-cell config: banned row styling, import_banned/reason read-only rules */
   const cellsCallback = useCallback(
     function (
       this: Handsontable.CellProperties,
@@ -343,15 +345,21 @@ export function CustomsHandsontable({
         meta.className = (meta.className ?? "") + " row-import-banned";
       }
 
-      // import_ban_reason col — make read-only when import_banned is false
       const prop = COLUMN_KEYS[col];
+
+      // import_banned checkbox — only customs/admin can toggle
+      if (prop === "import_banned" && !canToggleBan) {
+        meta.readOnly = true;
+      }
+
+      // import_ban_reason — read-only when import_banned is false
       if (prop === "import_ban_reason" && !data.import_banned) {
         meta.readOnly = true;
       }
 
       return meta;
     },
-    [initialData]
+    [initialData, canToggleBan]
   );
 
   if (items.length === 0) {
@@ -374,8 +382,8 @@ export function CustomsHandsontable({
           ref={hotRef}
           data={initialData}
           licenseKey="non-commercial-and-evaluation"
-          colHeaders={colHeaders}
-          columns={columns}
+          colHeaders={COL_HEADERS}
+          columns={COLUMNS}
           cells={cellsCallback}
           rowHeaders={false}
           stretchH="none"

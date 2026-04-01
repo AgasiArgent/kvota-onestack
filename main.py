@@ -15136,6 +15136,83 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
 
 
 # ============================================================================
+# WORKFLOW TRANSITION API (for Next.js frontend)
+# ============================================================================
+
+@rt("/api/quotes/{quote_id}/workflow/transition", methods=["POST"])
+async def api_workflow_transition(session, request: Request, quote_id: str):
+    """Execute a workflow status transition. Dual auth: JWT (Next.js) or session (FastHTML)."""
+    from services.workflow_service import transition_quote_status, complete_customs as wf_complete_customs
+    from services.role_service import get_user_role_codes
+
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_id = str(api_user.id)
+        supabase = get_supabase()
+        om = supabase.table("organization_members").select("organization_id").eq("user_id", user_id).limit(1).execute()
+        org_id = om.data[0]["organization_id"] if om.data else None
+        user_roles = get_user_role_codes(user_id, org_id) if org_id else []
+    else:
+        redirect = require_login(session)
+        if redirect:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user_data = session.get("user", {})
+        user_id = user_data.get("id")
+        org_id = user_data.get("org_id")
+        user_roles = user_data.get("roles", [])
+
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not org_id:
+        return JSONResponse({"error": "No organization"}, status_code=403)
+
+    # Parse request body
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+    else:
+        body = dict(await request.form())
+
+    to_status = body.get("to_status")
+    action = body.get("action")
+    comment = body.get("comment")
+
+    if not to_status and not action:
+        return JSONResponse({"error": "to_status or action is required"}, status_code=400)
+
+    # Handle special actions that have dedicated workflow functions
+    if action == "complete_customs":
+        result = wf_complete_customs(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles,
+        )
+    else:
+        if not to_status:
+            return JSONResponse({"error": "to_status is required"}, status_code=400)
+        result = transition_quote_status(
+            quote_id=quote_id,
+            to_status=to_status,
+            actor_id=user_id,
+            actor_roles=user_roles,
+            comment=comment,
+        )
+
+    if result.success:
+        return JSONResponse({
+            "success": True,
+            "from_status": result.from_status,
+            "to_status": result.to_status,
+        })
+    else:
+        return JSONResponse({
+            "success": False,
+            "error": result.error_message,
+        }, status_code=422)
+
+
+# ============================================================================
 # QUOTE DOCUMENTS TAB
 # ============================================================================
 

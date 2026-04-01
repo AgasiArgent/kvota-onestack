@@ -59,8 +59,10 @@ export function CustomsStep({
       await completeCustoms(quote.id);
       toast.success("Таможня завершена");
       router.refresh();
-    } catch {
-      toast.error("Не удалось завершить таможню");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось завершить таможню"
+      );
     } finally {
       setCompleting(false);
     }
@@ -72,8 +74,10 @@ export function CustomsStep({
       await skipCustoms(quote.id);
       toast.success("Таможня пропущена");
       router.refresh();
-    } catch {
-      toast.error("Не удалось пропустить таможню");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось пропустить таможню"
+      );
     } finally {
       setSkipping(false);
     }
