@@ -52,9 +52,10 @@ export function ChatPanel({
   return (
     <div
       className={cn(
-        "w-[340px] min-w-[300px] shrink-0",
-        "bg-background border-l border-border",
-        "flex flex-col h-full"
+        "fixed top-0 right-0 z-50",
+        "w-[340px] h-full",
+        "bg-background border-l border-border shadow-lg",
+        "flex flex-col"
       )}
     >
       {/* Header */}
