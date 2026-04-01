@@ -52,7 +52,7 @@ export function ChatPanel({
   return (
     <div
       className={cn(
-        "fixed top-0 right-0 z-50",
+        "fixed top-0 right-0 z-[200]",
         "w-[340px] h-full",
         "bg-background border-l border-border shadow-lg",
         "flex flex-col"
