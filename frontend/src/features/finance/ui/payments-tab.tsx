@@ -205,8 +205,8 @@ export function PaymentsTab({
               <TableCell className="text-muted-foreground tabular-nums">
                 {formatDate(payment.planned_date)}
               </TableCell>
-              <TableCell>
-                <span className="text-accent font-medium whitespace-nowrap">
+              <TableCell className="truncate">
+                <span className="text-accent font-medium">
                   {payment.deal_number}
                 </span>
               </TableCell>
@@ -216,9 +216,9 @@ export function PaymentsTab({
               >
                 {payment.customer_name ?? "---"}
               </TableCell>
-              <TableCell>
+              <TableCell className="overflow-hidden">
                 <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${
                     payment.is_income
                       ? "bg-green-100 text-green-700"
                       : "bg-red-100 text-red-700"
