@@ -43,8 +43,10 @@ export interface DealsListResult {
 
 export interface PaymentRecord {
   id: string;
+  deal_id: string;
   deal_number: string;
   customer_name: string | null;
+  category_id: string;
   category_name: string;
   category_slug: string;
   is_income: boolean;
@@ -53,6 +55,7 @@ export interface PaymentRecord {
   planned_date: string | null;
   planned_currency: string;
   actual_amount: number | null;
+  actual_currency: string | null;
   actual_date: string | null;
 }
 
@@ -156,6 +159,66 @@ export function formatStageLabel(raw: string): string {
     if (raw.includes(key)) return raw.replace(key, label);
   }
   return raw;
+}
+
+// ---------------------------------------------------------------------------
+// Plan-Fact types
+// ---------------------------------------------------------------------------
+
+export type PlanFactCurrency = "RUB" | "USD" | "EUR";
+
+export interface PlanFactCategory {
+  id: string;
+  code: string;
+  name: string;
+  is_income: boolean;
+  display_order: number;
+}
+
+export interface PlanFactItem {
+  id: string;
+  deal_id: string;
+  category: {
+    id: string;
+    code: string;
+    name: string;
+    is_income: boolean;
+  };
+  description: string;
+  planned_amount: number;
+  planned_currency: PlanFactCurrency;
+  planned_date: string;
+  actual_amount: number | null;
+  actual_currency: PlanFactCurrency | null;
+  actual_date: string | null;
+  variance_amount: number | null;
+  payment_document: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface CreatePlanFactPayload {
+  category_id: string;
+  description: string;
+  planned_amount: number;
+  planned_currency: PlanFactCurrency;
+  planned_date: string;
+}
+
+export interface RecordActualPayload {
+  actual_amount: number;
+  actual_currency: PlanFactCurrency;
+  actual_date: string;
+  payment_document?: string;
+  notes?: string;
+}
+
+export interface QuoteSearchResult {
+  id: string;
+  idn: string;
+  customer_name: string;
+  deal_id: string;
+  deal_number: string;
 }
 
 const FINANCE_ALLOWED_ROLES = ["admin", "finance", "top_manager"];

@@ -14,6 +14,7 @@ import { CalculationStep } from "./calculation-step/calculation-step";
 import { ControlStep } from "./control-step/control-step";
 import { SpecificationStep } from "./specification-step/specification-step";
 import { DocumentsStep } from "./documents-step/documents-step";
+import { PlanFactStep } from "@/features/plan-fact";
 
 interface QuoteStepContentProps {
   quote: QuoteDetailRow;
@@ -23,6 +24,7 @@ interface QuoteStepContentProps {
   userRoles: string[];
   userId: string;
   calcVariables?: Record<string, unknown> | null;
+  dealId?: string | null;
 }
 
 export function QuoteStepContent({
@@ -33,6 +35,7 @@ export function QuoteStepContent({
   userRoles,
   userId,
   calcVariables,
+  dealId,
 }: QuoteStepContentProps) {
   switch (activeStep) {
     case "sales":
@@ -94,6 +97,14 @@ export function QuoteStepContent({
       );
     case "documents":
       return <DocumentsStep quote={quote} userId={userId} />;
+    case "plan-fact":
+      return (
+        <PlanFactStep
+          quoteId={quote.id}
+          dealId={dealId ?? null}
+          userRoles={userRoles}
+        />
+      );
     case "cost-analysis":
       return (
         <div className="flex-1 p-6 text-sm text-muted-foreground">

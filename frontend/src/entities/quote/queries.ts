@@ -420,6 +420,34 @@ export async function fetchStageDeadline(
   };
 }
 
+/**
+ * Resolve the deal ID for a quote by traversing quotes -> specifications -> deals.
+ * Returns null if the quote has no specification or the specification has no deal.
+ */
+export async function fetchDealIdForQuote(
+  quoteId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+
+  // Find specification linked to this quote
+  const { data: spec } = await supabase
+    .from("specifications")
+    .select("id")
+    .eq("quote_id", quoteId)
+    .maybeSingle();
+
+  if (!spec) return null;
+
+  // Find deal linked to this specification
+  const { data: deal } = await supabase
+    .from("deals")
+    .select("id")
+    .eq("specification_id", spec.id)
+    .maybeSingle();
+
+  return deal?.id ?? null;
+}
+
 export async function fetchFilterOptions(
   orgId: string,
   user?: { id: string; roles: string[] }

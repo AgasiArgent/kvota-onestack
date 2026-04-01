@@ -7,6 +7,7 @@ import {
   fetchQuoteComments,
   fetchQuoteCalcVariables,
   fetchStageDeadline,
+  fetchDealIdForQuote,
   ROLE_ALLOWED_STEPS,
   STATUS_TO_STEP,
 } from "@/entities/quote";
@@ -39,7 +40,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount] = await Promise.all([
+  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount, dealId] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
@@ -47,6 +48,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     fetchQuoteCalcVariables(id),
     fetchOrgMembers(user.orgId),
     fetchDocumentCount(id),
+    fetchDealIdForQuote(id),
   ]);
 
   if (!quote) notFound();
@@ -81,7 +83,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   return (
     <div className="flex flex-col h-full">
       <UseCollapsedSidebar />
-      <QuoteStickyHeader quote={quote} isAdmin={isAdmin} documentCount={documentCount} activeStep={activeStep} />
+      <QuoteStickyHeader quote={quote} isAdmin={isAdmin} documentCount={documentCount} activeStep={activeStep} userRoles={userRoles} />
       <div className="flex flex-1 min-h-0">
         <QuoteStepContent
           quote={quote}
@@ -91,6 +93,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           userRoles={userRoles}
           userId={user.id}
           calcVariables={calcVariables}
+          dealId={dealId}
         />
         <ChatWrapper
           quoteId={id}

@@ -1,6 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -9,11 +12,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import { Pagination } from "@/shared/ui/pagination";
+import { PlanFactSheet } from "@/features/plan-fact/ui/plan-fact-sheet";
+import { PlanFactCreateDialog } from "@/features/plan-fact/ui/plan-fact-create-dialog";
 import type {
   PaymentRecord,
   PaymentTotals,
   PaymentsFilterParams,
+  PlanFactItem,
+  PlanFactCurrency,
 } from "@/entities/finance/types";
 
 interface PaymentsTabProps {
@@ -116,6 +124,34 @@ const STATUS_PILLS = [
   { value: "overdue", label: "Просрочено" },
 ] as const;
 
+/**
+ * Convert a PaymentRecord (from server query) to a PlanFactItem (needed by PlanFactSheet).
+ * PaymentRecord is a flattened view; PlanFactItem has nested category and additional fields.
+ */
+function paymentToPlanFactItem(payment: PaymentRecord): PlanFactItem {
+  return {
+    id: payment.id,
+    deal_id: payment.deal_id,
+    category: {
+      id: payment.category_id,
+      code: payment.category_slug,
+      name: payment.category_name,
+      is_income: payment.is_income,
+    },
+    description: payment.description ?? "",
+    planned_amount: payment.planned_amount ?? 0,
+    planned_currency: (payment.planned_currency as PlanFactCurrency) ?? "RUB",
+    planned_date: payment.planned_date ?? "",
+    actual_amount: payment.actual_amount,
+    actual_currency: payment.actual_currency as PlanFactCurrency | null,
+    actual_date: payment.actual_date,
+    variance_amount: null,
+    payment_document: null,
+    notes: null,
+    created_at: "",
+  };
+}
+
 export function PaymentsTab({
   payments,
   totals,
@@ -124,7 +160,25 @@ export function PaymentsTab({
   pageSize,
   filters,
 }: PaymentsTabProps) {
+  const router = useRouter();
   const totalPages = Math.ceil(total / pageSize);
+
+  // Sheet state (record actual payment)
+  const [sheetItem, setSheetItem] = useState<PlanFactItem | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // Create dialog state
+  const [createOpen, setCreateOpen] = useState(false);
+
+  function handleRowClick(payment: PaymentRecord) {
+    if (payment.actual_amount !== null) return;
+    setSheetItem(paymentToPlanFactItem(payment));
+    setSheetOpen(true);
+  }
+
+  function handleMutationSuccess() {
+    router.refresh();
+  }
 
   function handleDateChange(field: "date_from" | "date_to", value: string) {
     const url = buildFilterUrl(filters, { [field]: value || undefined, page: 1 });
@@ -180,9 +234,19 @@ export function PaymentsTab({
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="flex gap-4 text-sm text-muted-foreground">
-        <span>Всего записей: {total}</span>
+      {/* Stats + create button */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-muted-foreground">
+          Всего записей: {total}
+        </span>
+        <Button
+          size="sm"
+          onClick={() => setCreateOpen(true)}
+          className="bg-accent text-white hover:bg-accent-hover"
+        >
+          <Plus size={14} />
+          Новый платёж
+        </Button>
       </div>
 
       {/* Table */}
@@ -201,7 +265,15 @@ export function PaymentsTab({
         </TableHeader>
         <TableBody>
           {payments.map((payment) => (
-            <TableRow key={payment.id}>
+            <TableRow
+              key={payment.id}
+              className={
+                payment.actual_amount === null
+                  ? "cursor-pointer hover:bg-muted/50"
+                  : ""
+              }
+              onClick={() => handleRowClick(payment)}
+            >
               <TableCell className="text-muted-foreground tabular-nums">
                 {formatDate(payment.planned_date)}
               </TableCell>
@@ -323,6 +395,24 @@ export function PaymentsTab({
         totalItems={total}
         itemLabel="записей"
         buildHref={(p) => buildFilterUrl(filters, { page: p })}
+      />
+
+      {/* Record actual payment sheet */}
+      {sheetItem && (
+        <PlanFactSheet
+          item={sheetItem}
+          open={sheetOpen}
+          onOpenChange={setSheetOpen}
+          onSuccess={handleMutationSuccess}
+        />
+      )}
+
+      {/* Create new payment dialog */}
+      <PlanFactCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={handleMutationSuccess}
+        showQuoteSearch
       />
     </div>
   );

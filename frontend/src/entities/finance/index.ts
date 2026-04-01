@@ -11,6 +11,12 @@ export type {
   SupplierInvoicesFilterParams,
   CurrencyTotal,
   SupplierInvoicesListResult,
+  PlanFactCurrency,
+  PlanFactCategory,
+  PlanFactItem,
+  CreatePlanFactPayload,
+  RecordActualPayload,
+  QuoteSearchResult,
 } from "./types";
 export {
   DEAL_STATUS_LABELS,

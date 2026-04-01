@@ -49425,6 +49425,42 @@ async def post_phmb_notify_price_set(request):
     return await phmb_notify_price_set(request)
 
 
+# --- Plan-Fact JSON API (for Next.js frontend) ---
+
+from api.plan_fact import (
+    plan_fact_list_items,
+    plan_fact_create_item,
+    plan_fact_update_item,
+    plan_fact_delete_item,
+    plan_fact_list_categories,
+    quotes_search,
+)
+
+@rt("/api/plan-fact/categories", methods=["GET"])
+async def get_plan_fact_categories(request):
+    return await plan_fact_list_categories(request)
+
+@rt("/api/quotes/search", methods=["GET"])
+async def get_quotes_search(request):
+    return await quotes_search(request)
+
+@rt("/api/plan-fact/{deal_id}/items", methods=["GET"])
+async def get_plan_fact_items(request, deal_id: str):
+    return await plan_fact_list_items(request, deal_id)
+
+@rt("/api/plan-fact/{deal_id}/items", methods=["POST"])
+async def post_plan_fact_items(request, deal_id: str):
+    return await plan_fact_create_item(request, deal_id)
+
+@rt("/api/plan-fact/{deal_id}/items/{id}", methods=["PATCH"])
+async def patch_plan_fact_item(request, deal_id: str, id: str):
+    return await plan_fact_update_item(request, deal_id, id)
+
+@rt("/api/plan-fact/{deal_id}/items/{id}", methods=["DELETE"])
+async def delete_plan_fact_item(request, deal_id: str, id: str):
+    return await plan_fact_delete_item(request, deal_id, id)
+
+
 # --- Cron JSON API (for scheduled background tasks) ---
 
 from api.cron import cron_check_overdue

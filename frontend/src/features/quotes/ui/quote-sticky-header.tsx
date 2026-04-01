@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Paperclip } from "lucide-react";
+import { ArrowLeft, Paperclip, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
@@ -41,15 +41,20 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: "Отменено",
 };
 
+const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
+
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
   isAdmin: boolean;
   documentCount?: number;
   activeStep?: QuoteStep;
+  userRoles?: string[];
 }
 
-export function QuoteStickyHeader({ quote, documentCount, activeStep }: QuoteStickyHeaderProps) {
+export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles = [] }: QuoteStickyHeaderProps) {
   const isDocumentsActive = activeStep === "documents";
+  const isPlanFactActive = activeStep === "plan-fact";
+  const showPlanFact = userRoles.some((r) => PLAN_FACT_ROLES.includes(r));
   const workflowStatus = quote.workflow_status ?? "draft";
   const statusStyle =
     STATUS_BADGE_STYLES[workflowStatus] ?? "bg-slate-100 text-slate-700";
@@ -106,8 +111,22 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep }: QuoteSti
           )}
         </div>
 
-        {/* Right: documents button + amount + margin */}
+        {/* Right: plan-fact button + documents button + amount + margin */}
         <div className="flex items-center gap-4 shrink-0">
+          {showPlanFact && (
+            <Link
+              href={`/quotes/${quote.id}?step=plan-fact`}
+              className={cn(
+                "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
+                isPlanFactActive
+                  ? "text-foreground bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Wallet size={16} />
+            </Link>
+          )}
+
           <Link
             href={`/quotes/${quote.id}?step=documents`}
             className={cn(

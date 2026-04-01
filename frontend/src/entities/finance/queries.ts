@@ -276,7 +276,7 @@ export async function fetchPayments(
   // Step 2: Fetch all plan_fact_items for these deals
   let query = admin
     .from("plan_fact_items")
-    .select("id, deal_id, description, planned_amount, planned_date, planned_currency, actual_amount, actual_date, category_id")
+    .select("id, deal_id, description, planned_amount, planned_date, planned_currency, actual_amount, actual_currency, actual_date, category_id")
     .in("deal_id", orgDealIds)
     .order("planned_date", { ascending: false, nullsFirst: false });
 
@@ -379,8 +379,10 @@ export async function fetchPayments(
 
     return {
       id: row.id,
+      deal_id: row.deal_id ?? "",
       deal_number: deal?.deal_number ?? "",
       customer_name: customerName,
+      category_id: row.category_id ?? "",
       category_name: category?.name ?? "",
       category_slug: category?.code ?? "",
       is_income: isIncome,
@@ -389,6 +391,7 @@ export async function fetchPayments(
       planned_date: row.planned_date,
       planned_currency: row.planned_currency ?? "USD",
       actual_amount: row.actual_amount ? Number(row.actual_amount) : null,
+      actual_currency: row.actual_currency ?? null,
       actual_date: row.actual_date,
       derived_status: derivedStatus,
     };
