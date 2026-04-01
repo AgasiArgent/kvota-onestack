@@ -58,8 +58,10 @@ def _get_api_user(request):
     if not org_id:
         sb = get_supabase()
         om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).limit(1).execute()
+        import sys
+        print(f"[plan_fact] org_members fallback: data={om.data}", flush=True, file=sys.stderr)
         if om.data:
-            org_id = om.data[0].get("organization_id")
+            org_id = om.data[0]["organization_id"] if isinstance(om.data[0], dict) else None
 
     if not org_id:
         return None, JSONResponse(
