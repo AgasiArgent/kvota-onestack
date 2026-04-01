@@ -181,6 +181,12 @@
     margin-left: 0;
   }
 
+  /* Chat panel open — reserve space so content doesn't slide under the overlay */
+  html[data-chat-open="true"] .sidebar-margin {
+    padding-right: 340px;
+    transition: padding-right 0.2s ease;
+  }
+
   /* Changelog body — rendered markdown from Python API */
   .changelog-body h2 {
     font-size: 0.8rem;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { QuoteComment } from "@/entities/quote/types";
 import type { OrgMember } from "./chat-input";
 import { ChatFab } from "./chat-fab";
@@ -23,6 +23,11 @@ export function ChatWrapper({
 }: ChatWrapperProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-chat-open", String(isOpen));
+    return () => document.documentElement.removeAttribute("data-chat-open");
+  }, [isOpen]);
 
   const toggleChat = useCallback(() => {
     setIsOpen((prev) => {
