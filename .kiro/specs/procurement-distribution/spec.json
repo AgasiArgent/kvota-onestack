@@ -1,0 +1,7 @@
+{
+  "name": "procurement-distribution",
+  "description": "Dedicated distribution page for head_of_procurement to assign unassigned quote items grouped by quote and brand",
+  "status": "in_progress",
+  "created": "2026-04-01",
+  "design_ref": "docs/superpowers/specs/2026-04-01-procurement-distribution-design.md"
+}
