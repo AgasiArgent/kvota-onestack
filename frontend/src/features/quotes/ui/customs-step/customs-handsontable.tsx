@@ -216,9 +216,9 @@ const COL_HEADERS: string[] = [
  */
 const COLUMNS: Handsontable.ColumnSettings[] = [
   { data: "position", type: "numeric", width: 30, readOnly: true },
-  { data: "brand", type: "text", width: 55, readOnly: true },
-  { data: "product_code", type: "text", width: 70, readOnly: true },
-  { data: "product_name", type: "text", width: 130, readOnly: true },
+  { data: "brand", type: "text", width: 65, readOnly: true, wordWrap: false },
+  { data: "product_code", type: "text", width: 100, readOnly: true, wordWrap: false },
+  { data: "product_name", type: "text", width: 200, readOnly: true, wordWrap: false },
   { data: "quantity", type: "numeric", width: 40, readOnly: true },
   { data: "supplier_country", type: "text", width: 65, readOnly: true },
   { data: "hs_code", type: "text", width: 85 },
