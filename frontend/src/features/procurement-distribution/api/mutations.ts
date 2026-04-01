@@ -21,10 +21,13 @@ export async function assignBrandGroup(
 
   const supabase = createAdminClient();
 
-  // 1. Assign all items in the group
+  // 1. Assign all items in the group and set status to pending
   const { error: updateError } = await supabase
     .from("quote_items")
-    .update({ assigned_procurement_user: userId })
+    .update({
+      assigned_procurement_user: userId,
+      procurement_status: "pending",
+    })
     .in("id", itemIds);
 
   if (updateError) {

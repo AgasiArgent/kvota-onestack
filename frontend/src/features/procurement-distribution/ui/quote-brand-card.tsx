@@ -143,10 +143,7 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
                   <SelectContent>
                     {users.map((u) => (
                       <SelectItem key={u.user_id} value={u.user_id}>
-                        {u.full_name ?? u.user_id}
-                        <span className="text-text-subtle ml-1">
-                          ({u.active_quotes})
-                        </span>
+                        {`${u.full_name ?? u.user_id} (${u.active_quotes})`}
                       </SelectItem>
                     ))}
                   </SelectContent>
