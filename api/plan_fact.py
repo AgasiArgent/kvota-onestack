@@ -148,7 +148,7 @@ def _fetch_item_with_category(item_id: str):
             "id, deal_id, category_id, description, "
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
-            "variance_amount, payment_document, notes, status, created_at, "
+            "variance_amount, payment_document, notes, created_at, "
             "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("id", item_id)
@@ -181,7 +181,7 @@ def _format_item(row: dict) -> dict:
         "variance_amount": row.get("variance_amount"),
         "payment_document": row.get("payment_document"),
         "notes": row.get("notes"),
-        "status": row.get("status"),
+        "status": "paid" if row.get("actual_amount") is not None else "planned",
         "created_at": row.get("created_at"),
     })
 
@@ -212,7 +212,7 @@ async def plan_fact_list_items(request, deal_id: str):
             "id, deal_id, category_id, description, "
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
-            "variance_amount, payment_document, notes, status, created_at, "
+            "variance_amount, payment_document, notes, created_at, "
             "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("deal_id", deal_id)
