@@ -16,13 +16,22 @@ export async function apiClient<T = unknown>(
     data: { session },
   } = await supabase.auth.getSession();
 
+  const headers: Record<string, string> = {
+    ...(session?.access_token
+      ? { Authorization: `Bearer ${session.access_token}` }
+      : {}),
+  };
+
+  // Only set Content-Type for requests with a body — GET requests with
+  // Content-Type: application/json cause FastHTML to try parsing the empty body
+  if (options.body) {
+    headers["Content-Type"] = "application/json";
+  }
+
   const response = await fetch(`${PYTHON_API_URL}/api${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
-      ...(session?.access_token
-        ? { Authorization: `Bearer ${session.access_token}` }
-        : {}),
+      ...headers,
       ...options.headers,
     },
   });
