@@ -5,14 +5,8 @@ import { Loader2, Pin } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { UserSearchSelect } from "./user-search-select";
 import { assignBrandGroup } from "../api/mutations";
 import type {
   QuoteWithBrandGroups,
@@ -128,33 +122,16 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
                 </span>
               </div>
 
-              {/* User select */}
+              {/* User select with search */}
               <div className="w-[200px]">
-                <Select
+                <UserSearchSelect
+                  users={users}
                   value={state.userId}
                   onValueChange={(val) =>
-                    updateState(bg, { userId: val ?? "" })
+                    updateState(bg, { userId: val })
                   }
                   disabled={isAssigning}
-                >
-                  <SelectTrigger className="w-full">
-                    {state.userId ? (
-                      <span className="flex flex-1 text-left truncate text-sm">
-                        {users.find((u) => u.user_id === state.userId)
-                          ?.full_name ?? "..."}
-                      </span>
-                    ) : (
-                      <SelectValue placeholder="Выберите закупщика" />
-                    )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    {users.map((u) => (
-                      <SelectItem key={u.user_id} value={u.user_id}>
-                        {`${u.full_name ?? u.user_id} (${u.active_quotes})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                />
               </div>
 
               {/* Pin brand checkbox */}
