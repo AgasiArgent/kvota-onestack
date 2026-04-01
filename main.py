@@ -29824,7 +29824,8 @@ def render_payments_grouped(items):
             rows.append(
                 Tr(
                     Td(format_date_russian(planned_date_str) if planned_date_str else "—", style="white-space: nowrap;"),
-                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number, style="white-space: nowrap;"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number,
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
                     Td(""),  # customer already shown in header
                     Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—"),
                        style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
@@ -30040,7 +30041,8 @@ def finance_payments_tab(session, user, org_id, payment_type="all", payment_stat
             table_rows.append(
                 Tr(
                     Td(format_date_russian(planned_date_str) if planned_date_str else "—", style="white-space: nowrap;"),
-                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number, style="white-space: nowrap;"),
+                    Td(A(deal_number, href=f"/finance/{deal_id}") if deal_id else deal_number,
+                       style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
                     Td(customer_name, style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;", title=customer_name),
                     Td(Span(type_label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; {badge_style}"), " ", cat.get("name", "—"),
                        style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"),
