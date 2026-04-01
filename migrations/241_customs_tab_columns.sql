@@ -13,8 +13,7 @@ ALTER TABLE kvota.quote_items ADD COLUMN IF NOT EXISTS customs_marking VARCHAR(2
 ALTER TABLE kvota.quote_items ADD COLUMN IF NOT EXISTS customs_eco_fee DECIMAL(15,4);
 ALTER TABLE kvota.quote_items ADD COLUMN IF NOT EXISTS customs_honest_mark VARCHAR(255);
 
--- Split duty: percent-based and per-kg components
-ALTER TABLE kvota.quote_items ADD COLUMN IF NOT EXISTS customs_duty_percent DECIMAL(15,4);
+-- Per-kg duty component (percent-based duty uses existing customs_duty column)
 ALTER TABLE kvota.quote_items ADD COLUMN IF NOT EXISTS customs_duty_per_kg DECIMAL(15,4);
 
 -- Import ban flag and reason

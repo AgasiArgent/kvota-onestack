@@ -12961,18 +12961,18 @@ def resolve_vat_zone(country_raw: str, price_includes_vat: bool) -> dict:
 def _calc_combined_duty(item: Dict) -> float:
     """REQ-004: Compute combined import tariff from percent + per-kg duty.
 
-    Formula: customs_duty_percent + (customs_duty_per_kg * weight_in_kg / base_price * 100)
-    Falls back to customs_duty_percent only when weight or price is missing/zero.
-    Falls back to legacy customs_duty field when new split columns are absent.
+    Formula: customs_duty + (customs_duty_per_kg * weight_in_kg / base_price * 100)
+    Falls back to customs_duty only when weight or price is missing/zero.
+    Falls back to legacy import_tariff field when customs_duty is absent.
     """
     import logging
 
-    duty_pct = float(safe_decimal(item.get('customs_duty_percent')))
+    duty_pct = float(safe_decimal(item.get('customs_duty')))
     duty_per_kg = float(safe_decimal(item.get('customs_duty_per_kg')))
 
-    # If neither split column is populated, fall back to legacy field
+    # If neither column is populated, fall back to legacy field
     if duty_pct == 0 and duty_per_kg == 0:
-        legacy = item.get('customs_duty') or item.get('import_tariff')
+        legacy = item.get('import_tariff')
         return float(safe_decimal(legacy))
 
     if duty_per_kg > 0:

@@ -21,7 +21,6 @@ function ext<T>(row: unknown): T {
 type ItemExtras = {
   hs_code?: string | null;
   customs_duty?: number | null;
-  customs_duty_percent?: number | null;
   customs_duty_per_kg?: number | null;
   customs_ds_sgr?: string | null;
   customs_util_fee?: number | null;
@@ -51,7 +50,6 @@ const COLUMN_KEYS = [
   "supplier_country",
   "hs_code",
   "customs_duty",
-  "customs_duty_percent",
   "customs_duty_per_kg",
   "customs_ds_sgr",
   "customs_util_fee",
@@ -82,7 +80,6 @@ interface RowData {
   supplier_country: string;
   hs_code: string;
   customs_duty: number | null;
-  customs_duty_percent: number | null;
   customs_duty_per_kg: number | null;
   customs_ds_sgr: string;
   customs_util_fee: number | null;
@@ -122,7 +119,6 @@ function itemToRow(
     supplier_country: country,
     hs_code: extras.hs_code ?? "",
     customs_duty: extras.customs_duty ?? null,
-    customs_duty_percent: extras.customs_duty_percent ?? null,
     customs_duty_per_kg: extras.customs_duty_per_kg ?? null,
     customs_ds_sgr: extras.customs_ds_sgr ?? "",
     customs_util_fee: extras.customs_util_fee ?? null,
@@ -146,7 +142,6 @@ function itemToRow(
 
 const NUMERIC_FIELDS = new Set([
   "customs_duty",
-  "customs_duty_percent",
   "customs_duty_per_kg",
   "customs_util_fee",
   "customs_excise",
@@ -277,7 +272,6 @@ export function CustomsHandsontable({
       "Страна",
       "Код ТН ВЭД",
       headerWithTooltip("Пошлина %", numericTooltip),
-      headerWithTooltip("Пошлина, %", numericTooltip),
       headerWithTooltip("Пошлина, $/кг", numericTooltip),
       "ДС/СС/СГР",
       headerWithTooltip("Утильсбор", numericTooltip),
@@ -311,7 +305,6 @@ export function CustomsHandsontable({
       { data: "supplier_country", type: "text", width: 65, readOnly: true },
       { data: "hs_code", type: "text", width: 85 },
       { data: "customs_duty", type: "numeric", width: 55, allowEmpty: true },
-      { data: "customs_duty_percent", type: "numeric", width: 70, allowEmpty: true },
       { data: "customs_duty_per_kg", type: "numeric", width: 80, allowEmpty: true },
       { data: "customs_ds_sgr", type: "text", width: 80 },
       { data: "customs_util_fee", type: "numeric", width: 70, allowEmpty: true },
