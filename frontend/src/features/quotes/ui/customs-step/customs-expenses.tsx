@@ -17,29 +17,24 @@ interface ExpenseField {
 
 const EXPENSE_FIELDS: ExpenseField[] = [
   {
-    key: "brokerage_hub",
-    currencyKey: "brokerage_hub_currency",
-    label: "Брокерские (хаб)",
+    key: "customs_fee",
+    currencyKey: "customs_fee_currency",
+    label: "Таможенный сбор",
   },
   {
-    key: "brokerage_customs",
-    currencyKey: "brokerage_customs_currency",
-    label: "Брокерские (таможня)",
+    key: "origin_certificate",
+    currencyKey: "origin_certificate_currency",
+    label: "Сертификат происхождения",
   },
   {
-    key: "warehousing_at_customs",
-    currencyKey: "warehousing_at_customs_currency",
-    label: "СВХ",
-  },
-  {
-    key: "customs_documentation",
-    currencyKey: "customs_documentation_currency",
+    key: "documentation",
+    currencyKey: "documentation_currency",
     label: "Документация",
   },
   {
-    key: "brokerage_extra",
-    currencyKey: "brokerage_extra_currency",
-    label: "Доп. брокерские",
+    key: "brokerage",
+    currencyKey: "brokerage_currency",
+    label: "Брокерские расходы",
   },
 ];
 

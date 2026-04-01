@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle, Loader2 } from "lucide-react";
+import { CheckCircle, Loader2, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { QuoteItemRow } from "@/entities/quote/queries";
 
@@ -16,13 +16,19 @@ type ItemExtras = {
 interface CustomsActionBarProps {
   items: QuoteItemRow[];
   onCompleteCustoms: () => void;
+  onSkipCustoms: () => void;
   completing?: boolean;
+  skipping?: boolean;
+  canSkipCustoms?: boolean;
 }
 
 export function CustomsActionBar({
   items,
   onCompleteCustoms,
+  onSkipCustoms,
   completing = false,
+  skipping = false,
+  canSkipCustoms = false,
 }: CustomsActionBarProps) {
   const totalItems = items.length;
   const itemsWithHsCode = items.filter((item) => {
@@ -41,7 +47,7 @@ export function CustomsActionBar({
       <Button
         size="sm"
         className="bg-success text-white hover:bg-success/90"
-        disabled={!allHaveHsCode || completing}
+        disabled={!allHaveHsCode || completing || skipping}
         onClick={onCompleteCustoms}
       >
         {completing ? (
@@ -51,6 +57,22 @@ export function CustomsActionBar({
         )}
         Таможня завершена
       </Button>
+
+      {canSkipCustoms && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={completing || skipping}
+          onClick={onSkipCustoms}
+        >
+          {skipping ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <SkipForward size={14} />
+          )}
+          Пропустить таможню
+        </Button>
+      )}
 
       <span className="ml-auto text-sm text-muted-foreground tabular-nums">
         {itemsWithHsCode}/{totalItems} заполнено ТН ВЭД | {itemsWithDuty} с

@@ -251,6 +251,14 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
         ["customs", "admin"],
         auto_transition=True  # Auto when both logistics + customs are done
     ),
+    # Skip customs — manual transition to sales review without completing customs work
+    StatusTransition(
+        WorkflowStatus.PENDING_CUSTOMS,
+        WorkflowStatus.PENDING_SALES_REVIEW,
+        ["customs", "admin"],
+        requires_comment=False,
+        auto_transition=False,
+    ),
     StatusTransition(
         WorkflowStatus.PENDING_CUSTOMS,
         WorkflowStatus.CANCELLED,

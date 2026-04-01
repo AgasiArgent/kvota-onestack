@@ -389,6 +389,10 @@ export async function completeCustoms(quoteId: string) {
   }
 }
 
+export async function skipCustoms(quoteId: string) {
+  return updateQuoteWorkflowStatus(quoteId, "pending_sales_review");
+}
+
 export async function sendToClient(quoteId: string) {
   return updateQuoteWorkflowStatus(quoteId, "sent_to_client", {
     sent_at: new Date().toISOString(),

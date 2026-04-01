@@ -12958,6 +12958,39 @@ def resolve_vat_zone(country_raw: str, price_includes_vat: bool) -> dict:
     }
 
 
+def _calc_combined_duty(item: Dict) -> float:
+    """REQ-004: Compute combined import tariff from percent + per-kg duty.
+
+    Formula: customs_duty_percent + (customs_duty_per_kg * weight_in_kg / base_price * 100)
+    Falls back to customs_duty_percent only when weight or price is missing/zero.
+    Falls back to legacy customs_duty field when new split columns are absent.
+    """
+    import logging
+
+    duty_pct = float(safe_decimal(item.get('customs_duty_percent')))
+    duty_per_kg = float(safe_decimal(item.get('customs_duty_per_kg')))
+
+    # If neither split column is populated, fall back to legacy field
+    if duty_pct == 0 and duty_per_kg == 0:
+        legacy = item.get('customs_duty') or item.get('import_tariff')
+        return float(safe_decimal(legacy))
+
+    if duty_per_kg > 0:
+        weight = float(safe_decimal(item.get('weight_in_kg')))
+        price = float(safe_decimal(item.get('purchase_price_original') or item.get('base_price_vat')))
+        if weight > 0 and price > 0:
+            kg_as_pct = (duty_per_kg * weight) / price * 100
+            return duty_pct + kg_as_pct
+        else:
+            logging.getLogger(__name__).warning(
+                "Item %s: customs_duty_per_kg=%.4f but weight=%.2f, price=%.2f — using duty_pct only",
+                item.get('id'), duty_per_kg, weight, price,
+            )
+            return duty_pct
+
+    return duty_pct
+
+
 def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> List[QuoteCalculationInput]:
     """Build calculation inputs for all quote items.
 
@@ -13065,6 +13098,10 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
         if item.get('is_unavailable'):
             continue
 
+        # REQ-009: Skip import-banned items from calculation entirely
+        if item.get('import_banned'):
+            continue
+
         # Get item's purchase currency
         item_currency = item.get('purchase_currency') or item.get('currency_of_base_price', 'USD')
 
@@ -13079,7 +13116,7 @@ def build_calculation_inputs(items: List[Dict], variables: Dict[str, Any]) -> Li
                 bool(item.get('price_includes_vat', False))
             )["zone"] or "Прочие",
             'currency_of_base_price': item_currency,
-            'import_tariff': item.get('customs_duty') or item.get('import_tariff'),  # customs_duty is saved by customs workspace
+            'import_tariff': _calc_combined_duty(item),
             'markup': item.get('markup'),
             'supplier_discount': item.get('supplier_discount'),
         }
