@@ -1131,7 +1131,7 @@ export type Database = {
           pickup_location_id: string | null
           invoice_number: string
           currency: string
-          total_weight_kg: number
+          total_weight_kg: number | null
           total_volume_m3: number | null
           created_at: string | null
           updated_at: string | null
@@ -1168,7 +1168,7 @@ export type Database = {
           pickup_location_id?: string | null
           invoice_number: string
           currency: string
-          total_weight_kg: number
+          total_weight_kg?: number | null
           total_volume_m3?: number | null
           created_at?: string | null
           updated_at?: string | null
@@ -1205,7 +1205,7 @@ export type Database = {
           pickup_location_id?: string | null
           invoice_number?: string
           currency?: string
-          total_weight_kg?: number
+          total_weight_kg?: number | null
           total_volume_m3?: number | null
           created_at?: string | null
           updated_at?: string | null
@@ -3129,6 +3129,18 @@ export type Database = {
           dimension_width_mm: number | null
           dimension_length_mm: number | null
           vat_rate: number | null
+          customs_ds_sgr: string | null
+          customs_util_fee: number | null
+          customs_excise: number | null
+          customs_psn_pts: string | null
+          customs_notification: string | null
+          customs_licenses: string | null
+          customs_marking: string | null
+          customs_eco_fee: number | null
+          customs_honest_mark: string | null
+          customs_duty_per_kg: number | null
+          import_banned: boolean | null
+          import_ban_reason: string | null
         }
         Insert: {
           id?: string
@@ -3204,6 +3216,18 @@ export type Database = {
           dimension_width_mm?: number | null
           dimension_length_mm?: number | null
           vat_rate?: number | null
+          customs_ds_sgr?: string | null
+          customs_util_fee?: number | null
+          customs_excise?: number | null
+          customs_psn_pts?: string | null
+          customs_notification?: string | null
+          customs_licenses?: string | null
+          customs_marking?: string | null
+          customs_eco_fee?: number | null
+          customs_honest_mark?: string | null
+          customs_duty_per_kg?: number | null
+          import_banned?: boolean | null
+          import_ban_reason?: string | null
         }
         Update: {
           id?: string
@@ -3279,6 +3303,18 @@ export type Database = {
           dimension_width_mm?: number | null
           dimension_length_mm?: number | null
           vat_rate?: number | null
+          customs_ds_sgr?: string | null
+          customs_util_fee?: number | null
+          customs_excise?: number | null
+          customs_psn_pts?: string | null
+          customs_notification?: string | null
+          customs_licenses?: string | null
+          customs_marking?: string | null
+          customs_eco_fee?: number | null
+          customs_honest_mark?: string | null
+          customs_duty_per_kg?: number | null
+          import_banned?: boolean | null
+          import_ban_reason?: string | null
         }
         Relationships: []
       }
@@ -3551,6 +3587,9 @@ export type Database = {
           competitors: string | null
           cancellation_reason: string | null
           cancellation_comment: string | null
+          stage_entered_at: string | null
+          stage_deadline_override_hours: number | null
+          overdue_notified_at: string | null
         }
         Insert: {
           id?: string
@@ -3667,6 +3706,9 @@ export type Database = {
           competitors?: string | null
           cancellation_reason?: string | null
           cancellation_comment?: string | null
+          stage_entered_at?: string | null
+          stage_deadline_override_hours?: number | null
+          overdue_notified_at?: string | null
         }
         Update: {
           id?: string
@@ -3783,6 +3825,9 @@ export type Database = {
           competitors?: string | null
           cancellation_reason?: string | null
           cancellation_comment?: string | null
+          stage_entered_at?: string | null
+          stage_deadline_override_hours?: number | null
+          overdue_notified_at?: string | null
         }
         Relationships: []
       }
@@ -4209,6 +4254,33 @@ export type Database = {
           signed_scan_document_id?: string | null
           specification_date?: string | null
           export_data?: Json | null
+        }
+        Relationships: []
+      }
+      stage_deadlines: {
+        Row: {
+          id: string
+          organization_id: string
+          stage: string
+          deadline_hours: number
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          organization_id: string
+          stage: string
+          deadline_hours?: number
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          organization_id?: string
+          stage?: string
+          deadline_hours?: number
+          created_at?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
