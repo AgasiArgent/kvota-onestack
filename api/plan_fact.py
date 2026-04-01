@@ -58,8 +58,6 @@ def _get_api_user(request):
     if not org_id:
         sb = get_supabase()
         om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).limit(1).execute()
-        import sys
-        print(f"[plan_fact] org_members fallback: data={om.data}", flush=True, file=sys.stderr)
         if om.data:
             org_id = om.data[0]["organization_id"] if isinstance(om.data[0], dict) else None
 
@@ -151,7 +149,7 @@ def _fetch_item_with_category(item_id: str):
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
             "variance_amount, payment_document, notes, status, created_at, "
-            "plan_fact_categories!category_id(id, code, name, name_ru, is_income)"
+            "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("id", item_id)
         .execute()
@@ -171,7 +169,6 @@ def _format_item(row: dict) -> dict:
             "id": cat.get("id"),
             "code": cat.get("code"),
             "name": cat.get("name"),
-            "name_ru": cat.get("name_ru"),
             "is_income": cat.get("is_income"),
         },
         "description": row.get("description"),
@@ -216,7 +213,7 @@ async def plan_fact_list_items(request, deal_id: str):
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
             "variance_amount, payment_document, notes, status, created_at, "
-            "plan_fact_categories!category_id(id, code, name, name_ru, is_income)"
+            "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("deal_id", deal_id)
         .order("planned_date")
@@ -481,7 +478,7 @@ async def plan_fact_list_categories(request):
     sb = get_supabase()
     result = (
         sb.table("plan_fact_categories")
-        .select("id, code, name, name_ru, is_income, sort_order")
+        .select("id, code, name, is_income, sort_order")
         .order("sort_order")
         .execute()
     )
@@ -491,7 +488,6 @@ async def plan_fact_list_categories(request):
             "id": row["id"],
             "code": row["code"],
             "name": row["name"],
-            "name_ru": row.get("name_ru"),
             "is_income": row["is_income"],
             "sort_order": row["sort_order"],
         }
