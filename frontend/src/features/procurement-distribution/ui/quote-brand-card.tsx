@@ -138,7 +138,14 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
                   disabled={isAssigning}
                 >
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Выберите закупщика" />
+                    {state.userId ? (
+                      <span className="flex flex-1 text-left truncate text-sm">
+                        {users.find((u) => u.user_id === state.userId)
+                          ?.full_name ?? "..."}
+                      </span>
+                    ) : (
+                      <SelectValue placeholder="Выберите закупщика" />
+                    )}
                   </SelectTrigger>
                   <SelectContent>
                     {users.map((u) => (
