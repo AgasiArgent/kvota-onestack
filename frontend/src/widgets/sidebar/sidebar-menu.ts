@@ -17,6 +17,7 @@ import {
   MessageCircle,
   GitBranch,
   Settings,
+  SplitSquareHorizontal,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -36,6 +37,7 @@ interface MenuConfig {
   isAdmin: boolean;
   pendingApprovalsCount?: number;
   changelogUnreadCount?: number;
+  unassignedDistributionCount?: number;
 }
 
 export function buildMenuSections(config: MenuConfig): MenuSection[] {
@@ -44,6 +46,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     isAdmin,
     pendingApprovalsCount = 0,
     changelogUnreadCount = 0,
+    unassignedDistributionCount = 0,
   } = config;
   const hasRole = (...r: string[]) =>
     isAdmin || r.some((role) => roles.includes(role));
@@ -87,6 +90,16 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       icon: BarChart3,
       label: "Обзор",
       href: "/dashboard?tab=overview",
+    });
+  }
+  if (hasRole("head_of_procurement")) {
+    mainItems.push({
+      icon: SplitSquareHorizontal,
+      label: "Распределение",
+      href: "/procurement/distribution",
+      ...(unassignedDistributionCount > 0
+        ? { badge: unassignedDistributionCount }
+        : {}),
     });
   }
   if (hasRole("top_manager")) {

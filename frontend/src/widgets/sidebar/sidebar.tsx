@@ -18,6 +18,7 @@ interface SidebarProps {
   user: SessionUser;
   pendingApprovalsCount?: number;
   changelogUnreadCount?: number;
+  unassignedDistributionCount?: number;
   appContext?: AppContext;
 }
 
@@ -35,6 +36,7 @@ export function Sidebar({
   user,
   pendingApprovalsCount = 0,
   changelogUnreadCount = 0,
+  unassignedDistributionCount = 0,
   appContext = "main",
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
@@ -127,6 +129,7 @@ export function Sidebar({
     isAdmin,
     pendingApprovalsCount,
     changelogUnreadCount,
+    unassignedDistributionCount,
   });
 
   async function handleLogout() {
