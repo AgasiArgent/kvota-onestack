@@ -11,6 +11,7 @@ import type {
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
 import { ProcurementActionBar } from "./procurement-action-bar";
+import { SalesContextCard } from "./sales-context-card";
 import { UnassignedItems } from "./unassigned-items";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
@@ -92,8 +93,8 @@ export function ProcurementStep({
       await completeProcurement(quote.id);
       toast.success("Закупка завершена");
       router.refresh();
-    } catch {
-      toast.error("Не удалось завершить закупку");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Не удалось завершить закупку");
     } finally {
       setCompleting(false);
     }
@@ -110,9 +111,26 @@ export function ProcurementStep({
         onCreateInvoice={handleCreateInvoice}
         onCompleteProcurement={handleCompleteProcurement}
         completing={completing}
+        procurementCompleted={quote.procurement_completed_at != null}
       />
 
       <div className="p-6 space-y-4">
+        <SalesContextCard
+          quoteId={quote.id}
+          salesChecklist={
+            (quote.sales_checklist as {
+              is_estimate?: boolean;
+              is_tender?: boolean;
+              direct_request?: boolean;
+              trading_org_request?: boolean;
+              equipment_description?: string;
+              completed_at?: string;
+              completed_by?: string;
+            } | null) ?? null
+          }
+          salesManagerName={quote.created_by_profile?.full_name ?? null}
+        />
+
         <UnassignedItems
           key={invoices.length}
           items={items}
@@ -126,6 +144,7 @@ export function ProcurementStep({
             invoice={invoice}
             items={invoiceItemsMap.get(invoice.id) ?? []}
             defaultExpanded={invoices.length === 1 && idx === 0}
+            procurementCompleted={quote.procurement_completed_at != null}
           />
         ))}
 

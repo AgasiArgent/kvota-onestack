@@ -23,7 +23,7 @@ export function SalesStep({ quote, items }: SalesStepProps) {
 
   return (
     <div className="flex-1 min-w-0">
-      <SalesActionBar quote={quote} onOpenModal={setActiveModal} />
+      <SalesActionBar quote={quote} items={items} onOpenModal={setActiveModal} />
       <div className="p-6 space-y-6">
         <SalesInfoGrid quote={quote} />
         {isDraft ? (

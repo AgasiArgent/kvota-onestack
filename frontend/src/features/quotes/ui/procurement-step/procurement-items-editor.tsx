@@ -22,18 +22,21 @@ interface ProcurementItemsEditorProps {
   items: QuoteItemRow[];
   invoiceId: string;
   invoiceCurrency: string;
+  procurementCompleted: boolean;
 }
 
 export function ProcurementItemsEditor({
   items,
   invoiceId,
   invoiceCurrency,
+  procurementCompleted,
 }: ProcurementItemsEditorProps) {
   return (
     <ProcurementHandsontable
       items={items}
       invoiceId={invoiceId}
       invoiceCurrency={invoiceCurrency}
+      procurementCompleted={procurementCompleted}
     />
   );
 }

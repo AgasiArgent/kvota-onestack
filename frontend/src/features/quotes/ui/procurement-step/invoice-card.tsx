@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
+import { deleteInvoice } from "@/entities/quote/mutations";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -34,16 +35,20 @@ interface InvoiceCardProps {
   invoice: QuoteInvoiceRow;
   items: QuoteItemRow[];
   defaultExpanded?: boolean;
+  procurementCompleted: boolean;
 }
 
 export function InvoiceCard({
   invoice,
   items,
   defaultExpanded = false,
+  procurementCompleted,
 }: InvoiceCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [unassigning, setUnassigning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isEmpty = items.length === 0;
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
@@ -73,6 +78,19 @@ export function InvoiceCard({
       toast.error("Не удалось убрать позиции из инвойса");
     } finally {
       setUnassigning(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteInvoice(invoice.id);
+      toast.success(`Инвойс ${invoice.invoice_number} удалён`);
+      router.refresh();
+    } catch {
+      toast.error("Не удалось удалить инвойс");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -129,21 +147,34 @@ export function InvoiceCard({
           )}
         </button>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mr-2 text-muted-foreground hover:text-destructive"
-          onClick={handleUnassignAll}
-          disabled={unassigning}
-          title="Вернуть все позиции в нераспределённые"
-        >
-          {unassigning ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
-        </Button>
+        {isEmpty ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-2 text-muted-foreground hover:text-destructive"
+            onClick={handleDelete}
+            disabled={deleting}
+            title="Удалить пустой инвойс"
+          >
+            {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-2 text-muted-foreground hover:text-destructive"
+            onClick={handleUnassignAll}
+            disabled={unassigning}
+            title="Вернуть все позиции в нераспределённые"
+          >
+            {unassigning ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+          </Button>
+        )}
       </div>
 
       {expanded && (
         <div className="border-t border-border overflow-x-auto">
-          <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} />
+          <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} procurementCompleted={procurementCompleted} />
         </div>
       )}
     </Card>

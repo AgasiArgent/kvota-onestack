@@ -32,6 +32,7 @@ const COLUMN_KEYS = [
   "brand",
   "product_code",
   "supplier_sku",
+  "manufacturer_product_name",
   "product_name",
   "quantity",
   "purchase_price_original",
@@ -47,6 +48,7 @@ interface RowData {
   brand: string;
   product_code: string;
   supplier_sku: string;
+  manufacturer_product_name: string;
   product_name: string;
   quantity: number | null;
   purchase_price_original: number | null;
@@ -92,6 +94,7 @@ function itemToRow(item: QuoteItemRow): RowData {
     brand: item.brand ?? "",
     product_code: item.product_code ?? "",
     supplier_sku: item.supplier_sku ?? "",
+    manufacturer_product_name: item.manufacturer_product_name ?? "",
     product_name: item.product_name ?? "",
     quantity: item.quantity,
     purchase_price_original: item.purchase_price_original ?? null,
@@ -112,11 +115,13 @@ interface ProcurementHandsontableProps {
   items: QuoteItemRow[];
   invoiceId: string;
   invoiceCurrency: string;
+  procurementCompleted: boolean;
 }
 
 export function ProcurementHandsontable({
   items,
   invoiceCurrency,
+  procurementCompleted,
 }: ProcurementHandsontableProps) {
   const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -248,7 +253,7 @@ export function ProcurementHandsontable({
           } else if (field === "purchase_currency") {
             updates[field] = val || null;
           } else {
-            // Text fields: supplier_sku, supplier_sku_note
+            // Text fields: supplier_sku, manufacturer_product_name, supplier_sku_note
             updates[field] = val || null;
           }
         }
@@ -268,6 +273,25 @@ export function ProcurementHandsontable({
     [router]
   );
 
+  const lockedColIndices = useMemo(() => {
+    if (!procurementCompleted) return [];
+    return [
+      COLUMN_KEYS.indexOf("supplier_sku"),
+      COLUMN_KEYS.indexOf("purchase_price_original"),
+      COLUMN_KEYS.indexOf("production_time_days"),
+    ];
+  }, [procurementCompleted]);
+
+  const cellsCallback = useCallback(
+    (_row: number, col: number) => {
+      if (lockedColIndices.includes(col)) {
+        return { className: "locked-cell" };
+      }
+      return {};
+    },
+    [lockedColIndices]
+  );
+
   if (items.length === 0) {
     return (
       <div className="py-6 text-center text-sm text-muted-foreground">
@@ -278,6 +302,7 @@ export function ProcurementHandsontable({
 
   return (
     <div className="ht-theme-main">
+      <style>{`.locked-cell { background-color: var(--muted, #f4f4f5) !important; }`}</style>
       <HotTable
         ref={hotRef}
         data={initialData}
@@ -286,12 +311,13 @@ export function ProcurementHandsontable({
           "Бренд",
           "Арт.запр.",
           "Арт.произ.",
+          "Наим.произв.",
           "Наименование",
           "Кол",
           "Цена",
           "Готов.",
-          "Вес",
-          "Габар.",
+          "Вес, кг",
+          "В×Ш×Д, мм",
           "НДС",
           "Прим.",
           "",
@@ -303,12 +329,14 @@ export function ProcurementHandsontable({
             data: "supplier_sku",
             type: "text",
             width: 70,
+            readOnly: procurementCompleted,
             renderer: skuMismatchRenderer,
           },
+          { data: "manufacturer_product_name", type: "text", width: 90 },
           { data: "product_name", type: "text", width: 120, readOnly: true },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
-          { data: "purchase_price_original", type: "numeric", width: 55 },
-          { data: "production_time_days", type: "numeric", width: 45 },
+          { data: "purchase_price_original", type: "numeric", width: 55, readOnly: procurementCompleted },
+          { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },
           { data: "vat_rate", type: "numeric", width: 40 },
@@ -324,6 +352,7 @@ export function ProcurementHandsontable({
         minSpareRows={0}
         height="auto"
         afterChange={handleAfterChange}
+        cells={procurementCompleted ? cellsCallback : undefined}
         className="htLeft"
       />
     </div>

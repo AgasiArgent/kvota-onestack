@@ -377,14 +377,8 @@ export async function updateQuoteWorkflowStatus(
   if (error) throw error;
 }
 
-export async function submitToProcurement(quoteId: string) {
-  return updateQuoteWorkflowStatus(quoteId, "pending_procurement");
-}
-
 export async function completeProcurement(quoteId: string) {
-  return updateQuoteWorkflowStatus(quoteId, "procurement_complete", {
-    procurement_completed_at: new Date().toISOString(),
-  });
+  await callWorkflowTransition(quoteId, { action: "complete_procurement" });
 }
 
 export async function completeLogistics(quoteId: string) {
@@ -574,6 +568,38 @@ export async function returnQuoteForRevision(
     });
 
   if (commentError) throw commentError;
+}
+
+export async function submitToProcurementWithChecklist(
+  quoteId: string,
+  checklist: {
+    is_estimate: boolean;
+    is_tender: boolean;
+    direct_request: boolean;
+    trading_org_request: boolean;
+    equipment_description: string;
+  }
+): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/submit-procurement`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify({ checklist }),
+  });
+
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || "Не удалось передать в закупки");
+  }
 }
 
 export async function escalateQuote(

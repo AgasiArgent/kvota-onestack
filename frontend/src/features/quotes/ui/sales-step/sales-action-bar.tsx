@@ -6,7 +6,6 @@ import {
   Calculator,
   FileDown,
   ChevronDown,
-  ArrowRight,
   Send,
   Loader2,
 } from "lucide-react";
@@ -20,11 +19,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { config } from "@/shared/config";
-import {
-  submitToProcurement,
-  sendToClient,
-} from "@/entities/quote/mutations";
-import type { QuoteDetailRow } from "@/entities/quote/queries";
+import { sendToClient } from "@/entities/quote/mutations";
+import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
+import { TransferDialog } from "./transfer-dialog";
 
 export type ClientResponseModal =
   | "accept"
@@ -35,26 +32,14 @@ export type ClientResponseModal =
 
 interface SalesActionBarProps {
   quote: QuoteDetailRow;
+  items: QuoteItemRow[];
   onOpenModal?: (modal: ClientResponseModal) => void;
 }
 
-export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
+export function SalesActionBar({ quote, items, onOpenModal }: SalesActionBarProps) {
   const router = useRouter();
   const status = quote.workflow_status ?? "draft";
   const [loading, setLoading] = useState<string | null>(null);
-
-  async function handleSubmitToProcurement() {
-    setLoading("submit");
-    try {
-      await submitToProcurement(quote.id);
-      toast.success("КП передана в закупки");
-      router.refresh();
-    } catch {
-      toast.error("Не удалось передать в закупки");
-    } finally {
-      setLoading(null);
-    }
-  }
 
   async function handleCalculate() {
     setLoading("calculate");
@@ -95,21 +80,9 @@ export function SalesActionBar({ quote, onOpenModal }: SalesActionBarProps) {
   // Workflow-aware action bar: only show relevant actions per status
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-2">
-      {/* Draft: only action is to submit to procurement */}
+      {/* Draft: open transfer dialog with checklist */}
       {status === "draft" && (
-        <Button
-          size="sm"
-          className="bg-accent text-white hover:bg-accent-hover"
-          onClick={handleSubmitToProcurement}
-          disabled={loading === "submit"}
-        >
-          {loading === "submit" ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <ArrowRight size={14} />
-          )}
-          Передать в закупки
-        </Button>
+        <TransferDialog quote={quote} items={items} />
       )}
 
       {/* Waiting for procurement — no actions, just info */}
