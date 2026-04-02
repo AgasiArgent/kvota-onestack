@@ -111,13 +111,11 @@ export function TrainingPage({
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Video size={48} className="text-muted-foreground mb-4" />
           <p className="text-lg font-medium text-muted-foreground">
-            Нет обучающих видео
+            Раздел будет дополняться
           </p>
-          {isAdmin && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Нажмите &laquo;Добавить видео&raquo;, чтобы загрузить первое видео
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground mt-1">
+            Здесь появятся обучающие материалы
+          </p>
         </div>
       )}
 
