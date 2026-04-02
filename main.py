@@ -10881,7 +10881,7 @@ async def post(quote_id: str, session, request):
     supabase = get_supabase()
     try:
         supabase.table("quotes") \
-            .update({"sales_checklist": json.dumps(checklist_to_save)}) \
+            .update({"sales_checklist": checklist_to_save}) \
             .eq("id", quote_id) \
             .eq("organization_id", org_id) \
             .execute()
