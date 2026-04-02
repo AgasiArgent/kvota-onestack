@@ -3,7 +3,7 @@ import { createClient as createJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { Database } from "@/shared/types/database.types";
 
-// Share auth cookies across subdomains (app.kvotaflow.ru ↔ phmb.kvotaflow.ru)
+// Share auth cookies across subdomains
 const COOKIE_DOMAIN = process.env.NODE_ENV === "production" ? ".kvotaflow.ru" : undefined;
 
 /**

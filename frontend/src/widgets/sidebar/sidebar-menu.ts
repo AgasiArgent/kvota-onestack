@@ -214,32 +214,3 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
   return sections;
 }
 
-export function buildPhmbMenuSections(config: MenuConfig): MenuSection[] {
-  const { roles, isAdmin } = config;
-  const hasRole = (...r: string[]) =>
-    isAdmin || r.some((role) => roles.includes(role));
-  const sections: MenuSection[] = [];
-
-  // === PHMB MAIN ===
-  const phmbItems: MenuItem[] = [
-    { icon: FileText, label: "Реестр КП", href: "/phmb" },
-  ];
-
-  if (hasRole("procurement")) {
-    phmbItems.push({
-      icon: ClipboardList,
-      label: "Очередь закупок",
-      href: "/phmb/procurement",
-    });
-  }
-  if (hasRole("sales", "sales_manager")) {
-    phmbItems.push({
-      icon: Settings,
-      label: "Настройки",
-      href: "/phmb/settings",
-    });
-  }
-  sections.push({ title: "PHMB", items: phmbItems });
-
-  return sections;
-}

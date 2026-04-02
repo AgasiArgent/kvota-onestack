@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Share auth cookies across subdomains (app.kvotaflow.ru ↔ phmb.kvotaflow.ru)
+// Share auth cookies across subdomains
 const COOKIE_DOMAIN = process.env.NODE_ENV === "production" ? ".kvotaflow.ru" : undefined;
 
 export async function updateSession(request: NextRequest) {

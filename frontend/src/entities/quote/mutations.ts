@@ -93,7 +93,6 @@ export async function createQuote(
         status: "draft",
         workflow_status: "draft",
         currency: "USD",
-        is_phmb: false,
         created_by: userId,
         created_by_user_id: userId,
       })

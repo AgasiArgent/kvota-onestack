@@ -2,9 +2,6 @@ import { createClient } from "@/shared/lib/supabase/server";
 import type {
   SettingsPageData,
   CalcSettings,
-  PhmbSettings,
-  BrandDiscount,
-  BrandGroup,
   StageDeadline,
 } from "./types";
 
@@ -13,7 +10,7 @@ export async function fetchSettingsPageData(
 ): Promise<SettingsPageData> {
   const supabase = await createClient();
 
-  const [orgResult, calcResult, phmbResult, discountsResult, groupsResult, deadlinesResult] =
+  const [orgResult, calcResult, deadlinesResult] =
     await Promise.all([
       supabase
         .from("organizations")
@@ -25,23 +22,6 @@ export async function fetchSettingsPageData(
         .select("id, organization_id, rate_forex_risk, rate_fin_comm, rate_loan_interest_daily")
         .eq("organization_id", orgId)
         .maybeSingle(),
-      supabase
-        .from("phmb_settings")
-        .select(
-          "id, org_id, base_price_per_pallet, logistics_price_per_pallet, customs_handling_cost, exchange_rate_insurance_pct, financial_transit_pct, customs_insurance_pct, default_markup_pct, default_advance_pct, default_payment_days, default_delivery_days"
-        )
-        .eq("org_id", orgId)
-        .maybeSingle(),
-      supabase
-        .from("phmb_brand_type_discounts")
-        .select("id, org_id, brand, product_classification, discount_pct")
-        .eq("org_id", orgId)
-        .order("brand"),
-      supabase
-        .from("phmb_brand_groups")
-        .select("id, name")
-        .eq("org_id", orgId)
-        .order("sort_order"),
       supabase
         .from("stage_deadlines" as never)
         .select("id, organization_id, stage, deadline_hours")
@@ -57,9 +37,6 @@ export async function fetchSettingsPageData(
   return {
     organization,
     calcSettings: (calcResult.data as CalcSettings) ?? null,
-    phmbSettings: (phmbResult.data as PhmbSettings) ?? null,
-    brandDiscounts: (discountsResult.data ?? []) as BrandDiscount[],
-    brandGroups: (groupsResult.data ?? []) as BrandGroup[],
     stageDeadlines: ((deadlinesResult as { data: StageDeadline[] | null }).data ?? []) as StageDeadline[],
   };
 }

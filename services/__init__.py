@@ -805,9 +805,6 @@ from .telegram_service import (
     # Procurement invoice complete notification
     ProcurementInvoiceCompleteNotification,
     send_procurement_invoice_complete_notification,
-    # PHMB price set notification
-    PhmbPriceSetNotification,
-    send_phmb_price_set_notification,
 )
 
 __all__ = [
@@ -977,9 +974,6 @@ __all__ = [
     # Procurement invoice complete notification
     "ProcurementInvoiceCompleteNotification",
     "send_procurement_invoice_complete_notification",
-    # PHMB price set notification
-    "PhmbPriceSetNotification",
-    "send_phmb_price_set_notification",
     # Approval service (Feature #64)
     "Approval",
     "create_approval",

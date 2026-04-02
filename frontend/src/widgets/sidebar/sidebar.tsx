@@ -11,15 +11,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import type { SessionUser } from "@/entities/user";
-import { buildMenuSections, buildPhmbMenuSections } from "./sidebar-menu";
-import type { AppContext } from "@/shared/lib/app-context";
+import { buildMenuSections } from "./sidebar-menu";
 
 interface SidebarProps {
   user: SessionUser;
   pendingApprovalsCount?: number;
   changelogUnreadCount?: number;
   unassignedDistributionCount?: number;
-  appContext?: AppContext;
 }
 
 type ViewportMode = "desktop" | "tablet" | "mobile";
@@ -37,7 +35,6 @@ export function Sidebar({
   pendingApprovalsCount = 0,
   changelogUnreadCount = 0,
   unassignedDistributionCount = 0,
-  appContext = "main",
 }: SidebarProps) {
   const pathname = usePathname() ?? "";
   const router = useRouter();
@@ -123,8 +120,7 @@ export function Sidebar({
 
   const isAdmin =
     user.roles.includes("admin") || user.roles.includes("training_manager");
-  const menuBuilder = appContext === "phmb" ? buildPhmbMenuSections : buildMenuSections;
-  const sections = menuBuilder({
+  const sections = buildMenuSections({
     roles: user.roles,
     isAdmin,
     pendingApprovalsCount,
@@ -159,22 +155,13 @@ export function Sidebar({
         showLabels ? "justify-between px-4" : "justify-center"
       )}>
         {showLabels && (
-          <div className="flex items-center gap-2">
-            <Link
-              href={appContext === "phmb" ? "/phmb" : "/quotes"}
-              prefetch={false}
-              className="font-semibold text-lg text-accent"
-            >
-              {appContext === "phmb" ? "PHMB" : "Kvota"}
-            </Link>
-            <a
-              href={appContext === "phmb" ? "https://app.kvotaflow.ru" : "https://phmb.kvotaflow.ru"}
-              className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border-light text-text-muted hover:text-accent hover:border-accent transition-colors"
-              title={appContext === "phmb" ? "Перейти в основное приложение" : "Перейти в PHMB"}
-            >
-              {appContext === "phmb" ? "Main" : "PHMB"}
-            </a>
-          </div>
+          <Link
+            href="/quotes"
+            prefetch={false}
+            className="font-semibold text-lg text-accent"
+          >
+            Kvota
+          </Link>
         )}
         {isMobile && (
           <button
