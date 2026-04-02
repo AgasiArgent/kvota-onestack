@@ -13,13 +13,26 @@ import type {
 
 const PAGE_SIZE = 50;
 
+async function getGroupMemberIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  salesGroupId: string,
+  orgId: string
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("user_id")
+    .eq("sales_group_id", salesGroupId)
+    .eq("organization_id", orgId);
+  return data?.map((r) => r.user_id) ?? [];
+}
+
 export async function fetchCustomersList(
   params: {
     search?: string;
     status?: string;
     page?: number;
   },
-  user?: { id: string; roles: string[] }
+  user?: { id: string; roles: string[]; salesGroupId?: string | null; orgId?: string }
 ): Promise<{ data: CustomerListItem[]; total: number }> {
   const supabase = await createClient();
   const { search = "", status = "", page = 1 } = params;
@@ -32,9 +45,19 @@ export async function fetchCustomersList(
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  // Role-based filtering: sales users see only their assigned customers
+  // Role-based filtering: sales users see only their group's customers
   if (user && isSalesOnly(user.roles)) {
-    query = query.eq("manager_id", user.id);
+    if (user.salesGroupId && user.orgId) {
+      const memberIds = await getGroupMemberIds(supabase, user.salesGroupId, user.orgId);
+      // Fallback to own ID if group is empty (no members assigned yet)
+      if (memberIds.length > 0) {
+        query = query.in("manager_id", memberIds);
+      } else {
+        query = query.eq("manager_id", user.id);
+      }
+    } else {
+      query = query.eq("manager_id", user.id);
+    }
   }
 
   if (search) {
@@ -96,15 +119,21 @@ export async function fetchCustomersList(
 }
 
 export async function fetchCustomerDetail(
-  id: string
+  id: string,
+  orgId: string
 ): Promise<Customer | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("customers")
     .select("*")
     .eq("id", id)
+    .eq("organization_id", orgId)
     .single();
-  if (error) return null;
+  if (error) {
+    // "no rows found" → not found; anything else → rethrow
+    if (error.code === "PGRST116") return null;
+    throw error;
+  }
 
   // Resolve manager name separately (no FK relationship)
   let manager: { full_name: string } | null = null;

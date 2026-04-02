@@ -27,6 +27,7 @@ import {
   fetchSellerCompanies,
 } from "@/entities/quote/mutations";
 import { createCustomer } from "@/entities/customer/mutations";
+import { createClient } from "@/shared/lib/supabase/client";
 
 interface DaDataResult {
   found: boolean;
@@ -53,6 +54,7 @@ interface CreateQuoteDialogProps {
   userId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  preselectedCustomer?: { id: string; name: string } | null;
 }
 
 export function CreateQuoteDialog({
@@ -60,6 +62,7 @@ export function CreateQuoteDialog({
   userId,
   open,
   onOpenChange,
+  preselectedCustomer,
 }: CreateQuoteDialogProps) {
   const router = useRouter();
 
@@ -105,8 +108,13 @@ export function CreateQuoteDialog({
       return;
     }
 
-    setSelectedCustomer(null);
-    setCustomerQuery("");
+    if (preselectedCustomer) {
+      setSelectedCustomer(preselectedCustomer);
+      setCustomerQuery(preselectedCustomer.name);
+    } else {
+      setSelectedCustomer(null);
+      setCustomerQuery("");
+    }
     setCustomerResults([]);
     setDadataResult(null);
     setLookingUpDadata(false);
@@ -124,7 +132,7 @@ export function CreateQuoteDialog({
         }
       })
       .catch(() => toast.error("Не удалось загрузить юрлица"));
-  }, [open, orgId]);
+  }, [open, orgId, preselectedCustomer]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -226,7 +234,20 @@ export function CreateQuoteDialog({
       const message =
         err instanceof Error ? err.message : "Ошибка создания клиента";
       if (message.includes("duplicate") || message.includes("unique")) {
-        toast.error("Клиент с таким ИНН уже существует");
+        const innValue = customerQuery.replace(/\D/g, "");
+        const supabase = createClient();
+        const { data: existing } = await supabase
+          .from("customers")
+          .select("id, name")
+          .eq("inn", innValue)
+          .eq("organization_id", orgId)
+          .limit(1);
+        if (existing && existing.length > 0) {
+          handleSelectCustomer({ id: existing[0].id, name: existing[0].name });
+          toast.info(`Выбран существующий клиент "${existing[0].name}"`);
+        } else {
+          toast.error("Клиент с таким ИНН уже существует");
+        }
       } else {
         toast.error(message);
       }

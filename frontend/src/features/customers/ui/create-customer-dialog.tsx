@@ -59,7 +59,10 @@ export function CreateCustomerDialog({
   const [lookingUp, setLookingUp] = useState(false);
   const [dadataResult, setDadataResult] = useState<DaDataResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,7 +80,7 @@ export function CreateCustomerDialog({
       setLookingUp(false);
       setDadataResult(null);
       setSubmitting(false);
-      setDuplicateId(null);
+      setDuplicate(null);
     }
   }, [open]);
 
@@ -86,7 +89,7 @@ export function CreateCustomerDialog({
     if (noInn) {
       setInn("");
       setDadataResult(null);
-      setDuplicateId(null);
+      setDuplicate(null);
       setKpp("");
       setOgrn("");
       setAddress("");
@@ -101,13 +104,13 @@ export function CreateCustomerDialog({
     const cleaned = innValue.replace(/\D/g, "");
     if (cleaned.length < 10) {
       setDadataResult(null);
-      setDuplicateId(null);
+      setDuplicate(null);
       return;
     }
 
     setLookingUp(true);
     setDadataResult(null);
-    setDuplicateId(null);
+    setDuplicate(null);
 
     try {
       const res = await fetch("/proxy/dadata", {
@@ -157,7 +160,7 @@ export function CreateCustomerDialog({
       }, 300);
     } else {
       setDadataResult(null);
-      setDuplicateId(null);
+      setDuplicate(null);
       setName("");
       setKpp("");
       setOgrn("");
@@ -166,19 +169,21 @@ export function CreateCustomerDialog({
     }
   }
 
-  async function checkDuplicate(innValue: string): Promise<string | null> {
+  async function checkDuplicate(
+    innValue: string
+  ): Promise<{ id: string; name: string } | null> {
     if (!innValue) return null;
 
     const supabase = createClient();
     const { data } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, name")
       .eq("inn", innValue)
       .eq("organization_id", orgId)
       .limit(1);
 
     if (data && data.length > 0) {
-      return data[0].id;
+      return { id: data[0].id, name: data[0].name };
     }
     return null;
   }
@@ -196,9 +201,9 @@ export function CreateCustomerDialog({
     try {
       // Check for duplicate INN
       if (!noInn && inn.trim()) {
-        const existingId = await checkDuplicate(inn.trim());
-        if (existingId) {
-          setDuplicateId(existingId);
+        const existing = await checkDuplicate(inn.trim());
+        if (existing) {
+          setDuplicate(existing);
           setSubmitting(false);
           return;
         }
@@ -232,7 +237,7 @@ export function CreateCustomerDialog({
   const dadataNotFound =
     dadataResult !== null && !dadataResult.found && !lookingUp;
   const canSubmit =
-    name.trim().length > 0 && !submitting && !lookingUp && !duplicateId;
+    name.trim().length > 0 && !submitting && !lookingUp && !duplicate;
 
   return (
     <Dialog open={open} onOpenChange={(val) => !val && onOpenChange(false)}>
@@ -304,16 +309,23 @@ export function CreateCustomerDialog({
           )}
 
           {/* Duplicate warning */}
-          {duplicateId && (
-            <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-              Клиент с ИНН {inn} уже существует.{" "}
-              <a
-                href={`/customers/${duplicateId}`}
-                className="underline font-medium hover:text-red-900"
-                onClick={() => onOpenChange(false)}
+          {duplicate && (
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+              <p>
+                Клиент с ИНН {inn} уже существует: <strong>{duplicate.name}</strong>
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => {
+                  onOpenChange(false);
+                  router.push(`/customers/${duplicate.id}`);
+                }}
               >
                 Открыть карточку
-              </a>
+              </Button>
             </div>
           )}
 

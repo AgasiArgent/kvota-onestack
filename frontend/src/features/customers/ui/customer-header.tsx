@@ -1,18 +1,22 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Plus, Building2 } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { config } from "@/shared/config";
+import { CreateQuoteDialog } from "@/features/quotes";
 import type { Customer } from "@/entities/customer";
 
 interface Props {
   customer: Customer;
+  orgId: string;
+  userId: string;
 }
 
-export function CustomerHeader({ customer }: Props) {
+export function CustomerHeader({ customer, orgId, userId }: Props) {
+  const [createQuoteOpen, setCreateQuoteOpen] = useState(false);
+
   return (
     <div className="mb-6">
       <Link
@@ -30,16 +34,21 @@ export function CustomerHeader({ customer }: Props) {
             {customer.status === "active" ? "Активен" : "Неактивен"}
           </Badge>
         </div>
-        <a
-          href={`${config.legacyAppUrl}/quotes/new?customer_id=${customer.id}`}
-          target="_blank"
-          rel="noopener"
-          className={cn(buttonVariants(), "bg-accent text-white hover:bg-accent-hover")}
+        <Button
+          onClick={() => setCreateQuoteOpen(true)}
+          className="bg-accent text-white hover:bg-accent-hover"
         >
           <Plus size={16} />
           Создать КП
-        </a>
+        </Button>
       </div>
+      <CreateQuoteDialog
+        orgId={orgId}
+        userId={userId}
+        open={createQuoteOpen}
+        onOpenChange={setCreateQuoteOpen}
+        preselectedCustomer={{ id: customer.id, name: customer.name }}
+      />
     </div>
   );
 }

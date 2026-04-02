@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   fetchCustomerDetail,
   fetchCustomerStats,
@@ -11,6 +11,7 @@ import {
   fetchOrgUsers,
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
+import { getSessionUser } from "@/entities/user";
 import { CustomerHeader } from "@/features/customers/ui/customer-header";
 import { CustomerTabs } from "@/features/customers/ui/customer-tabs";
 import { TabOverview } from "@/features/customers/ui/tab-overview";
@@ -27,12 +28,15 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
   const { id } = await params;
   const { tab = "overview", subtab } = await searchParams;
 
-  const customer = await fetchCustomerDetail(id);
+  const user = await getSessionUser();
+  if (!user?.orgId) redirect("/login");
+
+  const customer = await fetchCustomerDetail(id, user.orgId);
   if (!customer) notFound();
 
   return (
     <div>
-      <CustomerHeader customer={customer} />
+      <CustomerHeader customer={customer} orgId={user.orgId} userId={user.id} />
       <CustomerTabs customerId={id} activeTab={tab}>
         {tab === "overview" && <OverviewContent customerId={id} customer={customer} />}
         {tab === "crm" && <CRMContent customerId={id} customer={customer} />}

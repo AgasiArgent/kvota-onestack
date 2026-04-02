@@ -1,6 +1,20 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { ROLE_LABELS_RU } from "./types";
 
+export async function fetchUserSalesGroupId(
+  userId: string,
+  orgId: string
+): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("sales_group_id")
+    .eq("user_id", userId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  return data?.sales_group_id ?? null;
+}
+
 export interface UserDepartment {
   roles: Array<{ name: string; slug: string }>;
   supervisor: { full_name: string } | null;
