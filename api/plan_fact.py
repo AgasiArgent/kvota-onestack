@@ -148,7 +148,7 @@ def _fetch_item_with_category(item_id: str):
             "id, deal_id, category_id, description, "
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
-            "variance_amount, payment_document, notes, created_at, "
+            "variance_amount, payment_document, notes, attachment_url, created_at, "
             "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("id", item_id)
@@ -181,6 +181,7 @@ def _format_item(row: dict) -> dict:
         "variance_amount": row.get("variance_amount"),
         "payment_document": row.get("payment_document"),
         "notes": row.get("notes"),
+        "attachment_url": row.get("attachment_url"),
         "status": "paid" if row.get("actual_amount") is not None else "planned",
         "created_at": row.get("created_at"),
     })
@@ -212,7 +213,7 @@ async def plan_fact_list_items(request, deal_id: str):
             "id, deal_id, category_id, description, "
             "planned_amount, planned_currency, planned_date, "
             "actual_amount, actual_currency, actual_date, "
-            "variance_amount, payment_document, notes, created_at, "
+            "variance_amount, payment_document, notes, attachment_url, created_at, "
             "plan_fact_categories!category_id(id, code, name, is_income)"
         )
         .eq("deal_id", deal_id)
@@ -367,7 +368,7 @@ async def plan_fact_update_item(request, deal_id: str, item_id: str):
         "category_id", "description",
         "planned_amount", "planned_currency", "planned_date",
         "actual_amount", "actual_currency", "actual_date",
-        "payment_document", "notes",
+        "payment_document", "notes", "attachment_url",
     }
     update_data = {k: v for k, v in body.items() if k in allowed_fields}
 

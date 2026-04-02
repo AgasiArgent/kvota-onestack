@@ -194,6 +194,7 @@ export interface PlanFactItem {
   variance_amount: number | null;
   payment_document: string | null;
   notes: string | null;
+  attachment_url: string | null;
   created_at: string;
 }
 
@@ -211,6 +212,7 @@ export interface RecordActualPayload {
   actual_date: string;
   payment_document?: string;
   notes?: string;
+  attachment_url?: string;
 }
 
 export interface QuoteSearchResult {

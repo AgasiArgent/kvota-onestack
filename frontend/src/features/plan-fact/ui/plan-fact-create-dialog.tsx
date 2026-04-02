@@ -311,7 +311,7 @@ export function PlanFactCreateDialog({
           <div className="grid grid-cols-[1fr_100px] gap-3">
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Сумма план <span className="text-destructive">*</span>
+                Сумма <span className="text-destructive">*</span>
               </Label>
               <Input
                 type="number"
@@ -363,7 +363,7 @@ export function PlanFactCreateDialog({
           {/* Planned date */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Дата план <span className="text-destructive">*</span>
+              Дата <span className="text-destructive">*</span>
             </Label>
             <Input
               type="date"

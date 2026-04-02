@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Loader2, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
+import { createClient } from "@/shared/lib/supabase/client";
 import {
   Sheet,
   SheetContent,
@@ -83,6 +84,9 @@ export function PlanFactSheet({
   const [actualDate, setActualDate] = useState(getTodayISO());
   const [paymentDocument, setPaymentDocument] = useState("");
   const [notes, setNotes] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -92,6 +96,8 @@ export function PlanFactSheet({
     setActualDate(getTodayISO());
     setPaymentDocument("");
     setNotes("");
+    setAttachmentFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     setErrors({});
   }
 
@@ -110,6 +116,25 @@ export function PlanFactSheet({
     return errs;
   }
 
+  async function uploadAttachment(): Promise<string | undefined> {
+    if (!attachmentFile) return undefined;
+
+    const supabase = createClient();
+    const storagePath = `payments/${item.deal_id}/${crypto.randomUUID()}-${attachmentFile.name}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("payment-documents")
+      .upload(storagePath, attachmentFile);
+
+    if (uploadError) throw new Error(`Ошибка загрузки файла: ${uploadError.message}`);
+
+    const { data: urlData } = supabase.storage
+      .from("payment-documents")
+      .getPublicUrl(storagePath);
+
+    return urlData.publicUrl;
+  }
+
   async function handleSubmit() {
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
@@ -121,17 +146,26 @@ export function PlanFactSheet({
     setSubmitting(true);
 
     try {
+      let attachmentUrl: string | undefined;
+      if (attachmentFile) {
+        setUploading(true);
+        attachmentUrl = await uploadAttachment();
+        setUploading(false);
+      }
+
       await recordActualPayment(item.deal_id, item.id, {
         actual_amount: parseFloat(actualAmount),
         actual_currency: actualCurrency,
         actual_date: actualDate,
         payment_document: paymentDocument.trim() || undefined,
         notes: notes.trim() || undefined,
+        attachment_url: attachmentUrl,
       });
       resetForm();
       onOpenChange(false);
       onSuccess();
     } catch (err) {
+      setUploading(false);
       const message =
         err instanceof Error ? err.message : "Не удалось записать оплату";
       toast.error(message);
@@ -281,6 +315,59 @@ export function PlanFactSheet({
             />
           </div>
 
+          {/* File attachment */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Платёжка (файл)
+            </Label>
+            {attachmentFile ? (
+              <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2">
+                <Paperclip size={14} className="text-muted-foreground shrink-0" />
+                <span className="text-sm truncate flex-1">{attachmentFile.name}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachmentFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full justify-start text-muted-foreground"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Paperclip size={14} />
+                Прикрепить файл
+              </Button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                if (file.size > 10 * 1024 * 1024) {
+                  toast.error("Максимальный размер файла — 10 МБ");
+                  e.target.value = "";
+                  return;
+                }
+                setAttachmentFile(file);
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              PDF, JPG, PNG — до 10 МБ
+            </p>
+          </div>
+
           {/* Notes */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -301,7 +388,7 @@ export function PlanFactSheet({
             className="w-full"
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
-            Отметить оплаченным
+            {uploading ? "Загрузка файла..." : "Отметить оплаченным"}
           </Button>
         </div>
       </SheetContent>

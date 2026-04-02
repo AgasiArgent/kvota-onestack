@@ -148,6 +148,7 @@ function paymentToPlanFactItem(payment: PaymentRecord): PlanFactItem {
     variance_amount: null,
     payment_document: null,
     notes: null,
+    attachment_url: null,
     created_at: "",
   };
 }
