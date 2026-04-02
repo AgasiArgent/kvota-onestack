@@ -45,18 +45,12 @@ export async function updateFeedbackStatus(
   shortId: string,
   status: string
 ): Promise<void> {
-  // Use legacy API for ClickUp sync + Telegram notification
-  const response = await fetch(
-    `https://kvotaflow.ru/admin/feedback/${shortId}/status`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ status }),
-      credentials: "include",
-    }
-  );
+  const supabase = createClient();
 
-  if (!response.ok) {
-    throw new Error(`Failed to update feedback status: ${response.status}`);
-  }
+  const { error } = await supabase
+    .from("user_feedback")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("short_id", shortId);
+
+  if (error) throw new Error(error.message);
 }
