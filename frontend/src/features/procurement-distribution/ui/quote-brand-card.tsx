@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Pin } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "./user-search-select";
@@ -91,7 +92,12 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
       {/* Quote header */}
       <div className="px-4 py-3 border-b border-border-light bg-background rounded-t-lg">
         <div className="flex items-center gap-3 text-sm">
-          <span className="font-semibold text-text">{quote.idn}</span>
+          <Link
+            href={`/quotes/${quote.id}`}
+            className="font-semibold text-text hover:text-accent hover:underline"
+          >
+            {quote.idn}
+          </Link>
           <span className="text-text-muted">{quote.customer_name ?? "—"}</span>
           <span className="text-text-subtle">{quote.sales_manager_name}</span>
           <span className="text-text-subtle ml-auto">

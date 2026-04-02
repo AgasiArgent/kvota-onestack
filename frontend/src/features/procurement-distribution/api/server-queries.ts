@@ -16,7 +16,8 @@ export async function fetchDistributionData(
     .from("quotes")
     .select("id, idn_quote, customer_id, created_by_user_id, created_at")
     .eq("organization_id", orgId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .not("workflow_status", "in", "(cancelled,rejected,draft)");
 
   if (!quoteRows || quoteRows.length === 0) return [];
 
@@ -217,7 +218,8 @@ export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
     .from("quotes")
     .select("id")
     .eq("organization_id", orgId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .not("workflow_status", "in", "(cancelled,rejected,draft)");
 
   if (!quoteRows || quoteRows.length === 0) return 0;
 
