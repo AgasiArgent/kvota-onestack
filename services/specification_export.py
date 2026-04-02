@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from dataclasses import dataclass
 
-from services.export_data_mapper import ExportData, format_date_russian, amount_in_words_russian
+from services.export_data_mapper import ExportData, enrich_with_legal_names, format_date_russian, amount_in_words_russian
 
 
 @dataclass
@@ -168,12 +168,12 @@ def generate_specification_html(data: ExportData, contract_info: Dict[str, Any] 
 
         <div class="parties">
             <div class="party">
-                <strong>Поставщик:</strong> {organization.get('name', 'Организация')},
+                <strong>Поставщик:</strong> {organization.get('legal_name') or organization.get('name', 'Организация')},
                 ИНН {organization.get('inn', '-')},
                 {organization.get('legal_address', '')}
             </div>
             <div class="party">
-                <strong>Покупатель:</strong> {customer.get('company_name', customer.get('name', 'Покупатель'))},
+                <strong>Покупатель:</strong> {customer.get('legal_name') or customer.get('company_name', customer.get('name', 'Покупатель'))},
                 ИНН {customer.get('inn', '-')},
                 {customer.get('address', '')}
             </div>
@@ -355,6 +355,9 @@ def fetch_specification_data(spec_id: str, org_id: str) -> SpecificationData:
         # Calculate from items if no summary
         calculations = _calculate_totals_from_items(items, specification.get("specification_currency", quote.get("currency", "RUB")))
 
+    # Enrich company names with DaData legal names
+    enrich_with_legal_names(customer, organization)
+
     return SpecificationData(
         specification=specification,
         quote=quote,
@@ -434,9 +437,9 @@ def generate_spec_pdf_html(data: SpecificationData) -> str:
     cargo_type = spec.get("cargo_type") or "Генеральный"
     supplier_payment_country = spec.get("supplier_payment_country") or "Китай"
 
-    # Legal entities
-    our_legal_entity = spec.get("our_legal_entity") or organization.get("name", "Поставщик")
-    client_legal_entity = spec.get("client_legal_entity") or customer.get("company_name") or customer.get("name", "Покупатель")
+    # Legal entities — prefer DaData legal name over manually entered name
+    our_legal_entity = organization.get("legal_name") or spec.get("our_legal_entity") or organization.get("name", "Поставщик")
+    client_legal_entity = customer.get("legal_name") or spec.get("client_legal_entity") or customer.get("company_name") or customer.get("name", "Покупатель")
 
     # Format dates
     sign_date_str = format_date_russian(sign_date) if sign_date else format_date_russian()
