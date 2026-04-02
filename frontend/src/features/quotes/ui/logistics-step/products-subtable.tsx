@@ -46,7 +46,7 @@ export function ProductsSubtable({ items, invoice }: ProductsSubtableProps) {
         <TableHeader>
           <TableRow>
             <TableHead>Товар</TableHead>
-            <TableHead className="w-24">Артикул</TableHead>
+            <TableHead className="w-36">Артикул</TableHead>
             <TableHead className="w-20 text-right">Кол-во</TableHead>
             <TableHead className="w-24 text-right">Вес, кг</TableHead>
             <TableHead className="w-36">Габариты, мм</TableHead>
@@ -67,7 +67,7 @@ export function ProductsSubtable({ items, invoice }: ProductsSubtableProps) {
                 <TableCell className="truncate max-w-48">
                   {item.product_name}
                 </TableCell>
-                <TableCell className="text-xs font-mono truncate max-w-24">
+                <TableCell className="text-xs font-mono truncate max-w-36">
                   {item.product_code ?? "\u2014"}
                 </TableCell>
                 <TableCell className="text-right font-mono text-sm">

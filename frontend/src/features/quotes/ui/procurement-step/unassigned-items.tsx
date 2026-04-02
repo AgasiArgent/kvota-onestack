@@ -109,7 +109,7 @@ export function UnassignedItems({
               />
             </TableHead>
             <TableHead className="w-28">Бренд</TableHead>
-            <TableHead className="w-32">Артикул</TableHead>
+            <TableHead className="w-40">Артикул</TableHead>
             <TableHead>Наименование</TableHead>
             <TableHead className="w-20 text-right">Кол-во</TableHead>
           </TableRow>
@@ -131,7 +131,7 @@ export function UnassignedItems({
               <TableCell className="truncate max-w-28">
                 {item.brand ?? "\u2014"}
               </TableCell>
-              <TableCell className="truncate max-w-32 font-mono text-xs">
+              <TableCell className="truncate max-w-40 font-mono text-xs">
                 {item.idn_sku ?? "\u2014"}
               </TableCell>
               <TableCell>{item.product_name}</TableCell>
