@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 const plusJakartaSans = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-sans", weight: ["300","400","500","600","700"] });
 
 export const metadata: Metadata = {
-  title: "OneStack",
-  description: "Система управления коммерческими предложениями",
+  title: "Kvota",
+  description: "Система управления коммерческими предложениями компании Мастер Бэринг",
 };
 
 export default function RootLayout({

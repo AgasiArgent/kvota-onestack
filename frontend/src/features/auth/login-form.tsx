@@ -55,8 +55,8 @@ export function LoginForm() {
             <Layers className="text-white" size={28} />
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold tracking-tight">OneStack</CardTitle>
-            <CardDescription>Система управления коммерческими предложениями</CardDescription>
+            <CardTitle className="text-2xl font-bold tracking-tight">Kvota</CardTitle>
+            <CardDescription>Система управления коммерческими предложениями компании Мастер Бэринг</CardDescription>
           </div>
         </CardHeader>
         <CardContent>
