@@ -49,6 +49,8 @@ const DELIVERY_METHODS = [
   { value: "multimodal", label: "Мультимодально" },
 ] as const;
 
+const INCOTERMS = ["DDP", "DAP", "CIF", "FOB", "EXW"] as const;
+
 interface CreateQuoteDialogProps {
   orgId: string;
   userId: string;
@@ -96,6 +98,7 @@ export function CreateQuoteDialog({
   const [deliveryCountry, setDeliveryCountry] = useState("Россия");
   const [deliveryCity, setDeliveryCity] = useState("Москва");
   const [deliveryMethod, setDeliveryMethod] = useState("");
+  const [incoterms, setIncoterms] = useState("");
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -123,6 +126,7 @@ export function CreateQuoteDialog({
     setDeliveryCountry("Россия");
     setDeliveryCity("Москва");
     setDeliveryMethod("");
+    setIncoterms("");
 
     fetchSellerCompanies(orgId)
       .then((companies) => {
@@ -278,6 +282,7 @@ export function CreateQuoteDialog({
         delivery_country: deliveryCountry.trim() || undefined,
         delivery_city: deliveryCity.trim() || undefined,
         delivery_method: deliveryMethod || undefined,
+        incoterms: incoterms || undefined,
       });
 
       onOpenChange(false);
@@ -469,6 +474,27 @@ export function CreateQuoteDialog({
                 {DELIVERY_METHODS.map((m) => (
                   <SelectItem key={m.value} value={m.value}>
                     {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+              Условия Incoterms
+            </Label>
+            <Select
+              value={incoterms}
+              onValueChange={(val) => setIncoterms(val ?? "")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="-- Не указаны --" />
+              </SelectTrigger>
+              <SelectContent>
+                {INCOTERMS.map((term) => (
+                  <SelectItem key={term} value={term}>
+                    {term}
                   </SelectItem>
                 ))}
               </SelectContent>

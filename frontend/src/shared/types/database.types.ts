@@ -2255,6 +2255,7 @@ export type Database = {
           created_at: string | null
           updated_at: string | null
           logistics_stage_id: string | null
+          attachment_url: string | null
         }
         Insert: {
           id?: string
@@ -2275,6 +2276,7 @@ export type Database = {
           created_at?: string | null
           updated_at?: string | null
           logistics_stage_id?: string | null
+          attachment_url?: string | null
         }
         Update: {
           id?: string
@@ -2295,6 +2297,7 @@ export type Database = {
           created_at?: string | null
           updated_at?: string | null
           logistics_stage_id?: string | null
+          attachment_url?: string | null
         }
         Relationships: []
       }
@@ -3590,6 +3593,9 @@ export type Database = {
           stage_entered_at: string | null
           stage_deadline_override_hours: number | null
           overdue_notified_at: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          incoterms: string | null
         }
         Insert: {
           id?: string
@@ -3709,6 +3715,9 @@ export type Database = {
           stage_entered_at?: string | null
           stage_deadline_override_hours?: number | null
           overdue_notified_at?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          incoterms?: string | null
         }
         Update: {
           id?: string
@@ -3828,6 +3837,48 @@ export type Database = {
           stage_entered_at?: string | null
           stage_deadline_override_hours?: number | null
           overdue_notified_at?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          incoterms?: string | null
+        }
+        Relationships: []
+      }
+      registration_requests: {
+        Row: {
+          id: string
+          first_name: string
+          last_name: string
+          email: string
+          phone: string | null
+          position: string | null
+          department: string | null
+          manager: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          first_name: string
+          last_name: string
+          email: string
+          phone?: string | null
+          position?: string | null
+          department?: string | null
+          manager?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          first_name?: string
+          last_name?: string
+          email?: string
+          phone?: string | null
+          position?: string | null
+          department?: string | null
+          manager?: string | null
+          status?: string
+          created_at?: string
         }
         Relationships: []
       }

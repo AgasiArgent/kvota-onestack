@@ -214,7 +214,7 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
         </div>
       )}
 
-      <ContextPanel quoteId={quote.id} isOpen={isContextOpen} />
+      <ContextPanel quoteId={quote.id} quote={quote} isOpen={isContextOpen} />
 
       <CancelQuoteDialog
         open={cancelOpen}

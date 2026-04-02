@@ -5,7 +5,6 @@ import { Toaster } from "sonner";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { SalesActionBar } from "./sales-action-bar";
 import type { ClientResponseModal } from "./sales-action-bar";
-import { SalesInfoGrid } from "./sales-info-grid";
 import { SalesItemsTable } from "./sales-items-table";
 import { SalesItemsEditor } from "./sales-items-editor";
 import { SalesCollapsible } from "./sales-collapsible";
@@ -25,7 +24,6 @@ export function SalesStep({ quote, items }: SalesStepProps) {
     <div className="flex-1 min-w-0">
       <SalesActionBar quote={quote} items={items} onOpenModal={setActiveModal} />
       <div className="p-6 space-y-6">
-        <SalesInfoGrid quote={quote} />
         {isDraft ? (
           <SalesItemsEditor
             quoteId={quote.id}
