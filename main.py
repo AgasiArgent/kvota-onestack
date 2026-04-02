@@ -15312,7 +15312,13 @@ async def api_workflow_transition(session, request: Request, quote_id: str):
         return JSONResponse({"error": "to_status or action is required"}, status_code=400)
 
     # Handle special actions that have dedicated workflow functions
-    if action == "complete_customs":
+    if action == "complete_procurement":
+        result = complete_procurement(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles,
+        )
+    elif action == "complete_customs":
         result = wf_complete_customs(
             quote_id=quote_id,
             actor_id=user_id,
