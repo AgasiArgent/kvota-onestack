@@ -10819,13 +10819,37 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 @rt("/api/quotes/{quote_id}/submit-procurement", methods=["POST"])
 async def post(quote_id: str, session, request):
     """Submit a draft quote for procurement evaluation with sales checklist."""
-    redirect = require_login(session)
-    if redirect:
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_meta = api_user.user_metadata or {}
+        org_id = user_meta.get("org_id")
+        if not org_id:
+            try:
+                sb = get_supabase()
+                om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).eq("status", "active").order("created_at").limit(1).execute()
+                if om.data:
+                    org_id = om.data[0]["organization_id"]
+            except Exception:
+                pass
+        user = {
+            "id": str(api_user.id),
+            "email": api_user.email or "",
+            "name": user_meta.get("name", api_user.email or ""),
+            "org_id": org_id,
+            "org_name": user_meta.get("org_name", ""),
+        }
+        user_roles = get_user_role_codes(user["id"], org_id)
+    else:
+        redirect = require_login(session)
+        if redirect:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user = session["user"]
+        user_roles = user.get("roles", [])
+        org_id = user["org_id"]
 
-    user = session["user"]
-    user_roles = user.get("roles", [])
-    org_id = user["org_id"]
+    if not user or not user.get("id"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
     # Parse checklist from JSON body
     checklist_data = None
