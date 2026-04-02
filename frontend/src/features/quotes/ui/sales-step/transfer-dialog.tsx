@@ -16,8 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { submitToProcurementWithChecklist } from "@/entities/quote";
-import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote";
+import { submitToProcurementWithChecklist } from "@/entities/quote/mutations";
+import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 
 // ---------------------------------------------------------------------------
 // Pre-transfer validation
