@@ -212,6 +212,7 @@ export async function createCustomer(
       organization_id: orgId,
       status: "active",
       created_by: userId,
+      manager_id: userId,
     })
     .select("id")
     .single();
