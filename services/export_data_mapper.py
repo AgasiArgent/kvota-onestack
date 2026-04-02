@@ -10,7 +10,12 @@ from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
+import logging
+
 from services.database import get_supabase
+from services.dadata_service import validate_inn, _call_dadata_api, normalize_dadata_result
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -25,6 +30,62 @@ class ExportData:
     seller_company: Optional[Dict[str, Any]] = None  # Our legal entity for invoices
     bank_accounts: List[Dict[str, Any]] = None  # Bank accounts for seller_company
     selected_bank_account: Optional[Dict[str, Any]] = None  # Selected bank account for invoice
+
+
+def _lookup_legal_name(inn: str, cache: Dict[str, str]) -> Optional[str]:
+    """
+    Look up official legal name by INN via DaData (sync).
+
+    Returns full_with_opf name or None on any failure.
+    Results are cached by INN within the export session.
+    """
+    if not inn or not validate_inn(inn):
+        return None
+
+    inn = str(inn).strip()
+    if inn in cache:
+        return cache[inn]
+
+    try:
+        response_data = _call_dadata_api(inn)
+        suggestions = response_data.get("suggestions", [])
+        if not suggestions:
+            cache[inn] = None
+            return None
+        result = normalize_dadata_result(suggestions[0])
+        legal_name = result.get("full_name")
+        cache[inn] = legal_name
+        return legal_name
+    except Exception:
+        logger.warning("DaData lookup failed for INN %s", inn, exc_info=True)
+        cache[inn] = None
+        return None
+
+
+def enrich_with_legal_names(
+    *entities: Optional[Dict[str, Any]],
+    inn_key: str = "inn",
+) -> None:
+    """
+    Enrich company dicts with DaData legal name (in-place).
+
+    For each entity that has an INN, looks up the official legal name
+    and stores it as 'legal_name'. Uses a shared cache so the same INN
+    is never looked up twice.
+
+    Args:
+        *entities: Company dicts to enrich (seller_company, customer, organization, etc.)
+        inn_key: Key name for the INN field in the dict
+    """
+    cache: Dict[str, str] = {}
+    for entity in entities:
+        if entity is None:
+            continue
+        inn = entity.get(inn_key)
+        if inn:
+            legal_name = _lookup_legal_name(inn, cache)
+            if legal_name:
+                entity["legal_name"] = legal_name
 
 
 def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
@@ -133,6 +194,9 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
                 .order("is_default", desc=True) \
                 .execute()
             bank_accounts = bank_result.data or []
+
+    # 10. Enrich company names with DaData legal names
+    enrich_with_legal_names(seller_company, customer, organization)
 
     return ExportData(
         quote=quote,

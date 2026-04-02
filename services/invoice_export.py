@@ -79,8 +79,8 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
     currency = quote.get("currency", "RUB")
     currency_symbol = get_currency_symbol(currency)
 
-    # Seller info (from seller_company or fallback)
-    seller_name = seller.get("name", "Организация")
+    # Seller info (from seller_company or fallback) — prefer DaData legal name
+    seller_name = seller.get("legal_name") or seller.get("name", "Организация")
     seller_inn = seller.get("inn", "")
     seller_kpp = seller.get("kpp", "")
     seller_address = seller.get("registration_address", "")
@@ -108,8 +108,8 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
                 director_name += f"{patronymic_initial}."
     director_position = seller.get("general_director_position", "Генеральный директор")
 
-    # Customer info
-    customer_name = customer.get("name") or quote.get("customer_name") or "Покупатель"
+    # Customer info — prefer DaData legal name
+    customer_name = customer.get("legal_name") or customer.get("name") or quote.get("customer_name") or "Покупатель"
     customer_inn = customer.get("inn") or ""
     customer_address = customer.get("address") or ""
     customer_phone = customer.get("phone") or ""

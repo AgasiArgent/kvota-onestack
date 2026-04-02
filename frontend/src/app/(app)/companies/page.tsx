@@ -12,7 +12,7 @@ interface Props {
 }
 
 const VALID_TABS: CompanyTab[] = ["seller", "buyer"];
-const ALLOWED_ROLES = ["admin", "finance", "procurement"];
+const ALLOWED_ROLES = ["admin", "finance", "procurement", "procurement_senior"];
 
 export default async function CompaniesPageRoute({ searchParams }: Props) {
   const user = await getSessionUser();

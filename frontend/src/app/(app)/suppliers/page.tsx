@@ -12,7 +12,7 @@ export default async function SuppliersPage({ searchParams }: Props) {
   if (!user?.orgId) redirect("/login");
 
   const isAllowed =
-    user.roles.includes("admin") || user.roles.includes("procurement");
+    user.roles.includes("admin") || user.roles.includes("procurement") || user.roles.includes("procurement_senior");
   if (!isAllowed) redirect("/");
 
   const params = await searchParams;

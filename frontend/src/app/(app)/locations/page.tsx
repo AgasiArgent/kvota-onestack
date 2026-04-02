@@ -15,7 +15,7 @@ interface Props {
   }>;
 }
 
-const ALLOWED_ROLES = ["admin", "logistics", "customs", "procurement"];
+const ALLOWED_ROLES = ["admin", "logistics", "customs", "procurement", "procurement_senior"];
 
 export default async function LocationsRoute({ searchParams }: Props) {
   const user = await getSessionUser();

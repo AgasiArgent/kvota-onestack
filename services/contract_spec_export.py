@@ -21,6 +21,7 @@ from datetime import datetime
 
 from services.database import get_supabase
 from services.export_data_mapper import (
+    enrich_with_legal_names,
     format_date_russian,
     format_date_russian_long,
     amount_in_words_russian,
@@ -211,6 +212,9 @@ def fetch_contract_spec_data(spec_id: str, org_id: str) -> Dict[str, Any]:
     calc_variables = {}
     if calc_vars_result.data:
         calc_variables = calc_vars_result.data[0].get("variables", {})
+
+    # Enrich company names with DaData legal names
+    enrich_with_legal_names(seller_company, customer, organization)
 
     return {
         "specification": spec,
@@ -404,9 +408,9 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
     contract_number = contract.get("contract_number", "б/н")
     contract_date = format_date_russian_long(contract.get("contract_date"))
 
-    # Company names
-    seller_name = seller_company.get("name") or spec.get("our_legal_entity") or organization.get("name", "Поставщик")
-    customer_name = customer.get("company_name") or customer.get("name") or spec.get("client_legal_entity", "Покупатель")
+    # Company names — prefer DaData legal name over manually entered name
+    seller_name = seller_company.get("legal_name") or seller_company.get("name") or spec.get("our_legal_entity") or organization.get("legal_name") or organization.get("name", "Поставщик")
+    customer_name = customer.get("legal_name") or customer.get("company_name") or customer.get("name") or spec.get("client_legal_entity", "Покупатель")
 
     # Director/signatory names - construct from separate name parts and format as "Surname N.P."
     seller_director_parts = [
