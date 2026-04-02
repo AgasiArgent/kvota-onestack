@@ -209,24 +209,32 @@ export async function fetchProcurementWorkload(
   }));
 }
 
-/** Lightweight count for sidebar badge */
+/** Count of unassigned brand-groups (unique quote+brand pairs) for sidebar badge */
 export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
   const supabase = createAdminClient();
 
-  const { count, error } = await supabase
-    .from("quote_items")
-    .select("id, quotes!inner(organization_id, deleted_at)", {
-      count: "exact",
-      head: true,
-    })
-    .is("assigned_procurement_user", null)
-    .eq("quotes.organization_id", orgId)
-    .is("quotes.deleted_at", null);
+  const { data: quoteRows } = await supabase
+    .from("quotes")
+    .select("id")
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
 
-  if (error) {
-    console.error("Failed to fetch unassigned count:", error);
-    return 0;
+  if (!quoteRows || quoteRows.length === 0) return 0;
+
+  const { data: items } = await supabase
+    .from("quote_items")
+    .select("quote_id, brand")
+    .in("quote_id", quoteRows.map((q) => q.id))
+    .is("assigned_procurement_user", null);
+
+  if (!items || items.length === 0) return 0;
+
+  // Count unique quote+brand pairs (brand-groups)
+  const groups = new Set<string>();
+  for (const item of items) {
+    const key = `${item.quote_id}::${(item.brand ?? "__null__").toLowerCase()}`;
+    groups.add(key);
   }
 
-  return count ?? 0;
+  return groups.size;
 }
