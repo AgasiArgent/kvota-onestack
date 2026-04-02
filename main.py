@@ -10816,6 +10816,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
 # ============================================================================
 
 @rt("/quotes/{quote_id}/submit-procurement", methods=["POST"])
+@rt("/api/quotes/{quote_id}/submit-procurement", methods=["POST"])
 async def post(quote_id: str, session, request):
     """Submit a draft quote for procurement evaluation with sales checklist."""
     redirect = require_login(session)
