@@ -4121,11 +4121,12 @@ async def send_admin_bug_report_with_photo(
     description: str,
     debug_context: dict = None,
     screenshot_b64: str = None,
+    screenshot_url: str = None,
     clickup_url: str = None,
 ) -> bool:
     """
     Send bug report to admin via Telegram.
-    If screenshot_b64 (raw base64 PNG) is provided, sends as photo with caption.
+    If screenshot_b64 (raw base64 PNG) or screenshot_url is provided, sends as photo with caption.
     Otherwise sends text-only message.
 
     Returns True on success.
@@ -4180,10 +4181,32 @@ async def send_admin_bug_report_with_photo(
     chat_id = int(ADMIN_TELEGRAM_CHAT_ID)
 
     try:
+        photo_bytes = None
+
         if screenshot_b64:
-            import io as _io
             import base64 as _b64
             photo_bytes = _b64.b64decode(screenshot_b64)
+        elif screenshot_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.get(screenshot_url)
+                    if resp.status_code == 200:
+                        content_type = resp.headers.get("content-type", "")
+                        content_length = int(resp.headers.get("content-length", 0))
+                        if not content_type.startswith("image/"):
+                            logger.warning(f"Screenshot for {short_id}: unexpected content-type '{content_type}'")
+                        elif content_length > 10 * 1024 * 1024:
+                            logger.warning(f"Screenshot for {short_id} too large ({content_length} bytes)")
+                        else:
+                            photo_bytes = resp.content
+                    else:
+                        logger.warning(f"Screenshot download failed for {short_id}: HTTP {resp.status_code}")
+            except Exception as dl_err:
+                logger.warning(f"Screenshot download failed for {short_id}: {dl_err}")
+
+        if photo_bytes:
+            import io as _io
             photo_file = _io.BytesIO(photo_bytes)
             photo_file.name = f"{short_id}.png"
             await bot.send_photo(
@@ -4194,7 +4217,8 @@ async def send_admin_bug_report_with_photo(
         else:
             await bot.send_message(chat_id=chat_id, text=text[:4096])
 
-        logger.info(f"Bug report {short_id} sent to admin chat {chat_id} (photo={bool(screenshot_b64)})")
+        has_photo = bool(photo_bytes)
+        logger.info(f"Bug report {short_id} sent to admin chat {chat_id} (photo={has_photo})")
         return True
     except Exception as e:
         logger.error(f"Failed to send bug report to admin: {e}")

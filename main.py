@@ -26473,11 +26473,20 @@ async def submit_feedback(session, request: Request):
     api_user = getattr(request.state, 'api_user', None)
     if api_user:
         user_meta = api_user.user_metadata or {}
+        org_id = user_meta.get("org_id")
+        if not org_id:
+            try:
+                sb = get_supabase()
+                om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).eq("status", "active").order("created_at").limit(1).execute()
+                if om.data:
+                    org_id = om.data[0]["organization_id"]
+            except Exception:
+                pass
         user = {
             "id": str(api_user.id),
             "email": api_user.email or "",
             "name": user_meta.get("name", api_user.email or ""),
-            "org_id": user_meta.get("org_id"),
+            "org_id": org_id,
             "org_name": user_meta.get("org_name", ""),
         }
     else:
@@ -26611,6 +26620,7 @@ async def submit_feedback(session, request: Request):
                 description=description,
                 debug_context=debug_context,
                 screenshot_b64=screenshot_b64,
+                screenshot_url=screenshot_url,
                 clickup_url=clickup_url
             )
         except Exception as e:
