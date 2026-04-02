@@ -147,6 +147,9 @@ export function QuoteBrandCard({ data, users, orgId }: Props) {
                   />
                   <Pin size={12} className="text-text-muted" />
                   <span className="text-text-muted">Закрепить</span>
+                  <span className="text-text-subtle text-[10px]" title="Все будущие заявки с этим брендом автоматически пойдут к выбранному закупщику">
+                    ?
+                  </span>
                 </label>
               )}
 
