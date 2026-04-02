@@ -1,9 +1,23 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Paperclip, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Paperclip, Wallet, Ban, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { cancelQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
 
@@ -42,6 +56,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
+const CANCEL_ROLES = ["sales", "head_of_sales", "admin"];
+const TERMINAL_STATUSES = new Set(["cancelled", "rejected", "spec_signed", "deal"]);
 
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
@@ -52,6 +68,7 @@ interface QuoteStickyHeaderProps {
 }
 
 export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles = [] }: QuoteStickyHeaderProps) {
+  const [cancelOpen, setCancelOpen] = useState(false);
   const isDocumentsActive = activeStep === "documents";
   const isPlanFactActive = activeStep === "plan-fact";
   const showPlanFact = userRoles.some((r) => PLAN_FACT_ROLES.includes(r));
@@ -111,8 +128,21 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
           )}
         </div>
 
-        {/* Right: plan-fact button + documents button + amount + margin */}
+        {/* Right: cancel + plan-fact + documents + amount + margin */}
         <div className="flex items-center gap-4 shrink-0">
+          {userRoles.some((r) => CANCEL_ROLES.includes(r)) &&
+            !TERMINAL_STATUSES.has(workflowStatus) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setCancelOpen(true)}
+              >
+                <Ban size={14} />
+                Отменить
+              </Button>
+            )}
+
           {showPlanFact && (
             <Link
               href={`/quotes/${quote.id}?step=plan-fact`}
@@ -161,6 +191,103 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
           )}
         </div>
       </div>
+
+      {/* Cancellation info banner */}
+      {workflowStatus === "cancelled" && quote.cancellation_comment && (
+        <div className="mt-2 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-800">
+          <span className="font-medium">Причина отмены:</span>{" "}
+          {quote.cancellation_comment}
+        </div>
+      )}
+
+      <CancelQuoteDialog
+        open={cancelOpen}
+        onClose={() => setCancelOpen(false)}
+        quoteId={quote.id}
+        idnQuote={quote.idn_quote}
+      />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cancel dialog (embedded in header for global access)
+// ---------------------------------------------------------------------------
+
+function CancelQuoteDialog({
+  open,
+  onClose,
+  quoteId,
+  idnQuote,
+}: {
+  open: boolean;
+  onClose: () => void;
+  quoteId: string;
+  idnQuote: string;
+}) {
+  const router = useRouter();
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleConfirm() {
+    if (!reason.trim()) return;
+    setSubmitting(true);
+    try {
+      await cancelQuote(quoteId, reason.trim());
+      toast.success("КП отменена");
+      setReason("");
+      onClose();
+      router.refresh();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Не удалось отменить КП"
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleClose() {
+    setReason("");
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Отменить заявку</DialogTitle>
+          <DialogDescription>
+            КП {idnQuote} будет отменена. Это действие необратимо.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">
+            Причина отмены <span className="text-destructive">*</span>
+          </label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Укажите причину отмены КП"
+            rows={3}
+          />
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>
+            Назад
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            disabled={!reason.trim() || submitting}
+          >
+            {submitting && <Loader2 size={14} className="animate-spin" />}
+            Отменить КП
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

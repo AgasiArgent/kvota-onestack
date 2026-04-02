@@ -143,6 +143,8 @@ export interface QuoteDetail {
   competitors: string | null;
   cancellation_reason: string | null;
   cancellation_comment: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
   total_amount: number | null;
   margin_percent: number | null;
   markup_percent: number | null;
@@ -327,4 +329,5 @@ export const STATUS_TO_STEP: Record<string, QuoteStep> = {
   pending_spec_control: "specification",
   spec_draft: "specification",
   spec_signed: "specification",
+  cancelled: "sales",
 };

@@ -425,10 +425,27 @@ export async function rejectQuote(
   });
 }
 
-export async function cancelQuote(quoteId: string) {
-  return updateQuoteWorkflowStatus(quoteId, "cancelled", {
-    cancellation_reason: "cancelled_by_user",
+export async function cancelQuote(quoteId: string, reason: string) {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/cancel`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify({ reason }),
   });
+
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || "Не удалось отменить КП");
+  }
 }
 
 export async function requestChanges(

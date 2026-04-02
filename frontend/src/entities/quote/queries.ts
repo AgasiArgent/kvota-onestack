@@ -53,6 +53,9 @@ export async function fetchQuotesList(
       // Treat as individual status value
       query = query.eq("workflow_status", params.status);
     }
+  } else {
+    // Default view: hide cancelled quotes (user must explicitly filter to see them)
+    query = query.neq("workflow_status", "cancelled");
   }
 
   if (params.customer) {

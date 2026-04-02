@@ -355,13 +355,16 @@ function CancelModal({
   idnQuote: string;
 }) {
   const router = useRouter();
+  const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
+    if (!reason.trim()) return;
     setSubmitting(true);
     try {
-      await cancelQuote(quoteId);
+      await cancelQuote(quoteId, reason.trim());
       toast.success("КП отменена");
+      setReason("");
       onClose();
       router.refresh();
     } catch (err) {
@@ -373,23 +376,41 @@ function CancelModal({
     }
   }
 
+  function handleClose() {
+    setReason("");
+    onClose();
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+    <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Отменить КП</DialogTitle>
+          <DialogTitle>Отменить заявку</DialogTitle>
           <DialogDescription>
             КП {idnQuote} будет отменена. Это действие необратимо.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">
+            Причина отмены <span className="text-destructive">*</span>
+          </label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Укажите причину отмены КП"
+            rows={3}
+          />
+        </div>
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={submitting}>
-            Отмена
+          <Button variant="outline" onClick={handleClose} disabled={submitting}>
+            Назад
           </Button>
           <Button
             variant="destructive"
             onClick={handleConfirm}
-            disabled={submitting}
+            disabled={!reason.trim() || submitting}
           >
             {submitting && <Loader2 size={14} className="animate-spin" />}
             Отменить КП
