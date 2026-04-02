@@ -17,7 +17,7 @@ export default async function CustomersPage({ searchParams }: Props) {
   const page = parseInt(params.page ?? "1", 10);
 
   const [{ data, total }, financials] = await Promise.all([
-    fetchCustomersList({ search, status, page }),
+    fetchCustomersList({ search, status, page }, { id: user.id, roles: user.roles }),
     fetchCustomerFinancials(user.orgId),
   ]);
 

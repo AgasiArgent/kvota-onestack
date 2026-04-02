@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
+import { isSalesOnly } from "@/shared/lib/roles";
 import type {
   CustomerListItem,
   CustomerFinancials,
@@ -12,11 +13,14 @@ import type {
 
 const PAGE_SIZE = 50;
 
-export async function fetchCustomersList(params: {
-  search?: string;
-  status?: string;
-  page?: number;
-}): Promise<{ data: CustomerListItem[]; total: number }> {
+export async function fetchCustomersList(
+  params: {
+    search?: string;
+    status?: string;
+    page?: number;
+  },
+  user?: { id: string; roles: string[] }
+): Promise<{ data: CustomerListItem[]; total: number }> {
   const supabase = await createClient();
   const { search = "", status = "", page = 1 } = params;
   const from = (page - 1) * PAGE_SIZE;
@@ -27,6 +31,11 @@ export async function fetchCustomersList(params: {
     .select("id, name, inn, status, manager_id", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
+
+  // Role-based filtering: sales users see only their assigned customers
+  if (user && isSalesOnly(user.roles)) {
+    query = query.eq("manager_id", user.id);
+  }
 
   if (search) {
     const escaped = escapePostgrestFilter(search);

@@ -1,30 +1,9 @@
 import { createClient } from "@/shared/lib/supabase/server";
+import { isSalesOnly } from "@/shared/lib/roles";
 import type { QuoteListItem, QuotesFilterParams, QuotesListResult } from "./types";
 import { getStatusesForGroup } from "./types";
 
 const DEFAULT_PAGE_SIZE = 20;
-
-const SALES_ROLES = ["sales", "head_of_sales"];
-
-function isSalesOnly(roles: string[]): boolean {
-  return (
-    roles.some((r) => SALES_ROLES.includes(r)) &&
-    !roles.some((r) =>
-      [
-        "admin",
-        "top_manager",
-        "procurement",
-        "logistics",
-        "customs",
-        "quote_controller",
-        "spec_controller",
-        "finance",
-        "head_of_procurement",
-        "head_of_logistics",
-      ].includes(r)
-    )
-  );
-}
 
 export async function fetchQuotesList(
   params: QuotesFilterParams,

@@ -8,7 +8,7 @@ export default async function MessagesPage() {
   if (!user?.orgId) redirect("/login");
 
   const [chats, orgMembers] = await Promise.all([
-    fetchAllChats(user.id, user.orgId),
+    fetchAllChats(user.id, user.orgId, "all", user.roles),
     fetchOrgMembers(user.orgId),
   ]);
 

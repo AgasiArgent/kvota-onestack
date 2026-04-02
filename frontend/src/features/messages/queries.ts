@@ -1,4 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/server";
+import { isSalesOnly } from "@/shared/lib/roles";
 
 export interface ChatListItem {
   quoteId: string;
@@ -18,7 +19,8 @@ export interface ChatListItem {
 export async function fetchAllChats(
   userId: string,
   orgId: string,
-  filter: "my" | "all" = "all"
+  filter: "my" | "all" = "all",
+  roles: string[] = []
 ): Promise<ChatListItem[]> {
   const supabase = await createClient();
 
@@ -64,6 +66,26 @@ export async function fetchAllChats(
 
   if (filter === "my") {
     quotesQuery = quotesQuery.or(`created_by.eq.${userId}`);
+  }
+
+  // Role-based filtering: sales users see only chats on their own quotes
+  // or quotes for their assigned customers
+  if (isSalesOnly(roles)) {
+    const { data: assignedCustomers } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("manager_id", userId);
+
+    const customerIds = (assignedCustomers ?? []).map((c) => c.id);
+
+    if (customerIds.length > 0) {
+      quotesQuery = quotesQuery.or(
+        `created_by.eq.${userId},customer_id.in.(${customerIds.join(",")})`
+      );
+    } else {
+      quotesQuery = quotesQuery.eq("created_by", userId);
+    }
   }
 
   const { data: quotes, error: quotesError } = await quotesQuery;
