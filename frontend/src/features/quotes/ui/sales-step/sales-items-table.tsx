@@ -49,6 +49,7 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
           <TableHead className="w-40">Артикул</TableHead>
           <TableHead>Наименование</TableHead>
           <TableHead className="w-20 text-right">Кол-во</TableHead>
+          <TableHead className="w-14">Ед.</TableHead>
           <TableHead className="w-28 text-right">
             Цена ({symbol})
           </TableHead>
@@ -69,6 +70,7 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
           <TableCell className="text-right font-mono">
             {qtyFmt.format(totalQty)}
           </TableCell>
+          <TableCell />
           <TableCell />
           <TableCell className="text-right font-mono">
             {numberFmt.format(totalAmount)}
@@ -94,6 +96,9 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
               <TableCell className="text-right font-mono">
                 {qtyFmt.format(item.quantity)}
               </TableCell>
+              <TableCell className="text-muted-foreground">
+                {item.unit ?? "шт"}
+              </TableCell>
               <TableCell className="text-right font-mono">
                 {item.base_price_vat != null
                   ? numberFmt.format(item.base_price_vat)
@@ -108,7 +113,7 @@ export function SalesItemsTable({ items, currency, quoteId }: SalesItemsTablePro
 
         {items.length === 0 && (
           <TableRow>
-            <TableCell colSpan={7} className="text-center py-8">
+            <TableCell colSpan={8} className="text-center py-8">
               <p className="text-muted-foreground">Нет позиций</p>
             </TableCell>
           </TableRow>

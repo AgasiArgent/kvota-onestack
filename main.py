@@ -9891,7 +9891,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                             {{data: 'product_code', type: 'text', width: 140}},
                             {{data: 'product_name', type: 'text', width: 300}},
                             {{data: 'quantity', type: 'numeric', width: 80}},
-                            {{data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'кг', 'м', 'л', 'компл'], width: 80}}
+                            {{data: 'unit', type: 'dropdown', source: ['шт', 'упак', 'компл', 'кг', 'г', 'т', 'м', 'мм', 'см', 'м²', 'м³', 'л', 'мл'], width: 80}}
                         ],
                         rowHeaders: false,
                         stretchH: 'all',

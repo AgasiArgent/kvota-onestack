@@ -82,7 +82,7 @@ function rowToCreatePayload(row: RowData) {
     brand: row.brand || undefined,
     product_code: row.product_code || undefined,
     quantity: row.quantity != null && row.quantity > 0 ? row.quantity : 1,
-    unit: row.unit || undefined,
+    unit: row.unit || "шт",
   };
 }
 
@@ -310,7 +310,21 @@ export function SalesItemsHandsontable({
             {
               data: "unit",
               type: "dropdown",
-              source: ["шт", "упак", "кг", "м", "л", "компл"],
+              source: [
+                "шт",
+                "упак",
+                "компл",
+                "кг",
+                "г",
+                "т",
+                "м",
+                "мм",
+                "см",
+                "м²",
+                "м³",
+                "л",
+                "мл",
+              ],
               width: 80,
             },
           ]}
