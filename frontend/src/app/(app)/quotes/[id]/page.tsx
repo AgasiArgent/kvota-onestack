@@ -9,6 +9,7 @@ import {
   fetchStageDeadline,
   fetchDealIdForQuote,
   ROLE_ALLOWED_STEPS,
+  ROLE_EDITABLE_STEPS,
   STATUS_TO_STEP,
 } from "@/entities/quote";
 import type { QuoteStep, StageDeadlineData } from "@/entities/quote";
@@ -76,6 +77,12 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
       ? requestedStep
       : getDefaultStep(userRoles);
 
+  // Determine if this step is read-only for the user (can view but not edit)
+  const editableSteps = isAdmin
+    ? allowedSteps
+    : [...new Set(userRoles.flatMap((r) => ROLE_EDITABLE_STEPS[r] ?? ROLE_ALLOWED_STEPS[r] ?? []))];
+  const isReadOnly = allowedSteps.length > 0 && !editableSteps.includes(activeStep);
+
   // Current workflow position (for rail highlighting)
   const workflowStatus = quote.workflow_status ?? "draft";
   const currentWorkflowStep = STATUS_TO_STEP[workflowStatus] ?? "sales";
@@ -94,6 +101,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
           userId={user.id}
           calcVariables={calcVariables}
           dealId={dealId}
+          isReadOnly={isReadOnly}
         />
         <ChatWrapper
           quoteId={id}

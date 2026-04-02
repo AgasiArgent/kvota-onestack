@@ -5,6 +5,7 @@ import { PositionsTable } from "@/features/positions";
 
 interface Props {
   searchParams: Promise<{
+    search?: string;
     availability?: string;
     brand?: string;
     moz?: string;
@@ -19,10 +20,11 @@ export default async function PositionsPage({ searchParams }: Props) {
   if (!user?.orgId) redirect("/login");
 
   const isAllowed =
-    user.roles.includes("admin") || user.roles.includes("procurement");
+    user.roles.includes("admin") || user.roles.includes("procurement") || user.roles.includes("procurement_senior");
   if (!isAllowed) redirect("/");
 
   const params = await searchParams;
+  const search = params.search ?? "";
   const availability = params.availability as "available" | "unavailable" | undefined;
   const brand = params.brand ?? "";
   const mozId = params.moz ?? "";
@@ -33,6 +35,7 @@ export default async function PositionsPage({ searchParams }: Props) {
   const { products, details, total, filterOptions } = await fetchPositionsList(
     user.orgId,
     {
+      search: search || undefined,
       availability: availability === "available" || availability === "unavailable" ? availability : undefined,
       brand: brand && brand !== "all" ? brand : undefined,
       mozId: mozId && mozId !== "all" ? mozId : undefined,
@@ -50,6 +53,7 @@ export default async function PositionsPage({ searchParams }: Props) {
         details={details}
         total={total}
         filterOptions={filterOptions}
+        initialSearch={search}
         initialBrand={brand}
         initialMozId={mozId}
         initialAvailability={params.availability ?? ""}

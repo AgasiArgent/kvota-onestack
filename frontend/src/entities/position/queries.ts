@@ -19,6 +19,7 @@ function getUntypedClient(): UntypedClient {
 }
 
 export interface PositionFilters {
+  search?: string;
   availability?: "available" | "unavailable";
   brand?: string;
   mozId?: string;
@@ -57,7 +58,7 @@ export async function fetchPositionsList(
 ): Promise<PositionsListResult> {
   const untyped = getUntypedClient();
   const supabase = createAdminClient();
-  const { availability, brand, mozId, dateFrom, dateTo, page = 1 } = filters;
+  const { search, availability, brand, mozId, dateFrom, dateTo, page = 1 } = filters;
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
@@ -73,6 +74,9 @@ export async function fetchPositionsList(
     masterQuery = masterQuery.eq("availability_status", "available");
   } else if (availability === "unavailable") {
     masterQuery = masterQuery.eq("availability_status", "unavailable");
+  }
+  if (search) {
+    masterQuery = masterQuery.ilike("product_code", `%${search}%`);
   }
   if (brand) {
     masterQuery = masterQuery.eq("brand", brand);

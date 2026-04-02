@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -31,6 +31,7 @@ interface Props {
     brands: string[];
     managers: { id: string; name: string }[];
   };
+  initialSearch: string;
   initialBrand: string;
   initialMozId: string;
   initialAvailability: string;
@@ -77,6 +78,7 @@ export function PositionsTable({
   details,
   total,
   filterOptions,
+  initialSearch,
   initialBrand,
   initialMozId,
   initialAvailability,
@@ -84,6 +86,7 @@ export function PositionsTable({
   initialDateTo,
   initialPage,
 }: Props) {
+  const [searchValue, setSearchValue] = useState(initialSearch);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(
     new Set()
   );
@@ -141,6 +144,14 @@ export function PositionsTable({
     navigate({ moz: v });
   }
 
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      navigate({ search: value || undefined });
+    }, 300);
+  }
+
   function handleDateChange(field: "dateFrom" | "dateTo", value: string) {
     clearTimeout(debounceRef.current);
     navigate({ [field]: value || undefined });
@@ -160,6 +171,16 @@ export function PositionsTable({
     <div className="space-y-4">
       {/* Filter bar */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" size={16} />
+          <Input
+            value={searchValue}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Поиск по артикулу..."
+            className="pl-9 w-[200px]"
+          />
+        </div>
+
         <Select
           defaultValue={initialAvailability || "all"}
           onValueChange={handleAvailabilityChange}

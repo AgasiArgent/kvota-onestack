@@ -4,6 +4,7 @@ const NON_SALES_ROLES = [
   "admin",
   "top_manager",
   "procurement",
+  "procurement_senior",
   "logistics",
   "customs",
   "quote_controller",

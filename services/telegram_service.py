@@ -105,7 +105,6 @@ class NotificationType(Enum):
     DEADLINE_REMINDER = "deadline_reminder"
     SYSTEM_MESSAGE = "system_message"
     PROCUREMENT_INVOICE_COMPLETE = "procurement_invoice_complete"
-    PHMB_PRICE_SET = "phmb_price_set"
 
 
 @dataclass
@@ -189,18 +188,6 @@ NOTIFICATION_TEMPLATES = {
 Статус: {status_line}
 Закупщик: {actor_name}
 {unavailable_section}
-[Открыть в системе]({quote_url})
-""",
-
-    NotificationType.PHMB_PRICE_SET: """
-🏷 *Цена установлена (PHMB)*
-
-КП: {quote_idn}
-Позиция: {product_name} ({cat_number})
-Цена: {price_display}
-
-Все позиции с ценой: {priced_count}/{total_count}
-
 [Открыть в системе]({quote_url})
 """,
 
@@ -3707,116 +3694,6 @@ async def send_procurement_invoice_complete_notification(
         quote_id=quote_id,
         sent=telegram_sent,
         error_message=telegram_error if not telegram_sent else None
-    )
-
-    return {
-        "success": True,
-        "telegram_sent": telegram_sent,
-        "notification_id": notification_id,
-        "telegram_id": telegram_id,
-        "error": telegram_error,
-    }
-
-
-# ============================================================================
-# PHMB Price Set Notification
-# ============================================================================
-
-@dataclass
-class PhmbPriceSetNotification:
-    """Data for phmb_price_set notification."""
-    quote_id: str
-    quote_idn: str
-    product_name: str
-    cat_number: str
-    price_rmb: float
-    priced_count: int
-    total_count: int
-
-
-async def send_phmb_price_set_notification(
-    user_id: Optional[str],
-    quote_id: str,
-    quote_idn: str,
-    product_name: str,
-    cat_number: str,
-    price_rmb: float,
-    priced_count: int,
-    total_count: int,
-) -> Dict[str, Any]:
-    """Send Telegram notification to sales manager when PHMB item is priced.
-
-    Args:
-        user_id: UUID of the quote creator (sales manager) to notify.
-        quote_id: UUID of the quote.
-        quote_idn: Quote identifier (e.g., "Q-202603-0015").
-        product_name: Name of the priced product.
-        cat_number: Catalog number of the priced product.
-        price_rmb: Price set by procurement (in RMB).
-        priced_count: Number of items now priced on this quote.
-        total_count: Total number of items on this quote.
-
-    Returns:
-        Dict with success, telegram_sent, notification_id, error keys.
-    """
-    if not user_id:
-        logger.info("No quote creator user_id provided - skipping PHMB price set notification")
-        return {
-            "success": True,
-            "telegram_sent": False,
-            "skipped": True,
-        }
-
-    title = "Цена установлена (PHMB)"
-    price_display = f"{price_rmb:,.2f} RMB"
-
-    db_message_parts = [
-        f"{quote_idn}",
-        f"{product_name} ({cat_number})",
-        f"Цена: {price_display}",
-        f"С ценой: {priced_count}/{total_count}",
-    ]
-    if priced_count >= total_count:
-        db_message_parts.append("Все позиции с ценой — можно рассчитывать")
-    db_message = "\n".join(db_message_parts)
-
-    telegram_sent = False
-    telegram_error = None
-    telegram_id = await get_user_telegram_id(user_id)
-
-    if telegram_id:
-        try:
-            message_id = await send_notification(
-                telegram_id=telegram_id,
-                notification_type=NotificationType.PHMB_PRICE_SET,
-                quote_id=quote_id,
-                include_open_button=True,
-                quote_idn=quote_idn,
-                product_name=product_name,
-                cat_number=cat_number,
-                price_display=price_display,
-                priced_count=priced_count,
-                total_count=total_count,
-            )
-            telegram_sent = message_id is not None
-            if not telegram_sent:
-                telegram_error = "Failed to send message"
-        except Exception as e:
-            telegram_error = str(e)
-            logger.error(f"Error sending PHMB price set notification to {user_id}: {e}")
-    else:
-        telegram_error = "User has no linked Telegram account"
-        logger.info(f"User {user_id} has no linked Telegram - PHMB price notification will be in-app only")
-
-    notification_id = record_notification(
-        user_id=user_id,
-        notification_type="phmb_price_set",
-        title=title,
-        message=db_message,
-        channel="telegram" if telegram_sent else "in_app",
-        quote_id=quote_id,
-        sent=telegram_sent,
-        error_message=telegram_error if not telegram_sent else None,
     )
 
     return {

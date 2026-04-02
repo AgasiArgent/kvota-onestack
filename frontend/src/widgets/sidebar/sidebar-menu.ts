@@ -78,6 +78,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       "sales_manager",
       "head_of_sales",
       "procurement",
+      "procurement_senior",
       "logistics",
       "head_of_logistics",
       "customs",
@@ -126,7 +127,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     label: "Коммерческие предложения",
     href: "/quotes",
   });
-  if (hasRole("procurement")) {
+  if (hasRole("procurement", "procurement_senior")) {
     registries.push({
       icon: Building2,
       label: "Поставщики",
@@ -138,14 +139,14 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/positions",
     });
   }
-  if (hasRole("finance", "procurement")) {
+  if (hasRole("finance", "procurement", "procurement_senior")) {
     registries.push({
       icon: Building,
       label: "Юрлица",
       href: "/companies",
     });
   }
-  if (hasRole("logistics", "customs", "procurement")) {
+  if (hasRole("logistics", "customs", "procurement", "procurement_senior")) {
     registries.push({
       icon: MapPin,
       label: "Локации",

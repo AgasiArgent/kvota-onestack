@@ -2097,8 +2097,6 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
     2. Brand (fallback) — if no sales group match, fall back to brand_assignments
        logic (per-item assignment by brand).
 
-    PHMB quotes (is_phmb=True) are excluded — they use a separate flow.
-
     Args:
         quote_id: UUID of the quote
 
@@ -2121,9 +2119,9 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
     supabase = get_supabase()
 
     try:
-        # Step 1: Fetch quote (org_id, created_by, is_phmb)
+        # Step 1: Fetch quote (org_id, created_by)
         quote_response = supabase.table("quotes") \
-            .select("id, organization_id, is_phmb, created_by") \
+            .select("id, organization_id, created_by") \
             .eq("id", quote_id) \
             .single() \
             .execute()
@@ -2138,20 +2136,9 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
             }
 
         org_id = quote_response.data.get("organization_id")
-        is_phmb = bool(quote_response.data.get("is_phmb"))
         created_by = quote_response.data.get("created_by")
 
-        # Step 2: Guard — PHMB quotes return early
-        if is_phmb:
-            return {
-                "success": True,
-                "error_message": None,
-                "assigned_users": [],
-                "assigned_items": 0,
-                "unassigned_brands": []
-            }
-
-        # Step 3: Fetch quote items
+        # Step 2: Fetch quote items
         items_response = supabase.table("quote_items") \
             .select("id, brand") \
             .eq("quote_id", quote_id) \

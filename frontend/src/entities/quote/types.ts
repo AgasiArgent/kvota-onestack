@@ -16,6 +16,7 @@ export interface QuotesFilterParams {
   status?: string; // status group key or individual status
   customer?: string; // customer UUID
   manager?: string; // manager user UUID
+  search?: string; // search by quote number (idn_quote) or customer name
   page?: number; // 1-based page number
   pageSize?: number; // default 20
 }
@@ -92,6 +93,7 @@ const ROLE_ACTION_STATUSES: Record<string, string[]> = {
   sales: ["pending_sales_review", "approved"],
   head_of_sales: ["pending_sales_review", "approved"],
   procurement: ["pending_procurement"],
+  procurement_senior: ["pending_procurement"],
   head_of_procurement: ["pending_procurement"],
   logistics: ["pending_logistics", "pending_logistics_and_customs"],
   head_of_logistics: ["pending_logistics", "pending_logistics_and_customs"],
@@ -269,6 +271,19 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
   head_of_sales: ["sales", "calculation", "negotiation", "specification", "documents"],
   procurement: ["procurement", "documents"],
   head_of_procurement: ["procurement", "documents"],
+  procurement_senior: [
+    "sales",
+    "calculation",
+    "procurement",
+    "logistics",
+    "customs",
+    "control",
+    "cost-analysis",
+    "negotiation",
+    "specification",
+    "documents",
+    "plan-fact",
+  ],
   logistics: ["logistics", "documents"],
   head_of_logistics: ["logistics", "documents"],
   customs: ["customs", "documents"],
@@ -288,6 +303,12 @@ export const ROLE_ALLOWED_STEPS: Record<string, QuoteStep[]> = {
     "documents",
     "plan-fact",
   ],
+};
+
+// Roles that can view all steps but only edit specific ones.
+// If a role is NOT listed here, it can edit all its allowed steps.
+export const ROLE_EDITABLE_STEPS: Record<string, QuoteStep[]> = {
+  procurement_senior: ["procurement", "documents"],
 };
 
 // Workflow status to step mapping (for rail highlighting)

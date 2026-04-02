@@ -52,6 +52,7 @@ export interface CustomerListItem {
   name: string;
   inn: string | null;
   status: string;
+  created_at: string;
   manager: { full_name: string } | null;
   quotes_count: number;
   last_quote_date: string | null;

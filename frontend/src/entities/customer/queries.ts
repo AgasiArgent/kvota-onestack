@@ -28,7 +28,7 @@ export async function fetchCustomersList(
 
   let query = supabase
     .from("customers")
-    .select("id, name, inn, status, manager_id", { count: "exact" })
+    .select("id, name, inn, status, manager_id, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
 
@@ -83,6 +83,7 @@ export async function fetchCustomersList(
     name: row.name,
     inn: row.inn,
     status: row.status ?? "active",
+    created_at: row.created_at ?? "",
     manager:
       row.manager_id && managerMap.has(row.manager_id)
         ? { full_name: managerMap.get(row.manager_id)! }

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Plus } from "lucide-react";
+import { AlertCircle, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -95,6 +96,7 @@ function buildFilterUrl(
   if (merged.status) params.set("status", merged.status);
   if (merged.customer) params.set("customer", merged.customer);
   if (merged.manager) params.set("manager", merged.manager);
+  if (merged.search) params.set("search", merged.search);
   if (merged.page && merged.page > 1) params.set("page", String(merged.page));
   const qs = params.toString();
   return qs ? `/quotes?${qs}` : "/quotes";
@@ -191,6 +193,18 @@ export function QuotesTable({
   const router = useRouter();
   const { navigate } = useFilterNavigation();
 
+  // Search state with debounce
+  const [searchValue, setSearchValue] = useState(filters.search ?? "");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function handleSearchChange(value: string) {
+    setSearchValue(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      navigate({ search: value || undefined });
+    }, 300);
+  }
+
   // Auto-open create dialog when ?create=true (deferred to avoid hydration mismatch)
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   useEffect(() => {
@@ -266,8 +280,18 @@ export function QuotesTable({
           onFilterChange={(status) => navigate({ status: status ?? undefined })}
         />
 
-        {/* Dropdown filters row */}
+        {/* Search + dropdown filters row */}
         <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
+            <Input
+              value={searchValue}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Поиск по номеру КП..."
+              className="pl-9"
+            />
+          </div>
+
           <Select
             defaultValue={filters.customer ?? "all"}
             onValueChange={handleCustomerChange}
@@ -386,7 +410,7 @@ export function QuotesTable({
               >
                 <div className="space-y-2">
                   <p>Нет коммерческих предложений</p>
-                  {(filters.status || filters.customer || filters.manager) && (
+                  {(filters.status || filters.customer || filters.manager || filters.search) && (
                     <p className="text-sm">
                       Попробуйте{" "}
                       <Link

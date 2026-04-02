@@ -25,6 +25,20 @@ interface QuoteStepContentProps {
   userId: string;
   calcVariables?: Record<string, unknown> | null;
   dealId?: string | null;
+  isReadOnly?: boolean;
+}
+
+function ReadOnlyOverlay({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative flex-1">
+      <div className="pointer-events-none select-none opacity-60">
+        {children}
+      </div>
+      <div className="absolute top-3 right-3 bg-muted/90 text-muted-foreground text-xs px-2 py-1 rounded pointer-events-none">
+        Только просмотр
+      </div>
+    </div>
+  );
 }
 
 export function QuoteStepContent({
@@ -36,13 +50,19 @@ export function QuoteStepContent({
   userId,
   calcVariables,
   dealId,
+  isReadOnly = false,
 }: QuoteStepContentProps) {
+  function wrapReadOnly(content: React.ReactNode) {
+    if (!isReadOnly) return content;
+    return <ReadOnlyOverlay>{content}</ReadOnlyOverlay>;
+  }
+
   switch (activeStep) {
     case "sales":
     case "negotiation":
-      return <SalesStep quote={quote} items={items} userRoles={userRoles} />;
+      return wrapReadOnly(<SalesStep quote={quote} items={items} userRoles={userRoles} />);
     case "calculation":
-      return (
+      return wrapReadOnly(
         <CalculationStep
           quote={quote}
           items={items}
@@ -51,7 +71,7 @@ export function QuoteStepContent({
         />
       );
     case "procurement":
-      return (
+      return wrapReadOnly(
         <ProcurementStep
           quote={quote}
           items={items}
@@ -60,7 +80,7 @@ export function QuoteStepContent({
         />
       );
     case "logistics":
-      return (
+      return wrapReadOnly(
         <LogisticsStep
           quote={quote}
           items={items}
@@ -69,7 +89,7 @@ export function QuoteStepContent({
         />
       );
     case "customs":
-      return (
+      return wrapReadOnly(
         <CustomsStep
           quote={quote}
           items={items}
@@ -78,7 +98,7 @@ export function QuoteStepContent({
         />
       );
     case "control":
-      return (
+      return wrapReadOnly(
         <ControlStep
           quote={quote}
           items={items}
@@ -88,7 +108,7 @@ export function QuoteStepContent({
         />
       );
     case "specification":
-      return (
+      return wrapReadOnly(
         <SpecificationStep
           quote={quote}
           items={items}
@@ -96,9 +116,9 @@ export function QuoteStepContent({
         />
       );
     case "documents":
-      return <DocumentsStep quote={quote} userId={userId} />;
+      return wrapReadOnly(<DocumentsStep quote={quote} userId={userId} />);
     case "plan-fact":
-      return (
+      return wrapReadOnly(
         <PlanFactStep
           quoteId={quote.id}
           dealId={dealId ?? null}

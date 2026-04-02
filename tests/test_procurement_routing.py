@@ -11,7 +11,6 @@ Tests cover:
 2. Cascade logic in workflow_service.assign_procurement_users_to_quote():
    - Priority 1: Sales group routing (all items get same user)
    - Priority 2: Brand fallback (existing brand_assignments logic)
-   - PHMB quotes excluded (return success, no assignments)
    - No match -> items stay unassigned
 
 TDD: Tests written BEFORE implementation.
@@ -463,7 +462,7 @@ class TestCascadeSalesGroupPriority:
         quotes_table.execute.return_value = MagicMock(data={
             "id": quote_id,
             "organization_id": org_id,
-            "is_phmb": False,
+
             "created_by": sales_user_id,
         })
 
@@ -553,7 +552,7 @@ class TestCascadeBrandFallback:
         quotes_table.execute.return_value = MagicMock(data={
             "id": quote_id,
             "organization_id": org_id,
-            "is_phmb": False,
+
             "created_by": sales_user_id,
         })
 
@@ -598,49 +597,7 @@ class TestCascadeBrandFallback:
 
 
 # =============================================================================
-# TEST GROUP 5: PHMB quotes excluded
-# =============================================================================
-
-class TestPHMBExcluded:
-    """PHMB quotes (is_phmb=True) return early with success and no assignments."""
-
-    @patch("services.workflow_service.get_supabase")
-    def test_phmb_excluded(
-        self,
-        mock_get_sb,
-        org_id,
-        quote_id,
-        sales_user_id,
-    ):
-        """PHMB quotes skip procurement routing entirely."""
-        from services.workflow_service import assign_procurement_users_to_quote
-
-        mock_client = MagicMock()
-        mock_get_sb.return_value = mock_client
-
-        mock_table = MagicMock()
-        mock_table.select.return_value = mock_table
-        mock_table.eq.return_value = mock_table
-        mock_table.single.return_value = mock_table
-        mock_table.execute.return_value = MagicMock(data={
-            "id": quote_id,
-            "organization_id": org_id,
-            "is_phmb": True,
-            "created_by": sales_user_id,
-        })
-
-        mock_client.table.return_value = mock_table
-
-        result = assign_procurement_users_to_quote(quote_id)
-
-        assert result["success"] is True
-        assert result["assigned_users"] == []
-        assert result["assigned_items"] == 0
-        assert result["unassigned_brands"] == []
-
-
-# =============================================================================
-# TEST GROUP 6: No sales group, no brand match -> unassigned
+# TEST GROUP 5: No sales group, no brand match -> unassigned
 # =============================================================================
 
 class TestNoMatchUnassigned:
@@ -682,7 +639,7 @@ class TestNoMatchUnassigned:
         quotes_table.execute.return_value = MagicMock(data={
             "id": quote_id,
             "organization_id": org_id,
-            "is_phmb": False,
+
             "created_by": sales_user_id,
         })
 
@@ -765,7 +722,7 @@ class TestEdgeCases:
         quotes_table.execute.return_value = MagicMock(data={
             "id": quote_id,
             "organization_id": org_id,
-            "is_phmb": False,
+
             "created_by": sales_user_id,
         })
 

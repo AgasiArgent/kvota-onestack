@@ -16,6 +16,7 @@ export {
   getGroupForStatus,
   getActionStatusesForUser,
   ROLE_ALLOWED_STEPS,
+  ROLE_EDITABLE_STEPS,
   STATUS_TO_STEP,
 } from "./types";
 export {

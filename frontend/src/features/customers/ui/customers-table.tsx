@@ -130,7 +130,7 @@ export function CustomersTable({
     return str.length > max ? str.slice(0, max) + "..." : str;
   }
 
-  const colSpan = isExpanded ? 9 : 2;
+  const colSpan = isExpanded ? 10 : 3;
 
   return (
     <div className="space-y-4">
@@ -203,8 +203,9 @@ export function CustomersTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className={isExpanded ? "w-[30%]" : "w-[60%]"}>Наименование</TableHead>
+            <TableHead className={isExpanded ? "w-[30%]" : "w-[50%]"}>Наименование</TableHead>
             <TableHead>ИНН</TableHead>
+            <TableHead className="w-[100px]">Дата</TableHead>
             {isExpanded && (
               <>
                 <TableHead>Менеджер</TableHead>
@@ -233,6 +234,9 @@ export function CustomersTable({
                 </TableCell>
                 <TableCell className="text-text-muted tabular-nums">
                   {customer.inn ?? "—"}
+                </TableCell>
+                <TableCell className="text-text-muted tabular-nums">
+                  {formatDate(customer.created_at)}
                 </TableCell>
                 {isExpanded && (
                   <>

@@ -63,6 +63,10 @@ export async function fetchQuotesList(
     query = query.eq("created_by", params.manager);
   }
 
+  if (params.search) {
+    query = query.ilike("idn_quote", `%${params.search}%`);
+  }
+
   // Apply pagination
   query = query.range(offset, offset + pageSize - 1);
 

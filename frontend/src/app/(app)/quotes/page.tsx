@@ -9,6 +9,7 @@ interface Props {
     status?: string;
     customer?: string;
     manager?: string;
+    search?: string;
     page?: string;
   }>;
 }
@@ -23,6 +24,7 @@ export default async function QuotesPage({ searchParams }: Props) {
     status: params.status || undefined,
     customer: params.customer && params.customer !== "all" ? params.customer : undefined,
     manager: params.manager && params.manager !== "all" ? params.manager : undefined,
+    search: params.search || undefined,
     page: params.page ? parseInt(params.page, 10) : 1,
   };
 

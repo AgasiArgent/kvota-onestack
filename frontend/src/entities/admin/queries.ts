@@ -118,6 +118,7 @@ export async function fetchAllRoles(orgId: string): Promise<RoleOption[]> {
     "admin",
     "sales",
     "procurement",
+    "procurement_senior",
     "logistics",
     "customs",
     "quote_controller",
