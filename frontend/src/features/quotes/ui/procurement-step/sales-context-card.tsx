@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ArrowRightLeft, ClipboardList } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { ROLE_LABELS_RU } from "@/entities/user";
+import { ROLE_LABELS_RU } from "@/entities/user/types";
 import { createClient } from "@/shared/lib/supabase/client";
 
 interface SalesChecklist {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { ROLE_LABELS_RU } from "@/entities/user";
+import { ROLE_LABELS_RU } from "@/entities/user/types";
 
 const STATUS_LABELS_RU: Record<string, string> = {
   draft: "Черновик",
