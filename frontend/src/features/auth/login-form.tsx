@@ -93,13 +93,13 @@ export function LoginForm() {
               <LogIn size={18} />
               {loading ? "Вход..." : "Войти в систему"}
             </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Нет аккаунта?{" "}
-              <Link href="/register" className="text-accent hover:underline">
-                Оставить заявку
-              </Link>
-            </p>
           </form>
+          <p className="text-center text-sm text-muted-foreground mt-4">
+            Нет аккаунта?{" "}
+            <Link href="/register" className="text-accent hover:underline">
+              Оставить заявку
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>
