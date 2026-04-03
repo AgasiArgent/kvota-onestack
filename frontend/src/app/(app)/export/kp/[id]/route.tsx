@@ -92,13 +92,13 @@ export async function GET(
     .limit(1)
     .single();
 
-  let vatRate = 20; // default for uncalculated quotes
+  let vatRate = 22; // default for uncalculated quotes
   if (calcVars?.variables) {
     const vars = calcVars.variables as Record<string, unknown>;
     const incoterms = vars.offer_incoterms as string | undefined;
     const saleType = vars.offer_sale_type as string | undefined;
     const isExport = saleType === "экспорт" || saleType === "export";
-    vatRate = incoterms === "DDP" && !isExport ? 20 : 0;
+    vatRate = incoterms === "DDP" && !isExport ? 22 : 0;
   }
 
   const buffer = await renderToBuffer(

@@ -351,7 +351,7 @@ export interface KPDocumentProps {
 // Document
 // ---------------------------------------------------------------------------
 
-export function KPDocument({ quote, items, logoBase64, vatRate = 20 }: KPDocumentProps) {
+export function KPDocument({ quote, items, logoBase64, vatRate = 22 }: KPDocumentProps) {
   const currency = quote.currency ?? "RUB";
 
   // Calculate totals using VAT rate from calc engine (DDP+domestic=20%, export=0%)
