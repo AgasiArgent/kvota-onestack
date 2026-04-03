@@ -100,119 +100,121 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
   const currency = quote.currency ?? "";
 
   return (
-    <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3">
-      <div className="flex items-center justify-between gap-4">
-        {/* Left: navigation + identification */}
-        <div className="flex items-center gap-3 min-w-0">
-          <Link
-            href="/quotes"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
-          >
-            <ArrowLeft size={16} />
-            КП
-          </Link>
-
-          <span className="font-mono text-sm font-medium shrink-0">
-            {quote.idn_quote}
-          </span>
-
-          <Badge className={cn("shrink-0 border-0", statusStyle)}>
-            {statusLabel}
-          </Badge>
-
-          {quote.customer && (
+    <>
+      <div className="sticky top-0 z-10 bg-card border-b border-border px-6 py-3">
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: navigation + identification */}
+          <div className="flex items-center gap-3 min-w-0">
             <Link
-              href={`/customers/${quote.customer.id}`}
-              className="text-sm text-muted-foreground hover:text-accent truncate"
+              href="/quotes"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground shrink-0"
             >
-              {quote.customer.name}
+              <ArrowLeft size={16} />
+              КП
             </Link>
-          )}
-        </div>
 
-        {/* Right: cancel + plan-fact + documents + amount + margin */}
-        <div className="flex items-center gap-4 shrink-0">
-          {userRoles.some((r) => CANCEL_ROLES.includes(r)) &&
-            !TERMINAL_STATUSES.has(workflowStatus) && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => setCancelOpen(true)}
+            <span className="font-mono text-sm font-medium shrink-0">
+              {quote.idn_quote}
+            </span>
+
+            <Badge className={cn("shrink-0 border-0", statusStyle)}>
+              {statusLabel}
+            </Badge>
+
+            {quote.customer && (
+              <Link
+                href={`/customers/${quote.customer.id}`}
+                className="text-sm text-muted-foreground hover:text-accent truncate"
               >
-                <Ban size={14} />
-                Отменить
-              </Button>
+                {quote.customer.name}
+              </Link>
             )}
+          </div>
 
-          <button
-            onClick={() => setIsContextOpen((v) => !v)}
-            className={cn(
-              "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
-              isContextOpen
-                ? "text-foreground bg-muted"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-          >
-            <Info size={16} />
-          </button>
+          {/* Right: cancel + plan-fact + documents + amount + margin */}
+          <div className="flex items-center gap-4 shrink-0">
+            {userRoles.some((r) => CANCEL_ROLES.includes(r)) &&
+              !TERMINAL_STATUSES.has(workflowStatus) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => setCancelOpen(true)}
+                >
+                  <Ban size={14} />
+                  Отменить
+                </Button>
+              )}
 
-          {showPlanFact && (
-            <Link
-              href={`/quotes/${quote.id}?step=plan-fact`}
+            <button
+              onClick={() => setIsContextOpen((v) => !v)}
               className={cn(
                 "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
-                isPlanFactActive
+                isContextOpen
                   ? "text-foreground bg-muted"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
             >
-              <Wallet size={16} />
-            </Link>
-          )}
+              <Info size={16} />
+            </button>
 
-          <Link
-            href={`/quotes/${quote.id}?step=documents`}
-            className={cn(
-              "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
-              isDocumentsActive
-                ? "text-foreground bg-muted"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            )}
-          >
-            <Paperclip size={16} />
-            {documentCount != null && documentCount > 0 && (
-              <Badge
-                variant="secondary"
-                className="h-5 min-w-5 px-1 text-[10px] font-semibold leading-none"
+            {showPlanFact && (
+              <Link
+                href={`/quotes/${quote.id}?step=plan-fact`}
+                className={cn(
+                  "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
+                  isPlanFactActive
+                    ? "text-foreground bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
               >
-                {documentCount}
-              </Badge>
+                <Wallet size={16} />
+              </Link>
             )}
-          </Link>
 
-          {formattedAmount && (
-            <span className="text-sm font-medium">
-              {formattedAmount}{" "}
-              <span className="text-muted-foreground">{currency}</span>
-            </span>
-          )}
+            <Link
+              href={`/quotes/${quote.id}?step=documents`}
+              className={cn(
+                "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
+                isDocumentsActive
+                  ? "text-foreground bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              <Paperclip size={16} />
+              {documentCount != null && documentCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 px-1 text-[10px] font-semibold leading-none"
+                >
+                  {documentCount}
+                </Badge>
+              )}
+            </Link>
 
-          {marginDisplay && (
-            <span className="text-sm text-muted-foreground">
-              Маржа {marginDisplay}
-            </span>
-          )}
+            {formattedAmount && (
+              <span className="text-sm font-medium">
+                {formattedAmount}{" "}
+                <span className="text-muted-foreground">{currency}</span>
+              </span>
+            )}
+
+            {marginDisplay && (
+              <span className="text-sm text-muted-foreground">
+                Маржа {marginDisplay}
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Cancellation info banner */}
+        {workflowStatus === "cancelled" && quote.cancellation_comment && (
+          <div className="mt-2 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-800">
+            <span className="font-medium">Причина отмены:</span>{" "}
+            {quote.cancellation_comment}
+          </div>
+        )}
       </div>
-
-      {/* Cancellation info banner */}
-      {workflowStatus === "cancelled" && quote.cancellation_comment && (
-        <div className="mt-2 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-800">
-          <span className="font-medium">Причина отмены:</span>{" "}
-          {quote.cancellation_comment}
-        </div>
-      )}
 
       <ContextPanel quoteId={quote.id} quote={quote} isOpen={isContextOpen} />
 
@@ -222,7 +224,7 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
         quoteId={quote.id}
         idnQuote={quote.idn_quote}
       />
-    </div>
+    </>
   );
 }
 
