@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, User, Package, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
@@ -193,7 +193,7 @@ export function ContextPanel({ quoteId, quote, isOpen }: ContextPanelProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="border-t border-border bg-card px-6 py-4">
+    <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
       {loading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 size={14} className="animate-spin" />
@@ -244,9 +244,12 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-4 mb-4 border-b border-border">
       {/* Client */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Клиент
-        </h4>
+        <div className="flex items-center gap-2 mb-2">
+          <User size={14} className="text-muted-foreground" />
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Клиент
+          </h4>
+        </div>
         <InfoRow label="Клиент">
           {quote.customer ? (
             <Link
@@ -294,36 +297,37 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
 
       {/* Terms */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Условия
-        </h4>
+        <div className="flex items-center gap-2 mb-2">
+          <Package size={14} className="text-muted-foreground" />
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Условия
+          </h4>
+        </div>
         <InfoRow label="Валюта">
           <span className="text-sm font-medium">{currency}</span>
         </InfoRow>
-        <InfoRow label="Способ доставки">
-          <span className="text-sm font-medium">
+        <InfoRow label="Доставка">
+          <span className="text-sm font-medium flex items-center gap-1">
             {DELIVERY_METHOD_LABELS[quote.delivery_method ?? ""] ?? quote.delivery_method ?? "\u2014"}
+            {quote.incoterms && (
+              <>
+                {" \u00B7 "}
+                <Badge variant="outline" className="text-xs font-semibold px-2 py-0">
+                  {quote.incoterms}
+                </Badge>
+              </>
+            )}
+            {" \u00B7 "}
+            <DeliveryPrioritySelect
+              quoteId={quote.id}
+              initialValue={quote.delivery_priority ?? null}
+            />
           </span>
         </InfoRow>
         <InfoRow label="Оплата">
           <span className="text-sm font-medium">
             {quote.payment_terms ?? "\u2014"}
           </span>
-        </InfoRow>
-        <InfoRow label="Инкотермс">
-          {quote.incoterms ? (
-            <Badge variant="outline" className="text-xs font-semibold px-2 py-0">
-              {quote.incoterms}
-            </Badge>
-          ) : (
-            <span className="text-sm text-muted-foreground">{"\u2014"}</span>
-          )}
-        </InfoRow>
-        <InfoRow label="Тип доставки">
-          <DeliveryPrioritySelect
-            quoteId={quote.id}
-            initialValue={quote.delivery_priority ?? null}
-          />
         </InfoRow>
         <InfoRow label="Дедлайн КП">
           <span className="text-sm font-medium">
@@ -336,9 +340,12 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
 
       {/* Financials */}
       <div className="space-y-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Финансы
-        </h4>
+        <div className="flex items-center gap-2 mb-2">
+          <TrendingUp size={14} className="text-muted-foreground" />
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Финансы
+          </h4>
+        </div>
         <InfoRow label="Прибыль">
           <span className="text-sm font-medium">
             {formatMoney(profit, currency)}

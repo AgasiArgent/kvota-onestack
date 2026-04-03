@@ -60,9 +60,30 @@ const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
 const CANCEL_ROLES = ["sales", "head_of_sales", "admin"];
 const TERMINAL_STATUSES = new Set(["cancelled", "rejected", "spec_signed", "deal"]);
 
+const CONTEXT_PANEL_STORAGE_KEY = "context-panel-closed";
+const CONTEXT_PANEL_MAX_ENTRIES = 100;
+
+function isQuotePanelClosed(quoteId: string): boolean {
+  try {
+    const ids: string[] = JSON.parse(localStorage.getItem(CONTEXT_PANEL_STORAGE_KEY) ?? "[]");
+    return ids.includes(quoteId);
+  } catch { return false; }
+}
+
+function toggleQuotePanelClosed(quoteId: string, closed: boolean): void {
+  try {
+    let ids: string[] = JSON.parse(localStorage.getItem(CONTEXT_PANEL_STORAGE_KEY) ?? "[]");
+    ids = ids.filter((id) => id !== quoteId);
+    if (closed) {
+      ids.push(quoteId);
+      if (ids.length > CONTEXT_PANEL_MAX_ENTRIES) ids = ids.slice(-CONTEXT_PANEL_MAX_ENTRIES);
+    }
+    localStorage.setItem(CONTEXT_PANEL_STORAGE_KEY, JSON.stringify(ids));
+  } catch { /* localStorage unavailable */ }
+}
+
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
-  isAdmin: boolean;
   documentCount?: number;
   activeStep?: QuoteStep;
   userRoles?: string[];
@@ -70,7 +91,9 @@ interface QuoteStickyHeaderProps {
 
 export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles = [] }: QuoteStickyHeaderProps) {
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [isContextOpen, setIsContextOpen] = useState(false);
+  const [isContextOpen, setIsContextOpen] = useState(
+    () => !isQuotePanelClosed(quote.id)
+  );
   const isDocumentsActive = activeStep === "documents";
   const isPlanFactActive = activeStep === "plan-fact";
   const showPlanFact = userRoles.some((r) => PLAN_FACT_ROLES.includes(r));
@@ -98,6 +121,14 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
     marginPercent != null ? `${marginPercent.toFixed(1)}%` : null;
 
   const currency = quote.currency ?? "";
+
+  function handleToggleContext() {
+    setIsContextOpen((prev) => {
+      const next = !prev;
+      toggleQuotePanelClosed(quote.id, !next);
+      return next;
+    });
+  }
 
   return (
     <>
@@ -147,7 +178,7 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
               )}
 
             <button
-              onClick={() => setIsContextOpen((v) => !v)}
+              onClick={handleToggleContext}
               className={cn(
                 "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
                 isContextOpen

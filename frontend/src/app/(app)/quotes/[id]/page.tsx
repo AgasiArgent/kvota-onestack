@@ -90,7 +90,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   return (
     <div className="flex flex-col h-full">
       <UseCollapsedSidebar />
-      <QuoteStickyHeader quote={quote} isAdmin={isAdmin} documentCount={documentCount} activeStep={activeStep} userRoles={userRoles} />
+      <QuoteStickyHeader quote={quote} documentCount={documentCount} activeStep={activeStep} userRoles={userRoles} />
       <div className="flex flex-1 min-h-0">
         <QuoteStepContent
           quote={quote}
