@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronDown, ChevronRight, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
+import { fetchCargoPlaces } from "@/entities/quote/mutations";
 import { ProductsSubtable } from "./products-subtable";
 import { RouteSegments } from "./route-segments";
 import { AdditionalExpenses } from "./additional-expenses";
@@ -28,6 +29,13 @@ export function LogisticsInvoiceRow({
   defaultExpanded = false,
 }: LogisticsInvoiceRowProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const [cargoPlaces, setCargoPlaces] = useState<
+    Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
+  >([]);
+
+  useEffect(() => {
+    fetchCargoPlaces(invoice.id).then(setCargoPlaces);
+  }, [invoice.id]);
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
@@ -37,10 +45,16 @@ export function LogisticsInvoiceRow({
     .join(", ");
   const destination = deliveryCity ?? "\u2014";
 
-  const totalWeight = items.reduce(
-    (sum, item) => sum + (item.weight_in_kg ?? 0) * item.quantity,
+  const hasCargoPlaces = cargoPlaces.length > 0;
+  const cargoWeight = cargoPlaces.reduce((sum, cp) => sum + cp.weight_kg, 0);
+  const cargoVolume = cargoPlaces.reduce(
+    (sum, cp) => sum + (cp.length_mm * cp.width_mm * cp.height_mm) / 1e9,
     0
   );
+
+  const totalWeight = hasCargoPlaces
+    ? cargoWeight
+    : items.reduce((sum, item) => sum + (item.weight_in_kg ?? 0) * item.quantity, 0);
 
   const logisticsCost =
     (invoice.logistics_supplier_to_hub ?? 0) +
@@ -78,16 +92,16 @@ export function LogisticsInvoiceRow({
         </span>
 
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {invoice.package_count ?? 0} мест
+          {hasCargoPlaces ? cargoPlaces.length : (invoice.package_count ?? 0)} мест
         </span>
 
         <span className="text-xs text-muted-foreground tabular-nums shrink-0">
           {numberFmt.format(totalWeight)} кг
         </span>
 
-        {invoice.total_volume_m3 != null && invoice.total_volume_m3 > 0 && (
+        {(hasCargoPlaces ? cargoVolume > 0 : (invoice.total_volume_m3 != null && invoice.total_volume_m3 > 0)) && (
           <span className="text-xs text-muted-foreground tabular-nums shrink-0">
-            {numberFmt.format(invoice.total_volume_m3)} м³
+            {numberFmt.format(hasCargoPlaces ? cargoVolume : invoice.total_volume_m3!)} м&sup3;
           </span>
         )}
 
@@ -103,6 +117,26 @@ export function LogisticsInvoiceRow({
 
       {expanded && (
         <div className="border-t border-border divide-y divide-border">
+          {hasCargoPlaces && (
+            <div className="px-4 py-2 bg-muted/30">
+              <div className="flex items-center gap-2 mb-1">
+                <Package size={14} className="text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Грузовые места ({cargoPlaces.length})
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                {cargoPlaces.map((cp) => (
+                  <div key={cp.position} className="text-xs text-muted-foreground tabular-nums">
+                    Место {cp.position}: {numberFmt.format(cp.weight_kg)} кг, {cp.length_mm}&times;{cp.width_mm}&times;{cp.height_mm} мм
+                  </div>
+                ))}
+                <div className="text-xs font-medium text-muted-foreground pt-1 border-t border-border mt-1">
+                  Итого: {numberFmt.format(cargoWeight)} кг, {cargoVolume.toFixed(2)} м&sup3;
+                </div>
+              </div>
+            </div>
+          )}
           <ProductsSubtable items={items} invoice={invoice} />
           <RouteSegments invoice={invoice} deliveryCity={deliveryCity} />
           <AdditionalExpenses invoiceId={invoice.id} />

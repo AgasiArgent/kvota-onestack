@@ -328,6 +328,13 @@ export async function deleteQuoteItem(itemId: string) {
 // Invoice CRUD
 // ---------------------------------------------------------------------------
 
+export interface CargoPlaceInput {
+  weight_kg: number;
+  length_mm: number;
+  width_mm: number;
+  height_mm: number;
+}
+
 export async function createInvoice(data: {
   quote_id: string;
   idn_quote: string;
@@ -335,10 +342,16 @@ export async function createInvoice(data: {
   buyer_company_id?: string;
   pickup_city?: string;
   currency?: string;
-  total_weight_kg?: number;
-  total_volume_m3?: number;
+  boxes: CargoPlaceInput[];
 }) {
   const supabase = createClient();
+
+  // Compute totals from boxes
+  const totalWeightKg = data.boxes.reduce((sum, b) => sum + b.weight_kg, 0);
+  const totalVolumeM3 = data.boxes.reduce(
+    (sum, b) => sum + (b.length_mm * b.width_mm * b.height_mm) / 1e9,
+    0
+  );
 
   // Generate invoice number: INV-{idx}-{idn_quote}
   const { count } = await supabase
@@ -358,14 +371,47 @@ export async function createInvoice(data: {
       buyer_company_id: data.buyer_company_id || null,
       pickup_city: data.pickup_city || null,
       currency: data.currency || "USD",
-      total_weight_kg: data.total_weight_kg ?? 0,
-      total_volume_m3: data.total_volume_m3 ?? null,
+      total_weight_kg: totalWeightKg,
+      total_volume_m3: totalVolumeM3,
     })
     .select("id, invoice_number")
     .single();
 
   if (error) throw error;
+
+  // Bulk-insert cargo places with sequential positions
+  if (data.boxes.length > 0) {
+    const cargoRows = data.boxes.map((box, i) => ({
+      invoice_id: invoice.id,
+      position: i + 1,
+      weight_kg: box.weight_kg,
+      length_mm: box.length_mm,
+      width_mm: box.width_mm,
+      height_mm: box.height_mm,
+    }));
+
+    const { error: cargoError } = await supabase
+      .from("invoice_cargo_places")
+      .insert(cargoRows);
+
+    if (cargoError) throw cargoError;
+  }
+
   return invoice;
+}
+
+// ---------------------------------------------------------------------------
+// Cargo places query (client-side — used by invoice-card and logistics-invoice-row)
+// ---------------------------------------------------------------------------
+
+export async function fetchCargoPlaces(invoiceId: string) {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("invoice_cargo_places")
+    .select("*")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: true });
+  return data ?? [];
 }
 
 export async function updateInvoice(

@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
-import { deleteInvoice } from "@/entities/quote/mutations";
+import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -48,7 +48,14 @@ export function InvoiceCard({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [unassigning, setUnassigning] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cargoPlaces, setCargoPlaces] = useState<
+    Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
+  >([]);
   const isEmpty = items.length === 0;
+
+  useEffect(() => {
+    fetchCargoPlaces(invoice.id).then(setCargoPlaces);
+  }, [invoice.id]);
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
@@ -61,6 +68,13 @@ export function InvoiceCard({
   }, 0);
   const currency = invoice.currency ?? "USD";
   const hasFile = ext<InvoiceExtras>(invoice).invoice_file_url != null;
+
+  const cargoWeight = cargoPlaces.reduce((sum, cp) => sum + cp.weight_kg, 0);
+  const cargoVolume = cargoPlaces.reduce(
+    (sum, cp) => sum + (cp.length_mm * cp.width_mm * cp.height_mm) / 1e9,
+    0
+  );
+  const hasCargoPlaces = cargoPlaces.length > 0;
 
   async function handleUnassignAll() {
     setUnassigning(true);
@@ -128,6 +142,12 @@ export function InvoiceCard({
             </span>
           )}
 
+          {hasCargoPlaces && (
+            <span className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline">
+              {cargoPlaces.length} мест &middot; {numberFmt.format(cargoWeight)} кг &middot; {cargoVolume.toFixed(2)} м&sup3;
+            </span>
+          )}
+
           <Badge variant="secondary" className="ml-auto shrink-0">
             {items.length} поз.
           </Badge>
@@ -173,8 +193,27 @@ export function InvoiceCard({
       </div>
 
       {expanded && (
-        <div className="border-t border-border overflow-x-auto">
-          <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} procurementCompleted={procurementCompleted} />
+        <div className="border-t border-border">
+          {hasCargoPlaces && (
+            <div className="px-4 py-2 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Package size={14} className="text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Грузовые места ({cargoPlaces.length})
+                </span>
+              </div>
+              <div className="space-y-0.5">
+                {cargoPlaces.map((cp) => (
+                  <div key={cp.position} className="text-xs text-muted-foreground tabular-nums">
+                    Место {cp.position}: {numberFmt.format(cp.weight_kg)} кг, {cp.length_mm}&times;{cp.width_mm}&times;{cp.height_mm} мм
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} procurementCompleted={procurementCompleted} />
+          </div>
         </div>
       )}
     </Card>

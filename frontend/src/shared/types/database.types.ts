@@ -1122,6 +1122,39 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_cargo_places: {
+        Row: {
+          id: string
+          invoice_id: string
+          position: number
+          weight_kg: number
+          length_mm: number
+          width_mm: number
+          height_mm: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          position?: number
+          weight_kg: number
+          length_mm: number
+          width_mm: number
+          height_mm: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          position?: number
+          weight_kg?: number
+          length_mm?: number
+          width_mm?: number
+          height_mm?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           id: string
