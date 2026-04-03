@@ -241,7 +241,7 @@ export function InvoiceCreateModal({
                       {item.brand ?? "\u2014"}
                     </span>
                     <span className="font-mono text-muted-foreground truncate max-w-24">
-                      {item.idn_sku ?? "\u2014"}
+                      {item.product_code ?? "\u2014"}
                     </span>
                     <span className="truncate flex-1">
                       {item.product_name}
