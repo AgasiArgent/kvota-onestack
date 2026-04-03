@@ -271,6 +271,48 @@ export async function createQuoteItem(
   return data;
 }
 
+export async function createQuoteItemsBatch(
+  quoteId: string,
+  items: {
+    product_name: string;
+    brand?: string;
+    product_code?: string;
+    quantity: number;
+    unit?: string;
+  }[]
+) {
+  if (items.length === 0) return [];
+
+  const supabase = createClient();
+
+  const { data: existing } = await supabase
+    .from("quote_items")
+    .select("position")
+    .eq("quote_id", quoteId)
+    .order("position", { ascending: false })
+    .limit(1);
+
+  const basePosition = (existing?.[0]?.position ?? 0) + 1;
+
+  const rows = items.map((item, i) => ({
+    quote_id: quoteId,
+    product_name: item.product_name,
+    brand: item.brand || null,
+    product_code: item.product_code || null,
+    quantity: item.quantity,
+    unit: item.unit || null,
+    position: basePosition + i,
+  }));
+
+  const { data, error } = await supabase
+    .from("quote_items")
+    .insert(rows)
+    .select();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteQuoteItem(itemId: string) {
   const supabase = createClient();
 

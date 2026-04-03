@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   createQuoteItem,
+  createQuoteItemsBatch,
   updateQuoteItem,
   deleteQuoteItem,
 } from "@/entities/quote/mutations";
@@ -175,8 +176,8 @@ export function SalesItemsHandsontable({
           updateQuoteItem(rowId, updates)
             .catch(() => toast.error("Не удалось сохранить"))
             .finally(() => pendingOps.current.delete(lockKey));
-        } else if (hasContent(rowData)) {
-          // New row with content: create item
+        } else if (hasContent(rowData) && source !== "CopyPaste.paste") {
+          // New row with content: create item (skip during paste — handled by afterPaste)
           const lockKey = `create-${rowIndex}`;
           if (pendingOps.current.has(lockKey)) continue;
           pendingOps.current.add(lockKey);
@@ -242,46 +243,40 @@ export function SalesItemsHandsontable({
       const hot = hotRef.current?.hotInstance;
       if (!hot) return;
 
-      // afterChange fires per-cell before afterPaste.
-      // Delay to let afterChange create individual rows first,
-      // then batch-create any rows that afterChange skipped.
-      setTimeout(() => {
-        const { startRow, endRow } = coords[0];
+      const { startRow, endRow } = coords[0];
 
-        const createPromises: Promise<void>[] = [];
+      // Collect new rows that need to be created
+      const newRows: { rowIndex: number; payload: ReturnType<typeof rowToCreatePayload> }[] = [];
 
-        for (let r = startRow; r <= endRow; r++) {
-          const rowId = rowIdsRef.current[r];
-          if (rowId) continue;
+      for (let r = startRow; r <= endRow; r++) {
+        const rowId = rowIdsRef.current[r];
+        if (rowId) continue;
 
-          const lockKey = `create-${r}`;
-          if (pendingOps.current.has(lockKey)) continue;
+        const rowData = hot.getSourceDataAtRow(r) as RowData | undefined;
+        if (!rowData || !hasContent(rowData)) continue;
 
-          const rowData = hot.getSourceDataAtRow(r) as RowData | undefined;
-          if (!rowData || !hasContent(rowData)) continue;
+        newRows.push({ rowIndex: r, payload: rowToCreatePayload(rowData) });
+      }
 
-          pendingOps.current.add(lockKey);
+      if (newRows.length === 0) return;
 
-          const promise = createQuoteItem(quoteId, rowToCreatePayload(rowData))
-            .then((created) => {
-              rowIdsRef.current[r] = created.id;
-              hot.setSourceDataAtCell(r, "id", created.id);
-            })
-            .catch(() => {
-              toast.error("Не удалось создать позицию");
-            })
-            .finally(() => pendingOps.current.delete(lockKey));
-
-          createPromises.push(promise);
-        }
-
-        if (createPromises.length > 0) {
-          Promise.all(createPromises).then(() => {
-            ensureSpareRow(hot);
-            router.refresh();
-          });
-        }
-      }, 150);
+      // Single batch insert — no race condition on position
+      createQuoteItemsBatch(
+        quoteId,
+        newRows.map((r) => r.payload)
+      )
+        .then((created) => {
+          for (let i = 0; i < created.length; i++) {
+            const { rowIndex } = newRows[i];
+            rowIdsRef.current[rowIndex] = created[i].id;
+            hot.setSourceDataAtCell(rowIndex, "id", created[i].id);
+          }
+          ensureSpareRow(hot);
+          router.refresh();
+        })
+        .catch(() => {
+          toast.error("Не удалось сохранить позиции");
+        });
     },
     [quoteId, router]
   );
