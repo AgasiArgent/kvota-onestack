@@ -318,12 +318,11 @@ interface ItemCalc {
   totalWithVat: number;
 }
 
-function calcItem(item: QuoteItemRow): ItemCalc {
+function calcItem(item: QuoteItemRow, vatRate: number): ItemCalc {
   const basePrice = item.base_price_vat ?? 0;
   const qty = item.quantity ?? 0;
-  const vatRate = item.vat_rate ?? 20;
 
-  const priceNoVat = basePrice / (1 + vatRate / 100);
+  const priceNoVat = vatRate > 0 ? basePrice / (1 + vatRate / 100) : basePrice;
   const sumNoVat = priceNoVat * qty;
   const totalWithVat = basePrice * qty;
   const vatAmount = totalWithVat - sumNoVat;
@@ -345,17 +344,18 @@ export interface KPDocumentProps {
   quote: QuoteDetailRow;
   items: QuoteItemRow[];
   logoBase64: string;
+  vatRate?: number;
 }
 
 // ---------------------------------------------------------------------------
 // Document
 // ---------------------------------------------------------------------------
 
-export function KPDocument({ quote, items, logoBase64 }: KPDocumentProps) {
+export function KPDocument({ quote, items, logoBase64, vatRate = 20 }: KPDocumentProps) {
   const currency = quote.currency ?? "RUB";
 
-  // Calculate totals
-  const calculations = items.map(calcItem);
+  // Calculate totals using VAT rate from calc engine (DDP+domestic=20%, export=0%)
+  const calculations = items.map((item) => calcItem(item, vatRate));
   const totalNoVat = calculations.reduce((sum, c) => sum + c.sumNoVat, 0);
   const totalVat = calculations.reduce((sum, c) => sum + c.vatAmount, 0);
   const totalWithVat = calculations.reduce((sum, c) => sum + c.totalWithVat, 0);

@@ -84,8 +84,25 @@ export async function GET(
 
   const items = itemsRes.data ?? [];
 
+  // Determine VAT rate from calc variables (DDP + not export → 20%, else → 0%)
+  const { data: calcVars } = await supabase
+    .from("quote_calculation_variables")
+    .select("variables")
+    .eq("quote_id", id)
+    .limit(1)
+    .single();
+
+  let vatRate = 20; // default for uncalculated quotes
+  if (calcVars?.variables) {
+    const vars = calcVars.variables as Record<string, unknown>;
+    const incoterms = vars.offer_incoterms as string | undefined;
+    const saleType = vars.offer_sale_type as string | undefined;
+    const isExport = saleType === "экспорт" || saleType === "export";
+    vatRate = incoterms === "DDP" && !isExport ? 20 : 0;
+  }
+
   const buffer = await renderToBuffer(
-    <KPDocument quote={quoteDetail} items={items} logoBase64={getLogoBase64() ?? ""} />
+    <KPDocument quote={quoteDetail} items={items} logoBase64={getLogoBase64() ?? ""} vatRate={vatRate} />
   );
 
   // Build filename: KP_{customer}_{date}.pdf
