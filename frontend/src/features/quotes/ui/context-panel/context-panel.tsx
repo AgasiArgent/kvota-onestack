@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Loader2, User, Package, TrendingUp } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import {
@@ -311,10 +310,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
             {DELIVERY_METHOD_LABELS[quote.delivery_method ?? ""] ?? quote.delivery_method ?? "\u2014"}
             {quote.incoterms && (
               <>
-                {" \u00B7 "}
-                <Badge variant="outline" className="text-xs font-semibold px-2 py-0">
-                  {quote.incoterms}
-                </Badge>
+                {" \u00B7 "}{quote.incoterms}
               </>
             )}
             {" \u00B7 "}

@@ -18,7 +18,7 @@ type ItemExtras = {
   dimension_height_mm?: number | null;
   dimension_width_mm?: number | null;
   dimension_length_mm?: number | null;
-  vat_rate?: number | null;
+  is_unavailable?: boolean | null;
   supplier_sku_note?: string | null;
 };
 
@@ -39,7 +39,7 @@ const COLUMN_KEYS = [
   "production_time_days",
   "weight_in_kg",
   "dimensions",
-  "vat_rate",
+  "is_unavailable",
   "supplier_sku_note",
 ] as const;
 
@@ -56,7 +56,7 @@ interface RowData {
   production_time_days: number | null;
   weight_in_kg: number | null;
   dimensions: string;
-  vat_rate: number | null;
+  is_unavailable: boolean;
   supplier_sku_note: string;
 }
 
@@ -106,7 +106,7 @@ function itemToRow(item: QuoteItemRow): RowData {
       extras.dimension_width_mm,
       extras.dimension_length_mm
     ),
-    vat_rate: extras.vat_rate ?? null,
+    is_unavailable: extras.is_unavailable ?? false,
     supplier_sku_note: extras.supplier_sku_note ?? "",
   };
 }
@@ -245,11 +245,12 @@ export function ProcurementHandsontable({
           } else if (
             field === "purchase_price_original" ||
             field === "weight_in_kg" ||
-            field === "vat_rate" ||
             field === "production_time_days"
           ) {
             const parsed = parseFloat(String(val));
             updates[field] = isNaN(parsed) ? null : parsed;
+          } else if (field === "is_unavailable") {
+            updates[field] = val === true || val === "true";
           } else if (field === "purchase_currency") {
             updates[field] = val || null;
           } else {
@@ -315,10 +316,10 @@ export function ProcurementHandsontable({
           "Наименование",
           "Кол",
           "Цена",
-          "Готов.",
+          "Срок, к.дн",
           "Вес, кг",
           "В×Ш×Д, мм",
-          "НДС",
+          "Н/Д",
           "Прим.",
           "",
         ]}
@@ -339,7 +340,7 @@ export function ProcurementHandsontable({
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },
-          { data: "vat_rate", type: "numeric", width: 40 },
+          { data: "is_unavailable", type: "checkbox", width: 35, className: "htCenter" },
           { data: "supplier_sku_note", type: "text", width: 80 },
           { data: "id", readOnly: true, width: 28, renderer: unassignRenderer },
         ]}
@@ -352,6 +353,11 @@ export function ProcurementHandsontable({
         minSpareRows={0}
         height="auto"
         afterChange={handleAfterChange}
+        afterGetColHeader={(col, th) => {
+          if (col === COLUMN_KEYS.indexOf("is_unavailable")) {
+            th.title = "Недоступно — позиция будет исключена из расчёта";
+          }
+        }}
         cells={procurementCompleted ? cellsCallback : undefined}
         className="htLeft"
       />
