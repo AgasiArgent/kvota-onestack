@@ -29,7 +29,7 @@ const FIELD_LABELS: Record<string, string> = {
   delivery_city: "Город доставки",
   delivery_country: "Страна",
   delivery_method: "Способ доставки",
-  delivery_terms: "Условия поставки",
+  incoterms: "Условия поставки",
 };
 
 export function validateForTransfer(

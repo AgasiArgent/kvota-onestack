@@ -368,7 +368,7 @@ export function KPDocument({ quote, items, logoBase64 }: KPDocumentProps) {
   const deliveryAddress = [quote.delivery_city, quote.delivery_country]
     .filter(Boolean)
     .join(", ") || quote.delivery_address || "—";
-  const incoterms = quote.delivery_terms ?? "—";
+  const incoterms = quote.incoterms ?? "—";
   const paymentTerms = quote.payment_terms ?? "—";
   const deliveryDays = quote.delivery_days != null ? `${quote.delivery_days} календарных дней` : "—";
 
