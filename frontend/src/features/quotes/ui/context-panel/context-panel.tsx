@@ -16,6 +16,7 @@ import {
 } from "./participants-block";
 import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
+import { DeliveryPrioritySelect } from "./delivery-priority-select";
 
 const DELIVERY_METHOD_LABELS: Record<string, string> = {
   air: "Авиа",
@@ -317,6 +318,19 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
           ) : (
             <span className="text-sm text-muted-foreground">{"\u2014"}</span>
           )}
+        </InfoRow>
+        <InfoRow label="Тип доставки">
+          <DeliveryPrioritySelect
+            quoteId={quote.id}
+            initialValue={quote.delivery_priority ?? null}
+          />
+        </InfoRow>
+        <InfoRow label="Дедлайн КП">
+          <span className="text-sm font-medium">
+            {quote.valid_until
+              ? new Date(quote.valid_until).toLocaleDateString("ru-RU")
+              : "\u2014"}
+          </span>
         </InfoRow>
       </div>
 

@@ -635,6 +635,7 @@ export async function patchQuote(
   updates: Partial<{
     contact_person_id: string | null;
     delivery_address: string | null;
+    delivery_priority: string | null;
   }>
 ): Promise<void> {
   const supabase = createClient();
