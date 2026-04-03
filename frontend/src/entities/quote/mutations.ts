@@ -629,3 +629,20 @@ export async function escalateQuote(
 
   if (commentError) throw commentError;
 }
+
+export async function patchQuote(
+  quoteId: string,
+  updates: Partial<{
+    contact_person_id: string | null;
+    delivery_address: string | null;
+  }>
+): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("quotes")
+    .update(updates)
+    .eq("id", quoteId);
+
+  if (error) throw error;
+}

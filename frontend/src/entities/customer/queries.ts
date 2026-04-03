@@ -224,6 +224,20 @@ export async function fetchCustomerContacts(
   }) as CustomerContact[];
 }
 
+export async function fetchCustomerAddresses(
+  customerId: string
+): Promise<Array<{ id: string; name: string | null; address: string; is_default: boolean }>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("customer_delivery_addresses")
+    .select("id, name, address, is_default")
+    .eq("customer_id", customerId)
+    .order("is_default", { ascending: false })
+    .order("name");
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; name: string | null; address: string; is_default: boolean }>;
+}
+
 export async function fetchCustomerQuotes(customerId: string) {
   const supabase = await createClient();
   const { data } = await supabase

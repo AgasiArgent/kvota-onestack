@@ -267,6 +267,30 @@ export async function updateCustomerGeneralEmail(
   if (error) throw error;
 }
 
+// ---------- Delivery address mutations ----------
+
+export async function createDeliveryAddress(
+  customerId: string,
+  data: { name?: string; address: string }
+): Promise<{ id: string; name: string | null; address: string }> {
+  const supabase = createClient();
+  const organizationId = await getCustomerOrgId(customerId);
+
+  const { data: row, error } = await supabase
+    .from("customer_delivery_addresses")
+    .insert({
+      customer_id: customerId,
+      organization_id: organizationId,
+      name: data.name ?? null,
+      address: data.address,
+    })
+    .select("id, name, address")
+    .single();
+
+  if (error) throw error;
+  return row as { id: string; name: string | null; address: string };
+}
+
 // ---------- Contract mutations ----------
 
 export async function createContract(

@@ -14,6 +14,8 @@ import {
   ParticipantsBlock,
   type ParticipantRow,
 } from "./participants-block";
+import { ContactDropdownSelect } from "./contact-dropdown-select";
+import { AddressDropdownSelect } from "./address-dropdown-select";
 
 const DELIVERY_METHOD_LABELS: Record<string, string> = {
   air: "Авиа",
@@ -257,14 +259,35 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
           )}
         </InfoRow>
         <InfoRow label="Контакт">
-          <span className="text-sm font-medium">
-            {quote.contact_person?.name ?? "\u2014"}
-          </span>
+          {quote.customer ? (
+            <ContactDropdownSelect
+              quoteId={quote.id}
+              customerId={quote.customer.id}
+              initialContact={
+                quote.contact_person
+                  ? { id: quote.contact_person.id, name: quote.contact_person.name }
+                  : null
+              }
+            />
+          ) : (
+            <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+          )}
         </InfoRow>
         <InfoRow label="Город доставки">
           <span className="text-sm font-medium">
             {quote.delivery_city ?? "\u2014"}
           </span>
+        </InfoRow>
+        <InfoRow label="Адрес доставки">
+          {quote.customer ? (
+            <AddressDropdownSelect
+              quoteId={quote.id}
+              customerId={quote.customer.id}
+              initialAddress={quote.delivery_address ?? null}
+            />
+          ) : (
+            <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+          )}
         </InfoRow>
       </div>
 

@@ -48,5 +48,6 @@ export {
   returnQuoteForRevision,
   escalateQuote,
   submitToProcurementWithChecklist,
+  patchQuote,
 } from "./mutations";
 export type { CreateQuoteInput } from "./mutations";
