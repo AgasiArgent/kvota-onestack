@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { submitToProcurementWithChecklist } from "@/entities/quote/mutations";
+import { submitToProcurementWithChecklist, patchQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +78,9 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
   const [isTender, setIsTender] = useState(false);
   const [directRequest, setDirectRequest] = useState(false);
   const [tradingOrgRequest, setTradingOrgRequest] = useState(false);
+  const [deliveryPriority, setDeliveryPriority] = useState(
+    quote.delivery_priority ?? ""
+  );
   const [error, setError] = useState<string | null>(null);
 
   function handleOpenClick() {
@@ -97,6 +100,7 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
     setIsTender(false);
     setDirectRequest(false);
     setTradingOrgRequest(false);
+    setDeliveryPriority(quote.delivery_priority ?? "");
     setError(null);
   }
 
@@ -109,6 +113,9 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
     setError(null);
     setSubmitting(true);
     try {
+      if (deliveryPriority) {
+        await patchQuote(quote.id, { delivery_priority: deliveryPriority });
+      }
       await submitToProcurementWithChecklist(quote.id, {
         is_estimate: isEstimate,
         is_tender: isTender,
@@ -203,6 +210,33 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
                 <Label htmlFor="chk-trading-org" className="cursor-pointer text-sm">
                   Запрашивал ли клиент через торгующих организаций?
                 </Label>
+              </div>
+            </div>
+
+            {/* Delivery priority */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Тип доставки</Label>
+              <div className="flex gap-3">
+                {([
+                  { value: "fast", label: "Быстрее" },
+                  { value: "normal", label: "Обычно" },
+                  { value: "cheap", label: "Дешевле" },
+                ] as const).map((opt) => (
+                  <label
+                    key={opt.value}
+                    className="flex items-center gap-1.5 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="radio"
+                      name="delivery_priority"
+                      value={opt.value}
+                      checked={deliveryPriority === opt.value}
+                      onChange={() => setDeliveryPriority(opt.value)}
+                      className="accent-accent"
+                    />
+                    {opt.label}
+                  </label>
+                ))}
               </div>
             </div>
 
