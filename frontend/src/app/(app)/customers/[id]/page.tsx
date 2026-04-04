@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import {
   fetchCustomerDetail,
+  canAccessCustomer,
   fetchCustomerStats,
   fetchCustomerContacts,
   fetchCustomerCalls,
@@ -31,8 +32,11 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const customer = await fetchCustomerDetail(id, user.orgId);
-  if (!customer) notFound();
+  const [customer, hasAccess] = await Promise.all([
+    fetchCustomerDetail(id, user.orgId),
+    canAccessCustomer(id, { id: user.id, roles: user.roles, orgId: user.orgId }),
+  ]);
+  if (!customer || !hasAccess) notFound();
 
   return (
     <div>

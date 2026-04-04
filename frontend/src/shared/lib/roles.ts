@@ -24,3 +24,12 @@ export function isSalesOnly(roles: string[]): boolean {
     !roles.some((r) => NON_SALES_ROLES.includes(r))
   );
 }
+
+/**
+ * Returns true if the user has the head_of_sales role.
+ * Head of sales sees all customers managed by anyone in their sales group.
+ * Regular sales sees only their own customers.
+ */
+export function isHeadOfSales(roles: string[]): boolean {
+  return roles.includes("head_of_sales");
+}

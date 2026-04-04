@@ -1,6 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
-import { isSalesOnly } from "@/shared/lib/roles";
+import { isSalesOnly, isHeadOfSales } from "@/shared/lib/roles";
 import type {
   CustomerListItem,
   CustomerFinancials,
@@ -45,11 +45,12 @@ export async function fetchCustomersList(
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  // Role-based filtering: sales users see only their group's customers
+  // Role-based filtering:
+  // - head_of_sales: sees customers of all managers in their sales group
+  // - sales (regular): sees only their own customers
   if (user && isSalesOnly(user.roles)) {
-    if (user.salesGroupId && user.orgId) {
+    if (isHeadOfSales(user.roles) && user.salesGroupId && user.orgId) {
       const memberIds = await getGroupMemberIds(supabase, user.salesGroupId, user.orgId);
-      // Fallback to own ID if group is empty (no members assigned yet)
       if (memberIds.length > 0) {
         query = query.in("manager_id", memberIds);
       } else {
@@ -116,6 +117,44 @@ export async function fetchCustomersList(
   }));
 
   return { data: items, total: count ?? 0 };
+}
+
+/**
+ * Checks if a sales-only user is allowed to view a specific customer.
+ * Regular sales: only their own customers. Head of sales: group's customers.
+ */
+export async function canAccessCustomer(
+  customerId: string,
+  user: { id: string; roles: string[]; orgId: string }
+): Promise<boolean> {
+  if (!isSalesOnly(user.roles)) return true;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("customers")
+    .select("manager_id")
+    .eq("id", customerId)
+    .eq("organization_id", user.orgId)
+    .single();
+
+  if (!data?.manager_id) return false;
+
+  if (isHeadOfSales(user.roles)) {
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("sales_group_id")
+      .eq("user_id", user.id)
+      .eq("organization_id", user.orgId)
+      .maybeSingle();
+
+    if (!profile?.sales_group_id) return data.manager_id === user.id;
+
+    const memberIds = await getGroupMemberIds(supabase, profile.sales_group_id, user.orgId);
+    if (memberIds.length === 0) return data.manager_id === user.id;
+    return memberIds.includes(data.manager_id);
+  }
+
+  return data.manager_id === user.id;
 }
 
 export async function fetchCustomerDetail(

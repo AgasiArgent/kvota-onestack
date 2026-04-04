@@ -13,6 +13,7 @@ export {
   fetchCustomersList,
   fetchCustomerFinancials,
   fetchCustomerDetail,
+  canAccessCustomer,
   fetchCustomerStats,
   fetchCustomerContacts,
   fetchCustomerAddresses,
