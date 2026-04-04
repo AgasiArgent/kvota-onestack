@@ -537,6 +537,27 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_assignees: {
+        Row: {
+          customer_id: string
+          user_id: string
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          customer_id: string
+          user_id: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          customer_id?: string
+          user_id?: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       customer_contacts: {
         Row: {
           id: string
