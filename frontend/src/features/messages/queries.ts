@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { isSalesOnly } from "@/shared/lib/roles";
+import { getAssignedCustomerIds } from "@/shared/lib/access";
 
 export interface ChatListItem {
   quoteId: string;
@@ -12,15 +13,20 @@ export interface ChatListItem {
   commentCount: number;
 }
 
+export type ChatAccessUser = {
+  id: string;
+  roles: string[];
+  orgId: string;
+  salesGroupId?: string | null;
+};
+
 /**
  * Fetch all quotes that have comments, sorted by most recent message.
  * Each item includes last message preview and quote metadata.
  */
 export async function fetchAllChats(
-  userId: string,
-  orgId: string,
-  filter: "my" | "all" = "all",
-  roles: string[] = []
+  user: ChatAccessUser,
+  filter: "my" | "all" = "all"
 ): Promise<ChatListItem[]> {
   const supabase = await createClient();
 
@@ -60,31 +66,27 @@ export async function fetchAllChats(
   let quotesQuery = supabase
     .from("quotes")
     .select("id, idn_quote, customer_id, created_by")
-    .eq("organization_id", orgId)
+    .eq("organization_id", user.orgId)
     .is("deleted_at", null)
     .in("id", quoteIds);
 
   if (filter === "my") {
-    quotesQuery = quotesQuery.or(`created_by.eq.${userId}`);
+    quotesQuery = quotesQuery.or(`created_by.eq.${user.id}`);
   }
 
-  // Role-based filtering: sales users see only chats on their own quotes
-  // or quotes for their assigned customers
-  if (isSalesOnly(roles)) {
-    const { data: assignedCustomers } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("organization_id", orgId)
-      .eq("manager_id", userId);
+  // Role-based filtering per .kiro/steering/access-control.md:
+  // Sales users see chats on quotes they created OR on quotes whose customer
+  // is assigned to them (or any group member for head_of_sales) via
+  // customer_assignees.
+  if (isSalesOnly(user.roles)) {
+    const assignedCustomerIds = await getAssignedCustomerIds(supabase, user);
 
-    const customerIds = (assignedCustomers ?? []).map((c) => c.id);
-
-    if (customerIds.length > 0) {
+    if (assignedCustomerIds.length > 0) {
       quotesQuery = quotesQuery.or(
-        `created_by.eq.${userId},customer_id.in.(${customerIds.join(",")})`
+        `created_by.eq.${user.id},customer_id.in.(${assignedCustomerIds.join(",")})`
       );
     } else {
-      quotesQuery = quotesQuery.eq("created_by", userId);
+      quotesQuery = quotesQuery.eq("created_by", user.id);
     }
   }
 

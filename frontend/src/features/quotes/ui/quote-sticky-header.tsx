@@ -20,7 +20,6 @@ import { cn } from "@/lib/utils";
 import { cancelQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
-import { ContextPanel } from "./context-panel/context-panel";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -60,40 +59,24 @@ const PLAN_FACT_ROLES = ["finance", "admin", "top_manager"];
 const CANCEL_ROLES = ["sales", "head_of_sales", "admin"];
 const TERMINAL_STATUSES = new Set(["cancelled", "rejected", "spec_signed", "deal"]);
 
-const CONTEXT_PANEL_STORAGE_KEY = "context-panel-closed";
-const CONTEXT_PANEL_MAX_ENTRIES = 100;
-
-function isQuotePanelClosed(quoteId: string): boolean {
-  try {
-    const ids: string[] = JSON.parse(localStorage.getItem(CONTEXT_PANEL_STORAGE_KEY) ?? "[]");
-    return ids.includes(quoteId);
-  } catch { return false; }
-}
-
-function toggleQuotePanelClosed(quoteId: string, closed: boolean): void {
-  try {
-    let ids: string[] = JSON.parse(localStorage.getItem(CONTEXT_PANEL_STORAGE_KEY) ?? "[]");
-    ids = ids.filter((id) => id !== quoteId);
-    if (closed) {
-      ids.push(quoteId);
-      if (ids.length > CONTEXT_PANEL_MAX_ENTRIES) ids = ids.slice(-CONTEXT_PANEL_MAX_ENTRIES);
-    }
-    localStorage.setItem(CONTEXT_PANEL_STORAGE_KEY, JSON.stringify(ids));
-  } catch { /* localStorage unavailable */ }
-}
-
 interface QuoteStickyHeaderProps {
   quote: QuoteDetailRow;
   documentCount?: number;
   activeStep?: QuoteStep;
   userRoles?: string[];
+  isContextOpen: boolean;
+  onToggleContext: () => void;
 }
 
-export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles = [] }: QuoteStickyHeaderProps) {
+export function QuoteStickyHeader({
+  quote,
+  documentCount,
+  activeStep,
+  userRoles = [],
+  isContextOpen,
+  onToggleContext,
+}: QuoteStickyHeaderProps) {
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [isContextOpen, setIsContextOpen] = useState(
-    () => !isQuotePanelClosed(quote.id)
-  );
   const isDocumentsActive = activeStep === "documents";
   const isPlanFactActive = activeStep === "plan-fact";
   const showPlanFact = userRoles.some((r) => PLAN_FACT_ROLES.includes(r));
@@ -101,6 +84,14 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
   const statusStyle =
     STATUS_BADGE_STYLES[workflowStatus] ?? "bg-slate-100 text-slate-700";
   const statusLabel = STATUS_LABELS[workflowStatus] ?? workflowStatus;
+
+  const createdAtLabel = quote.created_at
+    ? new Date(quote.created_at).toLocaleDateString("ru-RU", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      })
+    : null;
 
   const totalAmount = quote.total_amount_quote ?? null;
   const formattedAmount =
@@ -121,14 +112,6 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
     marginPercent != null ? `${marginPercent.toFixed(1)}%` : null;
 
   const currency = quote.currency ?? "";
-
-  function handleToggleContext() {
-    setIsContextOpen((prev) => {
-      const next = !prev;
-      toggleQuotePanelClosed(quote.id, !next);
-      return next;
-    });
-  }
 
   return (
     <>
@@ -151,6 +134,12 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
             <Badge className={cn("shrink-0 border-0", statusStyle)}>
               {statusLabel}
             </Badge>
+
+            {createdAtLabel && (
+              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                от {createdAtLabel}
+              </span>
+            )}
 
             {quote.customer && (
               <Link
@@ -178,39 +167,52 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
               )}
 
             <button
-              onClick={handleToggleContext}
+              onClick={onToggleContext}
               className={cn(
                 "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
                 isContextOpen
                   ? "text-foreground bg-muted"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
+              aria-label={isContextOpen ? "Свернуть контекст" : "Развернуть контекст"}
             >
               <Info size={16} />
             </button>
 
             {showPlanFact && (
               <Link
-                href={`/quotes/${quote.id}?step=plan-fact`}
+                href={
+                  isPlanFactActive
+                    ? `/quotes/${quote.id}`
+                    : `/quotes/${quote.id}?step=plan-fact`
+                }
                 className={cn(
                   "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
                   isPlanFactActive
                     ? "text-foreground bg-muted"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
+                aria-pressed={isPlanFactActive}
+                title={isPlanFactActive ? "Закрыть план-факт" : "Открыть план-факт"}
               >
                 <Wallet size={16} />
               </Link>
             )}
 
             <Link
-              href={`/quotes/${quote.id}?step=documents`}
+              href={
+                isDocumentsActive
+                  ? `/quotes/${quote.id}`
+                  : `/quotes/${quote.id}?step=documents`
+              }
               className={cn(
                 "relative inline-flex items-center gap-1 text-sm transition-colors rounded-md px-2 py-1",
                 isDocumentsActive
                   ? "text-foreground bg-muted"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
+              aria-pressed={isDocumentsActive}
+              title={isDocumentsActive ? "Закрыть документы" : "Открыть документы"}
             >
               <Paperclip size={16} />
               {documentCount != null && documentCount > 0 && (
@@ -246,8 +248,6 @@ export function QuoteStickyHeader({ quote, documentCount, activeStep, userRoles 
           </div>
         )}
       </div>
-
-      <ContextPanel quoteId={quote.id} quote={quote} isOpen={isContextOpen} />
 
       <CancelQuoteDialog
         open={cancelOpen}

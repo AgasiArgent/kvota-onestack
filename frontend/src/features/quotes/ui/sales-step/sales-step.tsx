@@ -7,7 +7,6 @@ import { SalesActionBar } from "./sales-action-bar";
 import type { ClientResponseModal } from "./sales-action-bar";
 import { SalesItemsTable } from "./sales-items-table";
 import { SalesItemsEditor } from "./sales-items-editor";
-import { SalesCollapsible } from "./sales-collapsible";
 import { ClientResponseModals } from "./client-response-modals";
 
 interface SalesStepProps {
@@ -37,7 +36,6 @@ export function SalesStep({ quote, items }: SalesStepProps) {
             quoteId={quote.id}
           />
         )}
-        <SalesCollapsible quote={quote} />
       </div>
       <ClientResponseModals
         quoteId={quote.id}

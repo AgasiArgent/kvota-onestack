@@ -15,13 +15,14 @@ import {
   STATUS_TO_STEP,
 } from "@/entities/quote";
 import type { QuoteStep, StageDeadlineData } from "@/entities/quote";
-import { QuoteStickyHeader } from "@/features/quotes/ui/quote-sticky-header";
+import { QuoteDetailShell } from "@/features/quotes/ui/quote-detail-shell";
 import { QuoteStatusRail } from "@/features/quotes/ui/quote-status-rail";
 import { QuoteStepContent } from "@/features/quotes/ui/quote-step-content";
 import { ChatWrapper } from "@/features/quotes/ui/chat-panel/chat-wrapper";
 import { UseCollapsedSidebar } from "@/features/quotes/ui/use-collapsed-sidebar";
 import { fetchOrgMembers } from "@/features/messages/queries";
 import { fetchDocumentCount } from "@/features/quotes/ui/documents-step/queries";
+import { fetchQuoteContextData } from "@/features/quotes/ui/context-panel/queries";
 
 function getDefaultStep(roles: string[]): QuoteStep {
   for (const role of roles) {
@@ -54,7 +55,18 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     salesGroupId,
   };
 
-  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount, dealId, hasAccess] = await Promise.all([
+  const [
+    quote,
+    items,
+    invoices,
+    comments,
+    calcVariables,
+    orgMembers,
+    documentCount,
+    dealId,
+    hasAccess,
+    contextData,
+  ] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
@@ -64,6 +76,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     fetchDocumentCount(id),
     fetchDealIdForQuote(id),
     canAccessQuote(id, accessUser),
+    fetchQuoteContextData(id),
   ]);
 
   if (!quote || !hasAccess) notFound();
@@ -102,38 +115,48 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const currentWorkflowStep = STATUS_TO_STEP[workflowStatus] ?? "sales";
 
   return (
-    <div className="flex flex-col h-full">
+    <>
       <UseCollapsedSidebar />
-      <QuoteStickyHeader quote={quote} documentCount={documentCount} activeStep={activeStep} userRoles={userRoles} />
-      <div className="flex flex-1 min-h-0">
-        <QuoteStepContent
-          quote={quote}
-          items={items}
-          invoices={invoices}
-          activeStep={activeStep}
-          userRoles={userRoles}
-          userId={user.id}
-          calcVariables={calcVariables}
-          dealId={dealId}
-          isReadOnly={isReadOnly}
-        />
-        <ChatWrapper
-          quoteId={id}
-          idnQuote={quote.idn_quote}
-          userId={user.id}
-          initialComments={comments}
-          orgMembers={orgMembers}
-        />
-        <QuoteStatusRail
-          activeStep={activeStep}
-          currentWorkflowStep={currentWorkflowStep}
-          allowedSteps={allowedSteps}
-          isAdmin={isAdmin}
-          quoteId={id}
-          workflowStatus={workflowStatus}
-          stageDeadline={stageDeadline}
-        />
-      </div>
-    </div>
+      <QuoteDetailShell
+        quote={quote}
+        documentCount={documentCount}
+        activeStep={activeStep}
+        userRoles={userRoles}
+        contextData={contextData}
+        stepContent={
+          <QuoteStepContent
+            quote={quote}
+            items={items}
+            invoices={invoices}
+            activeStep={activeStep}
+            userRoles={userRoles}
+            userId={user.id}
+            calcVariables={calcVariables}
+            dealId={dealId}
+            isReadOnly={isReadOnly}
+          />
+        }
+        chat={
+          <ChatWrapper
+            quoteId={id}
+            idnQuote={quote.idn_quote}
+            userId={user.id}
+            initialComments={comments}
+            orgMembers={orgMembers}
+          />
+        }
+        rail={
+          <QuoteStatusRail
+            activeStep={activeStep}
+            currentWorkflowStep={currentWorkflowStep}
+            allowedSteps={allowedSteps}
+            isAdmin={isAdmin}
+            quoteId={id}
+            workflowStatus={workflowStatus}
+            stageDeadline={stageDeadline}
+          />
+        }
+      />
+    </>
   );
 }

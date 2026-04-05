@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mail, User } from "lucide-react";
+import { Phone, Mail, User, UserCog } from "lucide-react";
 
 export interface SalesChecklist {
   is_estimate: boolean;
@@ -20,7 +20,13 @@ interface SalesChecklistBlockProps {
     phone: string | null;
     email: string | null;
   } | null;
-  salesManager: { id: string; full_name: string } | null;
+  salesManager: {
+    id: string;
+    full_name: string;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  additionalInfo: string | null;
 }
 
 const REQUEST_TYPE_BADGES: {
@@ -40,10 +46,14 @@ export function SalesChecklistBlock({
   checklist,
   contactPerson,
   salesManager,
+  additionalInfo,
 }: SalesChecklistBlockProps) {
   const activeBadges = checklist
     ? REQUEST_TYPE_BADGES.filter((b) => checklist[b.key])
     : [];
+
+  const hasAnyContent =
+    checklist || contactPerson || salesManager || additionalInfo;
 
   return (
     <div className="space-y-3">
@@ -66,45 +76,76 @@ export function SalesChecklistBlock({
         </div>
       )}
 
-      {/* Equipment description */}
+      {/* Equipment description (from sales_checklist JSON) */}
       {checklist?.equipment_description && (
-        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground">
+        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
           {checklist.equipment_description}
         </div>
       )}
 
-      {/* Contact person */}
-      {contactPerson && (
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <User size={13} />
-            <span>{contactPerson.name}</span>
+      {/* Additional info (quotes.additional_info column) */}
+      {additionalInfo && (
+        <div className="space-y-1">
+          <span className="text-xs text-muted-foreground">Доп. информация</span>
+          <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
+            {additionalInfo}
           </div>
-          {contactPerson.phone && (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Phone size={12} />
-              <span className="tabular-nums">{contactPerson.phone}</span>
-            </div>
-          )}
-          {contactPerson.email && (
-            <div className="flex items-center gap-1 text-muted-foreground">
-              <Mail size={12} />
-              <span>{contactPerson.email}</span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Sales manager */}
+      {/* Contact person (client-side contact) */}
+      {contactPerson && (
+        <div className="space-y-1">
+          <span className="text-xs text-muted-foreground">Контакт клиента</span>
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <User size={13} />
+              <span>{contactPerson.name}</span>
+            </div>
+            {contactPerson.phone && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Phone size={12} />
+                <span className="tabular-nums">{contactPerson.phone}</span>
+              </div>
+            )}
+            {contactPerson.email && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Mail size={12} />
+                <span>{contactPerson.email}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Sales manager (responsible МОП) */}
       {salesManager && (
-        <div className="text-sm text-muted-foreground">
-          МОП: <span className="text-foreground">{salesManager.full_name}</span>
+        <div className="space-y-1">
+          <span className="text-xs text-muted-foreground">Ответственный МОП</span>
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm">
+            <div className="flex items-center gap-1.5 text-foreground">
+              <UserCog size={13} className="text-muted-foreground" />
+              <span>{salesManager.full_name || "\u2014"}</span>
+            </div>
+            {salesManager.phone && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Phone size={12} />
+                <span className="tabular-nums">{salesManager.phone}</span>
+              </div>
+            )}
+            {salesManager.email && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Mail size={12} />
+                <span>{salesManager.email}</span>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {!checklist && !contactPerson && !salesManager && (
+      {!hasAnyContent && (
         <p className="text-sm text-muted-foreground">
-          Чеклист продаж не заполнен
+          Контекст продаж не заполнен
         </p>
       )}
     </div>
