@@ -21,11 +21,13 @@ export function ProcurementActionBar({
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
   const assignedCount = items.filter((i) => i.invoice_id != null).length;
-  const pricedCount = items.filter(
-    (i) => i.purchase_price_original != null
+  // A position is "ready" when it either has a purchase price or is marked
+  // unavailable (Н/Д) — unavailable items are excluded from the calculation
+  // and intentionally have no price.
+  const readyCount = items.filter(
+    (i) => i.purchase_price_original != null || i.is_unavailable === true
   ).length;
-
-  const allPriced = totalItems > 0 && pricedCount === totalItems;
+  const incomplete = totalItems > 0 && readyCount < totalItems;
 
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
@@ -48,7 +50,7 @@ export function ProcurementActionBar({
         <Button
           size="sm"
           className="bg-success text-white hover:bg-success/90"
-          disabled={!allPriced || completing}
+          disabled={completing}
           onClick={onCompleteProcurement}
         >
           {completing ? (
@@ -60,8 +62,12 @@ export function ProcurementActionBar({
         </Button>
       )}
 
-      <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-        {pricedCount}/{totalItems} оценено | {assignedCount} назначено
+      <span
+        className={`ml-auto text-sm tabular-nums ${
+          incomplete ? "text-warning font-medium" : "text-muted-foreground"
+        }`}
+      >
+        {readyCount}/{totalItems} готово | {assignedCount} назначено
       </span>
     </div>
   );

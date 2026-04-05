@@ -86,6 +86,22 @@ export function ProcurementStep({
   }
 
   async function handleCompleteProcurement() {
+    // Guard: every item must either have a purchase price or be marked Н/Д
+    // (is_unavailable). Blocking items surface as an actionable toast so the
+    // user knows what's missing instead of facing a silently disabled button.
+    const blockingCount = items.filter(
+      (i) => i.purchase_price_original == null && i.is_unavailable !== true
+    ).length;
+    if (blockingCount > 0) {
+      const plural = new Intl.PluralRules("ru-RU").select(blockingCount);
+      const word =
+        plural === "one" ? "позиция" : plural === "few" ? "позиции" : "позиций";
+      toast.error(
+        `Нельзя завершить: ${blockingCount} ${word} без цены. Заполните цену или отметьте Н/Д.`
+      );
+      return;
+    }
+
     setCompleting(true);
     try {
       await completeProcurement(quote.id);
