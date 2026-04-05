@@ -46,7 +46,7 @@ const DELIVERY_METHODS = [
   { value: "air", label: "Авиа" },
   { value: "auto", label: "Авто" },
   { value: "sea", label: "Море" },
-  { value: "multimodal", label: "Мультимодально" },
+  { value: "multimodal", label: "Любой" },
 ] as const;
 
 const INCOTERMS = ["DDP", "DAP", "CIF", "FOB", "EXW"] as const;

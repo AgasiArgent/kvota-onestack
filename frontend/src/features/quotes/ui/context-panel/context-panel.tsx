@@ -14,7 +14,7 @@ const DELIVERY_METHOD_LABELS: Record<string, string> = {
   air: "Авиа",
   auto: "Авто",
   sea: "Море",
-  multimodal: "Мультимодально",
+  multimodal: "Любой",
 };
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
