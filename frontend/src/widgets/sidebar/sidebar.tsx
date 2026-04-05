@@ -41,13 +41,27 @@ export function Sidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [viewportMode, setViewportMode] = useState<ViewportMode>("desktop");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
+  // Start empty on SSR and initial client render so the hydrated DOM matches
+  // the server output. localStorage-backed preferences are applied in the
+  // effect below after mount. Reading localStorage in the initializer would
+  // diverge SSR (empty) from client (saved state), shifting React's element
+  // indices and breaking Base UI's useId() — which surfaces as a hydration
+  // mismatch on ScrollAreaViewport's data-id attribute.
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("sidebar-collapsed-sections");
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch { return new Set(); }
-  });
+      if (saved) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCollapsedSections(new Set(JSON.parse(saved)));
+      }
+    } catch {
+      /* localStorage unavailable — stay on the default empty set */
+    }
+  }, []);
 
   const toggleSection = useCallback((title: string) => {
     setCollapsedSections((prev) => {
