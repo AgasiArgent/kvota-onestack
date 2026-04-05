@@ -34,7 +34,7 @@ export function TabBrands({ supplierId, brands }: Props) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = newBrand.trim();
     if (!trimmed) return;

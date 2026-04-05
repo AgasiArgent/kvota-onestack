@@ -83,7 +83,7 @@ export function ContractFormModal({
     setForm((prev: ContractFormData) => ({ ...prev, [key]: value }));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!form.contract_number.trim()) {

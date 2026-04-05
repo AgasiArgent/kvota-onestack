@@ -24,7 +24,7 @@ export function AddAddressForm({
 
   const addressInvalid = addressTouched && !address.trim();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SubmitEvent<HTMLFormElement>) {
     e.preventDefault();
     setAddressTouched(true);
 
