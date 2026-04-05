@@ -1,6 +1,7 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
-import { isSalesOnly, isHeadOfSales } from "@/shared/lib/roles";
+import { isSalesOnly } from "@/shared/lib/roles";
+import { getAssignedCustomerIds } from "@/shared/lib/access";
 import type {
   CustomerListItem,
   CustomerFinancials,
@@ -13,18 +14,11 @@ import type {
 
 const PAGE_SIZE = 50;
 
-async function getGroupMemberIds(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  salesGroupId: string,
-  orgId: string
-): Promise<string[]> {
-  const { data } = await supabase
-    .from("user_profiles")
-    .select("user_id")
-    .eq("sales_group_id", salesGroupId)
-    .eq("organization_id", orgId);
-  return data?.map((r) => r.user_id) ?? [];
-}
+// Sentinel UUID used to force a query to return zero rows when a sales-only
+// user has no customer assignments. Postgres .in() with an empty array is
+// a no-op (no filter applied), which would leak rows; using a dummy ID
+// guarantees empty results.
+const EMPTY_RESULT_UUID = "00000000-0000-0000-0000-000000000000";
 
 export async function fetchCustomersList(
   params: {
@@ -45,20 +39,19 @@ export async function fetchCustomersList(
     .order("created_at", { ascending: false })
     .range(from, to);
 
-  // Role-based filtering:
-  // - head_of_sales: sees customers of all managers in their sales group
-  // - sales (regular): sees only their own customers
-  if (user && isSalesOnly(user.roles)) {
-    if (isHeadOfSales(user.roles) && user.salesGroupId && user.orgId) {
-      const memberIds = await getGroupMemberIds(supabase, user.salesGroupId, user.orgId);
-      if (memberIds.length > 0) {
-        query = query.in("manager_id", memberIds);
-      } else {
-        query = query.eq("manager_id", user.id);
-      }
-    } else {
-      query = query.eq("manager_id", user.id);
-    }
+  // Role-based filtering via customer_assignees junction table.
+  // Per .kiro/steering/access-control.md:
+  // - sales (regular): customers they are assigned to
+  // - head_of_sales: customers any group member is assigned to
+  // Other roles see all customers in their org (filtered by RLS/org scope above).
+  if (user && isSalesOnly(user.roles) && user.orgId) {
+    const assignedIds = await getAssignedCustomerIds(supabase, {
+      id: user.id,
+      roles: user.roles,
+      salesGroupId: user.salesGroupId,
+      orgId: user.orgId,
+    });
+    query = query.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
   }
 
   if (search) {
@@ -121,40 +114,24 @@ export async function fetchCustomersList(
 
 /**
  * Checks if a sales-only user is allowed to view a specific customer.
- * Regular sales: only their own customers. Head of sales: group's customers.
+ * Non-sales roles always return true (visibility handled elsewhere).
+ * Sales users must have the customer in their assigned set (directly or,
+ * for head_of_sales, via any group member).
  */
 export async function canAccessCustomer(
   customerId: string,
-  user: { id: string; roles: string[]; orgId: string }
+  user: { id: string; roles: string[]; orgId: string; salesGroupId?: string | null }
 ): Promise<boolean> {
   if (!isSalesOnly(user.roles)) return true;
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("customers")
-    .select("manager_id")
-    .eq("id", customerId)
-    .eq("organization_id", user.orgId)
-    .single();
-
-  if (!data?.manager_id) return false;
-
-  if (isHeadOfSales(user.roles)) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("sales_group_id")
-      .eq("user_id", user.id)
-      .eq("organization_id", user.orgId)
-      .maybeSingle();
-
-    if (!profile?.sales_group_id) return data.manager_id === user.id;
-
-    const memberIds = await getGroupMemberIds(supabase, profile.sales_group_id, user.orgId);
-    if (memberIds.length === 0) return data.manager_id === user.id;
-    return memberIds.includes(data.manager_id);
-  }
-
-  return data.manager_id === user.id;
+  const assignedIds = await getAssignedCustomerIds(supabase, {
+    id: user.id,
+    roles: user.roles,
+    salesGroupId: user.salesGroupId,
+    orgId: user.orgId,
+  });
+  return assignedIds.includes(customerId);
 }
 
 export async function fetchCustomerDetail(

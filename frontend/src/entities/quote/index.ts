@@ -29,6 +29,7 @@ export {
   fetchQuoteCalcVariables,
   fetchStageDeadline,
   fetchDealIdForQuote,
+  canAccessQuote,
 } from "./queries";
 export type {
   QuoteDetailRow,

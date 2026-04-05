@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
 import { fetchQuotesList, fetchFilterOptions, getActionStatusesForUser } from "@/entities/quote";
 import type { QuotesFilterParams } from "@/entities/quote";
+import { isSalesOnly } from "@/shared/lib/roles";
 import { QuotesTable } from "@/features/quotes";
 
 interface Props {
@@ -28,13 +29,21 @@ export default async function QuotesPage({ searchParams }: Props) {
     page: params.page ? parseInt(params.page, 10) : 1,
   };
 
+  // Sales users need their group ID to expand head_of_sales access to group members.
+  const salesGroupId = isSalesOnly(user.roles)
+    ? await fetchUserSalesGroupId(user.id, user.orgId)
+    : null;
+
+  const accessUser = {
+    id: user.id,
+    roles: user.roles,
+    orgId: user.orgId,
+    salesGroupId,
+  };
+
   const [quotesResult, filterOptions] = await Promise.all([
-    fetchQuotesList(filters, {
-      id: user.id,
-      roles: user.roles,
-      org_id: user.orgId,
-    }),
-    fetchFilterOptions(user.orgId, { id: user.id, roles: user.roles }),
+    fetchQuotesList(filters, accessUser),
+    fetchFilterOptions(user.orgId, accessUser),
   ]);
 
   const actionStatuses = new Set(getActionStatusesForUser(user.roles));

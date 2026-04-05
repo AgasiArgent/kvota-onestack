@@ -1,5 +1,6 @@
 import { redirect, notFound } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser, fetchUserSalesGroupId } from "@/entities/user";
+import { isSalesOnly } from "@/shared/lib/roles";
 import {
   fetchQuoteDetail,
   fetchQuoteItems,
@@ -8,6 +9,7 @@ import {
   fetchQuoteCalcVariables,
   fetchStageDeadline,
   fetchDealIdForQuote,
+  canAccessQuote,
   ROLE_ALLOWED_STEPS,
   ROLE_EDITABLE_STEPS,
   STATUS_TO_STEP,
@@ -41,7 +43,18 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount, dealId] = await Promise.all([
+  // Sales users need salesGroupId to resolve head_of_sales group access.
+  const salesGroupId = isSalesOnly(user.roles)
+    ? await fetchUserSalesGroupId(user.id, user.orgId)
+    : null;
+  const accessUser = {
+    id: user.id,
+    roles: user.roles,
+    orgId: user.orgId,
+    salesGroupId,
+  };
+
+  const [quote, items, invoices, comments, calcVariables, orgMembers, documentCount, dealId, hasAccess] = await Promise.all([
     fetchQuoteDetail(id),
     fetchQuoteItems(id),
     fetchQuoteInvoices(id),
@@ -50,9 +63,10 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
     fetchOrgMembers(user.orgId),
     fetchDocumentCount(id),
     fetchDealIdForQuote(id),
+    canAccessQuote(id, accessUser),
   ]);
 
-  if (!quote) notFound();
+  if (!quote || !hasAccess) notFound();
 
   const userRoles = user.roles;
   const isAdmin = userRoles.includes("admin");

@@ -1,13 +1,21 @@
 import { createClient } from "@/shared/lib/supabase/server";
 import { isSalesOnly } from "@/shared/lib/roles";
+import { getAssignedCustomerIds } from "@/shared/lib/access";
 import type { QuoteListItem, QuotesFilterParams, QuotesListResult } from "./types";
 import { getStatusesForGroup } from "./types";
 
 const DEFAULT_PAGE_SIZE = 20;
 
+type QuoteAccessUser = {
+  id: string;
+  roles: string[];
+  orgId: string;
+  salesGroupId?: string | null;
+};
+
 export async function fetchQuotesList(
   params: QuotesFilterParams,
-  user: { id: string; roles: string[]; org_id: string }
+  user: QuoteAccessUser
 ): Promise<QuotesListResult> {
   const supabase = await createClient();
   const page = params.page ?? 1;
@@ -21,23 +29,18 @@ export async function fetchQuotesList(
       "id, idn_quote, created_at, workflow_status, total_amount_quote, total_profit_usd, currency, customer_id, created_by, version_count, current_version",
       { count: "exact" }
     )
-    .eq("organization_id", user.org_id)
+    .eq("organization_id", user.orgId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
-  // Role-based filtering: sales users see only their own quotes + quotes for their assigned customers
+  // Role-based filtering per .kiro/steering/access-control.md:
+  // Sales users see quotes where they are the creator OR where the customer
+  // has them (or any group member for head_of_sales) as an assignee.
   if (isSalesOnly(user.roles)) {
-    const { data: assignedCustomers } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("organization_id", user.org_id)
-      .eq("manager_id", user.id);
-
-    const customerIds = (assignedCustomers ?? []).map((c) => c.id);
-
-    if (customerIds.length > 0) {
+    const assignedCustomerIds = await getAssignedCustomerIds(supabase, user);
+    if (assignedCustomerIds.length > 0) {
       query = query.or(
-        `created_by.eq.${user.id},customer_id.in.(${customerIds.join(",")})`
+        `created_by.eq.${user.id},customer_id.in.(${assignedCustomerIds.join(",")})`
       );
     } else {
       query = query.eq("created_by", user.id);
@@ -434,9 +437,37 @@ export async function fetchDealIdForQuote(
   return deal?.id ?? null;
 }
 
+/**
+ * Checks if a user is allowed to view a specific quote.
+ * Non-sales roles always return true (visibility handled elsewhere).
+ * Sales users must either have created the quote OR have access to its
+ * customer via customer_assignees (directly or via their sales group).
+ */
+export async function canAccessQuote(
+  quoteId: string,
+  user: QuoteAccessUser
+): Promise<boolean> {
+  if (!isSalesOnly(user.roles)) return true;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("quotes")
+    .select("created_by, customer_id")
+    .eq("id", quoteId)
+    .eq("organization_id", user.orgId)
+    .maybeSingle();
+
+  if (!data) return false;
+  if (data.created_by === user.id) return true;
+  if (!data.customer_id) return false;
+
+  const assignedCustomerIds = await getAssignedCustomerIds(supabase, user);
+  return assignedCustomerIds.includes(data.customer_id);
+}
+
 export async function fetchFilterOptions(
   orgId: string,
-  user?: { id: string; roles: string[] }
+  user?: QuoteAccessUser
 ): Promise<{
   customers: { id: string; name: string }[];
   managers: { id: string; full_name: string }[];
@@ -452,14 +483,7 @@ export async function fetchFilterOptions(
 
   // Apply same sales role scoping as fetchQuotesList
   if (user && isSalesOnly(user.roles)) {
-    const { data: assignedCustomers } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("organization_id", orgId)
-      .eq("manager_id", user.id);
-
-    const assignedIds = (assignedCustomers ?? []).map((c) => c.id);
-
+    const assignedIds = await getAssignedCustomerIds(supabase, user);
     if (assignedIds.length > 0) {
       quotesQuery = quotesQuery.or(
         `created_by.eq.${user.id},customer_id.in.(${assignedIds.join(",")})`
