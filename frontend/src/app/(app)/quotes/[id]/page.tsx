@@ -125,6 +125,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
         contextData={contextData}
         stepContent={
           <QuoteStepContent
+            key="step"
             quote={quote}
             items={items}
             invoices={invoices}
@@ -138,6 +139,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
         }
         chat={
           <ChatWrapper
+            key="chat"
             quoteId={id}
             idnQuote={quote.idn_quote}
             userId={user.id}
@@ -147,6 +149,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
         }
         rail={
           <QuoteStatusRail
+            key="rail"
             activeStep={activeStep}
             currentWorkflowStep={currentWorkflowStep}
             allowedSteps={allowedSteps}
