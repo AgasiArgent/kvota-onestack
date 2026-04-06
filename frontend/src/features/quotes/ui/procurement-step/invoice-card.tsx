@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2, Package } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2, Package, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
@@ -51,6 +52,8 @@ export function InvoiceCard({
   const [cargoPlaces, setCargoPlaces] = useState<
     Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
   >([]);
+  const [weightKg, setWeightKg] = useState(invoice.total_weight_kg?.toString() ?? "");
+  const [volumeM3, setVolumeM3] = useState(invoice.total_volume_m3?.toString() ?? "");
   const isEmpty = items.length === 0;
 
   useEffect(() => {
@@ -75,6 +78,25 @@ export function InvoiceCard({
     0
   );
   const hasCargoPlaces = cargoPlaces.length > 0;
+
+  const hasInvoiceWeight = invoice.total_weight_kg != null || invoice.total_volume_m3 != null;
+
+  async function handleSaveField(field: "total_weight_kg" | "total_volume_m3", raw: string) {
+    const value = raw.trim() === "" ? null : Number(raw);
+    if (value !== null && isNaN(value)) return;
+    try {
+      const supabase = (await import("@/shared/lib/supabase/client")).createClient();
+      const { error } = await supabase
+        .from("invoices")
+        .update({ [field]: value })
+        .eq("id", invoice.id);
+      if (error) throw error;
+      toast.success("Сохранено");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось сохранить");
+    }
+  }
 
   async function handleUnassignAll() {
     setUnassigning(true);
@@ -142,6 +164,14 @@ export function InvoiceCard({
             </span>
           )}
 
+          {hasInvoiceWeight && (
+            <span className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline">
+              {invoice.total_weight_kg != null && <>{numberFmt.format(invoice.total_weight_kg)}&nbsp;кг</>}
+              {invoice.total_weight_kg != null && invoice.total_volume_m3 != null && " · "}
+              {invoice.total_volume_m3 != null && <>{numberFmt.format(invoice.total_volume_m3)}&nbsp;м&sup3;</>}
+            </span>
+          )}
+
           {hasCargoPlaces && (
             <span className="text-xs text-muted-foreground tabular-nums shrink-0 hidden sm:inline">
               {cargoPlaces.length} мест &middot; {numberFmt.format(cargoWeight)} кг &middot; {cargoVolume.toFixed(2)} м&sup3;
@@ -194,6 +224,55 @@ export function InvoiceCard({
 
       {expanded && (
         <div className="border-t border-border">
+          {!procurementCompleted ? (
+            <div className="px-4 py-2 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2 mb-1">
+                <Weight size={14} className="text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">
+                  Вес и габариты инвойса
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Вес"
+                    value={weightKg}
+                    onChange={(e) => setWeightKg(e.target.value)}
+                    onBlur={() => handleSaveField("total_weight_kg", weightKg)}
+                    className="h-7 w-24 text-xs tabular-nums"
+                  />
+                  <span className="text-xs text-muted-foreground">кг</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Объём"
+                    value={volumeM3}
+                    onChange={(e) => setVolumeM3(e.target.value)}
+                    onBlur={() => handleSaveField("total_volume_m3", volumeM3)}
+                    className="h-7 w-24 text-xs tabular-nums"
+                  />
+                  <span className="text-xs text-muted-foreground">м³</span>
+                </div>
+              </div>
+            </div>
+          ) : hasInvoiceWeight ? (
+            <div className="px-4 py-2 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Weight size={14} className="text-muted-foreground" />
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {invoice.total_weight_kg != null && <>{numberFmt.format(invoice.total_weight_kg)} кг</>}
+                  {invoice.total_weight_kg != null && invoice.total_volume_m3 != null && " · "}
+                  {invoice.total_volume_m3 != null && <>{numberFmt.format(invoice.total_volume_m3)} м³</>}
+                </span>
+              </div>
+            </div>
+          ) : null}
           {hasCargoPlaces && (
             <div className="px-4 py-2 bg-muted/30 border-b border-border">
               <div className="flex items-center gap-2 mb-1">
