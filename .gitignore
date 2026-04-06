@@ -7,5 +7,5 @@ __pycache__/
 *.db
 .claude/code-intelligence/
 
-# Claude browser-test report output (see ~/.claude/skills/browser-test/skill.md)
-**/tmp/test-reports/
+# Claude Code runtime state (sessions, test reports, code intelligence)
+tmp/
