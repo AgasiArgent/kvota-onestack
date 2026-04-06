@@ -12,7 +12,8 @@ export default async function ProcurementDistributionPage() {
 
   const isAllowed =
     user.roles.includes("admin") ||
-    user.roles.includes("head_of_procurement");
+    user.roles.includes("head_of_procurement") ||
+    user.roles.includes("procurement_senior");
   if (!isAllowed) redirect("/quotes");
 
   const orgId = user.orgId;

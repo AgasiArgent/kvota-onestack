@@ -93,7 +93,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/dashboard?tab=overview",
     });
   }
-  if (hasRole("head_of_procurement")) {
+  if (hasRole("head_of_procurement", "procurement_senior")) {
     mainItems.push({
       icon: SplitSquareHorizontal,
       label: "Распределение",
