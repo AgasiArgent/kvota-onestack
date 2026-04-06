@@ -125,6 +125,8 @@ export function StatusGroupFilter({
 const STATUS_LABELS: Record<string, string> = {
   draft: "Черновик",
   pending_procurement: "Закупки",
+  procurement_complete: "Закупка завершена",
+  pending_logistics: "Логистика",
   logistics: "Логистика",
   pending_customs: "Таможня",
   pending_logistics_and_customs: "Логистика и таможня",
