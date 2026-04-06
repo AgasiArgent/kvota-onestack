@@ -63,6 +63,13 @@ export async function fetchSuppliersList(
   const from = (page - 1) * PAGE_SIZE;
   const to = from + PAGE_SIZE - 1;
 
+  // Resolve assigned IDs once for procurement-only users (used for both list + counts)
+  let assignedIds: string[] | null = null;
+  if (user && isProcurementOnly(user.roles)) {
+    const supabaseAuth = await createClient();
+    assignedIds = await getAssignedSupplierIds(supabaseAuth, user.id);
+  }
+
   let query = supabase
     .from("suppliers")
     .select("id, name, supplier_code, country, city, is_active", {
@@ -73,12 +80,7 @@ export async function fetchSuppliersList(
     .range(from, to);
 
   // Role-based filtering via supplier_assignees junction table.
-  // Per .kiro/steering/access-control.md:
-  // - procurement/procurement_senior (without broader roles): only assigned suppliers
-  // - admin, top_manager, head_of_procurement: all suppliers
-  if (user && isProcurementOnly(user.roles)) {
-    const supabaseAuth = await createClient();
-    const assignedIds = await getAssignedSupplierIds(supabaseAuth, user.id);
+  if (assignedIds !== null) {
     query = query.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
   }
 
@@ -99,12 +101,18 @@ export async function fetchSuppliersList(
   const supplierIds = rows.map((s) => s.id);
 
   // Fetch primary contacts and active/inactive counts in parallel
+  // Counts query uses same visibility filter as main query
+  let countsQuery = supabase
+    .from("suppliers")
+    .select("is_active")
+    .eq("organization_id", orgId);
+  if (assignedIds !== null) {
+    countsQuery = countsQuery.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
+  }
+
   const [contactsResult, allStatuses] = await Promise.all([
     fetchPrimaryContactsForSuppliers(supplierIds),
-    supabase
-      .from("suppliers")
-      .select("is_active")
-      .eq("organization_id", orgId),
+    countsQuery,
   ]);
 
   const contactMap = new Map(
