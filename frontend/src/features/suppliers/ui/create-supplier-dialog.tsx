@@ -68,8 +68,12 @@ export function CreateSupplierDialog({
       onOpenChange(false);
       router.push(`/suppliers/${result.id}`);
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Ошибка создания поставщика";
+      const raw = err instanceof Error ? err.message : String(err);
+      const message = raw.includes("row-level security")
+        ? "Недостаточно прав для создания поставщика"
+        : raw.includes("unique") || raw.includes("duplicate")
+          ? "Поставщик с таким кодом уже существует"
+          : "Ошибка создания поставщика";
       toast.error(message);
     } finally {
       setSubmitting(false);
