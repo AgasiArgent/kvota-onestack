@@ -58,7 +58,7 @@ export function ProcurementActionBar({
           ) : (
             <CheckCircle size={14} />
           )}
-          Закупка завершена
+          Завершить закупку
         </Button>
       )}
 
