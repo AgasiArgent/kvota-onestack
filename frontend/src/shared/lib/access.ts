@@ -68,3 +68,23 @@ export async function getAssignedCustomerIds(
 
   return (data ?? []).map((r) => r.customer_id);
 }
+
+/**
+ * Returns the list of supplier IDs the user is assigned to.
+ * Simpler than customer version — no group logic (head_of_procurement
+ * sees all suppliers, so this is only called for regular procurement users).
+ *
+ * Returns an empty array if the user has no assignments — callers should
+ * handle this by scoping to zero rows.
+ */
+export async function getAssignedSupplierIds(
+  supabase: Client,
+  userId: string
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("supplier_assignees")
+    .select("supplier_id")
+    .eq("user_id", userId);
+
+  return (data ?? []).map((r) => r.supplier_id);
+}

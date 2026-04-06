@@ -127,7 +127,7 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
     label: "Коммерческие предложения",
     href: "/quotes",
   });
-  if (hasRole("procurement", "procurement_senior")) {
+  if (hasRole("procurement", "procurement_senior", "head_of_procurement", "top_manager")) {
     registries.push({
       icon: Building2,
       label: "Поставщики",

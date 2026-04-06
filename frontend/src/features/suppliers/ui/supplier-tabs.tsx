@@ -4,28 +4,35 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+interface Tab {
+  key: string;
+  label: string;
+}
+
 interface Props {
   supplierId: string;
   activeTab?: string;
+  tabs?: Tab[];
   children: React.ReactNode;
 }
 
-const TABS = [
+const DEFAULT_TABS: Tab[] = [
   { key: "overview", label: "Обзор" },
   { key: "brands", label: "Бренды" },
   { key: "contacts", label: "Контакты" },
-] as const;
+  { key: "positions", label: "Позиции" },
+  { key: "assignees", label: "Менеджеры" },
+];
 
-export type TabKey = (typeof TABS)[number]["key"];
-
-export function SupplierTabs({ supplierId, activeTab: activeTabProp, children }: Props) {
+export function SupplierTabs({ supplierId, activeTab: activeTabProp, tabs, children }: Props) {
   const searchParams = useSearchParams();
-  const activeTab = (activeTabProp ?? searchParams?.get("tab") ?? "overview") as TabKey;
+  const visibleTabs = tabs ?? DEFAULT_TABS;
+  const activeTab = activeTabProp ?? searchParams?.get("tab") ?? "overview";
 
   return (
     <div>
       <div className="flex gap-1 border-b border-border-light mb-6">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <Link
             key={tab.key}
             href={`/suppliers/${supplierId}?tab=${tab.key}`}

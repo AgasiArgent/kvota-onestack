@@ -81,6 +81,17 @@ export async function createSupplier(
     .single();
 
   if (error) throw error;
+
+  // Auto-assign the creator as a manager of this supplier
+  const untyped = supabase as unknown as UntypedClient;
+  await untyped
+    .from("supplier_assignees")
+    .insert({
+      supplier_id: supplier.id,
+      user_id: userId,
+      created_by: userId,
+    });
+
   return supplier;
 }
 
@@ -209,6 +220,43 @@ export async function toggleBrandPrimary(
     .from("brand_supplier_assignments")
     .update({ is_primary: isPrimary })
     .eq("id", assignmentId);
+
+  if (error) throw error;
+}
+
+// ---------- Assignee mutations ----------
+
+export async function addSupplierAssignee(
+  supplierId: string,
+  userId: string
+) {
+  const supabase = createClient();
+  const createdBy = await getCurrentUserId();
+  const untyped = supabase as unknown as UntypedClient;
+
+  const { error } = await untyped
+    .from("supplier_assignees")
+    .insert({
+      supplier_id: supplierId,
+      user_id: userId,
+      created_by: createdBy,
+    });
+
+  if (error) throw error;
+}
+
+export async function removeSupplierAssignee(
+  supplierId: string,
+  userId: string
+) {
+  const supabase = createClient();
+  const untyped = supabase as unknown as UntypedClient;
+
+  const { error } = await untyped
+    .from("supplier_assignees")
+    .delete()
+    .eq("supplier_id", supplierId)
+    .eq("user_id", userId);
 
   if (error) throw error;
 }

@@ -45,3 +45,22 @@ export interface BrandAssignment {
   notes: string | null;
   created_at: string | null;
 }
+
+export interface SupplierAssignee {
+  user_id: string;
+  full_name: string;
+  created_at: string;
+}
+
+export interface SupplierQuoteItem {
+  id: string;
+  product_name: string | null;
+  brand: string | null;
+  sku: string | null;
+  idn_sku: string | null;
+  quantity: number | null;
+  purchase_price: number | null;
+  purchase_currency: string | null;
+  procurement_date: string | null;
+  quote_idn: string;
+}

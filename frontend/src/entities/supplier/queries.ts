@@ -1,20 +1,29 @@
-import { createAdminClient } from "@/shared/lib/supabase/server";
+import { createAdminClient, createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
+import { isProcurementOnly } from "@/shared/lib/roles";
+import { getAssignedSupplierIds } from "@/shared/lib/access";
 import type {
   SupplierListItem,
   SupplierDetail,
   SupplierContact,
   BrandAssignment,
+  SupplierAssignee,
+  SupplierQuoteItem,
 } from "./types";
 
 const PAGE_SIZE = 50;
+
+// Sentinel UUID used to force a query to return zero rows when a procurement-only
+// user has no supplier assignments. Postgres .in() with an empty array is
+// a no-op (no filter applied), which would leak rows.
+const EMPTY_RESULT_UUID = "00000000-0000-0000-0000-000000000000";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type UntypedClient = { from: (table: string) => any };
 
 /**
- * supplier_contacts table is not in generated DB types yet (migration 217).
- * Use untyped client for queries to that table.
+ * supplier_contacts and supplier_assignees tables are not in generated DB types yet.
+ * Use untyped client for queries to those tables.
  */
 function getUntypedClient(): UntypedClient {
   return createAdminClient() as unknown as UntypedClient;
@@ -46,7 +55,8 @@ export async function fetchSuppliersList(
     country?: string;
     status?: string;
     page?: number;
-  }
+  },
+  user?: { id: string; roles: string[] }
 ): Promise<{ data: SupplierListItem[]; total: number; activeCount: number; inactiveCount: number }> {
   const supabase = createAdminClient();
   const { search = "", country = "", status = "", page = 1 } = params;
@@ -61,6 +71,16 @@ export async function fetchSuppliersList(
     .eq("organization_id", orgId)
     .order("name")
     .range(from, to);
+
+  // Role-based filtering via supplier_assignees junction table.
+  // Per .kiro/steering/access-control.md:
+  // - procurement/procurement_senior (without broader roles): only assigned suppliers
+  // - admin, top_manager, head_of_procurement: all suppliers
+  if (user && isProcurementOnly(user.roles)) {
+    const supabaseAuth = await createClient();
+    const assignedIds = await getAssignedSupplierIds(supabaseAuth, user.id);
+    query = query.in("id", assignedIds.length > 0 ? assignedIds : [EMPTY_RESULT_UUID]);
+  }
 
   if (search) {
     const escaped = escapePostgrestFilter(search);
@@ -111,6 +131,21 @@ export async function fetchSuppliersList(
   });
 
   return { data: items, total: count ?? 0, activeCount, inactiveCount };
+}
+
+/**
+ * Checks if a procurement-only user is allowed to view a specific supplier.
+ * Non-procurement-only roles always return true (visibility handled elsewhere).
+ */
+export async function canAccessSupplier(
+  supplierId: string,
+  user: { id: string; roles: string[] }
+): Promise<boolean> {
+  if (!isProcurementOnly(user.roles)) return true;
+
+  const supabase = await createClient();
+  const assignedIds = await getAssignedSupplierIds(supabase, user.id);
+  return assignedIds.includes(supplierId);
 }
 
 export async function fetchSupplierDetail(
@@ -172,5 +207,96 @@ export async function fetchBrandAssignments(
     is_primary: row.is_primary ?? false,
     notes: row.notes,
     created_at: row.created_at,
+  }));
+}
+
+export async function fetchSupplierAssignees(
+  supplierId: string
+): Promise<SupplierAssignee[]> {
+  const untyped = getUntypedClient();
+  const supabase = createAdminClient();
+
+  const { data, error } = await untyped
+    .from("supplier_assignees")
+    .select("supplier_id, user_id, created_at")
+    .eq("supplier_id", supplierId);
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ supplier_id: string; user_id: string; created_at: string }>;
+  if (rows.length === 0) return [];
+
+  // Resolve user names
+  const userIds = rows.map((r) => r.user_id);
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .in("user_id", userIds);
+
+  const nameMap = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p.full_name ?? ""])
+  );
+
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    full_name: nameMap.get(row.user_id) ?? "",
+    created_at: row.created_at,
+  }));
+}
+
+export async function fetchSupplierQuoteItems(
+  supplierId: string
+): Promise<SupplierQuoteItem[]> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("quote_items")
+    .select(
+      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, supplier_id)"
+    )
+    .eq("supplier_id", supplierId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    product_name: row.product_name,
+    brand: row.brand,
+    sku: row.supplier_sku,
+    idn_sku: row.idn_sku,
+    quantity: row.quantity,
+    purchase_price: row.purchase_price_original,
+    purchase_currency: row.purchase_currency,
+    procurement_date: row.procurement_completed_at,
+    quote_idn: (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
+  }));
+}
+
+/**
+ * Fetch procurement users in the org (for assignee management dropdown).
+ */
+export async function fetchProcurementUsers(
+  orgId: string
+): Promise<{ id: string; full_name: string }[]> {
+  const supabase = createAdminClient();
+
+  // Get user IDs with procurement roles
+  const { data: roleUsers } = await supabase
+    .from("user_roles")
+    .select("user_id, roles!inner(slug)")
+    .eq("organization_id", orgId)
+    .in("roles.slug", ["procurement", "procurement_senior", "head_of_procurement"]);
+
+  const userIds = [...new Set((roleUsers ?? []).map((r) => r.user_id))];
+  if (userIds.length === 0) return [];
+
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .in("user_id", userIds)
+    .order("full_name");
+
+  return (profiles ?? []).map((p) => ({
+    id: p.user_id,
+    full_name: p.full_name ?? "",
   }));
 }

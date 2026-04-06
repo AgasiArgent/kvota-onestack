@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { fetchSuppliersList } from "@/entities/supplier/queries";
 import { getSessionUser } from "@/entities/user";
-import { SuppliersTable } from "@/features/suppliers/ui/suppliers-table";
+import { hasProcurementAccess } from "@/shared/lib/roles";
+import { SuppliersTable } from "@/features/suppliers";
 
 interface Props {
   searchParams: Promise<{ q?: string; country?: string; status?: string; page?: string }>;
@@ -11,9 +12,7 @@ export default async function SuppliersPage({ searchParams }: Props) {
   const user = await getSessionUser();
   if (!user?.orgId) redirect("/login");
 
-  const isAllowed =
-    user.roles.includes("admin") || user.roles.includes("procurement") || user.roles.includes("procurement_senior");
-  if (!isAllowed) redirect("/");
+  if (!hasProcurementAccess(user.roles)) redirect("/");
 
   const params = await searchParams;
   const search = params.q ?? "";
@@ -23,7 +22,8 @@ export default async function SuppliersPage({ searchParams }: Props) {
 
   const { data, total, activeCount, inactiveCount } = await fetchSuppliersList(
     user.orgId,
-    { search, country, status, page }
+    { search, country, status, page },
+    { id: user.id, roles: user.roles }
   );
 
   return (

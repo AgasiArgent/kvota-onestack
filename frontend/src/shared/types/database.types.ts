@@ -4389,6 +4389,27 @@ export type Database = {
         }
         Relationships: []
       }
+      supplier_assignees: {
+        Row: {
+          supplier_id: string
+          user_id: string
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          supplier_id: string
+          user_id: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          supplier_id?: string
+          user_id?: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       supplier_contacts: {
         Row: {
           id: string
