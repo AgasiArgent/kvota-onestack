@@ -250,7 +250,7 @@ export async function fetchSupplierQuoteItems(
   const { data, error } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, supplier_id)"
+      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote)"
     )
     .eq("supplier_id", supplierId)
     .order("created_at", { ascending: false })
