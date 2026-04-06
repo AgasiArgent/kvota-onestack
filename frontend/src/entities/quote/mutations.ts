@@ -468,6 +468,25 @@ export async function updateQuoteWorkflowStatus(
 }
 
 export async function completeProcurement(quoteId: string) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Batch-set all items to procurement_status='completed' before workflow transition.
+  // The backend's check_all_procurement_complete requires this status on every item.
+  const { error } = await supabase
+    .from("quote_items")
+    .update({
+      procurement_status: "completed",
+      procurement_completed_at: new Date().toISOString(),
+      procurement_completed_by: user?.id ?? null,
+    })
+    .eq("quote_id", quoteId)
+    .neq("is_unavailable", true);
+
+  if (error) throw error;
+
   await callWorkflowTransition(quoteId, { action: "complete_procurement" });
 }
 

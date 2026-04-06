@@ -87,17 +87,23 @@ export function ProcurementStep({
 
   async function handleCompleteProcurement() {
     // Guard: every item must either have a purchase price or be marked Н/Д
-    // (is_unavailable). Blocking items surface as an actionable toast so the
-    // user knows what's missing instead of facing a silently disabled button.
-    const blockingCount = items.filter(
+    const noPriceCount = items.filter(
       (i) => i.purchase_price_original == null && i.is_unavailable !== true
     ).length;
-    if (blockingCount > 0) {
-      const plural = new Intl.PluralRules("ru-RU").select(blockingCount);
-      const word =
-        plural === "one" ? "позиция" : plural === "few" ? "позиции" : "позиций";
+    if (noPriceCount > 0) {
       toast.error(
-        `Нельзя завершить: ${blockingCount} ${word} без цены. Заполните цену или отметьте Н/Д.`
+        `Нельзя завершить: ${noPriceCount} поз. без цены. Заполните цену или отметьте Н/Д.`
+      );
+      return;
+    }
+
+    // Guard: every item must be assigned to an invoice
+    const unassignedCount = items.filter(
+      (i) => !i.invoice_id && i.is_unavailable !== true
+    ).length;
+    if (unassignedCount > 0) {
+      toast.error(
+        `Нельзя завершить: ${unassignedCount} поз. не распределены по инвойсам.`
       );
       return;
     }
