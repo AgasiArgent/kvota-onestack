@@ -17,4 +17,9 @@ export {
   fetchFeedbackList,
   fetchFeedbackDetail,
 } from "./queries";
-export { updateUserRoles, updateFeedbackStatus } from "./mutations";
+export {
+  updateUserRoles,
+  updateFeedbackStatus,
+  bulkUpdateFeedbackStatus,
+  fetchFeedbackDetailClient,
+} from "./mutations";

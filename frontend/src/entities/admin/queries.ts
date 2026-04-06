@@ -1,8 +1,6 @@
 import { createAdminClient } from "@/shared/lib/supabase/server";
 import type { OrgMember, RoleOption, FeedbackItem, FeedbackDetail } from "./types";
 
-const FEEDBACK_PAGE_SIZE = 20;
-
 export async function fetchOrgMembers(
   orgId: string,
   search?: string
@@ -139,11 +137,16 @@ export async function fetchFeedbackList(
   orgId: string,
   status?: string,
   search?: string,
-  page?: number
+  page?: number,
+  pageSize?: number
 ): Promise<{ data: FeedbackItem[]; total: number; page: number; pageSize: number }> {
   const admin = createAdminClient();
   const currentPage = page ?? 1;
-  const offset = (currentPage - 1) * FEEDBACK_PAGE_SIZE;
+  const validSizes = [25, 50, 100];
+  const effectivePageSize = validSizes.includes(pageSize ?? 0)
+    ? pageSize!
+    : 50;
+  const offset = (currentPage - 1) * effectivePageSize;
 
   let query = admin
     .from("user_feedback")
@@ -164,7 +167,7 @@ export async function fetchFeedbackList(
     );
   }
 
-  query = query.range(offset, offset + FEEDBACK_PAGE_SIZE - 1);
+  query = query.range(offset, offset + effectivePageSize - 1);
 
   const { data, count, error } = await query;
   if (error) throw error;
@@ -184,7 +187,7 @@ export async function fetchFeedbackList(
     data: items,
     total: count ?? 0,
     page: currentPage,
-    pageSize: FEEDBACK_PAGE_SIZE,
+    pageSize: effectivePageSize,
   };
 }
 

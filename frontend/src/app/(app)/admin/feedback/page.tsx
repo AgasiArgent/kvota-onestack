@@ -8,6 +8,7 @@ interface Props {
     status?: string;
     search?: string;
     page?: string;
+    pageSize?: string;
   }>;
 }
 
@@ -21,8 +22,9 @@ export default async function AdminFeedbackPage({ searchParams }: Props) {
   const status = params.status || undefined;
   const search = params.search || "";
   const page = params.page ? parseInt(params.page, 10) : 1;
+  const pageSize = params.pageSize ? parseInt(params.pageSize, 10) : 50;
 
-  const result = await fetchFeedbackList(user.orgId, status, search, page);
+  const result = await fetchFeedbackList(user.orgId, status, search, page, pageSize);
 
   return (
     <div>
