@@ -1,8 +1,29 @@
 "use client";
 
-import { Plus, CheckCircle, Loader2 } from "lucide-react";
+import { Plus, CheckCircle, Loader2, UserCheck, DollarSign } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+
+type ProcurementSubStage = "assignment" | "pricing" | "ready";
+
+function getSubStage(items: QuoteItemRow[]): ProcurementSubStage {
+  if (items.length === 0) return "assignment";
+  const allAssigned = items.every(
+    (i) => i.assigned_procurement_user != null || i.is_unavailable === true
+  );
+  if (!allAssigned) return "assignment";
+  const allPriced = items.every(
+    (i) => i.purchase_price_original != null || i.is_unavailable === true
+  );
+  return allPriced ? "ready" : "pricing";
+}
+
+const SUB_STAGE_CONFIG: Record<ProcurementSubStage, { label: string; icon: typeof UserCheck; style: string }> = {
+  assignment: { label: "Назначение", icon: UserCheck, style: "bg-amber-100 text-amber-700" },
+  pricing: { label: "Оценка", icon: DollarSign, style: "bg-blue-100 text-blue-700" },
+  ready: { label: "Готово к завершению", icon: CheckCircle, style: "bg-green-100 text-green-700" },
+};
 
 interface ProcurementActionBarProps {
   items: QuoteItemRow[];
@@ -20,17 +41,25 @@ export function ProcurementActionBar({
   procurementCompleted = false,
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
-  const assignedCount = items.filter((i) => i.invoice_id != null).length;
-  // A position is "ready" when it either has a purchase price or is marked
-  // unavailable (Н/Д) — unavailable items are excluded from the calculation
-  // and intentionally have no price.
+  const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
+  const assignedInvoiceCount = items.filter((i) => i.invoice_id != null).length;
   const readyCount = items.filter(
     (i) => i.purchase_price_original != null || i.is_unavailable === true
   ).length;
   const incomplete = totalItems > 0 && readyCount < totalItems;
+  const subStage = getSubStage(items);
+  const stageConfig = SUB_STAGE_CONFIG[subStage];
+  const StageIcon = stageConfig.icon;
 
   return (
     <div className="sticky top-[52px] z-[5] bg-card border-b border-border px-6 py-2 flex items-center gap-3">
+      {!procurementCompleted && (
+        <Badge variant="outline" className={`gap-1 ${stageConfig.style}`}>
+          <StageIcon size={12} />
+          {stageConfig.label}
+        </Badge>
+      )}
+
       <Button
         size="sm"
         className="bg-accent text-white hover:bg-accent-hover"
@@ -67,7 +96,7 @@ export function ProcurementActionBar({
           incomplete ? "text-warning font-medium" : "text-muted-foreground"
         }`}
       >
-        {readyCount}/{totalItems} готово | {assignedCount} назначено
+        {readyCount}/{totalItems} готово | {assignedUserCount} назн. | {assignedInvoiceCount} в инвойсах
       </span>
     </div>
   );
