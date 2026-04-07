@@ -683,8 +683,8 @@ class TestProcurementAutoTransition:
         result = check_all_procurement_complete("quote-uuid")
 
         assert result["is_complete"] is True
-        assert result["total_items"] == 3
-        assert result["completed_items"] == 3
+        assert result["total_items"] == 2  # Unavailable items excluded from active count
+        assert result["completed_items"] == 2
         assert result["pending_items"] == 0
         assert result["items_without_price"] == 0
 
