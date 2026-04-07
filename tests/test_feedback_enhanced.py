@@ -31,6 +31,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MAIN_PY = os.path.join(_PROJECT_ROOT, "main.py")
 TELEGRAM_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "telegram_service.py")
 CLICKUP_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "clickup_service.py")
+FEEDBACK_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "feedback_service.py")
 
 
 def _read_source(path):
@@ -909,36 +910,36 @@ class TestStatusUpdateEndpoint:
             handler_end = min(idx + 2000, len(source))
         return source[idx:handler_end]
 
+    def _get_feedback_service_source(self):
+        """Read feedback_service.py which contains the delegated logic."""
+        return _read_source(FEEDBACK_SERVICE_PY)
+
     def test_validates_status_values(self):
-        """Handler must validate status against allowed values."""
-        handler = self._get_status_handler()
-        assert handler is not None, "Status handler not found"
-        # Should have a set/list of valid statuses
+        """Handler or service must validate status against allowed values."""
+        service = self._get_feedback_service_source()
+        # The service defines VALID_STATUSES with all valid status values
         for valid_status in ["new", "in_progress", "resolved", "closed"]:
-            assert valid_status in handler, (
-                f"Status handler must recognize valid status: {valid_status}"
+            assert valid_status in service, (
+                f"Feedback service must recognize valid status: {valid_status}"
             )
 
     def test_rejects_invalid_status(self):
-        """Handler must reject invalid status values."""
-        handler = self._get_status_handler()
-        assert handler is not None, "Status handler not found"
-        # Should contain validation logic that checks against valid statuses
+        """Handler or service must reject invalid status values."""
+        service = self._get_feedback_service_source()
         has_validation = (
-            "valid_statuses" in handler or
-            "not in" in handler or
-            "if status" in handler
+            "VALID_STATUSES" in service or
+            "valid_statuses" in service or
+            "not in" in service
         )
         assert has_validation, (
-            "Status handler must validate status against allowed values"
+            "Feedback service must validate status against allowed values"
         )
 
     def test_updates_updated_at_timestamp(self):
-        """Handler must set updated_at when updating status."""
-        handler = self._get_status_handler()
-        assert handler is not None, "Status handler not found"
-        assert "updated_at" in handler, (
-            "Status handler must update updated_at timestamp"
+        """Handler or service must set updated_at when updating status."""
+        service = self._get_feedback_service_source()
+        assert "updated_at" in service, (
+            "Feedback service must update updated_at timestamp"
         )
 
     def test_requires_admin_role(self):
