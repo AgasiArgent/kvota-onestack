@@ -187,13 +187,13 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_PROCUREMENT,
         WorkflowStatus.PENDING_LOGISTICS,
-        ["procurement", "admin"],
+        ["procurement", "head_of_procurement", "admin"],
         auto_transition=True  # Triggered when all procurement is complete
     ),
     StatusTransition(
         WorkflowStatus.PENDING_PROCUREMENT,
         WorkflowStatus.PENDING_CUSTOMS,
-        ["procurement", "admin"],
+        ["procurement", "head_of_procurement", "admin"],
         auto_transition=True  # Triggered when all procurement is complete
     ),
     StatusTransition(
@@ -212,7 +212,7 @@ ALLOWED_TRANSITIONS: List[StatusTransition] = [
     StatusTransition(
         WorkflowStatus.PENDING_PROCUREMENT,
         WorkflowStatus.PENDING_QUOTE_CONTROL,
-        ["procurement", "admin"],
+        ["procurement", "head_of_procurement", "admin"],
         requires_comment=True  # Must explain what was fixed
     ),
 
@@ -2790,10 +2790,10 @@ def complete_procurement(
     supabase = get_supabase()
 
     # Validate role
-    if not any(role in ["procurement", "admin"] for role in actor_roles):
+    if not any(role in ["procurement", "head_of_procurement", "admin"] for role in actor_roles):
         return TransitionResult(
             success=False,
-            error_message="Only procurement or admin can complete procurement",
+            error_message="Only procurement, head of procurement or admin can complete procurement",
             quote_id=quote_id
         )
 
@@ -2878,7 +2878,7 @@ def complete_procurement(
 
     # Log the transition in workflow_transitions
     try:
-        actor_role = "procurement" if "procurement" in actor_roles else "admin"
+        actor_role = next((r for r in actor_roles if r in ("procurement", "head_of_procurement")), "admin")
         transition_data = {
             "quote_id": quote_id,
             "from_status": current_status,
