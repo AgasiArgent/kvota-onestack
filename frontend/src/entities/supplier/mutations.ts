@@ -72,6 +72,7 @@ export async function createSupplier(
       supplier_code: data.supplier_code || null,
       country: data.country || null,
       city: data.city || null,
+      registration_number: data.registration_number || null,
       default_payment_terms: data.default_payment_terms || null,
       organization_id: orgId,
       is_active: true,
@@ -106,6 +107,7 @@ export async function updateSupplier(
   if (data.supplier_code !== undefined) updatePayload.supplier_code = data.supplier_code || null;
   if (data.country !== undefined) updatePayload.country = data.country || null;
   if (data.city !== undefined) updatePayload.city = data.city || null;
+  if (data.registration_number !== undefined) updatePayload.registration_number = data.registration_number || null;
   if (data.default_payment_terms !== undefined) updatePayload.default_payment_terms = data.default_payment_terms || null;
   if (data.is_active !== undefined) updatePayload.is_active = data.is_active;
 
