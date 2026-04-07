@@ -14,6 +14,7 @@ interface Position {
   purchase_price: number | null;
   purchase_currency: string | null;
   procurement_date: string | null;
+  request_date: string | null;
   quote_idn: string;
 }
 
@@ -51,6 +52,7 @@ export function TabPositions({ positions }: Props) {
             <TableHead>IDN-SKU</TableHead>
             <TableHead className="text-right">Кол-во</TableHead>
             <TableHead className="text-right">Цена закупки</TableHead>
+            <TableHead>Дата запроса</TableHead>
             <TableHead>Дата закупки</TableHead>
             <TableHead>КП</TableHead>
           </TableRow>
@@ -65,6 +67,9 @@ export function TabPositions({ positions }: Props) {
               <TableCell className="text-right tabular-nums">{p.quantity ?? "—"}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatPrice(p.purchase_price, p.purchase_currency)}
+              </TableCell>
+              <TableCell className="text-text-muted tabular-nums">
+                {formatDate(p.request_date)}
               </TableCell>
               <TableCell className="text-text-muted tabular-nums">
                 {formatDate(p.procurement_date)}

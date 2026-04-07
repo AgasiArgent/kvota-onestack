@@ -390,7 +390,7 @@ export async function fetchCustomerPositions(customerId: string) {
   const { data } = await supabase
     .from("quote_items")
     .select(
-      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote, customer_id)"
+      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, created_at, quotes!inner(idn_quote, customer_id)"
     )
     .eq("quotes.customer_id", customerId)
     .order("created_at", { ascending: false })
@@ -406,6 +406,7 @@ export async function fetchCustomerPositions(customerId: string) {
     purchase_price: row.purchase_price_original,
     purchase_currency: row.purchase_currency,
     procurement_date: row.procurement_completed_at,
+    request_date: row.created_at,
     quote_idn:
       (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
   }));
