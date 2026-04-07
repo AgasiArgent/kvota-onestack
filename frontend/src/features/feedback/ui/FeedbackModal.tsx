@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Bug, Send, X, Camera } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { Bug, Send, X, Camera, Paperclip } from "lucide-react";
 import { submitFeedback, type FeedbackType } from "../api/submitFeedback";
 import { collectDebugContext } from "../lib/debugContext";
 
@@ -11,6 +11,7 @@ interface FeedbackModalProps {
   onScreenshotRequest: () => void;
   screenshotDataUrl?: string;
   onClearScreenshot: () => void;
+  onSetScreenshot: (dataUrl: string) => void;
 }
 
 const FEEDBACK_TYPES: { value: FeedbackType; label: string }[] = [
@@ -26,6 +27,7 @@ export function FeedbackModal({
   onScreenshotRequest,
   screenshotDataUrl,
   onClearScreenshot,
+  onSetScreenshot,
 }: FeedbackModalProps) {
   const [feedbackType, setFeedbackType] = useState<FeedbackType>("bug");
   const [description, setDescription] = useState("");
@@ -35,6 +37,7 @@ export function FeedbackModal({
     shortId?: string;
     error?: string;
   } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetAndClose = useCallback(() => {
     setFeedbackType("bug");
@@ -43,6 +46,23 @@ export function FeedbackModal({
     onClearScreenshot();
     onClose();
   }, [onClose, onClearScreenshot]);
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          onSetScreenshot(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+      // Reset input so the same file can be re-selected
+      e.target.value = "";
+    },
+    [onSetScreenshot]
+  );
 
   const handleSubmit = useCallback(async () => {
     if (!description.trim()) return;
@@ -193,14 +213,31 @@ export function FeedbackModal({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={onScreenshotRequest}
-                  className="flex items-center gap-2 px-3 py-2 text-sm border border-dashed border-border rounded-md text-text-muted hover:bg-sidebar hover:text-text transition-colors"
-                >
-                  <Camera size={16} />
-                  Добавить скриншот
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onScreenshotRequest}
+                    className="flex items-center gap-2 px-3 py-2 text-sm border border-dashed border-border rounded-md text-text-muted hover:bg-sidebar hover:text-text transition-colors"
+                  >
+                    <Camera size={16} />
+                    Снимок экрана
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 text-sm border border-dashed border-border rounded-md text-text-muted hover:bg-sidebar hover:text-text transition-colors"
+                  >
+                    <Paperclip size={16} />
+                    Прикрепить файл
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </div>
               )}
             </div>
 

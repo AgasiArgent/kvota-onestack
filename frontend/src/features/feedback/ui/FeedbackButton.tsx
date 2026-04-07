@@ -63,6 +63,7 @@ export function FeedbackButton() {
         onScreenshotRequest={handleScreenshotRequest}
         screenshotDataUrl={screenshotDataUrl}
         onClearScreenshot={handleClearScreenshot}
+        onSetScreenshot={setScreenshotDataUrl}
       />
 
       {annotatorOpen && rawScreenshot && (
