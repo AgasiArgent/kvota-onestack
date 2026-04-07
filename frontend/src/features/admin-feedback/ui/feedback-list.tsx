@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Search } from "lucide-react";
+import { Copy, ExternalLink, Search } from "lucide-react";
 import { Pagination } from "@/shared/ui/pagination";
 import { useFilterNavigation } from "@/shared/lib/use-filter-navigation";
 import { toast } from "sonner";
@@ -203,9 +203,23 @@ export function FeedbackList({
         accessorKey: "short_id",
         header: "ID",
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.short_id}</span>
+          <span className="inline-flex items-center gap-1 font-mono text-xs">
+            {row.original.short_id}
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Копировать ID"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard.writeText(row.original.short_id);
+                toast.success("ID скопирован");
+              }}
+            >
+              <Copy size={12} />
+            </button>
+          </span>
         ),
-        size: 100,
+        size: 120,
       },
       // Type badge
       {
