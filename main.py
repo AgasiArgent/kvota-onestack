@@ -32356,7 +32356,7 @@ def get(session, status_filter: str = ""):
 
 @rt("/admin/feedback/{short_id}/status", methods=["POST"])
 async def post_feedback_status(session, short_id: str, status: str = "new"):
-    """HTMX endpoint to update feedback status. Syncs to ClickUp if configured."""
+    """HTMX endpoint to update feedback status. Syncs to ClickUp + Telegram."""
     redirect = require_login(session)
     if redirect:
         return redirect
@@ -32365,51 +32365,48 @@ async def post_feedback_status(session, short_id: str, status: str = "new"):
     if "admin" not in user.get("roles", []):
         return Div("Нет прав", cls="text-error")
 
-    valid_statuses = {"new", "in_progress", "resolved", "closed"}
-    if status not in valid_statuses:
-        return Div("Недопустимый статус", cls="text-error")
+    from services.feedback_service import update_feedback_status
+    result = await update_feedback_status(short_id, status)
 
-    supabase = get_supabase()
-    try:
-        supabase.table("user_feedback").update({
-            "status": status,
-            "updated_at": datetime.now().isoformat()
-        }).eq("short_id", short_id).execute()
+    if not result.success:
+        return Div(f"Ошибка: {result.message}", cls="text-error text-sm")
 
-        # Sync status to ClickUp if task_id exists
-        clickup_msg = ""
-        try:
-            from services.clickup_service import update_clickup_task_status
-            result = supabase.table("user_feedback").select("clickup_task_id, user_id, feedback_type, description").eq("short_id", short_id).limit(1).execute()
-            feedback_record = result.data[0] if result.data else {}
-            task_id = feedback_record.get("clickup_task_id")
-            if task_id:
-                synced = await update_clickup_task_status(task_id, status)
-                clickup_msg = " (ClickUp обновлён)" if synced else " (ClickUp: ошибка синхронизации)"
-        except Exception as ce:
-            logger.warning(f"ClickUp sync failed for {short_id}: {ce}")
-            feedback_record = {}
+    status_label, _ = STATUS_LABELS.get(status, ("—", ""))
+    extras = []
+    if result.clickup_synced:
+        extras.append("ClickUp обновлён")
+    if result.telegram_notified:
+        extras.append("Telegram уведомлён")
+    suffix = f" ({', '.join(extras)})" if extras else ""
+    return Span(f"Сохранено: {status_label}{suffix}", cls="text-success text-sm")
 
-        # Notify reporter via Telegram when resolved/closed
-        if status in ("resolved", "closed") and feedback_record.get("user_id"):
-            try:
-                reporter_tg_id = await get_user_telegram_id(feedback_record["user_id"])
-                if reporter_tg_id:
-                    await send_feedback_resolved_notification(
-                        telegram_id=reporter_tg_id,
-                        short_id=short_id,
-                        feedback_type=feedback_record.get("feedback_type", ""),
-                        description=feedback_record.get("description", ""),
-                        new_status=status
-                    )
-            except Exception as te:
-                logger.warning(f"Telegram notification failed for feedback {short_id}: {te}")
 
-        status_label, _ = STATUS_LABELS.get(status, ("—", ""))
-        return Span(f"Сохранено: {status_label}{clickup_msg}", cls="text-success text-sm")
-    except Exception as e:
-        logger.error(f"Failed to update feedback status {short_id}: {e}")
-        return Div(f"Ошибка: {e}", cls="text-error text-sm")
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+
+
+@rt("/api/internal/feedback/{short_id}/status", methods=["POST"])
+async def post_internal_feedback_status(request, short_id: str, status: str = "resolved"):
+    """Internal API to update feedback status with notifications.
+
+    Protected by INTERNAL_API_KEY header. Used by CLI workflows (e.g., /fix-bugs)
+    to ensure Telegram notifications fire when resolving feedback via automation.
+
+    Usage: curl -X POST 'https://kvotaflow.ru/api/internal/feedback/FB-XXX/status?status=resolved' \\
+             -H 'X-Internal-Key: <key>'
+    """
+    auth_key = request.headers.get("x-internal-key", "")
+    if not INTERNAL_API_KEY or auth_key != INTERNAL_API_KEY:
+        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
+
+    from services.feedback_service import update_feedback_status
+    result = await update_feedback_status(short_id, status)
+
+    return JSONResponse({
+        "success": result.success,
+        "message": result.message,
+        "telegram_notified": result.telegram_notified,
+        "clickup_synced": result.clickup_synced,
+    }, status_code=200 if result.success else 400)
 
 
 @rt("/admin" + "/feedback/{short_id}/sync-clickup", methods=["POST"])
