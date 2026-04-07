@@ -1,5 +1,5 @@
 import { createClient } from "@/shared/lib/supabase/server";
-import { isSalesOnly } from "@/shared/lib/roles";
+import { isSalesOnly, isAssignedItemsOnly } from "@/shared/lib/roles";
 import { getAssignedCustomerIds } from "@/shared/lib/access";
 
 export interface ChatListItem {
@@ -88,6 +88,12 @@ export async function fetchAllChats(
     } else {
       quotesQuery = quotesQuery.eq("created_by", user.id);
     }
+  } else if (isAssignedItemsOnly(user.roles)) {
+    // Operational roles (procurement, logistics, customs) see chats only on
+    // quotes where they are personally assigned.
+    quotesQuery = quotesQuery.or(
+      `assigned_procurement_users.cs.{${user.id}},assigned_logistics_user.eq.${user.id},assigned_customs_user.eq.${user.id}`
+    );
   }
 
   const { data: quotes, error: quotesError } = await quotesQuery;

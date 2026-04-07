@@ -80,3 +80,31 @@ export function hasProcurementAccess(roles: string[]): boolean {
 export function canManageSupplierAssignees(roles: string[]): boolean {
   return roles.includes("admin") || roles.includes("head_of_procurement");
 }
+
+const ASSIGNED_ITEMS_ROLES = ["procurement", "logistics", "customs"];
+
+/** Roles that grant quote visibility beyond personal item assignment. */
+const BROAD_QUOTE_ACCESS_ROLES = [
+  "admin",
+  "top_manager",
+  "quote_controller",
+  "spec_controller",
+  "finance",
+  "head_of_logistics",
+  "head_of_procurement",
+  "procurement_senior",
+  "sales",
+  "head_of_sales",
+];
+
+/**
+ * Returns true if the user has ONLY assigned-items roles (procurement,
+ * logistics, customs) and no other role that grants broader quote visibility.
+ * These users should only see quotes where they are personally assigned.
+ */
+export function isAssignedItemsOnly(roles: string[]): boolean {
+  return (
+    roles.some((r) => ASSIGNED_ITEMS_ROLES.includes(r)) &&
+    !roles.some((r) => BROAD_QUOTE_ACCESS_ROLES.includes(r))
+  );
+}
