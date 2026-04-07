@@ -35,12 +35,12 @@ const STEPS: StepDef[] = [
   {
     key: "logistics",
     label: "Логистика",
-    statuses: ["pending_logistics"],
+    statuses: ["pending_logistics", "pending_logistics_and_customs"],
   },
   {
     key: "customs",
     label: "Таможня",
-    statuses: ["pending_customs"],
+    statuses: ["pending_customs", "pending_logistics_and_customs"],
   },
   {
     key: "calculation",
@@ -135,8 +135,8 @@ export function QuoteStatusRail({
     >
       <ul className="flex flex-col gap-0.5">
         {STEPS.map((step, idx) => {
-          const isCompleted = currentStepIdx >= 0 && idx < currentStepIdx;
-          const isCurrent = idx === currentStepIdx;
+          const isCurrent = step.statuses.includes(workflowStatus);
+          const isCompleted = currentStepIdx >= 0 && idx < currentStepIdx && !isCurrent;
           const isActive = step.key === activeStep;
           const isClickable = isAdmin || allowedSteps.includes(step.key);
 
