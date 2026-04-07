@@ -2710,18 +2710,20 @@ def check_all_procurement_complete(quote_id: str) -> Dict:
 
         items = items_response.data or []
 
-        total_items = len(items)
-        completed_items = sum(1 for i in items if i.get("procurement_status") == "completed")
+        # Unavailable items are excluded from completion checks —
+        # they don't need procurement processing
+        active_items = [i for i in items if not i.get("is_unavailable", False)]
+        total_items = len(active_items)
+        completed_items = sum(1 for i in active_items if i.get("procurement_status") == "completed")
         pending_items = total_items - completed_items
 
-        # Check that all non-unavailable items have a price > 0
+        # Check that all active items have a price > 0
         items_without_price = []
-        for item in items:
-            is_unavailable = item.get("is_unavailable", False)
+        for item in active_items:
             price = item.get("purchase_price_original")
             has_valid_price = price is not None and float(price) > 0
 
-            if not is_unavailable and not has_valid_price:
+            if not has_valid_price:
                 items_without_price.append(item.get("product_name", item.get("id")))
 
         # Determine if complete
