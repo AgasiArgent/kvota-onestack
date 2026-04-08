@@ -1,16 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Users } from "lucide-react";
+import { Plus, Trash2, Users, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -34,12 +28,36 @@ interface Props {
 
 export function TabAssignees({ customerId, assignees, salesUsers, canManage }: Props) {
   const router = useRouter();
+  const [search, setSearch] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedName, setSelectedName] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   const assignedUserIds = new Set(assignees.map((a) => a.user_id));
   const availableUsers = salesUsers.filter((u) => !assignedUserIds.has(u.id));
+  const filteredUsers = availableUsers.filter((u) =>
+    u.full_name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleSelect(user: { id: string; full_name: string }) {
+    setSelectedUserId(user.id);
+    setSelectedName(user.full_name);
+    setSearch(user.full_name);
+    setDropdownOpen(false);
+  }
 
   async function handleAdd() {
     if (!selectedUserId) return;
@@ -47,6 +65,8 @@ export function TabAssignees({ customerId, assignees, salesUsers, canManage }: P
     try {
       await addCustomerAssignee(customerId, selectedUserId);
       setSelectedUserId("");
+      setSelectedName("");
+      setSearch("");
       router.refresh();
     } catch (err) {
       console.error("Failed to add assignee:", err);
@@ -70,26 +90,48 @@ export function TabAssignees({ customerId, assignees, salesUsers, canManage }: P
   return (
     <div className="space-y-6">
       {canManage && availableUsers.length > 0 && (
-        <div className="flex items-end gap-3">
-          <div className="w-72">
-            <Select value={selectedUserId} onValueChange={(v: string | null) => setSelectedUserId(v ?? "")}>
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите менеджера" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableUsers.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
+        <div className="flex items-center gap-3">
+          <div className="relative w-80" ref={wrapperRef}>
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" />
+            <Input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setDropdownOpen(true);
+                if (selectedName && e.target.value !== selectedName) {
+                  setSelectedUserId("");
+                  setSelectedName("");
+                }
+              }}
+              onFocus={() => setDropdownOpen(true)}
+              placeholder="Поиск менеджера..."
+              className="h-9 text-sm pl-9"
+            />
+            {dropdownOpen && filteredUsers.length > 0 && (
+              <div className="absolute z-50 top-full mt-1 w-full bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {filteredUsers.map((user) => (
+                  <button
+                    key={user.id}
+                    type="button"
+                    onClick={() => handleSelect(user)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-sidebar transition-colors"
+                  >
                     {user.full_name}
-                  </SelectItem>
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            )}
+            {dropdownOpen && search && filteredUsers.length === 0 && (
+              <div className="absolute z-50 top-full mt-1 w-full bg-white border border-border rounded-md shadow-lg px-3 py-2 text-sm text-text-muted">
+                Не найдено
+              </div>
+            )}
           </div>
           <Button
             size="sm"
             disabled={!selectedUserId || adding}
             onClick={handleAdd}
-            className="bg-accent text-white hover:bg-accent-hover"
+            className="bg-accent text-white hover:bg-accent-hover shrink-0"
           >
             <Plus size={14} />
             Добавить
