@@ -62,19 +62,20 @@ export function validateForTransfer(
   return { errors, missingFields };
 }
 
-/** Highlight empty required fields in the context panel with a pulse animation. */
+/** Highlight empty required fields in the context panel via inline styles. */
 function highlightMissingFields(fields: string[]) {
-  const HIGHLIGHT_CLASS = "ring-2 ring-destructive/60 bg-destructive/5";
-  const highlighted: Element[] = [];
+  const highlighted: HTMLElement[] = [];
 
   for (const field of fields) {
     // delivery_country and delivery_city share the same row visually
     const selector = field === "delivery_country" ? "delivery_city" : field;
     // incoterms shares the delivery row
     const dataField = field === "incoterms" ? "delivery_method" : selector;
-    const el = document.querySelector(`[data-field="${dataField}"]`);
-    if (el) {
-      el.classList.add(...HIGHLIGHT_CLASS.split(" "));
+    const el = document.querySelector<HTMLElement>(`[data-field="${dataField}"]`);
+    if (el && !highlighted.includes(el)) {
+      el.style.outline = "2px solid hsl(var(--destructive))";
+      el.style.outlineOffset = "2px";
+      el.style.backgroundColor = "hsl(var(--destructive) / 0.05)";
       highlighted.push(el);
     }
   }
@@ -87,7 +88,9 @@ function highlightMissingFields(fields: string[]) {
   // Remove highlight after 3 seconds
   setTimeout(() => {
     for (const el of highlighted) {
-      el.classList.remove(...HIGHLIGHT_CLASS.split(" "));
+      el.style.outline = "";
+      el.style.outlineOffset = "";
+      el.style.backgroundColor = "";
     }
   }, 3000);
 }
