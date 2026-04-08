@@ -137,7 +137,7 @@ Edit is a separate concern from view. A user may see an entity but not be allowe
 | `head_of_sales` | Group's customers, quotes, contacts, calls |
 | `sales` | Customers they are assigned to, own quotes, own calls |
 | `head_of_procurement` | Only procurement fields on any quote |
-| `procurement_senior` | Procurement fields on quotes in procurement stage |
+| `procurement_senior` | Procurement fields on quotes in procurement stage + assign procurement users |
 | `procurement` | Procurement fields on their assigned items only |
 | `logistics`, `customs` | Logistics/customs fields on their assigned items |
 | `quote_controller` | Control/approval fields on quotes |
@@ -216,6 +216,6 @@ Before merging any feature that reads or writes user data:
 
 ## Known Limitations / TODO
 
-- **procurement_senior** role currently has no users — Plastinina needs her role changed from `head_of_procurement` to `procurement_senior`
+- **procurement_senior** role active — Plastinina (ekaterina.pl@masterbearing.ru) has this role. Can view procurement-stage quotes + assign procurement users on distribution page.
 - **Head of X roles**: `head_of_procurement` and `head_of_logistics` are org-wide (no group), but `head_of_sales` is group-scoped — this asymmetry is intentional but may surprise future devs
 - **Supplier assignees backfill**: Existing suppliers have no assignees after migration 253 — admin/head_of_procurement must assign manually

@@ -75,10 +75,14 @@ export function hasProcurementAccess(roles: string[]): boolean {
 
 /**
  * Returns true if the user can manage supplier assignees.
- * Only admin and head_of_procurement.
+ * Admin, head_of_procurement, and procurement_senior.
  */
 export function canManageSupplierAssignees(roles: string[]): boolean {
-  return roles.includes("admin") || roles.includes("head_of_procurement");
+  return (
+    roles.includes("admin") ||
+    roles.includes("head_of_procurement") ||
+    roles.includes("procurement_senior")
+  );
 }
 
 const ASSIGNED_ITEMS_ROLES = ["procurement", "logistics", "customs"];
