@@ -41,12 +41,24 @@ export function DocumentUpload({
     setUploading(true);
     try {
       const supabase = createClient();
-      const storagePath = `quotes/${quoteId}/${crypto.randomUUID()}-${file.name}`;
+      const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+      const storagePath = `quotes/${quoteId}/${crypto.randomUUID()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("kvota-documents")
         .upload(storagePath, file);
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        if (uploadError.message?.includes("mime") || uploadError.message?.includes("type")) {
+          throw new Error(
+            `Формат файла "${ext}" не поддерживается. Допустимые: PDF, Word, Excel, JPG, PNG, WebP, ZIP`
+          );
+        }
+        if (uploadError.message?.includes("size") || uploadError.message?.includes("limit")) {
+          const sizeMb = Math.round(file.size / 1024 / 1024);
+          throw new Error(`Файл слишком большой (${sizeMb} МБ). Максимум: 50 МБ`);
+        }
+        throw new Error(`Ошибка загрузки: ${uploadError.message}`);
+      }
 
       const { error: insertError } = await supabase.from("documents").insert({
         organization_id: orgId,
@@ -61,7 +73,9 @@ export function DocumentUpload({
         description: description || null,
         uploaded_by: userId,
       });
-      if (insertError) throw insertError;
+      if (insertError) {
+        throw new Error(`Ошибка сохранения записи: ${insertError.message}`);
+      }
 
       toast.success(`Файл "${file.name}" загружен`);
       setDescription("");
@@ -69,8 +83,8 @@ export function DocumentUpload({
       if (fileInputRef.current) fileInputRef.current.value = "";
       onUploaded();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "unknown";
-      toast.error(`Не удалось загрузить файл: ${msg}`);
+      const msg = err instanceof Error ? err.message : "Неизвестная ошибка";
+      toast.error(msg);
     } finally {
       setUploading(false);
     }
