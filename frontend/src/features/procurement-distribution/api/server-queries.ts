@@ -149,7 +149,7 @@ export async function fetchProcurementWorkload(
   for (const row of roleRows ?? []) {
     const role = row.roles as unknown as { slug: string } | null;
     const slug = role?.slug;
-    if (slug === "procurement" || slug === "head_of_procurement") {
+    if (slug === "procurement" || slug === "procurement_senior" || slug === "head_of_procurement") {
       procUserIds.add(row.user_id);
     }
   }
