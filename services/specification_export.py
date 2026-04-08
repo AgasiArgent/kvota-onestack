@@ -128,6 +128,8 @@ def generate_specification_html(data: ExportData, contract_info: Dict[str, Any] 
                 border: 1px solid #333;
                 padding: 0.3cm;
                 font-size: 9pt;
+                word-break: break-word;
+                overflow-wrap: break-word;
             }}
             th {{
                 background: #f0f0f0;
@@ -541,6 +543,8 @@ def generate_spec_pdf_html(data: SpecificationData) -> str:
                 border: 1px solid #333;
                 padding: 0.2cm;
                 font-size: 8pt;
+                word-break: break-word;
+                overflow-wrap: break-word;
             }}
             th {{
                 background: #f0f0f0;

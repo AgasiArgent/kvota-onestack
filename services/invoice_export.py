@@ -329,6 +329,8 @@ def generate_invoice_html(data: ExportData, invoice_info: Dict[str, Any] = None)
             border: 1px solid #ccc;
             padding: 5px 4px;
             vertical-align: top;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }}
 
         .col-num {{ width: 5%; text-align: center; }}

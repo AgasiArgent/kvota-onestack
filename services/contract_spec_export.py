@@ -549,6 +549,8 @@ def generate_contract_spec_html(data: Dict[str, Any]) -> str:
                 border: 1px solid #000;
                 padding: 0.2cm 0.3cm;
                 font-size: 9pt;
+                word-break: break-word;
+                overflow-wrap: break-word;
             }}
             th {{
                 background: #f0f0f0;
