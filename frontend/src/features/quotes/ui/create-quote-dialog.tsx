@@ -99,6 +99,8 @@ export function CreateQuoteDialog({
   const [deliveryCity, setDeliveryCity] = useState("Москва");
   const [deliveryMethod, setDeliveryMethod] = useState("");
   const [incoterms, setIncoterms] = useState("");
+  const [deliveryPriority, setDeliveryPriority] = useState("");
+  const [validUntil, setValidUntil] = useState("");
 
   // Submit
   const [submitting, setSubmitting] = useState(false);
@@ -283,6 +285,8 @@ export function CreateQuoteDialog({
         delivery_city: deliveryCity.trim() || undefined,
         delivery_method: deliveryMethod || undefined,
         incoterms: incoterms || undefined,
+        delivery_priority: deliveryPriority || undefined,
+        valid_until: validUntil || undefined,
       });
 
       onOpenChange(false);
@@ -499,6 +503,38 @@ export function CreateQuoteDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Priority & Deadline */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Приоритет доставки
+              </Label>
+              <Select
+                value={deliveryPriority}
+                onValueChange={(val) => setDeliveryPriority(val ?? "")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="-- Не указан --" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fast">Быстрее</SelectItem>
+                  <SelectItem value="normal">Обычно</SelectItem>
+                  <SelectItem value="cheap">Дешевле</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Дедлайн КП
+              </Label>
+              <Input
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
+            </div>
           </div>
 
           <DialogFooter>

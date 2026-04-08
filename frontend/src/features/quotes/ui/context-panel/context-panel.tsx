@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
-import { DeliveryPrioritySelect } from "./delivery-priority-select";
 import type { ParticipantRow } from "./participants-block";
 import { ROLE_LABELS_RU } from "@/entities/user/types";
 import type { QuoteContextData } from "./queries";
@@ -16,6 +15,12 @@ const DELIVERY_METHOD_LABELS: Record<string, string> = {
   auto: "Авто",
   sea: "Море",
   multimodal: "Любой",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  fast: "Быстрее",
+  normal: "Обычно",
+  cheap: "Дешевле",
 };
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -157,10 +162,9 @@ function QuoteInfoBlock({
           </span>
         </InfoRow>
         <InfoRow label="Приоритет">
-          <DeliveryPrioritySelect
-            quoteId={quote.id}
-            initialValue={quote.delivery_priority ?? null}
-          />
+          <span className="text-sm font-medium">
+            {PRIORITY_LABELS[quote.delivery_priority ?? ""] ?? "\u2014"}
+          </span>
         </InfoRow>
         <InfoRow label="Оплата">
           <span className="text-sm font-medium">
@@ -267,7 +271,7 @@ function InfoRow({
       {...(dataField ? { "data-field": dataField } : {})}
     >
       <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      <span className="min-w-0 truncate">{children}</span>
+      <span className="min-w-0 [&>*]:truncate">{children}</span>
     </div>
   );
 }

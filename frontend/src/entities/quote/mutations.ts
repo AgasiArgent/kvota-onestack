@@ -39,6 +39,8 @@ export interface CreateQuoteInput {
   delivery_city?: string;
   delivery_method?: string;
   incoterms?: string;
+  delivery_priority?: string;
+  valid_until?: string;
 }
 
 async function generateIdnQuote(
@@ -92,6 +94,8 @@ export async function createQuote(
         delivery_city: input.delivery_city || null,
         delivery_method: input.delivery_method || null,
         incoterms: input.incoterms || null,
+        delivery_priority: input.delivery_priority || null,
+        valid_until: input.valid_until || null,
         status: "draft",
         workflow_status: "draft",
         currency: "USD",
