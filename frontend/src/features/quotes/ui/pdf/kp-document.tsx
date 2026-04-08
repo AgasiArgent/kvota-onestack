@@ -27,6 +27,11 @@ Font.register({
   ],
 });
 
+// Break long words (article codes, SKUs) that have no natural break points
+Font.registerHyphenationCallback((word) =>
+  word.length > 12 ? Array.from(word) : [word]
+);
+
 // ---------------------------------------------------------------------------
 // Brand colors
 // ---------------------------------------------------------------------------
