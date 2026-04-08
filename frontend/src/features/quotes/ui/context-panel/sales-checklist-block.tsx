@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mail, User, UserCog } from "lucide-react";
+import { Phone, Mail, UserCog } from "lucide-react";
 
 export interface SalesChecklist {
   is_estimate: boolean;
@@ -89,31 +89,6 @@ export function SalesChecklistBlock({
           <span className="text-xs text-muted-foreground">Доп. информация</span>
           <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-foreground whitespace-pre-wrap">
             {additionalInfo}
-          </div>
-        </div>
-      )}
-
-      {/* Contact person (client-side contact) */}
-      {contactPerson && (
-        <div className="space-y-1">
-          <span className="text-xs text-muted-foreground">Контакт клиента</span>
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-sm">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <User size={13} />
-              <span>{contactPerson.name}</span>
-            </div>
-            {contactPerson.phone && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Phone size={12} />
-                <span className="tabular-nums">{contactPerson.phone}</span>
-              </div>
-            )}
-            {contactPerson.email && (
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Mail size={12} />
-                <span>{contactPerson.email}</span>
-              </div>
-            )}
           </div>
         </div>
       )}

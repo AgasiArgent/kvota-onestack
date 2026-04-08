@@ -84,7 +84,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-4 mb-4 border-b border-border">
       {/* Client */}
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <User size={14} className="text-muted-foreground" />
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -137,7 +137,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
       </div>
 
       {/* Terms */}
-      <div className="space-y-2">
+      <div className="space-y-2 min-w-0">
         <div className="flex items-center gap-2 mb-2">
           <Package size={14} className="text-muted-foreground" />
           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
@@ -148,19 +148,16 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
           <span className="text-sm font-medium">{currency}</span>
         </InfoRow>
         <InfoRow label="Доставка" dataField="delivery_method">
-          <span className="text-sm font-medium flex items-center gap-1">
+          <span className="text-sm font-medium truncate">
             {DELIVERY_METHOD_LABELS[quote.delivery_method ?? ""] ?? quote.delivery_method ?? "\u2014"}
-            {quote.incoterms && (
-              <>
-                {" \u00B7 "}{quote.incoterms}
-              </>
-            )}
-            {" \u00B7 "}
-            <DeliveryPrioritySelect
-              quoteId={quote.id}
-              initialValue={quote.delivery_priority ?? null}
-            />
+            {quote.incoterms && <>{" \u00B7 "}{quote.incoterms}</>}
           </span>
+        </InfoRow>
+        <InfoRow label="Приоритет">
+          <DeliveryPrioritySelect
+            quoteId={quote.id}
+            initialValue={quote.delivery_priority ?? null}
+          />
         </InfoRow>
         <InfoRow label="Оплата">
           <span className="text-sm font-medium">
@@ -215,11 +212,11 @@ function InfoRow({
 }) {
   return (
     <div
-      className="flex justify-between items-baseline gap-2 rounded px-1 -mx-1 transition-colors duration-300"
+      className="flex justify-between items-baseline gap-2 rounded px-1 -mx-1 transition-colors duration-300 min-w-0"
       {...(dataField ? { "data-field": dataField } : {})}
     >
       <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </div>
   );
 }
