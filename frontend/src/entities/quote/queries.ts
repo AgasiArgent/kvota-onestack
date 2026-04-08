@@ -227,7 +227,7 @@ export async function fetchQuoteItems(quoteId: string) {
     .from("quote_items")
     .select("*")
     .eq("quote_id", quoteId)
-    .order("created_at", { ascending: true });
+    .order("position", { ascending: true });
 
   return data ?? [];
 }
