@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { User, Package, TrendingUp } from "lucide-react";
+import { User, Package, TrendingUp, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
-import { SalesChecklistBlock } from "./sales-checklist-block";
-import { ParticipantsBlock } from "./participants-block";
 import { ContactDropdownSelect } from "./contact-dropdown-select";
 import { AddressDropdownSelect } from "./address-dropdown-select";
 import { DeliveryPrioritySelect } from "./delivery-priority-select";
+import type { ParticipantRow } from "./participants-block";
+import { ROLE_LABELS_RU } from "@/entities/user/types";
 import type { QuoteContextData } from "./queries";
 
 const DELIVERY_METHOD_LABELS: Record<string, string> = {
@@ -47,17 +48,11 @@ interface ContextPanelProps {
 export function ContextPanel({ quote, data }: ContextPanelProps) {
   return (
     <div className="mx-6 mt-3 mb-1 rounded-lg border border-border bg-muted/30 p-4">
-      <QuoteInfoBlock quote={quote} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SalesChecklistBlock
-          checklist={data.salesChecklist}
-          contactPerson={data.contactPerson}
-          salesManager={data.salesManager}
-          additionalInfo={quote.additional_info ?? null}
-        />
-        <ParticipantsBlock participants={data.participants} />
-      </div>
+      <QuoteInfoBlock
+        quote={quote}
+        salesManager={data.salesManager}
+        participants={data.participants}
+      />
     </div>
   );
 }
@@ -66,7 +61,15 @@ export function ContextPanel({ quote, data }: ContextPanelProps) {
 // Quote info summary block (Client / Terms / Financials)
 // ---------------------------------------------------------------------------
 
-function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
+function QuoteInfoBlock({
+  quote,
+  salesManager,
+  participants,
+}: {
+  quote: QuoteDetailRow;
+  salesManager: QuoteContextData["salesManager"];
+  participants: ParticipantRow[];
+}) {
   const currency = quote.currency ?? "USD";
   const profit = quote.profit_quote_currency ?? null;
   const revenue = quote.revenue_no_vat_quote_currency ?? null;
@@ -82,7 +85,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
       : null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-4 mb-4 border-b border-border">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       {/* Client */}
       <div className="space-y-2 min-w-0">
         <div className="flex items-center gap-2 mb-2">
@@ -197,8 +200,56 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
           </span>
         </InfoRow>
       </div>
+
+      {/* Participants */}
+      <div className="space-y-2 min-w-0">
+        <div className="flex items-center gap-2 mb-2">
+          <Users size={14} className="text-muted-foreground" />
+          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Участники
+          </h4>
+        </div>
+        {salesManager && (
+          <div className="flex items-baseline gap-1.5 text-sm">
+            <span className="text-xs text-muted-foreground shrink-0">МОП</span>
+            <span className="font-medium truncate">{salesManager.full_name}</span>
+          </div>
+        )}
+        {participants.length > 0 ? (
+          <ul className="space-y-1.5 max-h-32 overflow-y-auto">
+            {participants.map((p) => (
+              <li key={p.id} className="text-sm text-muted-foreground truncate">
+                <span className="tabular-nums">
+                  {formatParticipantDate(p.created_at)}
+                </span>
+                {" "}
+                <span className="text-foreground">{p.actor_name}</span>
+                {" "}
+                <Badge variant="outline" className="text-[10px] h-4 px-1 align-middle">
+                  {ROLE_LABELS_RU[p.actor_role] ?? p.actor_role}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          !salesManager && (
+            <p className="text-sm text-muted-foreground">Нет участников</p>
+          )
+        )}
+      </div>
     </div>
   );
+}
+
+function formatParticipantDate(dateStr: string | null): string {
+  if (!dateStr) return "\u2014";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function InfoRow({
