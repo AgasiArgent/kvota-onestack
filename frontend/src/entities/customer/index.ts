@@ -6,6 +6,7 @@ export type {
   CustomerListItem,
   CustomerFinancials,
   CustomerStats,
+  CustomerAssignee,
   PhoneEntry,
   ContractFormData,
 } from "./types";
@@ -22,6 +23,7 @@ export {
   fetchCustomerQuotes,
   fetchCustomerSpecs,
   fetchCustomerPositions,
+  fetchCustomerAssignees,
   fetchOrgUsers,
 } from "./queries";
 export type {
@@ -43,4 +45,6 @@ export {
   createContract,
   updateContract,
   deleteContract,
+  addCustomerAssignee,
+  removeCustomerAssignee,
 } from "./mutations";

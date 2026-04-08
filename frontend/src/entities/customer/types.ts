@@ -115,3 +115,9 @@ export interface CustomerStats {
   overdue_count: number;
   last_payment_date: string | null;
 }
+
+export interface CustomerAssignee {
+  user_id: string;
+  full_name: string;
+  created_at: string;
+}

@@ -5,3 +5,4 @@ export { TabOverview } from "./ui/tab-overview";
 export { TabCRM } from "./ui/tab-crm";
 export { TabDocuments } from "./ui/tab-documents";
 export { TabPositions } from "./ui/tab-positions";
+export { TabAssignees } from "./ui/tab-assignees";

@@ -1,7 +1,14 @@
-import { createClient } from "@/shared/lib/supabase/server";
+import { createAdminClient, createClient } from "@/shared/lib/supabase/server";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
 import { isSalesOnly } from "@/shared/lib/roles";
 import { getAssignedCustomerIds } from "@/shared/lib/access";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type UntypedClient = { from: (table: string) => any };
+
+function getUntypedClient(): UntypedClient {
+  return createAdminClient() as unknown as UntypedClient;
+}
 import type {
   CustomerListItem,
   CustomerFinancials,
@@ -9,6 +16,7 @@ import type {
   CustomerContact,
   CustomerContract,
   CustomerStats,
+  CustomerAssignee,
   PhoneEntry,
 } from "./types";
 
@@ -409,6 +417,39 @@ export async function fetchCustomerPositions(customerId: string) {
     request_date: row.created_at,
     quote_idn:
       (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
+  }));
+}
+
+export async function fetchCustomerAssignees(
+  customerId: string
+): Promise<CustomerAssignee[]> {
+  const untyped = getUntypedClient();
+  const supabase = createAdminClient();
+
+  const { data, error } = await untyped
+    .from("customer_assignees")
+    .select("customer_id, user_id, created_at")
+    .eq("customer_id", customerId);
+  if (error) throw error;
+
+  const rows = (data ?? []) as Array<{ customer_id: string; user_id: string; created_at: string }>;
+  if (rows.length === 0) return [];
+
+  // Resolve user names
+  const userIds = rows.map((r) => r.user_id);
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, full_name")
+    .in("user_id", userIds);
+
+  const nameMap = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p.full_name ?? ""])
+  );
+
+  return rows.map((row) => ({
+    user_id: row.user_id,
+    full_name: nameMap.get(row.user_id) ?? "",
+    created_at: row.created_at,
   }));
 }
 

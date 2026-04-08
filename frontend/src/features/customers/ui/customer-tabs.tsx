@@ -15,6 +15,7 @@ const TABS = [
   { key: "crm", label: "CRM" },
   { key: "documents", label: "Документы" },
   { key: "positions", label: "Позиции" },
+  { key: "assignees", label: "Ответственные" },
 ] as const;
 
 export type TabKey = (typeof TABS)[number]["key"];

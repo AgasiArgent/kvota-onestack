@@ -1,6 +1,9 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import type { ContractFormData, CustomerContract, PhoneEntry } from "./types";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type UntypedClient = { from: (table: string) => any };
+
 // ---------- Form data types ----------
 
 export interface ContactFormData {
@@ -343,6 +346,43 @@ export async function deleteContract(contractId: string) {
     .from("customer_contracts")
     .delete()
     .eq("id", contractId);
+
+  if (error) throw error;
+}
+
+// ---------- Assignee mutations ----------
+
+export async function addCustomerAssignee(
+  customerId: string,
+  userId: string
+) {
+  const supabase = createClient();
+  const createdBy = await getCurrentUserId();
+  const untyped = supabase as unknown as UntypedClient;
+
+  const { error } = await untyped
+    .from("customer_assignees")
+    .insert({
+      customer_id: customerId,
+      user_id: userId,
+      created_by: createdBy,
+    });
+
+  if (error) throw error;
+}
+
+export async function removeCustomerAssignee(
+  customerId: string,
+  userId: string
+) {
+  const supabase = createClient();
+  const untyped = supabase as unknown as UntypedClient;
+
+  const { error } = await untyped
+    .from("customer_assignees")
+    .delete()
+    .eq("customer_id", customerId)
+    .eq("user_id", userId);
 
   if (error) throw error;
 }

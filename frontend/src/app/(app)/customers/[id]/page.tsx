@@ -9,6 +9,7 @@ import {
   fetchCustomerSpecs,
   fetchCustomerContracts,
   fetchCustomerPositions,
+  fetchCustomerAssignees,
   fetchOrgUsers,
 } from "@/entities/customer";
 import type { Customer } from "@/entities/customer";
@@ -19,6 +20,7 @@ import { TabOverview } from "@/features/customers/ui/tab-overview";
 import { TabCRM } from "@/features/customers/ui/tab-crm";
 import { TabDocuments } from "@/features/customers/ui/tab-documents";
 import { TabPositions } from "@/features/customers/ui/tab-positions";
+import { TabAssignees } from "@/features/customers/ui/tab-assignees";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -46,6 +48,7 @@ export default async function CustomerDetailPage({ params, searchParams }: Props
         {tab === "crm" && <CRMContent customerId={id} customer={customer} />}
         {tab === "documents" && <DocumentsContent customerId={id} subtab={subtab} />}
         {tab === "positions" && <PositionsContent customerId={id} />}
+        {tab === "assignees" && <AssigneesContent customerId={id} orgId={user.orgId} userRoles={user.roles} />}
       </CustomerTabs>
     </div>
   );
@@ -103,4 +106,29 @@ async function DocumentsContent({
 async function PositionsContent({ customerId }: { customerId: string }) {
   const positions = await fetchCustomerPositions(customerId);
   return <TabPositions positions={positions} />;
+}
+
+async function AssigneesContent({
+  customerId,
+  orgId,
+  userRoles,
+}: {
+  customerId: string;
+  orgId: string;
+  userRoles: string[];
+}) {
+  const [assignees, orgUsers] = await Promise.all([
+    fetchCustomerAssignees(customerId),
+    fetchOrgUsers(orgId),
+  ]);
+  const canManage =
+    userRoles.includes("admin") || userRoles.includes("head_of_sales");
+  return (
+    <TabAssignees
+      customerId={customerId}
+      assignees={assignees}
+      salesUsers={orgUsers}
+      canManage={canManage}
+    />
+  );
 }
