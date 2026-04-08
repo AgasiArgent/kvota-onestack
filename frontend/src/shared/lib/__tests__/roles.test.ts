@@ -3,6 +3,7 @@ import {
   isSalesOnly,
   isAssignedItemsOnly,
   isProcurementOnly,
+  isProcurementSeniorOnly,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -121,50 +122,148 @@ describe("isProcurementOnly", () => {
   });
 });
 
-describe("role tier mutual exclusivity", () => {
-  it("isSalesOnly and isAssignedItemsOnly never both return true", () => {
-    const allRoles = [
-      "admin",
-      "top_manager",
-      "sales",
-      "head_of_sales",
-      "procurement",
-      "head_of_procurement",
-      "procurement_senior",
-      "logistics",
-      "customs",
-      "quote_controller",
-      "spec_controller",
-      "finance",
-      "head_of_logistics",
-    ];
+describe("isProcurementSeniorOnly", () => {
+  // --- Should return TRUE (procurement stage only) ---
 
-    // Test all single roles
+  it("returns true for procurement_senior alone", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior"])).toBe(true);
+  });
+
+  it("returns true for procurement_senior + procurement combo (senior dominates)", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "procurement"])).toBe(true);
+  });
+
+  it("returns true for procurement_senior + logistics combo", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "logistics"])).toBe(true);
+  });
+
+  it("returns true for procurement_senior + customs combo", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "customs"])).toBe(true);
+  });
+
+  // --- Should return FALSE (broader role overrides) ---
+
+  it("returns false for admin", () => {
+    expect(isProcurementSeniorOnly(["admin"])).toBe(false);
+  });
+
+  it("returns false for procurement_senior + admin", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "admin"])).toBe(false);
+  });
+
+  it("returns false for procurement_senior + head_of_procurement", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "head_of_procurement"])).toBe(false);
+  });
+
+  it("returns false for procurement_senior + sales (mixed tier)", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "sales"])).toBe(false);
+  });
+
+  it("returns false for procurement_senior + top_manager", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "top_manager"])).toBe(false);
+  });
+
+  it("returns false for procurement_senior + finance", () => {
+    expect(isProcurementSeniorOnly(["procurement_senior", "finance"])).toBe(false);
+  });
+
+  it("returns false for procurement without senior", () => {
+    expect(isProcurementSeniorOnly(["procurement"])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(isProcurementSeniorOnly([])).toBe(false);
+  });
+});
+
+describe("role tier mutual exclusivity", () => {
+  const allRoles = [
+    "admin",
+    "top_manager",
+    "sales",
+    "head_of_sales",
+    "procurement",
+    "head_of_procurement",
+    "procurement_senior",
+    "logistics",
+    "customs",
+    "quote_controller",
+    "spec_controller",
+    "finance",
+    "head_of_logistics",
+  ];
+
+  const multiRoleCombos = [
+    ["sales", "procurement"],
+    ["sales", "logistics"],
+    ["head_of_sales", "customs"],
+    ["procurement", "logistics"],
+    ["procurement", "customs"],
+    ["procurement_senior", "procurement"],
+    ["procurement_senior", "sales"],
+    ["procurement_senior", "admin"],
+  ];
+
+  it("isSalesOnly and isAssignedItemsOnly never both return true", () => {
     for (const role of allRoles) {
       const roles = [role];
-      const sales = isSalesOnly(roles);
-      const assigned = isAssignedItemsOnly(roles);
       expect(
-        sales && assigned,
+        isSalesOnly(roles) && isAssignedItemsOnly(roles),
         `Role [${role}] matched both isSalesOnly and isAssignedItemsOnly`
       ).toBe(false);
     }
-
-    // Test common multi-role combos
-    const combos = [
-      ["sales", "procurement"],
-      ["sales", "logistics"],
-      ["head_of_sales", "customs"],
-      ["procurement", "logistics"],
-      ["procurement", "customs"],
-    ];
-    for (const roles of combos) {
-      const sales = isSalesOnly(roles);
-      const assigned = isAssignedItemsOnly(roles);
+    for (const roles of multiRoleCombos) {
       expect(
-        sales && assigned,
+        isSalesOnly(roles) && isAssignedItemsOnly(roles),
         `Roles [${roles.join(",")}] matched both`
       ).toBe(false);
+    }
+  });
+
+  it("isProcurementSeniorOnly and isSalesOnly never both return true", () => {
+    for (const role of allRoles) {
+      const roles = [role];
+      expect(
+        isProcurementSeniorOnly(roles) && isSalesOnly(roles),
+        `Role [${role}] matched both isProcurementSeniorOnly and isSalesOnly`
+      ).toBe(false);
+    }
+    for (const roles of multiRoleCombos) {
+      expect(
+        isProcurementSeniorOnly(roles) && isSalesOnly(roles),
+        `Roles [${roles.join(",")}] matched both`
+      ).toBe(false);
+    }
+  });
+
+  it("isProcurementSeniorOnly and isAssignedItemsOnly never both return true", () => {
+    for (const role of allRoles) {
+      const roles = [role];
+      expect(
+        isProcurementSeniorOnly(roles) && isAssignedItemsOnly(roles),
+        `Role [${role}] matched both isProcurementSeniorOnly and isAssignedItemsOnly`
+      ).toBe(false);
+    }
+    for (const roles of multiRoleCombos) {
+      expect(
+        isProcurementSeniorOnly(roles) && isAssignedItemsOnly(roles),
+        `Roles [${roles.join(",")}] matched both`
+      ).toBe(false);
+    }
+  });
+
+  it("at most one tier function returns true for any single role", () => {
+    for (const role of allRoles) {
+      const roles = [role];
+      const matches = [
+        isSalesOnly(roles) && "isSalesOnly",
+        isAssignedItemsOnly(roles) && "isAssignedItemsOnly",
+        isProcurementSeniorOnly(roles) && "isProcurementSeniorOnly",
+      ].filter(Boolean);
+      expect(
+        matches.length,
+        `Role [${role}] matched ${matches.length} tiers: ${matches.join(", ")}`
+      ).toBeLessThanOrEqual(1);
     }
   });
 });

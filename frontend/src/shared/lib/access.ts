@@ -70,6 +70,74 @@ export async function getAssignedCustomerIds(
 }
 
 /**
+ * Returns the list of quote IDs that have items assigned to this user.
+ * Used by ASSIGNED_ITEMS tier (procurement, logistics, customs).
+ *
+ * - procurement: via quote_items.assigned_procurement_user
+ * - logistics: via quotes.assigned_logistics_user
+ * - customs: via quotes.assigned_customs_user
+ *
+ * Runs applicable queries in parallel and deduplicates results.
+ */
+export async function getAssignedQuoteIds(
+  supabase: Client,
+  user: AccessUser
+): Promise<string[]> {
+  const promises: Promise<string[]>[] = [];
+
+  if (user.roles.includes("procurement")) {
+    promises.push(
+      (async () => {
+        const { data } = await supabase
+          .from("quote_items")
+          .select("quote_id")
+          .eq("assigned_procurement_user", user.id);
+        return [
+          ...new Set(
+            (data ?? [])
+              .map((r) => r.quote_id)
+              .filter((id): id is string => id !== null)
+          ),
+        ];
+      })()
+    );
+  }
+
+  if (user.roles.includes("logistics")) {
+    promises.push(
+      (async () => {
+        const { data } = await supabase
+          .from("quotes")
+          .select("id")
+          .eq("organization_id", user.orgId)
+          .eq("assigned_logistics_user", user.id)
+          .is("deleted_at", null);
+        return (data ?? []).map((r) => r.id);
+      })()
+    );
+  }
+
+  if (user.roles.includes("customs")) {
+    promises.push(
+      (async () => {
+        const { data } = await supabase
+          .from("quotes")
+          .select("id")
+          .eq("organization_id", user.orgId)
+          .eq("assigned_customs_user", user.id)
+          .is("deleted_at", null);
+        return (data ?? []).map((r) => r.id);
+      })()
+    );
+  }
+
+  if (promises.length === 0) return [];
+
+  const results = await Promise.all(promises);
+  return [...new Set(results.flat())];
+}
+
+/**
  * Returns the list of supplier IDs the user is assigned to.
  * Simpler than customer version — no group logic (head_of_procurement
  * sees all suppliers, so this is only called for regular procurement users).
