@@ -91,7 +91,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
             Клиент
           </h4>
         </div>
-        <InfoRow label="Клиент">
+        <InfoRow label="Клиент" dataField="customer_id">
           {quote.customer ? (
             <Link
               href={`/customers/${quote.customer.id}`}
@@ -118,7 +118,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
             <span className="text-sm text-muted-foreground">{"\u2014"}</span>
           )}
         </InfoRow>
-        <InfoRow label="Город доставки">
+        <InfoRow label="Город доставки" dataField="delivery_city">
           <span className="text-sm font-medium">
             {quote.delivery_city ?? "\u2014"}
           </span>
@@ -147,7 +147,7 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
         <InfoRow label="Валюта">
           <span className="text-sm font-medium">{currency}</span>
         </InfoRow>
-        <InfoRow label="Доставка">
+        <InfoRow label="Доставка" dataField="delivery_method">
           <span className="text-sm font-medium flex items-center gap-1">
             {DELIVERY_METHOD_LABELS[quote.delivery_method ?? ""] ?? quote.delivery_method ?? "\u2014"}
             {quote.incoterms && (
@@ -207,12 +207,17 @@ function QuoteInfoBlock({ quote }: { quote: QuoteDetailRow }) {
 function InfoRow({
   label,
   children,
+  dataField,
 }: {
   label: string;
   children: React.ReactNode;
+  dataField?: string;
 }) {
   return (
-    <div className="flex justify-between items-baseline gap-2">
+    <div
+      className="flex justify-between items-baseline gap-2 rounded px-1 -mx-1 transition-colors duration-300"
+      {...(dataField ? { "data-field": dataField } : {})}
+    >
       <span className="text-xs text-muted-foreground shrink-0">{label}</span>
       {children}
     </div>

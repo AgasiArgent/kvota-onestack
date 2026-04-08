@@ -35,13 +35,15 @@ const FIELD_LABELS: Record<string, string> = {
 export function validateForTransfer(
   quote: QuoteDetailRow,
   items: QuoteItemRow[]
-): string[] {
+): { errors: string[]; missingFields: string[] } {
   const errors: string[] = [];
+  const missingFields: string[] = [];
 
   for (const [field, label] of Object.entries(FIELD_LABELS)) {
     const value = (quote as Record<string, unknown>)[field];
     if (!value || (typeof value === "string" && !value.trim())) {
       errors.push(label);
+      missingFields.push(field);
     }
   }
 
@@ -57,7 +59,37 @@ export function validateForTransfer(
     errors.push("Хотя бы одна позиция (наименование, количество, ед.изм.)");
   }
 
-  return errors;
+  return { errors, missingFields };
+}
+
+/** Highlight empty required fields in the context panel with a pulse animation. */
+function highlightMissingFields(fields: string[]) {
+  const HIGHLIGHT_CLASS = "ring-2 ring-destructive/60 bg-destructive/5";
+  const highlighted: Element[] = [];
+
+  for (const field of fields) {
+    // delivery_country and delivery_city share the same row visually
+    const selector = field === "delivery_country" ? "delivery_city" : field;
+    // incoterms shares the delivery row
+    const dataField = field === "incoterms" ? "delivery_method" : selector;
+    const el = document.querySelector(`[data-field="${dataField}"]`);
+    if (el) {
+      el.classList.add(...HIGHLIGHT_CLASS.split(" "));
+      highlighted.push(el);
+    }
+  }
+
+  // Scroll to first highlighted element
+  if (highlighted.length > 0) {
+    highlighted[0].scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  // Remove highlight after 3 seconds
+  setTimeout(() => {
+    for (const el of highlighted) {
+      el.classList.remove(...HIGHLIGHT_CLASS.split(" "));
+    }
+  }, 3000);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,9 +116,10 @@ export function TransferDialog({ quote, items }: TransferDialogProps) {
   const [error, setError] = useState<string | null>(null);
 
   function handleOpenClick() {
-    const errors = validateForTransfer(quote, items);
+    const { errors, missingFields } = validateForTransfer(quote, items);
     if (errors.length > 0) {
       toast.error("Заполните обязательные поля: " + errors.join(", "));
+      highlightMissingFields(missingFields);
       return;
     }
     setOpen(true);
