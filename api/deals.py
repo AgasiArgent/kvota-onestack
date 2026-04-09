@@ -139,9 +139,15 @@ async def create_deal(request) -> JSONResponse:
     sb = get_supabase()
 
     # --- Step 1: Validate specification ---
-    spec_resp = sb.table("specifications").select(
-        "id, quote_id, organization_id, sign_date, signed_scan_url, status"
-    ).eq("id", spec_id).execute()
+    try:
+        spec_resp = sb.table("specifications").select(
+            "id, quote_id, organization_id, sign_date, signed_scan_url, status"
+        ).eq("id", spec_id).execute()
+    except Exception:
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Invalid spec_id format"}},
+            status_code=400,
+        )
 
     if not spec_resp.data:
         return JSONResponse(
