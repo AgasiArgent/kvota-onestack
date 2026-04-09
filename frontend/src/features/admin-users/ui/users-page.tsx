@@ -25,10 +25,16 @@ interface SalesGroupOption {
   name: string;
 }
 
+interface DepartmentOption {
+  id: string;
+  name: string;
+}
+
 interface UsersPageProps {
   members: OrgMember[];
   allRoles: RoleOption[];
   salesGroups: SalesGroupOption[];
+  departments: DepartmentOption[];
   orgId: string;
 }
 
@@ -45,6 +51,7 @@ export function UsersPageClient({
   members,
   allRoles,
   salesGroups,
+  departments,
   orgId,
 }: UsersPageProps) {
   const [search, setSearch] = useState("");
@@ -217,6 +224,7 @@ export function UsersPageClient({
       <CreateUserDialog
         allRoles={allRoles}
         salesGroups={salesGroups}
+        departments={departments}
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       />
@@ -227,6 +235,7 @@ export function UsersPageClient({
           member={selectedMember}
           allRoles={allRoles}
           salesGroups={salesGroups}
+          departments={departments}
           orgId={orgId}
           isOpen={isEditSheetOpen}
           onClose={handleEditSheetClose}

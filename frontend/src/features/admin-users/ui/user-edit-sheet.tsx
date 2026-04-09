@@ -48,10 +48,16 @@ interface SalesGroupOption {
   name: string;
 }
 
+interface DepartmentOption {
+  id: string;
+  name: string;
+}
+
 interface UserEditSheetProps {
   member: OrgMember;
   allRoles: RoleOption[];
   salesGroups: SalesGroupOption[];
+  departments: DepartmentOption[];
   orgId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -61,6 +67,7 @@ export function UserEditSheet({
   member,
   allRoles,
   salesGroups,
+  departments,
   orgId,
   isOpen,
   onClose,
@@ -72,6 +79,9 @@ export function UserEditSheet({
   const [position, setPosition] = useState(member.position ?? "");
   const [salesGroupId, setSalesGroupId] = useState(
     member.sales_group_id ?? ""
+  );
+  const [departmentId, setDepartmentId] = useState(
+    member.department_id ?? ""
   );
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -97,6 +107,7 @@ export function UserEditSheet({
     setFullName(member.full_name ?? "");
     setPosition(member.position ?? "");
     setSalesGroupId(member.sales_group_id ?? "");
+    setDepartmentId(member.department_id ?? "");
     setSelectedSlugs(new Set(member.roles.map((r) => r.slug)));
   }, [member]);
 
@@ -113,6 +124,7 @@ export function UserEditSheet({
         position: position.trim() || null,
         sales_group_id:
           hasSalesRole && salesGroupId ? salesGroupId : null,
+        department_id: departmentId || null,
       });
 
       if (error) throw error;
@@ -262,6 +274,26 @@ export function UserEditSheet({
                       {salesGroups.map((group) => (
                         <SelectItem key={group.id} value={group.id}>
                           {group.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {departments.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Департамент
+                  </Label>
+                  <Select value={departmentId} onValueChange={(val) => setDepartmentId(val ?? "")}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Выберите департамент" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id}>
+                          {dept.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

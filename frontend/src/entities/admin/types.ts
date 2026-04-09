@@ -8,6 +8,7 @@ export interface OrgMember {
   status: "active" | "suspended";
   position: string | null;
   sales_group_id: string | null;
+  department_id: string | null;
   is_last_admin: boolean;
 }
 
@@ -82,10 +83,12 @@ export interface CreateUserPayload {
   role_slugs: string[];
   position?: string;
   sales_group_id?: string | null;
+  department_id?: string | null;
 }
 
 export interface UpdateUserPayload {
   full_name?: string;
   position?: string;
   sales_group_id?: string | null;
+  department_id?: string | null;
 }

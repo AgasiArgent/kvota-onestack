@@ -17,6 +17,7 @@ export {
   fetchOrgMembers,
   fetchAllRoles,
   fetchSalesGroups,
+  fetchDepartments,
   fetchFeedbackList,
   fetchFeedbackDetail,
 } from "./queries";

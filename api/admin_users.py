@@ -124,6 +124,7 @@ async def create_user(request) -> JSONResponse:
         role_slugs: list[str] (required) - At least one role slug
         position: str (optional) - Job title
         sales_group_id: str (optional) - Sales group UUID
+        department_id: str (optional) - Department UUID
     Returns:
         user_id: str - Created user UUID
         email: str - User email
@@ -155,6 +156,7 @@ async def create_user(request) -> JSONResponse:
     role_slugs = body.get("role_slugs") or []
     position = (body.get("position") or "").strip() or None
     sales_group_id = body.get("sales_group_id") or None
+    department_id = body.get("department_id") or None
 
     errors: dict[str, str] = {}
     if not email:
@@ -239,6 +241,8 @@ async def create_user(request) -> JSONResponse:
             profile_data["position"] = position
         if sales_group_id:
             profile_data["sales_group_id"] = sales_group_id
+        if department_id:
+            profile_data["department_id"] = department_id
 
         sb.table("user_profiles").insert(profile_data).execute()
 

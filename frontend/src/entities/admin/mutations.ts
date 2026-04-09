@@ -8,7 +8,7 @@ import type { FeedbackDetail } from "./types";
 export async function updateUserProfile(
   userId: string,
   orgId: string,
-  data: { full_name?: string; position?: string | null; sales_group_id?: string | null }
+  data: { full_name?: string; position?: string | null; sales_group_id?: string | null; department_id?: string | null }
 ) {
   const supabase = createClient();
   return supabase

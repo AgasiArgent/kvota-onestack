@@ -24,7 +24,7 @@ export async function fetchOrgMembers(
     await Promise.all([
       admin
         .from("user_profiles")
-        .select("user_id, full_name, position, sales_group_id")
+        .select("user_id, full_name, position, sales_group_id, department_id")
         .in("user_id", userIds),
       admin
         .from("user_roles")
@@ -51,6 +51,7 @@ export async function fetchOrgMembers(
     full_name: string | null;
     position: string | null;
     sales_group_id: string | null;
+    department_id: string | null;
   }
   const profileMap = new Map<string, ProfileData>(
     (profilesResult.data ?? []).map((p) => [
@@ -59,6 +60,7 @@ export async function fetchOrgMembers(
         full_name: p.full_name as string | null,
         position: (p as Record<string, unknown>).position as string | null,
         sales_group_id: (p as Record<string, unknown>).sales_group_id as string | null,
+        department_id: (p as Record<string, unknown>).department_id as string | null,
       },
     ])
   );
@@ -110,6 +112,7 @@ export async function fetchOrgMembers(
       status: statusMap.get(uid) ?? "active",
       position: profile?.position ?? null,
       sales_group_id: profile?.sales_group_id ?? null,
+      department_id: profile?.department_id ?? null,
       is_last_admin: isAdmin && adminCount === 1,
     };
   });
@@ -177,6 +180,19 @@ export async function fetchSalesGroups(): Promise<
 
   if (error) throw error;
   return (data ?? []).map((g) => ({ id: g.id, name: g.name }));
+}
+
+export async function fetchDepartments(): Promise<
+  { id: string; name: string }[]
+> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("departments")
+    .select("id, name")
+    .order("name");
+
+  if (error) throw error;
+  return (data ?? []).map((d) => ({ id: d.id, name: d.name }));
 }
 
 export async function fetchFeedbackList(
