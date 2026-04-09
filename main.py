@@ -48129,6 +48129,15 @@ async def delete_plan_fact_item(request, deal_id: str, id: str):
     return await plan_fact_delete_item(request, deal_id, id)
 
 
+# --- Deals JSON API (for Next.js frontend) ---
+
+from api.deals import create_deal as api_create_deal
+
+@rt("/api/deals", methods=["POST"])
+async def post_deals(request):
+    return await api_create_deal(request)
+
+
 # --- Admin User Management JSON API (for Next.js frontend) ---
 
 from api.admin_users import (

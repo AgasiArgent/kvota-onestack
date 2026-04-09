@@ -1,6 +1,9 @@
 "use server";
 
 import { createClient } from "@/shared/lib/supabase/server";
+import { apiServerClient } from "@/shared/lib/api-server";
+import { getSessionUser } from "@/entities/user";
+import { revalidatePath } from "next/cache";
 
 export async function createSpecification(data: {
   quote_id: string;
@@ -69,66 +72,31 @@ export async function uploadSignedScan(specId: string, file: File) {
 }
 
 export async function confirmSignatureAndCreateDeal(specId: string) {
-  const supabase = await createClient();
+  const user = await getSessionUser();
+  if (!user?.orgId) throw new Error("Not authenticated");
 
-  // Fetch spec with quote data
-  const { data: spec, error: specError } = await supabase
-    .from("specifications")
-    .select("id, quote_id, organization_id, specification_number, sign_date, signed_scan_url")
-    .eq("id", specId)
-    .single();
+  const res = await apiServerClient<{
+    deal_id: string;
+    deal_number: string;
+    logistics_stages: number;
+    invoices_created: number;
+    invoices_skipped_reason: string | null;
+  }>("/deals", {
+    method: "POST",
+    body: JSON.stringify({
+      spec_id: specId,
+      user_id: user.id,
+      org_id: user.orgId,
+    }),
+  });
 
-  if (specError || !spec) throw specError ?? new Error("Specification not found");
-  if (!spec.signed_scan_url) throw new Error("Signed scan not uploaded");
+  if (!res.success) {
+    throw new Error(res.error?.message || "Failed to create deal");
+  }
 
-  // Fetch quote for deal data
-  const { data: quote, error: quoteError } = await supabase
-    .from("quotes")
-    .select("id, total_amount, currency")
-    .eq("id", spec.quote_id)
-    .single();
+  revalidatePath("/quotes");
 
-  if (quoteError || !quote) throw quoteError ?? new Error("Quote not found");
-
-  // Generate deal number
-  const now = new Date();
-  const year = now.getFullYear();
-  const { count } = await supabase
-    .from("deals")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", `${year}-01-01`);
-
-  const seq = (count ?? 0) + 1;
-  const dealNumber = `DEAL-${year}-${String(seq).padStart(4, "0")}`;
-
-  // Update spec status to signed
-  await updateSpecification(specId, { status: "signed" });
-
-  // Create deal
-  const { data: deal, error: dealError } = await supabase
-    .from("deals")
-    .insert({
-      specification_id: specId,
-      quote_id: spec.quote_id,
-      organization_id: spec.organization_id,
-      deal_number: dealNumber,
-      signed_at: spec.sign_date ?? new Date().toISOString().slice(0, 10),
-      total_amount: quote.total_amount,
-      currency: quote.currency,
-      status: "active",
-    })
-    .select("id, deal_number")
-    .single();
-
-  if (dealError) throw dealError;
-
-  // Update quote workflow status
-  await supabase
-    .from("quotes")
-    .update({ workflow_status: "spec_signed" })
-    .eq("id", spec.quote_id);
-
-  return deal;
+  return res.data;
 }
 
 export async function createCustomerContract(data: {
