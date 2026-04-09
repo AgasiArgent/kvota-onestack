@@ -17,6 +17,17 @@ export function FeedbackButton() {
     installErrorInterceptors();
   }, []);
 
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "b") {
+        e.preventDefault();
+        setModalOpen(true);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleScreenshotRequest = useCallback(async () => {
     setModalOpen(false);
     try {
@@ -50,8 +61,8 @@ export function FeedbackButton() {
     <>
       <button
         onClick={() => setModalOpen(true)}
-        className="fixed bottom-4 right-4 z-50 w-11 h-11 flex items-center justify-center bg-card border border-border-light rounded-lg text-text-subtle hover:text-text-muted hover:border-border shadow-sm cursor-pointer transition-colors"
-        title="Сообщить о проблеме"
+        className="fixed bottom-4 right-4 z-[250] w-11 h-11 flex items-center justify-center bg-card border border-border-light rounded-lg text-text-subtle hover:text-text-muted hover:border-border shadow-sm cursor-pointer transition-colors"
+        title="Сообщить о проблеме (Ctrl+Shift+B)"
         type="button"
       >
         <Bug size={20} />
