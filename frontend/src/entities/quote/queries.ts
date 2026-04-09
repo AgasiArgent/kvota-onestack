@@ -55,7 +55,7 @@ export async function fetchQuotesList(
     }
   } else if (isProcurementSeniorOnly(user.roles)) {
     // PROCUREMENT_STAGE_ONLY tier: procurement_senior sees only procurement-stage quotes
-    query = query.eq("workflow_status", "procurement");
+    query = query.eq("workflow_status", "pending_procurement");
   }
   // All other roles (admin, top_manager, controllers, finance, head_of_procurement, head_of_logistics)
   // → no additional filter, they see all org quotes
@@ -492,7 +492,7 @@ export async function canAccessQuote(
       .eq("id", quoteId)
       .eq("organization_id", user.orgId)
       .maybeSingle();
-    return data?.workflow_status === "procurement";
+    return data?.workflow_status === "pending_procurement";
   }
 
   return true;
@@ -532,7 +532,7 @@ export async function fetchFilterOptions(
       quotesQuery = quotesQuery.eq("created_by", user.id);
     }
   } else if (user && isProcurementSeniorOnly(user.roles)) {
-    quotesQuery = quotesQuery.eq("workflow_status", "procurement");
+    quotesQuery = quotesQuery.eq("workflow_status", "pending_procurement");
   }
 
   const { data: quotesData, error: quotesError } = await quotesQuery;

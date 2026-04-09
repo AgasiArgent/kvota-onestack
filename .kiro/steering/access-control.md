@@ -15,7 +15,7 @@ Every role maps to one visibility tier. The tier determines how broad a user's v
 | **FULL_VIEW_READONLY** | `top_manager` | Everything in org, no edit |
 | **FULL_SCOPED_EDIT** | `quote_controller`, `spec_controller`, `finance`, `head_of_logistics` | All entities, edit only their domain fields |
 | **PROCUREMENT_ALL_STAGES** | `head_of_procurement` | All quotes across all stages, edit only procurement fields |
-| **PROCUREMENT_STAGE_ONLY** | `procurement_senior` | Only quotes currently in procurement stage, edit procurement fields |
+| **PROCUREMENT_STAGE_ONLY** | `procurement_senior` | Only quotes where `workflow_status = 'pending_procurement'`, edit procurement fields |
 | **GROUP** | `head_of_sales` | Their sales group's data, full view + edit |
 | **OWN** | `sales` | Own data + customers where they are assigned |
 | **ASSIGNED_ITEMS** | `procurement`, `logistics`, `customs` | Only quote/spec items personally assigned to them |
@@ -64,7 +64,7 @@ customer_assignees    — (customer_id, user_id) pairs, many-to-many
 | FULL_VIEW_EDIT / FULL_VIEW_READONLY | All | All |
 | FULL_SCOPED_EDIT | All | All |
 | PROCUREMENT_ALL_STAGES (head_of_procurement) | All | All (edit only procurement fields) |
-| PROCUREMENT_STAGE_ONLY (procurement_senior) | Quotes where `workflow_status = 'procurement'` | Same |
+| PROCUREMENT_STAGE_ONLY (procurement_senior) | Quotes where `workflow_status = 'pending_procurement'` | Same |
 | GROUP (head_of_sales) | Quotes where `created_by` is in group OR customer has a group member assignee | Same |
 | OWN (sales) | Quotes where `created_by = user.id` OR customer has user as assignee | Same |
 | ASSIGNED_ITEMS (procurement/logistics/customs) | Quotes that contain items assigned to user | Same |
