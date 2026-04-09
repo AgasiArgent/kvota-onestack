@@ -7,12 +7,12 @@ export async function fetchOrgMembers(
 ): Promise<OrgMember[]> {
   const admin = createAdminClient();
 
-  // 1. Fetch active organization members
+  // 1. Fetch all organization members (active + suspended)
   const { data: members, error: membersError } = await admin
     .from("organization_members")
-    .select("user_id, created_at")
+    .select("user_id, created_at, status")
     .eq("organization_id", orgId)
-    .eq("status", "active");
+    .in("status", ["active", "suspended"]);
 
   if (membersError) throw membersError;
   if (!members || members.length === 0) return [];
@@ -24,7 +24,7 @@ export async function fetchOrgMembers(
     await Promise.all([
       admin
         .from("user_profiles")
-        .select("user_id, full_name")
+        .select("user_id, full_name, position, sales_group_id")
         .in("user_id", userIds),
       admin
         .from("user_roles")
@@ -47,8 +47,20 @@ export async function fetchOrgMembers(
   const authUsers = authData?.users ?? [];
 
   // Build lookup maps
-  const profileMap = new Map<string, string | null>(
-    (profilesResult.data ?? []).map((p) => [p.user_id, p.full_name as string | null])
+  interface ProfileData {
+    full_name: string | null;
+    position: string | null;
+    sales_group_id: string | null;
+  }
+  const profileMap = new Map<string, ProfileData>(
+    (profilesResult.data ?? []).map((p) => [
+      p.user_id,
+      {
+        full_name: p.full_name as string | null,
+        position: (p as Record<string, unknown>).position as string | null,
+        sales_group_id: (p as Record<string, unknown>).sales_group_id as string | null,
+      },
+    ])
   );
   const emailMap = new Map(
     authUsers.map((u) => [u.id, u.email ?? ""])
@@ -71,15 +83,36 @@ export async function fetchOrgMembers(
   const joinedMap = new Map(
     members.map((m) => [m.user_id, m.created_at])
   );
+  const statusMap = new Map(
+    members.map((m) => [m.user_id, (m.status ?? "active") as "active" | "suspended"])
+  );
 
-  let result: OrgMember[] = userIds.map((uid) => ({
-    user_id: uid,
-    full_name: profileMap.get(uid) ?? null,
-    email: emailMap.get(uid) ?? "",
-    roles: rolesMap.get(uid) ?? [],
-    telegram_username: telegramMap.get(uid) ?? null,
-    joined_at: joinedMap.get(uid) ?? "",
-  }));
+  // Count total admins for last-admin guard
+  let adminCount = 0;
+  for (const [, roles] of rolesMap) {
+    if (roles.some((r) => r.slug === "admin")) {
+      adminCount++;
+    }
+  }
+
+  let result: OrgMember[] = userIds.map((uid) => {
+    const profile = profileMap.get(uid);
+    const userRoles = rolesMap.get(uid) ?? [];
+    const isAdmin = userRoles.some((r) => r.slug === "admin");
+
+    return {
+      user_id: uid,
+      full_name: profile?.full_name ?? null,
+      email: emailMap.get(uid) ?? "",
+      roles: userRoles,
+      telegram_username: telegramMap.get(uid) ?? null,
+      joined_at: joinedMap.get(uid) ?? "",
+      status: statusMap.get(uid) ?? "active",
+      position: profile?.position ?? null,
+      sales_group_id: profile?.sales_group_id ?? null,
+      is_last_admin: isAdmin && adminCount === 1,
+    };
+  });
 
   // Apply search filter (client-side — small dataset <50 users)
   if (search) {
@@ -131,6 +164,19 @@ export async function fetchAllRoles(orgId: string): Promise<RoleOption[]> {
   return (data ?? [])
     .filter((r) => activeSlugs.has(r.slug))
     .map((r) => ({ id: r.id, slug: r.slug, name: r.name }));
+}
+
+export async function fetchSalesGroups(): Promise<
+  { id: string; name: string }[]
+> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("sales_groups")
+    .select("id, name")
+    .order("name");
+
+  if (error) throw error;
+  return (data ?? []).map((g) => ({ id: g.id, name: g.name }));
 }
 
 export async function fetchFeedbackList(

@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,17 +13,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
-import { Search, Users, MessageCircle } from "lucide-react";
+import { Search, Users, MessageCircle, Plus } from "lucide-react";
 import type { OrgMember, RoleOption } from "@/entities/admin/types";
 import { ROLE_COLORS } from "@/entities/admin/types";
 import { ROLE_LABELS_RU } from "@/entities/user/types";
-import { RoleEditModal } from "./role-edit-modal";
+import { CreateUserDialog } from "./create-user-dialog";
+import { UserEditSheet } from "./user-edit-sheet";
+
+interface SalesGroupOption {
+  id: string;
+  name: string;
+}
 
 interface UsersPageProps {
   members: OrgMember[];
   allRoles: RoleOption[];
+  salesGroups: SalesGroupOption[];
   orgId: string;
-  currentUserId: string;
 }
 
 function formatDate(dateStr: string): string {
@@ -36,13 +44,16 @@ function formatDate(dateStr: string): string {
 export function UsersPageClient({
   members,
   allRoles,
+  salesGroups,
   orgId,
-  currentUserId,
 }: UsersPageProps) {
   const [search, setSearch] = useState("");
-  const [editingMember, setEditingMember] = useState<OrgMember | null>(null);
+  const [selectedMember, setSelectedMember] = useState<OrgMember | null>(null);
+  const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
   const telegramCount = members.filter((m) => m.telegram_username).length;
+  const activeCount = members.filter((m) => m.status === "active").length;
 
   const filtered = useMemo(() => {
     if (!search) return members;
@@ -53,6 +64,16 @@ export function UsersPageClient({
         m.email.toLowerCase().includes(q)
     );
   }, [members, search]);
+
+  function handleRowClick(member: OrgMember) {
+    setSelectedMember(member);
+    setIsEditSheetOpen(true);
+  }
+
+  function handleEditSheetClose() {
+    setIsEditSheetOpen(false);
+    setSelectedMember(null);
+  }
 
   return (
     <div className="space-y-6">
@@ -69,6 +90,15 @@ export function UsersPageClient({
         </Card>
         <Card className="flex items-center gap-3 p-4">
           <div className="flex size-10 items-center justify-center rounded-lg bg-green-100">
+            <Users size={20} className="text-green-700" />
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Активных</p>
+            <p className="text-2xl font-bold">{activeCount}</p>
+          </div>
+        </Card>
+        <Card className="flex items-center gap-3 p-4">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-green-100">
             <MessageCircle size={20} className="text-green-700" />
           </div>
           <div>
@@ -78,18 +108,24 @@ export function UsersPageClient({
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          placeholder="Поиск по имени или email..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      {/* Search + Create button */}
+      <div className="flex items-center gap-4">
+        <div className="relative max-w-sm flex-1">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            placeholder="Поиск по имени или email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Plus size={16} />
+          Добавить пользователя
+        </Button>
       </div>
 
       {/* Table */}
@@ -99,13 +135,18 @@ export function UsersPageClient({
             <TableHead>ФИО</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Роли</TableHead>
+            <TableHead>Статус</TableHead>
             <TableHead>Telegram</TableHead>
             <TableHead>Дата</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filtered.map((member) => (
-            <TableRow key={member.user_id}>
+            <TableRow
+              key={member.user_id}
+              className="cursor-pointer"
+              onClick={() => handleRowClick(member)}
+            >
               <TableCell className="font-medium">
                 {member.full_name ?? "\u2014"}
               </TableCell>
@@ -113,12 +154,7 @@ export function UsersPageClient({
                 {member.email}
               </TableCell>
               <TableCell>
-                <button
-                  type="button"
-                  className="flex flex-wrap gap-1 cursor-pointer"
-                  onClick={() => setEditingMember(member)}
-                  title="Редактировать роли"
-                >
+                <div className="flex flex-wrap gap-1">
                   {member.roles.length > 0 ? (
                     member.roles.map((role) => {
                       const colorClass =
@@ -135,12 +171,23 @@ export function UsersPageClient({
                   ) : (
                     <span className="text-sm text-muted-foreground">\u2014</span>
                   )}
-                </button>
+                </div>
+              </TableCell>
+              <TableCell>
+                {member.status === "active" ? (
+                  <Badge className="bg-green-100 text-green-700">
+                    Активен
+                  </Badge>
+                ) : (
+                  <Badge className="bg-red-100 text-red-700">
+                    Заблокирован
+                  </Badge>
+                )}
               </TableCell>
               <TableCell>
                 {member.telegram_username ? (
                   <span className="text-green-600 text-sm">
-                    \u2713 @{member.telegram_username}
+                    &#x2713; @{member.telegram_username}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">\u2014</span>
@@ -154,7 +201,7 @@ export function UsersPageClient({
           {filtered.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={5}
+                colSpan={6}
                 className="text-center py-12 text-muted-foreground"
               >
                 {search
@@ -166,17 +213,23 @@ export function UsersPageClient({
         </TableBody>
       </Table>
 
-      {/* Role edit modal */}
-      {editingMember && (
-        <RoleEditModal
-          member={editingMember}
+      {/* Create user dialog */}
+      <CreateUserDialog
+        allRoles={allRoles}
+        salesGroups={salesGroups}
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+      />
+
+      {/* User edit sheet */}
+      {selectedMember && (
+        <UserEditSheet
+          member={selectedMember}
           allRoles={allRoles}
+          salesGroups={salesGroups}
           orgId={orgId}
-          currentUserId={currentUserId}
-          open={!!editingMember}
-          onOpenChange={(open) => {
-            if (!open) setEditingMember(null);
-          }}
+          isOpen={isEditSheetOpen}
+          onClose={handleEditSheetClose}
         />
       )}
     </div>

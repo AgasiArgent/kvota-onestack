@@ -3,6 +3,8 @@ export type {
   FeedbackItem,
   FeedbackDetail,
   RoleOption,
+  CreateUserPayload,
+  UpdateUserPayload,
 } from "./types";
 export {
   ROLE_COLORS,
@@ -14,11 +16,12 @@ export {
 export {
   fetchOrgMembers,
   fetchAllRoles,
+  fetchSalesGroups,
   fetchFeedbackList,
   fetchFeedbackDetail,
 } from "./queries";
 export {
-  updateUserRoles,
+  updateUserProfile,
   updateFeedbackStatus,
   bulkUpdateFeedbackStatus,
   fetchFeedbackDetailClient,

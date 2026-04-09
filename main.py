@@ -44838,63 +44838,18 @@ def _ci_status_badge(status):
     return Span(label, style=f"padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; {style}")
 
 
+from services.deal_data_service import fetch_items_with_buyer_companies as _svc_fetch_items_with_buyer_companies
+from services.deal_data_service import fetch_enrichment_data as _svc_fetch_enrichment_data
+
+
 def _fetch_items_with_buyer_companies(supabase, quote_id):
-    """Fetch quote items enriched with buyer_company_id from invoices.
-
-    buyer_company_id lives on the invoices table, not on quote_items.
-    Items link to invoices via quote_items.invoice_id.
-    This function resolves that indirection and returns items with
-    buyer_company_id set, plus a bc_lookup dict of buyer companies.
-    """
-    items_resp = supabase.table("quote_items").select("*").eq("quote_id", quote_id).execute()
-    items = items_resp.data or []
-
-    inv_resp = supabase.table("invoices").select(
-        "id, buyer_company_id, buyer_companies!buyer_company_id(id, name, country, region)"
-    ).eq("quote_id", quote_id).execute()
-    inv_data = inv_resp.data or []
-
-    bc_lookup = {}
-    inv_bc_map = {}
-    for inv in inv_data:
-        bc = (inv.get("buyer_companies") or {})
-        if bc and bc.get("id"):
-            bc_lookup[bc["id"]] = bc
-            inv_bc_map[inv["id"]] = bc["id"]
-
-    for item in items:
-        if not item.get("buyer_company_id") and item.get("invoice_id"):
-            item["buyer_company_id"] = inv_bc_map.get(item["invoice_id"])
-
-    return items, bc_lookup
+    """Fetch quote items enriched with buyer_company_id from invoices."""
+    return _svc_fetch_items_with_buyer_companies(supabase, quote_id)
 
 
 def _fetch_enrichment_data(supabase, org_id):
-    """Fetch active currency contracts and bank accounts for an organization.
-
-    Used to enrich currency invoice generation with contract/bank details.
-    Returns (contracts_list, bank_accounts_list). On failure returns ([], [])
-    so that invoice generation can proceed without enrichment.
-    """
-    try:
-        contracts_resp = supabase.table("currency_contracts").select("*").eq(
-            "organization_id", org_id
-        ).eq("is_active", True).execute()
-        contracts = contracts_resp.data or []
-    except Exception as e:
-        print(f"Warning: could not fetch currency_contracts for org {org_id}: {e}")
-        contracts = []
-
-    try:
-        bank_accounts_resp = supabase.table("bank_accounts").select("*").eq(
-            "organization_id", org_id
-        ).eq("is_active", True).execute()
-        bank_accounts = bank_accounts_resp.data or []
-    except Exception as e:
-        print(f"Warning: could not fetch bank_accounts for org {org_id}: {e}")
-        bank_accounts = []
-
-    return contracts, bank_accounts
+    """Fetch active currency contracts and bank accounts for an organization."""
+    return _svc_fetch_enrichment_data(supabase, org_id)
 
 
 def _finance_fetch_deal_data(deal_id, org_id, user_roles):
@@ -48172,6 +48127,27 @@ async def patch_plan_fact_item(request, deal_id: str, id: str):
 @rt("/api/plan-fact/{deal_id}/items/{id}", methods=["DELETE"])
 async def delete_plan_fact_item(request, deal_id: str, id: str):
     return await plan_fact_delete_item(request, deal_id, id)
+
+
+# --- Admin User Management JSON API (for Next.js frontend) ---
+
+from api.admin_users import (
+    create_user as admin_create_user,
+    update_user_status as admin_update_user_status,
+    update_user_roles as admin_update_user_roles,
+)
+
+@rt("/api/admin/users", methods=["POST"])
+async def post_admin_users(request):
+    return await admin_create_user(request)
+
+@rt("/api/admin/users/{user_id}/roles", methods=["PATCH"])
+async def patch_admin_user_roles(request, user_id: str):
+    return await admin_update_user_roles(request, user_id)
+
+@rt("/api/admin/users/{user_id}", methods=["PATCH"])
+async def patch_admin_user(request, user_id: str):
+    return await admin_update_user_status(request, user_id)
 
 
 # --- Cron JSON API (for scheduled background tasks) ---

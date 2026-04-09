@@ -1,45 +1,21 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import type { FeedbackDetail } from "./types";
 
-export async function updateUserRoles(
+/**
+ * Update user profile fields directly via Supabase.
+ * For single-table CRUD — no need for Python API.
+ */
+export async function updateUserProfile(
   userId: string,
   orgId: string,
-  roleSlugs: string[]
-): Promise<void> {
+  data: { full_name?: string; position?: string | null; sales_group_id?: string | null }
+) {
   const supabase = createClient();
-
-  // 1. Look up role IDs by slug
-  const { data: roles, error: rolesError } = await supabase
-    .from("roles")
-    .select("id, slug")
-    .in("slug", roleSlugs);
-
-  if (rolesError) throw rolesError;
-  if (!roles || roles.length === 0) {
-    throw new Error("No matching roles found");
-  }
-
-  // 2. Delete existing user_roles for this user in this org
-  const { error: deleteError } = await supabase
-    .from("user_roles")
-    .delete()
+  return supabase
+    .from("user_profiles")
+    .update(data)
     .eq("user_id", userId)
     .eq("organization_id", orgId);
-
-  if (deleteError) throw deleteError;
-
-  // 3. Insert new roles
-  const inserts = roles.map((role) => ({
-    user_id: userId,
-    role_id: role.id,
-    organization_id: orgId,
-  }));
-
-  const { error: insertError } = await supabase
-    .from("user_roles")
-    .insert(inserts);
-
-  if (insertError) throw insertError;
 }
 
 export async function updateFeedbackStatus(

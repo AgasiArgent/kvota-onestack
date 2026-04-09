@@ -5,6 +5,10 @@ export interface OrgMember {
   roles: { id: string; slug: string; name: string }[];
   telegram_username: string | null;
   joined_at: string;
+  status: "active" | "suspended";
+  position: string | null;
+  sales_group_id: string | null;
+  is_last_admin: boolean;
 }
 
 export interface FeedbackItem {
@@ -70,3 +74,18 @@ export const FEEDBACK_STATUS_COLORS: Record<string, string> = {
   resolved: "bg-green-100 text-green-700",
   closed: "bg-slate-100 text-slate-700",
 };
+
+export interface CreateUserPayload {
+  email: string;
+  password: string;
+  full_name: string;
+  role_slugs: string[];
+  position?: string;
+  sales_group_id?: string | null;
+}
+
+export interface UpdateUserPayload {
+  full_name?: string;
+  position?: string;
+  sales_group_id?: string | null;
+}

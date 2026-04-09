@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/entities/user";
-import { fetchOrgMembers, fetchAllRoles } from "@/entities/admin";
+import { fetchOrgMembers, fetchAllRoles, fetchSalesGroups } from "@/entities/admin";
 import { UsersPageClient } from "@/features/admin-users";
 
 export default async function AdminUsersPage() {
@@ -8,9 +8,10 @@ export default async function AdminUsersPage() {
   if (!user?.orgId) redirect("/login");
   if (!user.roles.includes("admin")) redirect("/quotes");
 
-  const [members, allRoles] = await Promise.all([
+  const [members, allRoles, salesGroups] = await Promise.all([
     fetchOrgMembers(user.orgId),
     fetchAllRoles(user.orgId),
+    fetchSalesGroups(),
   ]);
 
   return (
@@ -19,8 +20,8 @@ export default async function AdminUsersPage() {
       <UsersPageClient
         members={members}
         allRoles={allRoles}
+        salesGroups={salesGroups}
         orgId={user.orgId}
-        currentUserId={user.id}
       />
     </div>
   );
