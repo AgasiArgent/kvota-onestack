@@ -25,6 +25,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { createClient } from "@/shared/lib/supabase/client";
+import { confirmSignatureAndCreateDeal } from "./mutations";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import type {
   SpecificationRow,
@@ -255,24 +256,23 @@ export function SpecificationStep({
     }
   }
 
-  // Create deal via single RPC call
+  // Create deal via Python API endpoint (api-first pattern)
   async function handleCreateDeal() {
     if (!spec) return;
     setCreatingDeal(true);
     try {
-      const supabase = createClient();
+      const result = await confirmSignatureAndCreateDeal(spec.id);
+      const dealNumber = result?.deal_number ?? "";
+      const invoicesCreated = result?.invoices_created ?? 0;
+      const skipReason = result?.invoices_skipped_reason;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase.rpc as any)("create_deal_from_specification", {
-        p_spec_id: spec.id,
-        p_quote_id: quote.id,
-        p_organization_id: orgId,
-      });
-
-      if (error) throw error;
-
-      const dealNumber = Array.isArray(data) ? data[0]?.deal_number : (data as { deal_number: string })?.deal_number;
-      toast.success(`Сделка ${dealNumber ?? ""} создана!`);
+      if (invoicesCreated > 0) {
+        toast.success(`Сделка ${dealNumber} создана! Валютных инвойсов: ${invoicesCreated}`);
+      } else if (skipReason) {
+        toast.success(`Сделка ${dealNumber} создана. Инвойсы не созданы: ${skipReason}`);
+      } else {
+        toast.success(`Сделка ${dealNumber} создана!`);
+      }
       router.push("/quotes");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown";
