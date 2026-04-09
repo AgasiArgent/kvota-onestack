@@ -176,6 +176,73 @@ describe("isProcurementSeniorOnly", () => {
   });
 });
 
+/**
+ * Regression: FB-260408-172108-de72, FB-260409-152729-ef33
+ * User with head_of_procurement + procurement_senior was incorrectly
+ * matched as isProcurementSeniorOnly, causing them to see only
+ * procurement-stage quotes instead of all quotes.
+ */
+describe("tier determination for real-world role combos", () => {
+  /**
+   * Determines which access tier a role set falls into.
+   * Mirrors the if/else chain in fetchQuotesList (queries.ts).
+   */
+  function determineTier(roles: string[]): string {
+    if (isAssignedItemsOnly(roles)) return "ASSIGNED_ITEMS";
+    if (isSalesOnly(roles)) return "OWN_OR_GROUP";
+    if (isProcurementSeniorOnly(roles)) return "PROCUREMENT_STAGE_ONLY";
+    return "FULL";
+  }
+
+  // --- Single roles ---
+  it.each([
+    { roles: ["admin"], expected: "FULL" },
+    { roles: ["top_manager"], expected: "FULL" },
+    { roles: ["head_of_procurement"], expected: "FULL" },
+    { roles: ["head_of_logistics"], expected: "FULL" },
+    { roles: ["quote_controller"], expected: "FULL" },
+    { roles: ["spec_controller"], expected: "FULL" },
+    { roles: ["finance"], expected: "FULL" },
+    { roles: ["sales"], expected: "OWN_OR_GROUP" },
+    { roles: ["head_of_sales"], expected: "OWN_OR_GROUP" },
+    { roles: ["procurement"], expected: "ASSIGNED_ITEMS" },
+    { roles: ["logistics"], expected: "ASSIGNED_ITEMS" },
+    { roles: ["customs"], expected: "ASSIGNED_ITEMS" },
+    { roles: ["procurement_senior"], expected: "PROCUREMENT_STAGE_ONLY" },
+  ])("$roles → $expected", ({ roles, expected }) => {
+    expect(determineTier(roles)).toBe(expected);
+  });
+
+  // --- Multi-role combos (regression cases) ---
+  it("head_of_procurement + procurement_senior → FULL (Plastinina regression)", () => {
+    expect(determineTier(["head_of_procurement", "procurement_senior"])).toBe("FULL");
+  });
+
+  it("sales + procurement_senior → FULL (broader role wins)", () => {
+    expect(determineTier(["sales", "procurement_senior"])).toBe("FULL");
+  });
+
+  it("sales + head_of_sales → OWN_OR_GROUP (both are sales-tier)", () => {
+    expect(determineTier(["sales", "head_of_sales"])).toBe("OWN_OR_GROUP");
+  });
+
+  it("procurement + logistics → ASSIGNED_ITEMS (both are assigned-tier)", () => {
+    expect(determineTier(["procurement", "logistics"])).toBe("ASSIGNED_ITEMS");
+  });
+
+  it("procurement_senior + procurement → PROCUREMENT_STAGE_ONLY (senior dominates)", () => {
+    expect(determineTier(["procurement_senior", "procurement"])).toBe("PROCUREMENT_STAGE_ONLY");
+  });
+
+  it("procurement_senior + admin → FULL (admin overrides)", () => {
+    expect(determineTier(["procurement_senior", "admin"])).toBe("FULL");
+  });
+
+  it("procurement + sales → FULL (cross-domain = no special filter)", () => {
+    expect(determineTier(["procurement", "sales"])).toBe("FULL");
+  });
+});
+
 describe("role tier mutual exclusivity", () => {
   const allRoles = [
     "admin",
