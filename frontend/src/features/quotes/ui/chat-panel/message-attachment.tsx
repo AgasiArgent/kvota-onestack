@@ -84,10 +84,16 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
     );
   }
 
-  // Non-image: compact download card
+  // Non-image: compact download card.
+  // The `download` attribute tells Chrome to save the file with its
+  // original filename instead of rendering it (e.g. the PDF viewer),
+  // which both matches user intent for a file-attachment card and
+  // sidesteps Chrome's PDF viewer showing confusing error states for
+  // malformed files.
   return (
     <a
       href={signedUrl ?? "#"}
+      download={attachment.original_filename}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => {
