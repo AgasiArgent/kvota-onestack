@@ -374,7 +374,7 @@ export function ChatInput({
         </div>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-stretch gap-2">
         <input
           ref={fileInputRef}
           type="file"
@@ -383,19 +383,6 @@ export function ChatInput({
           accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.zip"
           onChange={handleFileSelect}
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={disabled || sending}
-          className={cn(
-            "flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg",
-            "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-            "disabled:opacity-50 disabled:cursor-not-allowed"
-          )}
-          aria-label="Прикрепить файл"
-          type="button"
-        >
-          <Paperclip className="w-4 h-4" />
-        </button>
         <textarea
           ref={textareaRef}
           value={value}
@@ -414,29 +401,44 @@ export function ChatInput({
               : "Написать сообщение..."
           }
           disabled={disabled || sending}
-          rows={1}
+          rows={2}
           className={cn(
             "flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm",
             "placeholder:text-muted-foreground",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             "disabled:cursor-not-allowed disabled:opacity-50",
-            "max-h-24"
+            "min-h-[64px] max-h-40"
           )}
         />
-        <button
-          onClick={handleSend}
-          disabled={!canSend}
-          className={cn(
-            "flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg",
-            "transition-colors",
-            canSend
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground cursor-not-allowed"
-          )}
-          aria-label="Отправить"
-        >
-          <Send className="w-4 h-4" />
-        </button>
+        <div className="flex flex-col justify-between flex-shrink-0">
+          <button
+            onClick={handleSend}
+            disabled={!canSend}
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg transition-colors",
+              canSend
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
+            )}
+            aria-label="Отправить"
+            type="button"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={disabled || sending}
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg",
+              "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+              "disabled:opacity-50 disabled:cursor-not-allowed"
+            )}
+            aria-label="Прикрепить файл"
+            type="button"
+          >
+            <Paperclip className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
