@@ -298,14 +298,6 @@ export function QuotesTableClient({
         rowKey={(q) => q.id}
         columns={columns}
         filterOptions={filterOptionsMap}
-        defaultFilters={{
-          status: {
-            kind: "multi-select",
-            values: filterOptions.statuses
-              .filter((s) => s.value !== "cancelled")
-              .map((s) => s.value),
-          },
-        }}
         onRowClick={handleRowClick}
         search={{
           placeholder: "Поиск по КП, клиенту, бренду...",

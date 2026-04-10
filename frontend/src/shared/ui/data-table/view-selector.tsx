@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -172,7 +173,9 @@ export function ViewSelector({
           }
         />
         <DropdownMenuContent className="w-60" align="start">
-          <DropdownMenuLabel>Сохранённые виды</DropdownMenuLabel>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Сохранённые виды</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
 
           {/* "All" (no view) item */}
