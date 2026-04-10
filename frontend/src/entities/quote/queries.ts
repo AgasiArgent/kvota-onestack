@@ -317,10 +317,12 @@ export async function fetchQuoteComments(quoteId: string) {
 
   if (!comments?.length) return [];
 
-  // Batch-resolve user profiles + role slugs
+  const commentIds = comments.map((c) => c.id);
+
+  // Batch-resolve user profiles + role slugs + attachments in parallel
   const userIds = [...new Set(comments.map((c) => c.user_id))];
 
-  const [profilesRes, membersRes] = await Promise.all([
+  const [profilesRes, membersRes, attachmentsRes] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("user_id, full_name")
@@ -329,6 +331,12 @@ export async function fetchQuoteComments(quoteId: string) {
       .from("organization_members")
       .select("user_id, roles!inner(slug)")
       .in("user_id", userIds),
+    supabase
+      .from("documents")
+      .select(
+        "id, comment_id, original_filename, storage_path, mime_type, file_size_bytes"
+      )
+      .in("comment_id", commentIds),
   ]);
 
   const profileMap = new Map(
@@ -340,6 +348,30 @@ export async function fetchQuoteComments(quoteId: string) {
       (m.roles as unknown as { slug: string })?.slug ?? "unknown",
     ])
   );
+
+  // Group attachments by comment_id
+  const attachmentsByComment = new Map<
+    string,
+    Array<{
+      id: string;
+      original_filename: string;
+      storage_path: string;
+      mime_type: string | null;
+      file_size_bytes: number | null;
+    }>
+  >();
+  for (const att of attachmentsRes.data ?? []) {
+    if (!att.comment_id) continue;
+    const list = attachmentsByComment.get(att.comment_id) ?? [];
+    list.push({
+      id: att.id,
+      original_filename: att.original_filename,
+      storage_path: att.storage_path,
+      mime_type: att.mime_type,
+      file_size_bytes: att.file_size_bytes,
+    });
+    attachmentsByComment.set(att.comment_id, list);
+  }
 
   return comments.map((c) => {
     const profile = profileMap.get(c.user_id);
@@ -353,6 +385,7 @@ export async function fetchQuoteComments(quoteId: string) {
             role_slug: roleMap.get(c.user_id) ?? "unknown",
           }
         : null,
+      attachments: attachmentsByComment.get(c.id) ?? [],
     };
   });
 }

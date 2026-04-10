@@ -85,6 +85,18 @@ export function useRealtimeComments(
               );
             });
 
+            // Fetch attachments for the new message (if any). The realtime
+            // payload only contains the comment row — attachments live in
+            // the documents table and are linked async by sendQuoteComment.
+            resolveAttachments(supabase, newRow.id).then((attachments) => {
+              if (attachments.length === 0) return;
+              setMessages((current) =>
+                current.map((m) =>
+                  m.id === newRow.id ? { ...m, attachments } : m
+                )
+              );
+            });
+
             return [
               ...prev,
               {
@@ -95,6 +107,7 @@ export function useRealtimeComments(
                 mentions: newRow.mentions,
                 created_at: newRow.created_at,
                 user_profile: null,
+                attachments: [],
               },
             ];
           });
@@ -183,6 +196,29 @@ export function useRealtimeComments(
   );
 
   return { messages, sendMessage, isConnected };
+}
+
+async function resolveAttachments(
+  supabase: ReturnType<typeof createClient>,
+  commentId: string
+): Promise<NonNullable<QuoteComment["attachments"]>> {
+  try {
+    const { data } = await supabase
+      .from("documents")
+      .select(
+        "id, original_filename, storage_path, mime_type, file_size_bytes"
+      )
+      .eq("comment_id", commentId);
+    return (data ?? []).map((d) => ({
+      id: d.id,
+      original_filename: d.original_filename,
+      storage_path: d.storage_path,
+      mime_type: d.mime_type,
+      file_size_bytes: d.file_size_bytes,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 async function resolveUserProfile(

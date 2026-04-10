@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import type { QuoteComment } from "@/entities/quote/types";
+import { MessageAttachment } from "./message-attachment";
 
 const ROLE_BADGE_COLORS: Record<string, string> = {
   sales: "bg-blue-100 text-blue-700",
@@ -116,16 +117,27 @@ export function ChatMessage({ comment, isOwn }: ChatMessageProps) {
         </div>
 
         {/* Message body */}
-        <div
-          className={cn(
-            "rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words",
-            isOwn
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-foreground"
-          )}
-        >
-          {comment.body}
-        </div>
+        {comment.body && (
+          <div
+            className={cn(
+              "rounded-lg px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words",
+              isOwn
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-foreground"
+            )}
+          >
+            {comment.body}
+          </div>
+        )}
+
+        {/* Attachments */}
+        {comment.attachments && comment.attachments.length > 0 && (
+          <div className={cn("flex flex-col gap-1", isOwn && "items-end")}>
+            {comment.attachments.map((att) => (
+              <MessageAttachment key={att.id} attachment={att} isOwn={isOwn} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

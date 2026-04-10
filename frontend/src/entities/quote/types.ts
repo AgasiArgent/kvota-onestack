@@ -215,6 +215,14 @@ export interface QuoteInvoice {
   buyer_company?: { id: string; name: string; company_code: string } | null;
 }
 
+export interface CommentAttachment {
+  id: string;
+  original_filename: string;
+  storage_path: string;
+  mime_type: string | null;
+  file_size_bytes: number | null;
+}
+
 export interface QuoteComment {
   id: string;
   quote_id: string;
@@ -228,6 +236,7 @@ export interface QuoteComment {
     full_name: string;
     role_slug: string;
   } | null;
+  attachments?: CommentAttachment[];
 }
 
 export interface QuoteVersion {
