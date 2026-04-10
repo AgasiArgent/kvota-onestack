@@ -185,7 +185,7 @@ export function ProcurementHandsontable({
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "✕";
-      btn.title = "Убрать из инвойса";
+      btn.title = "Убрать из КП";
       btn.style.cssText =
         "border:none;background:none;color:#a1a1aa;cursor:pointer;font-size:14px;padding:2px 6px;border-radius:4px;";
       btn.onmouseenter = () => { btn.style.color = "#dc2626"; btn.style.backgroundColor = "#fee2e2"; };
@@ -196,7 +196,7 @@ export function ProcurementHandsontable({
         if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
         pendingOps.current.add(`unassign-${rowId}`);
         unassignItemFromInvoice(rowId)
-          .then(() => { toast.success("Позиция убрана из инвойса"); router.refresh(); })
+          .then(() => { toast.success("Позиция убрана из КП"); router.refresh(); })
           .catch(() => toast.error("Не удалось убрать позицию"))
           .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
       };
@@ -296,7 +296,7 @@ export function ProcurementHandsontable({
   if (items.length === 0) {
     return (
       <div className="py-6 text-center text-sm text-muted-foreground">
-        Нет позиций в этом инвойсе
+        Нет позиций в этом КП
       </div>
     );
   }

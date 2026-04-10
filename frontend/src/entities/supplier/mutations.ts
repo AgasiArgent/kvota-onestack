@@ -16,6 +16,7 @@ export interface SupplierFormData {
   city?: string;
   registration_number?: string;
   default_payment_terms?: string;
+  notes?: string;
 }
 
 export interface SupplierContactFormData {
@@ -109,6 +110,7 @@ export async function updateSupplier(
   if (data.city !== undefined) updatePayload.city = data.city || null;
   if (data.registration_number !== undefined) updatePayload.registration_number = data.registration_number || null;
   if (data.default_payment_terms !== undefined) updatePayload.default_payment_terms = data.default_payment_terms || null;
+  if (data.notes !== undefined) updatePayload.notes = data.notes || null;
   if (data.is_active !== undefined) updatePayload.is_active = data.is_active;
 
   const { error } = await supabase

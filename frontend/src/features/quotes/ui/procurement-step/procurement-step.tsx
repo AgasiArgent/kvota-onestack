@@ -103,7 +103,7 @@ export function ProcurementStep({
     ).length;
     if (unassignedCount > 0) {
       toast.error(
-        `Нельзя завершить: ${unassignedCount} поз. не распределены по инвойсам.`
+        `Нельзя завершить: ${unassignedCount} поз. не распределены по КП поставщиков.`
       );
       return;
     }
@@ -154,7 +154,7 @@ export function ProcurementStep({
 
         {invoices.length === 0 && items.every((i) => i.invoice_id != null) && (
           <div className="text-center py-12 text-muted-foreground">
-            Нет инвойсов
+            Нет КП поставщиков
           </div>
         )}
       </div>

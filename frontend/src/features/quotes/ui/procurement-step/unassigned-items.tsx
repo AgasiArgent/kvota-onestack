@@ -79,7 +79,7 @@ export function UnassignedItems({
     setAssigning(true);
     try {
       await assignItemsToInvoice(Array.from(selectedIds), invoiceId);
-      toast.success(`${selectedIds.size} поз. назначено в инвойс`);
+      toast.success(`${selectedIds.size} поз. назначено в КП`);
       setSelectedIds(new Set());
       router.refresh();
     } catch {
@@ -155,7 +155,7 @@ export function UnassignedItems({
             disabled={assigning}
           >
             <Plus size={14} />
-            Создать инвойс с выбранными
+            Создать КП с выбранными
           </Button>
 
           {invoices.length > 0 && (
@@ -168,7 +168,7 @@ export function UnassignedItems({
                     ) : (
                       <ArrowRight size={14} />
                     )}
-                    Назначить в инвойс
+                    Назначить в КП
                     <ChevronDown size={14} />
                   </Button>
                 }

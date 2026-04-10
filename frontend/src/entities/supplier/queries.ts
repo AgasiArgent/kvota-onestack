@@ -177,6 +177,7 @@ export async function fetchSupplierDetail(
     // registration_number added in migration 217, not yet in generated types
     registration_number: (data as unknown as Record<string, unknown>).registration_number as string | null ?? null,
     default_payment_terms: data.default_payment_terms,
+    notes: (data as unknown as Record<string, unknown>).notes as string | null ?? null,
     is_active: data.is_active !== false,
     created_at: data.created_at ?? "",
     updated_at: data.updated_at,

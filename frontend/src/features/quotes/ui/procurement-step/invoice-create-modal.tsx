@@ -145,11 +145,11 @@ export function InvoiceCreateModal({
         );
       }
 
-      toast.success("Инвойс создан");
+      toast.success("КП поставщику создано");
       handleClose();
       router.refresh();
     } catch {
-      toast.error("Не удалось создать инвойс");
+      toast.error("Не удалось создать КП поставщику");
     } finally {
       setSubmitting(false);
     }
@@ -158,12 +158,12 @@ export function InvoiceCreateModal({
   const canSubmit = !submitting;
 
   return (
-    <Dialog open={open} onOpenChange={(val) => !val && handleClose()}>
-      <DialogContent className="sm:max-w-lg z-[200]">
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent className="sm:max-w-lg z-[200]" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Создать инвойс</DialogTitle>
+          <DialogTitle>Создать КП поставщику</DialogTitle>
           <DialogDescription>
-            Заполните данные инвойса и назначьте позиции
+            Заполните данные КП поставщика и назначьте позиции
           </DialogDescription>
         </DialogHeader>
 
@@ -304,8 +304,8 @@ export function InvoiceCreateModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Файл инвойса</Label>
-            <Input type="file" accept=".pdf,.jpg,.png,.xlsx" />
+            <Label>Файл КП поставщика</Label>
+            <Input type="file" />
           </div>
 
           {selectedItems.length > 0 && (

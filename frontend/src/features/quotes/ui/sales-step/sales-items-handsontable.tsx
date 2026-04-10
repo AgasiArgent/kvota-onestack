@@ -177,6 +177,12 @@ export function SalesItemsHandsontable({
             .catch(() => toast.error("Не удалось сохранить"))
             .finally(() => pendingOps.current.delete(lockKey));
         } else if (hasContent(rowData) && source !== "CopyPaste.paste") {
+          // Validate required fields: brand and article (product_code)
+          if (!rowData.brand?.trim() || !rowData.product_code?.trim()) {
+            // Don't create yet — wait for required fields
+            continue;
+          }
+
           // New row with content: create item (skip during paste — handled by afterPaste)
           const lockKey = `create-${rowIndex}`;
           if (pendingOps.current.has(lockKey)) continue;
@@ -254,6 +260,7 @@ export function SalesItemsHandsontable({
 
         const rowData = hot.getSourceDataAtRow(r) as RowData | undefined;
         if (!rowData || !hasContent(rowData)) continue;
+        if (!rowData.brand?.trim() || !rowData.product_code?.trim()) continue;
 
         newRows.push({ rowIndex: r, payload: rowToCreatePayload(rowData) });
       }
@@ -296,7 +303,7 @@ export function SalesItemsHandsontable({
           ref={hotRef}
           data={initialData}
           licenseKey="non-commercial-and-evaluation"
-          colHeaders={["Бренд", "Артикул", "Наименование", "Кол-во", "Ед."]}
+          colHeaders={["Бренд *", "Артикул *", "Наименование", "Кол-во", "Ед."]}
           columns={[
             { data: "brand", type: "text", width: 120 },
             { data: "product_code", type: "text", width: 150 },

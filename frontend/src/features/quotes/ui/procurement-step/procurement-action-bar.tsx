@@ -67,7 +67,7 @@ export function ProcurementActionBar({
         disabled={procurementCompleted}
       >
         <Plus size={14} />
-        Создать инвойс
+        Создать КП поставщику
       </Button>
 
       {procurementCompleted ? (
@@ -96,7 +96,7 @@ export function ProcurementActionBar({
           incomplete ? "text-warning font-medium" : "text-muted-foreground"
         }`}
       >
-        {readyCount}/{totalItems} готово | {assignedUserCount} назн. | {assignedInvoiceCount} в инвойсах
+        {readyCount}/{totalItems} готово | {assignedUserCount} назн. | {assignedInvoiceCount} в КП
       </span>
     </div>
   );

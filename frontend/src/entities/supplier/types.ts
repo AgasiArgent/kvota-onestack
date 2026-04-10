@@ -19,6 +19,7 @@ export interface SupplierDetail {
   city: string | null;
   registration_number: string | null;
   default_payment_terms: string | null;
+  notes: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string | null;

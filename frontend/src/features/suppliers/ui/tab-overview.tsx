@@ -30,6 +30,7 @@ export function TabOverview({ supplier }: Props) {
   const [paymentTerms, setPaymentTerms] = useState(
     supplier.default_payment_terms ?? ""
   );
+  const [notes, setNotes] = useState(supplier.notes ?? "");
 
   function resetForm() {
     setName(supplier.name);
@@ -38,6 +39,7 @@ export function TabOverview({ supplier }: Props) {
     setCity(supplier.city ?? "");
     setRegistrationNumber(supplier.registration_number ?? "");
     setPaymentTerms(supplier.default_payment_terms ?? "");
+    setNotes(supplier.notes ?? "");
   }
 
   async function handleSave() {
@@ -50,6 +52,7 @@ export function TabOverview({ supplier }: Props) {
         city,
         registration_number: registrationNumber,
         default_payment_terms: paymentTerms,
+        notes,
       });
       setEditing(false);
       router.refresh();
@@ -86,6 +89,18 @@ export function TabOverview({ supplier }: Props) {
                 <Field label="Код" value={supplierCode} onChange={setSupplierCode} placeholder="Краткий код" />
                 <Field label="Рег. номер / VAT" value={registrationNumber} onChange={setRegistrationNumber} placeholder="VAT / Tax ID" />
                 <Field label="Условия оплаты" value={paymentTerms} onChange={setPaymentTerms} placeholder="Условия оплаты по умолчанию" />
+                <fieldset className="flex flex-col gap-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+                    Комментарии
+                  </Label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Заметки о поставщике"
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring resize-y"
+                  />
+                </fieldset>
                 <div className="flex gap-2 pt-2">
                   <Button
                     size="sm"
@@ -108,6 +123,7 @@ export function TabOverview({ supplier }: Props) {
                 <Row label="Код" value={supplier.supplier_code} />
                 <Row label="Рег. номер / VAT" value={supplier.registration_number} />
                 <Row label="Условия оплаты" value={supplier.default_payment_terms} />
+                <Row label="Комментарии" value={supplier.notes} />
                 <Row
                   label="Статус"
                   value={

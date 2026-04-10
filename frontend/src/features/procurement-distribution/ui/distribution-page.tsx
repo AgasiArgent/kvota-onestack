@@ -16,6 +16,7 @@ interface Props {
 }
 
 export function DistributionPage({ quotes, workload, orgId }: Props) {
+  const totalQuotes = quotes.length;
   const totalItems = quotes.reduce(
     (sum, q) => sum + q.brandGroups.reduce((s, bg) => s + bg.itemCount, 0),
     0
@@ -29,10 +30,9 @@ export function DistributionPage({ quotes, workload, orgId }: Props) {
           <h1 className="text-xl font-semibold text-text">
             Распределение заявок
           </h1>
-          {totalItems > 0 && (
+          {totalQuotes > 0 && (
             <p className="text-sm text-text-muted mt-1">
-              {totalItems} {totalItems === 1 ? "позиция требует" : "позиций требуют"}{" "}
-              назначения
+              {totalQuotes} {totalQuotes === 1 ? "заявка" : totalQuotes < 5 ? "заявки" : "заявок"} ({totalItems} поз.)
             </p>
           )}
         </div>

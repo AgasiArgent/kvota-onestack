@@ -111,7 +111,7 @@ export function InvoiceCard({
       toast.success(`${items.length} поз. возвращены в нераспределённые`);
       router.refresh();
     } catch {
-      toast.error("Не удалось убрать позиции из инвойса");
+      toast.error("Не удалось убрать позиции из КП");
     } finally {
       setUnassigning(false);
     }
@@ -124,7 +124,7 @@ export function InvoiceCard({
       toast.success(`Инвойс ${invoice.invoice_number} удалён`);
       router.refresh();
     } catch {
-      toast.error("Не удалось удалить инвойс");
+      toast.error("Не удалось удалить КП");
     } finally {
       setDeleting(false);
     }
@@ -204,7 +204,7 @@ export function InvoiceCard({
             className="mr-2 text-muted-foreground hover:text-destructive"
             onClick={handleDelete}
             disabled={deleting}
-            title="Удалить пустой инвойс"
+            title="Удалить пустое КП поставщику"
           >
             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
           </Button>
@@ -229,7 +229,7 @@ export function InvoiceCard({
               <div className="flex items-center gap-2 mb-1">
                 <Weight size={14} className="text-muted-foreground" />
                 <span className="text-xs font-medium text-muted-foreground">
-                  Вес и габариты инвойса
+                  Вес и габариты
                 </span>
               </div>
               <div className="flex items-center gap-3">
