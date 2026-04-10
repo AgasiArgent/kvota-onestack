@@ -15,6 +15,7 @@ interface ChatPanelProps {
   quoteId: string;
   idnQuote: string;
   userId: string;
+  orgId: string;
   initialComments: QuoteComment[];
   onNewMessage?: () => void;
   orgMembers?: OrgMember[];
@@ -26,6 +27,7 @@ export function ChatPanel({
   quoteId,
   idnQuote,
   userId,
+  orgId,
   initialComments,
   onNewMessage,
   orgMembers,
@@ -104,7 +106,13 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <ChatInput onSend={sendMessage} orgMembers={orgMembers} />
+      <ChatInput
+        onSend={sendMessage}
+        orgMembers={orgMembers}
+        quoteId={quoteId}
+        orgId={orgId}
+        userId={userId}
+      />
     </div>
   );
 }

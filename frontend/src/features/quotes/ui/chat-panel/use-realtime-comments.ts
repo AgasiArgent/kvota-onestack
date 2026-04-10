@@ -9,7 +9,11 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 
 interface UseRealtimeCommentsReturn {
   messages: QuoteComment[];
-  sendMessage: (body: string, mentions?: string[]) => Promise<void>;
+  sendMessage: (
+    body: string,
+    mentions?: string[],
+    attachmentDocumentIds?: string[]
+  ) => Promise<void>;
   isConnected: boolean;
 }
 
@@ -113,9 +117,15 @@ export function useRealtimeComments(
   }, [quoteId]);
 
   const sendMessage = useCallback(
-    async (body: string, mentionIds?: string[]) => {
+    async (
+      body: string,
+      mentionIds?: string[],
+      attachmentDocumentIds?: string[]
+    ) => {
       const trimmed = body.trim();
-      if (!trimmed) return;
+      const hasAttachments =
+        attachmentDocumentIds !== undefined && attachmentDocumentIds.length > 0;
+      if (!trimmed && !hasAttachments) return;
 
       // Optimistic: add message locally before server confirms
       const optimisticId = crypto.randomUUID();
@@ -132,7 +142,13 @@ export function useRealtimeComments(
       setMessages((prev) => [...prev, optimisticMessage]);
 
       try {
-        const result = await sendQuoteComment(quoteId, userId, trimmed, mentionIds);
+        const result = await sendQuoteComment(
+          quoteId,
+          userId,
+          trimmed,
+          mentionIds,
+          attachmentDocumentIds
+        );
         // Track this ID so realtime event is skipped
         sentIdsRef.current.add(result.id);
         // Replace optimistic message with server result

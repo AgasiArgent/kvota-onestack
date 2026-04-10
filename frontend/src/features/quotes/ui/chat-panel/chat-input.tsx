@@ -5,10 +5,12 @@ import {
   useRef,
   useCallback,
   useEffect,
+  type ChangeEvent,
   type KeyboardEvent,
 } from "react";
-import { Send } from "lucide-react";
+import { Paperclip, Send, X, Loader2, FileIcon, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatAttachments } from "./use-chat-attachments";
 
 export interface OrgMember {
   userId: string;
@@ -16,9 +18,16 @@ export interface OrgMember {
 }
 
 interface ChatInputProps {
-  onSend: (body: string, mentions?: string[]) => Promise<void>;
+  onSend: (
+    body: string,
+    mentions?: string[],
+    attachmentDocumentIds?: string[]
+  ) => Promise<void>;
   disabled?: boolean;
   orgMembers?: OrgMember[];
+  quoteId: string;
+  orgId: string;
+  userId: string;
 }
 
 /**
@@ -42,11 +51,28 @@ function getMentionQuery(
   return { query, startIndex: atIdx };
 }
 
-export function ChatInput({ onSend, disabled, orgMembers }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  disabled,
+  orgMembers,
+  quoteId,
+  orgId,
+  userId,
+}: ChatInputProps) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {
+    attachments,
+    addFiles,
+    removeAttachment,
+    clear: clearAttachments,
+    getReadyDocumentIds,
+    isUploading,
+    hasAttachments,
+  } = useChatAttachments({ quoteId, orgId, userId });
 
   // Mention autocomplete state
   const [mentionQuery, setMentionQuery] = useState<{
@@ -110,14 +136,21 @@ export function ChatInput({ onSend, disabled, orgMembers }: ChatInputProps) {
 
   const handleSend = useCallback(async () => {
     const trimmed = value.trim();
-    if (!trimmed || sending) return;
+    const readyIds = getReadyDocumentIds();
+    // Allow sending when there's either text or at least one ready attachment
+    if ((!trimmed && readyIds.length === 0) || sending || isUploading) return;
 
     setSending(true);
     try {
-      await onSend(trimmed, mentions.length > 0 ? mentions : undefined);
+      await onSend(
+        trimmed,
+        mentions.length > 0 ? mentions : undefined,
+        readyIds.length > 0 ? readyIds : undefined
+      );
       setValue("");
       setMentions([]);
       setMentionQuery(null);
+      clearAttachments();
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
@@ -125,7 +158,26 @@ export function ChatInput({ onSend, disabled, orgMembers }: ChatInputProps) {
       setSending(false);
       textareaRef.current?.focus();
     }
-  }, [value, sending, onSend, mentions]);
+  }, [
+    value,
+    sending,
+    onSend,
+    mentions,
+    getReadyDocumentIds,
+    isUploading,
+    clearAttachments,
+  ]);
+
+  const handleFileSelect = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const files = e.target.files ? Array.from(e.target.files) : [];
+      // Reset so selecting the same file again re-triggers change
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (files.length === 0) return;
+      await addFiles(files);
+    },
+    [addFiles]
+  );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -172,7 +224,12 @@ export function ChatInput({ onSend, disabled, orgMembers }: ChatInputProps) {
     textarea.style.height = `${Math.min(textarea.scrollHeight, 96)}px`;
   }, []);
 
-  const canSend = value.trim().length > 0 && !sending && !disabled;
+  const hasReadyAttachments = attachments.some((a) => a.documentId && !a.error);
+  const canSend =
+    (value.trim().length > 0 || hasReadyAttachments) &&
+    !sending &&
+    !isUploading &&
+    !disabled;
   const showDropdown = mentionQuery !== null && filteredMembers.length > 0;
 
   return (
@@ -203,7 +260,65 @@ export function ChatInput({ onSend, disabled, orgMembers }: ChatInputProps) {
         </div>
       )}
 
+      {/* Pending attachments preview */}
+      {hasAttachments && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {attachments.map((att) => {
+            const isImage = att.file.type.startsWith("image/");
+            return (
+              <div
+                key={att.tempId}
+                className={cn(
+                  "flex items-center gap-2 rounded-md border px-2 py-1 text-xs",
+                  att.error
+                    ? "border-destructive/40 bg-destructive/5 text-destructive"
+                    : "border-border bg-muted/40"
+                )}
+              >
+                {att.progress < 100 && !att.error ? (
+                  <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                ) : isImage ? (
+                  <ImageIcon className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                ) : (
+                  <FileIcon className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                )}
+                <span className="max-w-[140px] truncate">{att.file.name}</span>
+                <button
+                  onClick={() => removeAttachment(att.tempId)}
+                  className="flex-shrink-0 p-0.5 rounded hover:bg-muted"
+                  aria-label={`Удалить ${att.file.name}`}
+                  type="button"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.zip"
+          onChange={handleFileSelect}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled || sending}
+          className={cn(
+            "flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-lg",
+            "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
+          aria-label="Прикрепить файл"
+          type="button"
+        >
+          <Paperclip className="w-4 h-4" />
+        </button>
         <textarea
           ref={textareaRef}
           value={value}

@@ -143,6 +143,7 @@ export default async function QuoteDetailPage({ params, searchParams }: Props) {
             quoteId={id}
             idnQuote={quote.idn_quote}
             userId={user.id}
+            orgId={user.orgId}
             initialComments={comments}
             orgMembers={orgMembers}
           />

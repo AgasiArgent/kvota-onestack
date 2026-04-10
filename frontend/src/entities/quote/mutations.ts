@@ -170,7 +170,8 @@ export async function sendQuoteComment(
   quoteId: string,
   userId: string,
   body: string,
-  mentions?: string[]
+  mentions?: string[],
+  attachmentDocumentIds?: string[]
 ) {
   const supabase = createClient();
 
@@ -186,6 +187,18 @@ export async function sendQuoteComment(
     .single();
 
   if (error) throw error;
+
+  // Link uploaded attachments to this comment. Documents were inserted
+  // earlier by useChatAttachments with comment_id=null; we set it here so
+  // they can be queried as chat media on the documents tab.
+  if (attachmentDocumentIds && attachmentDocumentIds.length > 0) {
+    const { error: linkError } = await supabase
+      .from("documents")
+      .update({ comment_id: data.id })
+      .in("id", attachmentDocumentIds);
+    if (linkError) throw linkError;
+  }
+
   return data;
 }
 

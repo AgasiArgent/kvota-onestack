@@ -58,12 +58,14 @@ function ActiveChat({
   quoteId,
   idnQuote,
   userId,
+  orgId,
   initialComments,
   orgMembers,
 }: {
   quoteId: string;
   idnQuote: string;
   userId: string;
+  orgId: string;
   initialComments: QuoteComment[];
   orgMembers: OrgMember[];
 }) {
@@ -139,7 +141,13 @@ function ActiveChat({
       </div>
 
       {/* Input */}
-      <ChatInput onSend={handleSend} orgMembers={orgMembers} />
+      <ChatInput
+        onSend={handleSend}
+        orgMembers={orgMembers}
+        quoteId={quoteId}
+        orgId={orgId}
+        userId={userId}
+      />
     </div>
   );
 }
@@ -160,7 +168,6 @@ export function MessagesInbox({
   const [loadingComments, setLoadingComments] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
 
-  void orgId; // Used by parent for data fetching
 
   const filteredChats =
     filter === "my"
@@ -372,6 +379,7 @@ export function MessagesInbox({
             quoteId={selectedQuoteId}
             idnQuote={selectedChat?.idnQuote ?? ""}
             userId={userId}
+            orgId={orgId}
             initialComments={comments}
             orgMembers={orgMembers}
           />

@@ -10,6 +10,7 @@ interface ChatWrapperProps {
   quoteId: string;
   idnQuote: string;
   userId: string;
+  orgId: string;
   initialComments: QuoteComment[];
   orgMembers?: OrgMember[];
 }
@@ -18,6 +19,7 @@ export function ChatWrapper({
   quoteId,
   idnQuote,
   userId,
+  orgId,
   initialComments,
   orgMembers,
 }: ChatWrapperProps) {
@@ -64,6 +66,7 @@ export function ChatWrapper({
         quoteId={quoteId}
         idnQuote={idnQuote}
         userId={userId}
+        orgId={orgId}
         initialComments={initialComments}
         onNewMessage={handleNewMessage}
         orgMembers={orgMembers}
