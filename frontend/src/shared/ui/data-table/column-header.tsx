@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { ColumnFilter } from "./column-filter";
+import { ParticipantsFilter } from "./participants-filter";
 import { RangeFilter } from "./range-filter";
 import type {
   DataTableColumn,
@@ -99,6 +100,32 @@ export function ColumnHeader<T>({
               value.min === undefined && value.max === undefined
                 ? null
                 : { kind: "range", ...value }
+            )
+          }
+          onReset={() => onFilterChange(column.key, null)}
+        />
+      );
+    }
+
+    if (column.filter.kind === "grouped-multi-select") {
+      const selected =
+        filterValue?.kind === "grouped-multi-select" ? filterValue.values : [];
+      const logic =
+        filterValue?.kind === "grouped-multi-select" ? filterValue.logic ?? "or" : "or";
+      return (
+        <ParticipantsFilter
+          columnKey={column.key}
+          title={column.label}
+          groups={column.filter.groups}
+          options={options ?? []}
+          selected={selected}
+          selectedLogic={logic}
+          onApply={(values, nextLogic) =>
+            onFilterChange(
+              column.key,
+              values.length > 0
+                ? { kind: "grouped-multi-select", values, logic: nextLogic }
+                : null
             )
           }
           onReset={() => onFilterChange(column.key, null)}

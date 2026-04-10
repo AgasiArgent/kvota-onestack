@@ -21,6 +21,7 @@ import type {
 
 const RANGE_MIN_SUFFIX = "__min";
 const RANGE_MAX_SUFFIX = "__max";
+const LOGIC_SUFFIX = "__logic";
 const RESERVED_KEYS = new Set(["sort", "page", "search", "view"]);
 
 /**
@@ -56,6 +57,19 @@ export function parseFilterParams(
       const max = parseNumeric(maxRaw);
       if (min !== undefined || max !== undefined) {
         filters[column.key] = { kind: "range", min, max };
+      }
+    } else if (column.filter.kind === "grouped-multi-select") {
+      const raw = searchParams.get(column.key);
+      if (raw !== null && raw.length > 0) {
+        const values = raw
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0);
+        if (values.length > 0) {
+          const logicRaw = searchParams.get(`${column.key}${LOGIC_SUFFIX}`);
+          const logic = logicRaw === "and" ? "and" : "or";
+          filters[column.key] = { kind: "grouped-multi-select", values, logic };
+        }
       }
     }
   }
@@ -97,6 +111,12 @@ export function serializeFilters(
       if (value.max !== undefined) {
         params.set(`${key}${RANGE_MAX_SUFFIX}`, String(value.max));
       }
+    } else if (value.kind === "grouped-multi-select") {
+      if (value.values.length === 0) continue;
+      params.set(key, value.values.join(","));
+      if (value.logic === "and") {
+        params.set(`${key}${LOGIC_SUFFIX}`, "and");
+      }
     }
   }
   return params;
@@ -125,6 +145,12 @@ export function canonicalizeState(state: SerializedTableState): string {
         kind: "range",
         min: value.min ?? null,
         max: value.max ?? null,
+      };
+    } else if (value.kind === "grouped-multi-select") {
+      canonicalFilters[key] = {
+        kind: "grouped-multi-select",
+        values: [...value.values].sort(),
+        logic: value.logic ?? "or",
       };
     }
   }

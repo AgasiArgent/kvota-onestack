@@ -2,11 +2,20 @@ import type { ReactNode } from "react";
 
 /**
  * Discriminated union of filter shapes that the DataTable understands.
- * Stored in URL as comma-separated values (multi-select) or __min/__max suffixes (range).
+ * Stored in URL as comma-separated values (multi-select, grouped-multi-select)
+ * or __min/__max suffixes (range). The optional __logic suffix controls
+ * AND/OR semantics for grouped filters.
  */
 export type FilterValue =
   | { kind: "multi-select"; values: readonly string[] }
-  | { kind: "range"; min?: number; max?: number };
+  | { kind: "range"; min?: number; max?: number }
+  | {
+      kind: "grouped-multi-select";
+      /** Composite values in the form "<group>:<id>". */
+      values: readonly string[];
+      /** Default "or" — any participant match wins. "and" requires all selected to match. */
+      logic?: "or" | "and";
+    };
 
 /**
  * Declares the type of filter a column supports.
@@ -15,11 +24,21 @@ export type FilterValue =
  */
 export type ColumnFilterType =
   | { kind: "multi-select" }
-  | { kind: "range"; unit?: string };
+  | { kind: "range"; unit?: string }
+  | {
+      kind: "grouped-multi-select";
+      /**
+       * Map of group key → human-readable label. The filter popover renders
+       * one collapsible section per group; option.group decides membership.
+       */
+      groups: Record<string, string>;
+    };
 
 export interface FilterOption {
   value: string;
   label: string;
+  /** Group key — matches a key in ColumnFilterType.groups for grouped filters. */
+  group?: string;
 }
 
 export type FilterOptions = Record<string, readonly FilterOption[]>;

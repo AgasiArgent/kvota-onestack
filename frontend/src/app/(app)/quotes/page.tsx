@@ -46,12 +46,18 @@ export default async function QuotesPage({ searchParams }: Props) {
 
   const params = await searchParams;
 
+  const participantsLogicRaw = parseStringParam(params.participants__logic);
+  const participantsLogic: "or" | "and" | undefined =
+    participantsLogicRaw === "and" ? "and" : undefined;
+
   const filters: QuotesFilterParams = {
     status: parseMultiValue(params.status),
     customer: parseMultiValue(params.customer),
     manager: parseMultiValue(params.manager),
     brand: parseMultiValue(params.brand),
     procurement_manager: parseMultiValue(params.procurement_manager),
+    participants: parseMultiValue(params.participants),
+    participants_logic: participantsLogic,
     amount_min: parseNumericParam(params.amount__min),
     amount_max: parseNumericParam(params.amount__max),
     sort: parseStringParam(params.sort),

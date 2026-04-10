@@ -91,15 +91,26 @@ function columnsDefaultVisible(
 }
 
 /**
- * Filter out stale column keys that are no longer present in the column config.
- * Ensures that removed columns don't linger in persisted state (per R5.6).
+ * Reconcile persisted column visibility with the current column config.
+ *
+ * - Drops stale keys (columns that no longer exist in config) — R5.6
+ * - Adds new columns that appeared since the persisted snapshot if they are
+ *   marked `defaultVisible !== false`. This ensures newly added columns show
+ *   up automatically for users who already have a persisted visibility list.
+ * - Returns keys in config order for stable rendering.
  */
 function reconcileVisibleColumns(
   persisted: readonly string[],
   columns: readonly DataTableColumn<unknown>[]
 ): readonly string[] {
   const known = new Set(columns.map((c) => c.key));
-  return persisted.filter((key) => known.has(key));
+  const persistedSet = new Set(persisted.filter((key) => known.has(key)));
+  for (const column of columns) {
+    if (column.defaultVisible !== false && !persistedSet.has(column.key)) {
+      persistedSet.add(column.key);
+    }
+  }
+  return columns.map((c) => c.key).filter((k) => persistedSet.has(k));
 }
 
 /**
@@ -168,6 +179,7 @@ export function useTableState({
         sp.delete(key);
         sp.delete(`${key}__min`);
         sp.delete(`${key}__max`);
+        sp.delete(`${key}__logic`);
         sp.delete("page");
 
         if (value === null) return;
@@ -177,6 +189,10 @@ export function useTableState({
         } else if (value.kind === "range") {
           if (value.min !== undefined) sp.set(`${key}__min`, String(value.min));
           if (value.max !== undefined) sp.set(`${key}__max`, String(value.max));
+        } else if (value.kind === "grouped-multi-select") {
+          if (value.values.length === 0) return;
+          sp.set(key, value.values.join(","));
+          if (value.logic === "and") sp.set(`${key}__logic`, "and");
         }
       });
     },
@@ -256,6 +272,7 @@ export function useTableState({
         sp.delete(column.key);
         sp.delete(`${column.key}__min`);
         sp.delete(`${column.key}__max`);
+        sp.delete(`${column.key}__logic`);
       }
       sp.delete("search");
       sp.delete("page");

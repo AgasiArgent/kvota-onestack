@@ -12,6 +12,8 @@ export interface QuoteListItem {
   current_version: number;
   brands: readonly string[];
   procurement_managers: readonly { id: string; full_name: string }[];
+  logistics_user: { id: string; full_name: string } | null;
+  customs_user: { id: string; full_name: string } | null;
 }
 
 export interface QuotesFilterParams {
@@ -25,6 +27,14 @@ export interface QuotesFilterParams {
   brand?: readonly string[];
   /** Multi-value procurement manager filter (quote_items.assigned_procurement_user IN → quote IDs). */
   procurement_manager?: readonly string[];
+  /**
+   * Composite participant filter. Values in the form "<role>:<user_id>".
+   * Roles: sales, procurement, logistics, customs.
+   * Logic controls whether a quote must match ALL selected participants
+   * (and) or ANY of them (or, default).
+   */
+  participants?: readonly string[];
+  participants_logic?: "or" | "and";
   /** Amount range filter (total_amount_quote gte/lte). */
   amount_min?: number;
   amount_max?: number;

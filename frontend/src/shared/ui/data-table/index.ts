@@ -12,6 +12,7 @@ export type {
 export { DataTable, type DataTableProps } from "./data-table";
 export { ColumnFilter } from "./column-filter";
 export { RangeFilter } from "./range-filter";
+export { ParticipantsFilter } from "./participants-filter";
 export { ColumnVisibility } from "./column-visibility";
 export { ColumnHeader } from "./column-header";
 export { ViewSelector } from "./view-selector";

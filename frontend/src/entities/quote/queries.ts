@@ -30,7 +30,7 @@ export async function fetchQuotesList(
   let query = supabase
     .from("quotes")
     .select(
-      "id, idn_quote, created_at, workflow_status, total_amount_quote, total_profit_usd, currency, customer_id, created_by, version_count, current_version",
+      "id, idn_quote, created_at, workflow_status, total_amount_quote, total_profit_usd, currency, customer_id, created_by, version_count, current_version, assigned_logistics_user, assigned_customs_user",
       { count: "exact" }
     )
     .eq("organization_id", user.orgId)
@@ -123,6 +123,87 @@ export async function fetchQuotesList(
       query = query.in("id", pmQuoteIds);
     } else {
       query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+    }
+  }
+
+  // Participants composite filter (combined МОП/МОЗ/МОЛ/МОТ)
+  if (params.participants && params.participants.length > 0) {
+    const byRole: Record<string, string[]> = {
+      sales: [],
+      procurement: [],
+      logistics: [],
+      customs: [],
+    };
+    for (const composite of params.participants) {
+      const [role, userId] = composite.split(":");
+      if (role && userId && byRole[role]) {
+        byRole[role].push(userId);
+      }
+    }
+
+    // For each role with selections, compute the set of quote IDs that match.
+    // Then combine with OR (union) or AND (intersection) depending on logic.
+    const roleQuoteIdSets: Set<string>[] = [];
+
+    if (byRole.sales.length > 0) {
+      const { data } = await supabase
+        .from("quotes")
+        .select("id")
+        .eq("organization_id", user.orgId)
+        .in("created_by", byRole.sales);
+      roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
+    }
+
+    if (byRole.procurement.length > 0) {
+      const { data } = await supabase
+        .from("quote_items")
+        .select("quote_id")
+        .in("assigned_procurement_user", byRole.procurement);
+      roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.quote_id)));
+    }
+
+    if (byRole.logistics.length > 0) {
+      const { data } = await supabase
+        .from("quotes")
+        .select("id")
+        .eq("organization_id", user.orgId)
+        .in("assigned_logistics_user", byRole.logistics);
+      roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
+    }
+
+    if (byRole.customs.length > 0) {
+      const { data } = await supabase
+        .from("quotes")
+        .select("id")
+        .eq("organization_id", user.orgId)
+        .in("assigned_customs_user", byRole.customs);
+      roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
+    }
+
+    if (roleQuoteIdSets.length > 0) {
+      const logic = params.participants_logic === "and" ? "and" : "or";
+      let resultIds: Set<string>;
+      if (logic === "and") {
+        // Intersection: a quote must be in every set
+        resultIds = new Set(roleQuoteIdSets[0]);
+        for (let i = 1; i < roleQuoteIdSets.length; i++) {
+          for (const id of [...resultIds]) {
+            if (!roleQuoteIdSets[i].has(id)) resultIds.delete(id);
+          }
+        }
+      } else {
+        // Union: a quote is included if it appears in any set
+        resultIds = new Set();
+        for (const set of roleQuoteIdSets) {
+          for (const id of set) resultIds.add(id);
+        }
+      }
+
+      if (resultIds.size > 0) {
+        query = query.in("id", Array.from(resultIds));
+      } else {
+        query = query.eq("id", "00000000-0000-0000-0000-000000000000");
+      }
     }
   }
 
@@ -228,17 +309,34 @@ export async function fetchQuotesList(
     }
   }
 
-  // Second round: resolve procurement user names
-  const procUsersResult = allProcUserIds.size > 0
+  // Collect logistics + customs user IDs from quote rows
+  const logisticsUserIds = new Set<string>();
+  const customsUserIds = new Set<string>();
+  for (const row of rows as unknown as Array<{
+    assigned_logistics_user: string | null;
+    assigned_customs_user: string | null;
+  }>) {
+    if (row.assigned_logistics_user) logisticsUserIds.add(row.assigned_logistics_user);
+    if (row.assigned_customs_user) customsUserIds.add(row.assigned_customs_user);
+  }
+
+  // Second round: resolve procurement + logistics + customs user names together
+  const secondRoundUserIds = new Set<string>([
+    ...allProcUserIds,
+    ...logisticsUserIds,
+    ...customsUserIds,
+  ]);
+
+  const extraUsersResult = secondRoundUserIds.size > 0
     ? await supabase
         .from("user_profiles")
         .select("user_id, full_name")
-        .in("user_id", Array.from(allProcUserIds))
+        .in("user_id", Array.from(secondRoundUserIds))
     : { data: [] as { user_id: string; full_name: string | null }[], error: null };
 
   const customers = customersResult.data ?? [];
   const managers = managersResult.data ?? [];
-  const procUsers = procUsersResult.data ?? [];
+  const extraUsers = extraUsersResult.data ?? [];
 
   const customerMap = new Map(
     customers.map((c) => [c.id, { id: c.id, name: c.name }])
@@ -249,8 +347,9 @@ export async function fetchQuotesList(
       { id: m.user_id, full_name: m.full_name ?? "" },
     ])
   );
-  const procUserMap = new Map(
-    procUsers.map((m) => [
+  // extraUsers contains procurement + logistics + customs users (batched together)
+  const extraUserMap = new Map(
+    extraUsers.map((m) => [
       m.user_id,
       { id: m.user_id, full_name: m.full_name ?? "" },
     ])
@@ -258,6 +357,10 @@ export async function fetchQuotesList(
 
   const items: QuoteListItem[] = rows.map((row) => {
     const procIds = Array.from(procUsersByQuote.get(row.id) ?? []);
+    const rawRow = row as unknown as {
+      assigned_logistics_user: string | null;
+      assigned_customs_user: string | null;
+    };
     return {
       id: row.id,
       idn_quote: row.idn_quote,
@@ -272,8 +375,14 @@ export async function fetchQuotesList(
       current_version: row.current_version ?? 1,
       brands: Array.from(brandsByQuote.get(row.id) ?? []),
       procurement_managers: procIds
-        .map((uid) => procUserMap.get(uid))
+        .map((uid) => extraUserMap.get(uid))
         .filter((m): m is { id: string; full_name: string } => m != null),
+      logistics_user: rawRow.assigned_logistics_user
+        ? extraUserMap.get(rawRow.assigned_logistics_user) ?? null
+        : null,
+      customs_user: rawRow.assigned_customs_user
+        ? extraUserMap.get(rawRow.assigned_customs_user) ?? null
+        : null,
     };
   });
 
@@ -674,6 +783,13 @@ export async function canAccessQuote(
   return true;
 }
 
+export interface ParticipantsOptions {
+  sales: { id: string; full_name: string }[];
+  procurement: { id: string; full_name: string }[];
+  logistics: { id: string; full_name: string }[];
+  customs: { id: string; full_name: string }[];
+}
+
 export async function fetchFilterOptions(
   orgId: string,
   user?: QuoteAccessUser
@@ -683,6 +799,7 @@ export async function fetchFilterOptions(
   procurementManagers: { id: string; full_name: string }[];
   brands: string[];
   statuses: { value: string; label: string }[];
+  participants: ParticipantsOptions;
 }> {
   const supabase = await createClient();
 
@@ -831,5 +948,57 @@ export async function fetchFilterOptions(
     { value: "cancelled", label: "Отменено" },
   ];
 
-  return { customers, managers, procurementManagers, brands, statuses };
+  // Fetch all organization users grouped by role for the Participants filter.
+  // This is deliberately broad — show every eligible user, not just those
+  // already assigned to a quote.
+  const ROLE_GROUPS: Record<keyof ParticipantsOptions, string[]> = {
+    sales: ["sales", "head_of_sales"],
+    procurement: ["procurement", "procurement_senior", "head_of_procurement"],
+    logistics: ["logistics", "head_of_logistics"],
+    customs: ["customs"],
+  };
+
+  async function fetchUsersByRoleSlugs(slugs: string[]): Promise<{ id: string; full_name: string }[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = supabase as unknown as { from: (t: string) => any };
+    const { data, error } = await untyped
+      .from("user_roles")
+      .select("user_id, roles!inner(slug)")
+      .eq("organization_id", orgId)
+      .in("roles.slug", slugs);
+    if (error || !data) {
+      console.error(`Failed to fetch users for roles ${slugs.join(",")}:`, error);
+      return [];
+    }
+    const userIds = Array.from(
+      new Set((data as Array<{ user_id: string }>).map((r) => r.user_id))
+    );
+    if (userIds.length === 0) return [];
+    const { data: profiles } = await supabase
+      .from("user_profiles")
+      .select("user_id, full_name")
+      .in("user_id", userIds)
+      .order("full_name");
+    return (profiles ?? []).map((p) => ({
+      id: p.user_id,
+      full_name: p.full_name ?? "",
+    }));
+  }
+
+  const [salesUsers, procurementUsers, logisticsUsers, customsUsers] =
+    await Promise.all([
+      fetchUsersByRoleSlugs(ROLE_GROUPS.sales),
+      fetchUsersByRoleSlugs(ROLE_GROUPS.procurement),
+      fetchUsersByRoleSlugs(ROLE_GROUPS.logistics),
+      fetchUsersByRoleSlugs(ROLE_GROUPS.customs),
+    ]);
+
+  const participants: ParticipantsOptions = {
+    sales: salesUsers,
+    procurement: procurementUsers,
+    logistics: logisticsUsers,
+    customs: customsUsers,
+  };
+
+  return { customers, managers, procurementManagers, brands, statuses, participants };
 }

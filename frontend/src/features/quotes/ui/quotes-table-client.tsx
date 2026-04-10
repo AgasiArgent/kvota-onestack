@@ -26,6 +26,12 @@ interface QuotesTableClientProps {
     procurementManagers: { id: string; full_name: string }[];
     brands: string[];
     statuses: { value: string; label: string }[];
+    participants: {
+      sales: { id: string; full_name: string }[];
+      procurement: { id: string; full_name: string }[];
+      logistics: { id: string; full_name: string }[];
+      customs: { id: string; full_name: string }[];
+    };
   };
   userRoles: string[];
   userId: string;
@@ -171,20 +177,6 @@ export function QuotesTableClient({
         filter: { kind: "multi-select" },
       },
       {
-        key: "manager",
-        label: "МОП",
-        accessor: (q) => (
-          <span
-            className="text-muted-foreground truncate block"
-            title={q.manager?.full_name ?? ""}
-          >
-            {q.manager?.full_name ?? "\u2014"}
-          </span>
-        ),
-        width: "140px",
-        filter: { kind: "multi-select" },
-      },
-      {
         key: "status",
         label: "Статус",
         accessor: (q) => (
@@ -197,20 +189,50 @@ export function QuotesTableClient({
         filter: { kind: "multi-select" },
       },
       {
-        key: "procurement_manager",
-        label: "МОЗ",
-        accessor: (q) => (
-          <span
-            className="text-muted-foreground truncate block"
-            title={q.procurement_managers.map((m) => m.full_name).join(", ")}
-          >
-            {q.procurement_managers.length > 0
-              ? q.procurement_managers.map((m) => m.full_name).join(", ")
-              : "\u2014"}
-          </span>
-        ),
-        width: "140px",
-        filter: { kind: "multi-select" },
+        key: "participants",
+        label: "Участники",
+        accessor: (q) => {
+          // Vertical stack: МОП / МОЗ / МОЛ / МОТ — skip empty roles.
+          const rows: { roleLabel: string; name: string }[] = [];
+          if (q.manager) rows.push({ roleLabel: "МОП", name: q.manager.full_name });
+          if (q.procurement_managers.length > 0) {
+            rows.push({
+              roleLabel: "МОЗ",
+              name: q.procurement_managers.map((m) => m.full_name).join(", "),
+            });
+          }
+          if (q.logistics_user) rows.push({ roleLabel: "МОЛ", name: q.logistics_user.full_name });
+          if (q.customs_user) rows.push({ roleLabel: "МОТ", name: q.customs_user.full_name });
+
+          if (rows.length === 0) {
+            return <span className="text-muted-foreground">&mdash;</span>;
+          }
+
+          return (
+            <div className="flex flex-col gap-0.5 text-xs leading-tight">
+              {rows.map((r, idx) => (
+                <div key={idx} className="flex items-baseline gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground shrink-0 w-8">
+                    {r.roleLabel}
+                  </span>
+                  <span className="text-foreground truncate" title={r.name}>
+                    {r.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        },
+        width: "300px",
+        filter: {
+          kind: "grouped-multi-select",
+          groups: {
+            sales: "МОП",
+            procurement: "МОЗ",
+            logistics: "МОЛ",
+            customs: "МОТ",
+          },
+        },
       },
       {
         key: "version",
@@ -261,25 +283,41 @@ export function QuotesTableClient({
   );
 
   // Build filter options keyed by column key for the DataTable
-  const filterOptionsMap: FilterOptions = useMemo(
-    () => ({
+  const filterOptionsMap: FilterOptions = useMemo(() => {
+    // Participants: flat list of options with composite values + group tags.
+    const participantOptions = [
+      ...filterOptions.participants.sales.map((u) => ({
+        value: `sales:${u.id}`,
+        label: u.full_name,
+        group: "sales",
+      })),
+      ...filterOptions.participants.procurement.map((u) => ({
+        value: `procurement:${u.id}`,
+        label: u.full_name,
+        group: "procurement",
+      })),
+      ...filterOptions.participants.logistics.map((u) => ({
+        value: `logistics:${u.id}`,
+        label: u.full_name,
+        group: "logistics",
+      })),
+      ...filterOptions.participants.customs.map((u) => ({
+        value: `customs:${u.id}`,
+        label: u.full_name,
+        group: "customs",
+      })),
+    ];
+
+    return {
       customer: filterOptions.customers.map((c) => ({
         value: c.id,
         label: c.name,
       })),
       brand: filterOptions.brands.map((b) => ({ value: b, label: b })),
-      manager: filterOptions.managers.map((m) => ({
-        value: m.id,
-        label: m.full_name,
-      })),
       status: filterOptions.statuses,
-      procurement_manager: filterOptions.procurementManagers.map((m) => ({
-        value: m.id,
-        label: m.full_name,
-      })),
-    }),
-    [filterOptions]
-  );
+      participants: participantOptions,
+    };
+  }, [filterOptions]);
 
   const actionStatusSet = useMemo(
     () => new Set(actionStatuses),
