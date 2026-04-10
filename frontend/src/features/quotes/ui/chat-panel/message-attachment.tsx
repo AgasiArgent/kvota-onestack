@@ -123,36 +123,56 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
     );
   }
 
-  // Non-image: compact download card.
-  // The card's href uses the download-option signed URL, so clicking
-  // anywhere on the card triggers a file download (Content-Disposition:
-  // attachment from Supabase Storage).
+  // Non-image: file card with two separate actions
+  //   • clicking the filename / icon → opens the file in a new tab (preview)
+  //   • clicking the download icon on the right → forces a download
+  // Nested <a> is not allowed in HTML so the container is a plain <div>.
   return (
-    <a
-      href={downloadUrl ?? "#"}
-      download={attachment.original_filename}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => {
-        if (!downloadUrl) e.preventDefault();
-      }}
+    <div
       className={cn(
         "mt-1 flex items-center gap-2 rounded-md border px-2.5 py-1.5 max-w-[240px] text-xs transition-colors",
         isOwn
-          ? "bg-primary/5 border-primary/20 hover:bg-primary/10"
-          : "bg-background hover:bg-muted"
+          ? "bg-primary/5 border-primary/20"
+          : "bg-background"
       )}
     >
-      <FileIcon className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-      <div className="flex-1 min-w-0">
-        <div className="truncate font-medium">{attachment.original_filename}</div>
-        {attachment.file_size_bytes && (
-          <div className="text-[10px] text-muted-foreground">
-            {formatFileSize(attachment.file_size_bytes)}
+      <a
+        href={viewUrl ?? "#"}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => {
+          if (!viewUrl) e.preventDefault();
+        }}
+        className="flex-1 flex items-center gap-2 min-w-0 rounded hover:opacity-80 transition-opacity"
+      >
+        <FileIcon className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+        <div className="flex-1 min-w-0">
+          <div className="truncate font-medium">
+            {attachment.original_filename}
           </div>
+          {attachment.file_size_bytes && (
+            <div className="text-[10px] text-muted-foreground">
+              {formatFileSize(attachment.file_size_bytes)}
+            </div>
+          )}
+        </div>
+      </a>
+      <a
+        href={downloadUrl ?? "#"}
+        download={attachment.original_filename}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Скачать ${attachment.original_filename}`}
+        onClick={(e) => {
+          if (!downloadUrl) e.preventDefault();
+        }}
+        className={cn(
+          "flex-shrink-0 flex items-center justify-center w-6 h-6 rounded",
+          "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         )}
-      </div>
-      <Download className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
-    </a>
+      >
+        <Download className="w-3 h-3" />
+      </a>
+    </div>
   );
 }
