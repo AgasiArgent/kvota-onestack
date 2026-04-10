@@ -10,6 +10,7 @@ import {
   Trash2,
   ChevronDown,
   Loader2,
+  BadgePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,8 @@ export interface DocumentRow {
   document_type: string | null;
   description: string | null;
   created_at: string | null;
+  comment_id?: string | null;
+  status?: string | null;
 }
 
 const MIME_ICONS: Record<string, typeof FileText> = {
@@ -47,12 +50,18 @@ interface DocumentGroupProps {
   title: string;
   documents: DocumentRow[];
   onDeleted: () => void;
+  /** When provided, shows a "Promote to official" button per document. */
+  onPromote?: (doc: DocumentRow) => void;
+  /** Optional empty-state message */
+  emptyMessage?: string;
 }
 
 export function DocumentGroup({
   title,
   documents,
   onDeleted,
+  onPromote,
+  emptyMessage,
 }: DocumentGroupProps) {
   const [open, setOpen] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -123,7 +132,13 @@ export function DocumentGroup({
         </Badge>
       </button>
 
-      {open && (
+      {open && documents.length === 0 && emptyMessage && (
+        <div className="border-t border-border px-4 py-6 text-center text-xs text-muted-foreground">
+          {emptyMessage}
+        </div>
+      )}
+
+      {open && documents.length > 0 && (
         <div className="border-t border-border divide-y divide-border">
           {documents.map((doc) => {
             const category = getMimeCategory(doc.mime_type);
@@ -170,6 +185,7 @@ export function DocumentGroup({
                   className="h-7 w-7 shrink-0"
                   disabled={downloadingId === doc.id}
                   onClick={() => handleDownload(doc)}
+                  title="Скачать"
                 >
                   {downloadingId === doc.id ? (
                     <Loader2 size={14} className="animate-spin" />
@@ -177,12 +193,24 @@ export function DocumentGroup({
                     <Download size={14} />
                   )}
                 </Button>
+                {onPromote && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                    onClick={() => onPromote(doc)}
+                    title="Сделать официальным"
+                  >
+                    <BadgePlus size={14} />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50"
                   disabled={deletingId === doc.id}
                   onClick={() => handleDelete(doc)}
+                  title="Удалить"
                 >
                   {deletingId === doc.id ? (
                     <Loader2 size={14} className="animate-spin" />

@@ -72,6 +72,7 @@ export function DocumentUpload({
         document_type: documentType,
         description: description || null,
         uploaded_by: userId,
+        status: "final", // Direct uploads are intentional official documents
       });
       if (insertError) {
         throw new Error(`Ошибка сохранения записи: ${insertError.message}`);
