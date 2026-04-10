@@ -1,0 +1,41 @@
+{
+  "feature": "Phase 5b — Quote Composition Engine",
+  "feature_slug": "phase-5b-quote-composition",
+  "phase": "specify",
+  "size": "big",
+  "started_at": "2026-04-10T15:00:00+03:00",
+  "updated_at": "2026-04-10T15:00:00+03:00",
+  "artifacts": {
+    "research": ".planning/research/SUMMARY.md",
+    "specs_dir": ".kiro/specs/phase-5b-quote-composition/",
+    "context": ".planning/CONTEXT.md",
+    "plan": "docs/plans/2026-04-10-phase-5b-quote-composition-engine.md"
+  },
+  "stack": "python+nextjs",
+  "clickup_list": "kvota",
+  "browser_test_url": "http://localhost:3000",
+  "language": "ru",
+  "constraints": {
+    "locked_files": [
+      "calculation_engine.py",
+      "calculation_models.py",
+      "calculation_mapper.py"
+    ],
+    "migration_numbers": [263, 264, 265],
+    "commit_rule": "explicit paths only, never git add . or -A",
+    "coauthor": "Claude Opus 4.6",
+    "checkin_after_task": 1
+  },
+  "design_decisions_locked": [
+    "quote_items.invoice_id stays as legacy pointer; invoice_item_prices supplements",
+    "composition picker UI inside calculation step, above Calculate button",
+    "logistics per-invoice, customs per-item (HS codes stay on quote_items)",
+    "KP versions frozen on send",
+    "editing verified invoices requires head_of_procurement approval (day 1, not deferred)",
+    "bypass: same supplier skips logistics+customs pre-fill; new supplier skips only customs"
+  ],
+  "open_decisions": [],
+  "confirmed_decisions": [
+    "Migration 264 = composition_selected_invoice_id on quote_items + verified_at/verified_by on invoices (user confirmed 2026-04-10, soft-yes, proceed)"
+  ]
+}

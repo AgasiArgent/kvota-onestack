@@ -1,0 +1,26 @@
+{
+  "feature_name": "phase-5b-quote-composition",
+  "created_at": "2026-04-10T15:00:00+03:00",
+  "updated_at": "2026-04-10T15:40:00+03:00",
+  "language": "en",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "generated": true, "approved": true },
+    "design": { "generated": true, "approved": true },
+    "tasks": { "generated": true, "approved": true }
+  },
+  "ready_for_implementation": true,
+  "context": {
+    "scope_doc": "docs/plans/2026-04-10-phase-5b-quote-composition-engine.md",
+    "research": ".planning/research/SUMMARY.md",
+    "kiro_research": ".kiro/specs/phase-5b-quote-composition/research.md",
+    "state": ".planning/state.json",
+    "locked_files": [
+      "calculation_engine.py",
+      "calculation_models.py",
+      "calculation_mapper.py"
+    ],
+    "migration_numbers": [263, 264, 265],
+    "checkin_after_task": 1
+  }
+}
