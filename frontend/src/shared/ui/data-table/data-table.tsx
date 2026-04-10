@@ -13,8 +13,10 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Pagination } from "@/shared/ui/pagination";
 import { useTableState } from "@/shared/lib/data-table";
+import { useColumnWidths } from "@/shared/lib/data-table/use-column-widths";
 import type { TableView } from "@/entities/table-view";
 
 import { ColumnHeader } from "./column-header";
@@ -114,6 +116,55 @@ export function DataTable<T>({
     defaultFilters,
     defaultSort,
   });
+
+  // Column widths with localStorage persistence
+  const { widths, setWidth } = useColumnWidths({ tableKey, columns });
+
+  // Resize state
+  const [resizingKey, setResizingKey] = useState<string | null>(null);
+  const resizeStateRef = useRef<{
+    columnKey: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  const handleResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, columnKey: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const currentWidth = widths[columnKey] ?? 100;
+      resizeStateRef.current = {
+        columnKey,
+        startX: e.clientX,
+        startWidth: currentWidth,
+      };
+      setResizingKey(columnKey);
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [widths]
+  );
+
+  const handleResizePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+      const delta = e.clientX - resizeState.startX;
+      const nextWidth = resizeState.startWidth + delta;
+      setWidth(resizeState.columnKey, nextWidth);
+    },
+    [setWidth]
+  );
+
+  const handleResizePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (resizeStateRef.current) {
+        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        resizeStateRef.current = null;
+        setResizingKey(null);
+      }
+    },
+    []
+  );
 
   // Debounced search
   const [searchInput, setSearchInput] = useState(state.search);
@@ -289,14 +340,16 @@ export function DataTable<T>({
             {visibleColumns.map((column) => (
               <TableHead
                 key={column.key}
-                style={column.width ? { width: column.width } : undefined}
-                className={
-                  column.align === "right"
-                    ? "text-right"
-                    : column.align === "center"
-                      ? "text-center"
-                      : undefined
+                style={
+                  widths[column.key]
+                    ? { width: widths[column.key], minWidth: widths[column.key] }
+                    : undefined
                 }
+                className={cn(
+                  "relative select-none",
+                  column.align === "right" && "text-right",
+                  column.align === "center" && "text-center"
+                )}
               >
                 <ColumnHeader
                   column={column}
@@ -305,6 +358,20 @@ export function DataTable<T>({
                   filterValue={state.filters[column.key]}
                   onFilterChange={state.setFilter}
                   options={filterOptions[column.key]}
+                />
+                {/* Column resize handle — 4px hit area, 1px visual line on hover */}
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={`Изменить ширину колонки ${column.label}`}
+                  onPointerDown={(e) => handleResizePointerDown(e, column.key)}
+                  onPointerMove={handleResizePointerMove}
+                  onPointerUp={handleResizePointerUp}
+                  className={cn(
+                    "absolute top-0 right-0 h-full w-1 cursor-col-resize group/resize",
+                    "hover:bg-accent/40 transition-colors",
+                    resizingKey === column.key && "bg-accent"
+                  )}
                 />
               </TableHead>
             ))}
