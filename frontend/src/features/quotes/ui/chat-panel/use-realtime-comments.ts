@@ -241,23 +241,29 @@ async function resolveUserProfile(
   userId: string
 ): Promise<QuoteComment["user_profile"]> {
   try {
-    const [profileRes, memberRes] = await Promise.all([
+    // NOTE: role info moved from organization_members.role_id (dropped
+    // by migration 255) to the user_roles table. A user may have 0 or
+    // multiple roles — take the first one for display, tolerate 0 via
+    // maybeSingle(). Querying organization_members for role lookup
+    // returns 400 because the FK to roles no longer exists.
+    const [profileRes, roleRes] = await Promise.all([
       supabase
         .from("user_profiles")
         .select("user_id, full_name")
         .eq("user_id", userId)
-        .single(),
+        .maybeSingle(),
       supabase
-        .from("organization_members")
+        .from("user_roles")
         .select("user_id, roles!inner(slug)")
         .eq("user_id", userId)
         .limit(1)
-        .single(),
+        .maybeSingle(),
     ]);
 
     const fullName = profileRes.data?.full_name ?? "";
     const roleSlug =
-      (memberRes.data?.roles as unknown as { slug: string })?.slug ?? "unknown";
+      (roleRes.data?.roles as unknown as { slug: string } | undefined)?.slug ??
+      "unknown";
 
     return { id: userId, full_name: fullName, role_slug: roleSlug };
   } catch {
