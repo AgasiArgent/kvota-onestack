@@ -226,6 +226,7 @@ export function QuotesTableClient({
             </span>
           ),
         align: "center",
+        width: "90px",
       },
       {
         key: "amount",
@@ -239,6 +240,7 @@ export function QuotesTableClient({
         sortKey: "amount",
         align: "right",
         filter: { kind: "range" },
+        width: "140px",
       },
       {
         key: "profit",
@@ -252,6 +254,7 @@ export function QuotesTableClient({
           );
         },
         align: "right",
+        width: "120px",
       },
     ],
     [router, statusLabelMap]
