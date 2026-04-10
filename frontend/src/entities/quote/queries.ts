@@ -1,5 +1,10 @@
 import { createClient } from "@/shared/lib/supabase/server";
-import { isSalesOnly, isAssignedItemsOnly, isProcurementSeniorOnly } from "@/shared/lib/roles";
+import {
+  isSalesOnly,
+  isAssignedItemsOnly,
+  isProcurementSeniorOnly,
+  isCustomsOnly,
+} from "@/shared/lib/roles";
 import { getAssignedCustomerIds, getAssignedQuoteIds } from "@/shared/lib/access";
 import type { QuoteListItem, QuotesFilterParams, QuotesListResult } from "./types";
 import { getStatusesForGroup } from "./types";
@@ -34,8 +39,15 @@ export async function fetchQuotesList(
     .order("created_at", { ascending: false });
 
   // Role-based filtering per .kiro/steering/access-control.md:
-  if (isAssignedItemsOnly(user.roles)) {
-    // ASSIGNED_ITEMS tier: procurement/logistics/customs see only quotes with items assigned to them
+  if (isCustomsOnly(user.roles)) {
+    // CUSTOMS_STAGE tier: customs users see all quotes currently in customs
+    // workflow stages for their org (no per-user assignment mechanism yet)
+    query = query.in("workflow_status", [
+      "pending_customs",
+      "pending_logistics_and_customs",
+    ]);
+  } else if (isAssignedItemsOnly(user.roles)) {
+    // ASSIGNED_ITEMS tier: procurement/logistics see only quotes with items assigned to them
     const assignedQuoteIds = await getAssignedQuoteIds(supabase, user);
     if (assignedQuoteIds.length > 0) {
       query = query.in("id", assignedQuoteIds);
@@ -322,13 +334,16 @@ export async function fetchQuoteComments(quoteId: string) {
   // Batch-resolve user profiles + role slugs + attachments in parallel
   const userIds = [...new Set(comments.map((c) => c.user_id))];
 
-  const [profilesRes, membersRes, attachmentsRes] = await Promise.all([
+  const [profilesRes, rolesRes, attachmentsRes] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("user_id, full_name")
       .in("user_id", userIds),
+    // NOTE: role info lives in user_roles after migration 255 dropped
+    // organization_members.role_id. A user may have multiple roles —
+    // first one wins for display purposes.
     supabase
-      .from("organization_members")
+      .from("user_roles")
       .select("user_id, roles!inner(slug)")
       .in("user_id", userIds),
     supabase
@@ -342,12 +357,15 @@ export async function fetchQuoteComments(quoteId: string) {
   const profileMap = new Map(
     (profilesRes.data ?? []).map((p) => [p.user_id, p])
   );
-  const roleMap = new Map(
-    (membersRes.data ?? []).map((m) => [
-      m.user_id,
-      (m.roles as unknown as { slug: string })?.slug ?? "unknown",
-    ])
-  );
+  const roleMap = new Map<string, string>();
+  for (const row of rolesRes.data ?? []) {
+    if (!roleMap.has(row.user_id)) {
+      roleMap.set(
+        row.user_id,
+        (row.roles as unknown as { slug: string })?.slug ?? "unknown"
+      );
+    }
+  }
 
   // Group attachments by comment_id
   const attachmentsByComment = new Map<
@@ -497,6 +515,19 @@ export async function canAccessQuote(
 ): Promise<boolean> {
   const supabase = await createClient();
 
+  if (isCustomsOnly(user.roles)) {
+    const { data } = await supabase
+      .from("quotes")
+      .select("workflow_status")
+      .eq("id", quoteId)
+      .eq("organization_id", user.orgId)
+      .maybeSingle();
+    return (
+      data?.workflow_status === "pending_customs" ||
+      data?.workflow_status === "pending_logistics_and_customs"
+    );
+  }
+
   if (isAssignedItemsOnly(user.roles)) {
     const assignedQuoteIds = await getAssignedQuoteIds(supabase, user);
     return assignedQuoteIds.includes(quoteId);
@@ -548,7 +579,12 @@ export async function fetchFilterOptions(
     .is("deleted_at", null);
 
   // Apply same role scoping as fetchQuotesList
-  if (user && isAssignedItemsOnly(user.roles)) {
+  if (user && isCustomsOnly(user.roles)) {
+    quotesQuery = quotesQuery.in("workflow_status", [
+      "pending_customs",
+      "pending_logistics_and_customs",
+    ]);
+  } else if (user && isAssignedItemsOnly(user.roles)) {
     const assignedQuoteIds = await getAssignedQuoteIds(supabase, user);
     if (assignedQuoteIds.length > 0) {
       quotesQuery = quotesQuery.in("id", assignedQuoteIds);

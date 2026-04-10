@@ -370,6 +370,22 @@ export async function createInvoice(data: {
     0
   );
 
+  // Derive pickup_country from supplier.country so that logistics
+  // auto-assignment (assign_logistics_to_invoices) can match a logistics
+  // rate by country. Without this, invoices stay with NULL pickup_country
+  // and logistics users never receive them. (Bug FB-260410-110450-4b85,
+  // FB-260410-123751-4b94.)
+  let pickupCountry: string | null = null;
+  if (data.supplier_id) {
+    const { data: supplier, error: supplierError } = await supabase
+      .from("suppliers")
+      .select("country")
+      .eq("id", data.supplier_id)
+      .maybeSingle();
+    if (supplierError) throw supplierError;
+    pickupCountry = supplier?.country ?? null;
+  }
+
   // Generate invoice number: INV-{idx}-{idn_quote}
   const { count } = await supabase
     .from("invoices")
@@ -387,6 +403,7 @@ export async function createInvoice(data: {
       supplier_id: data.supplier_id || null,
       buyer_company_id: data.buyer_company_id || null,
       pickup_city: data.pickup_city || null,
+      pickup_country: pickupCountry,
       currency: data.currency || "USD",
       total_weight_kg: totalWeightKg,
       total_volume_m3: totalVolumeM3,

@@ -139,3 +139,23 @@ export function isAssignedItemsOnly(roles: string[]): boolean {
     !roles.some((r) => BROAD_QUOTE_ACCESS_ROLES.includes(r))
   );
 }
+
+/** Roles that override the customs stage-only tier (grant full quote visibility). */
+const ROLES_BROADER_THAN_CUSTOMS = ["admin", "top_manager"];
+
+/**
+ * Returns true if the user has the customs role and no full-visibility role
+ * (admin, top_manager). Customs users see all quotes currently in customs
+ * workflow stages (pending_customs, pending_logistics_and_customs) for their
+ * organization — there is no per-user customs assignment mechanism yet.
+ *
+ * Checked BEFORE isAssignedItemsOnly in the access-tier chain, so a pure
+ * customs user is routed to the stage-based filter instead of the (empty)
+ * assignment-based filter.
+ */
+export function isCustomsOnly(roles: string[]): boolean {
+  return (
+    roles.includes("customs") &&
+    !roles.some((r) => ROLES_BROADER_THAN_CUSTOMS.includes(r))
+  );
+}

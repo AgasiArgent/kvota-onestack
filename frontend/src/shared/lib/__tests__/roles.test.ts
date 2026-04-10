@@ -4,6 +4,7 @@ import {
   isAssignedItemsOnly,
   isProcurementOnly,
   isProcurementSeniorOnly,
+  isCustomsOnly,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -176,6 +177,37 @@ describe("isProcurementSeniorOnly", () => {
   });
 });
 
+describe("isCustomsOnly", () => {
+  // --- Should return TRUE (customs stage-only tier) ---
+
+  it("returns true for customs-only user", () => {
+    expect(isCustomsOnly(["customs"])).toBe(true);
+  });
+
+  it("returns true for customs + sales combo (customs still dominant)", () => {
+    // Sales doesn't grant full quote visibility; customs stage filter still applies.
+    expect(isCustomsOnly(["customs", "sales"])).toBe(true);
+  });
+
+  // --- Should return FALSE (broader role overrides) ---
+
+  it("returns false for customs + admin combo", () => {
+    expect(isCustomsOnly(["customs", "admin"])).toBe(false);
+  });
+
+  it("returns false for customs + top_manager combo", () => {
+    expect(isCustomsOnly(["customs", "top_manager"])).toBe(false);
+  });
+
+  it("returns false for logistics-only user", () => {
+    expect(isCustomsOnly(["logistics"])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(isCustomsOnly([])).toBe(false);
+  });
+});
+
 /**
  * Regression: FB-260408-172108-de72, FB-260409-152729-ef33
  * User with head_of_procurement + procurement_senior was incorrectly
@@ -188,6 +220,7 @@ describe("tier determination for real-world role combos", () => {
    * Mirrors the if/else chain in fetchQuotesList (queries.ts).
    */
   function determineTier(roles: string[]): string {
+    if (isCustomsOnly(roles)) return "CUSTOMS_STAGE";
     if (isAssignedItemsOnly(roles)) return "ASSIGNED_ITEMS";
     if (isSalesOnly(roles)) return "OWN_OR_GROUP";
     if (isProcurementSeniorOnly(roles)) return "PROCUREMENT_STAGE_ONLY";
@@ -207,7 +240,7 @@ describe("tier determination for real-world role combos", () => {
     { roles: ["head_of_sales"], expected: "OWN_OR_GROUP" },
     { roles: ["procurement"], expected: "ASSIGNED_ITEMS" },
     { roles: ["logistics"], expected: "ASSIGNED_ITEMS" },
-    { roles: ["customs"], expected: "ASSIGNED_ITEMS" },
+    { roles: ["customs"], expected: "CUSTOMS_STAGE" },
     { roles: ["procurement_senior"], expected: "PROCUREMENT_STAGE_ONLY" },
   ])("$roles → $expected", ({ roles, expected }) => {
     expect(determineTier(roles)).toBe(expected);

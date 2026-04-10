@@ -71,11 +71,13 @@ export async function getAssignedCustomerIds(
 
 /**
  * Returns the list of quote IDs that have items assigned to this user.
- * Used by ASSIGNED_ITEMS tier (procurement, logistics, customs).
+ * Used by ASSIGNED_ITEMS tier (procurement, logistics).
  *
  * - procurement: via quote_items.assigned_procurement_user
  * - logistics: via quotes.assigned_logistics_user
- * - customs: via quotes.assigned_customs_user
+ *
+ * Customs is handled separately via isCustomsOnly + workflow-stage filter —
+ * no customs assignment mechanism exists yet.
  *
  * Runs applicable queries in parallel and deduplicates results.
  */
@@ -111,20 +113,6 @@ export async function getAssignedQuoteIds(
           .select("id")
           .eq("organization_id", user.orgId)
           .eq("assigned_logistics_user", user.id)
-          .is("deleted_at", null);
-        return (data ?? []).map((r) => r.id);
-      })()
-    );
-  }
-
-  if (user.roles.includes("customs")) {
-    promises.push(
-      (async () => {
-        const { data } = await supabase
-          .from("quotes")
-          .select("id")
-          .eq("organization_id", user.orgId)
-          .eq("assigned_customs_user", user.id)
           .is("deleted_at", null);
         return (data ?? []).map((r) => r.id);
       })()
