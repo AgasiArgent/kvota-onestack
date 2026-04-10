@@ -377,8 +377,9 @@ export function ChatInput({
       <div className="flex items-stretch gap-2">
         <input
           ref={fileInputRef}
+          id="chat-file-input"
           type="file"
-          className="hidden"
+          className="sr-only"
           multiple
           accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.zip"
           onChange={handleFileSelect}
@@ -425,19 +426,24 @@ export function ChatInput({
           >
             <Send className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled || sending}
-            className={cn(
-              "flex items-center justify-center w-9 h-9 rounded-lg",
-              "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
-              "disabled:opacity-50 disabled:cursor-not-allowed"
-            )}
+          {/*
+            Native <label> trigger — clicking it opens the file chooser via
+            the browser's label→input activation, no JS click synthesis.
+            This is more robust than fileInputRef.current?.click() because
+            the pattern works even if a programmatic click gets blocked.
+          */}
+          <label
+            htmlFor="chat-file-input"
             aria-label="Прикрепить файл"
-            type="button"
+            className={cn(
+              "flex items-center justify-center w-9 h-9 rounded-lg cursor-pointer",
+              "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors",
+              (disabled || sending) &&
+                "opacity-50 cursor-not-allowed pointer-events-none"
+            )}
           >
             <Paperclip className="w-4 h-4" />
-          </button>
+          </label>
         </div>
       </div>
     </div>
