@@ -1080,6 +1080,8 @@ export type Database = {
           uploaded_by: string | null
           created_at: string | null
           parent_quote_id: string | null
+          comment_id: string | null
+          status: string
         }
         Insert: {
           id?: string
@@ -1095,6 +1097,8 @@ export type Database = {
           uploaded_by?: string | null
           created_at?: string | null
           parent_quote_id?: string | null
+          comment_id?: string | null
+          status?: string
         }
         Update: {
           id?: string
@@ -1110,6 +1114,8 @@ export type Database = {
           uploaded_by?: string | null
           created_at?: string | null
           parent_quote_id?: string | null
+          comment_id?: string | null
+          status?: string
         }
         Relationships: []
       }
@@ -1640,7 +1646,6 @@ export type Database = {
           id: string
           organization_id: string
           user_id: string
-          role_id: string
           status: string | null
           is_owner: boolean | null
           invited_by: string | null
@@ -1654,7 +1659,6 @@ export type Database = {
           id?: string
           organization_id: string
           user_id: string
-          role_id: string
           status?: string | null
           is_owner?: boolean | null
           invited_by?: string | null
@@ -1668,7 +1672,6 @@ export type Database = {
           id?: string
           organization_id?: string
           user_id?: string
-          role_id?: string
           status?: string | null
           is_owner?: boolean | null
           invited_by?: string | null
