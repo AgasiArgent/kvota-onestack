@@ -221,3 +221,10 @@
 html[data-chat-open="true"] .sidebar-margin {
   margin-right: 340px;
 }
+
+/* Chat panel open — slide the feedback FAB left so it doesn't overlap the
+   chat Send button. The chat panel is 340px wide at right:0, so shifting
+   by -356px (340 + 16 margin) places the FAB just left of the panel. */
+html[data-chat-open="true"] [data-feedback-fab] {
+  transform: translateX(-356px);
+}

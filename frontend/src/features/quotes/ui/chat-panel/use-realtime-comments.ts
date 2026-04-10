@@ -162,11 +162,22 @@ export function useRealtimeComments(
           mentionIds,
           attachmentDocumentIds
         );
-        // Track this ID so realtime event is skipped
+        // Track this ID so any future realtime event is skipped
         sentIdsRef.current.add(result.id);
-        // Replace optimistic message with server result
-        setMessages((prev) =>
-          prev.map((m) =>
+        // Reconcile optimistic message with server result. If the realtime
+        // event has already arrived (e.g. sendQuoteComment was slowed down
+        // by the attachment-link step), a message with result.id is already
+        // in state — in that case we just drop the optimistic entry to
+        // avoid a duplicate-key warning. Otherwise, replace the optimistic
+        // message in place.
+        setMessages((prev) => {
+          const alreadyHasServerMsg = prev.some(
+            (m) => m.id === result.id && m.id !== optimisticId
+          );
+          if (alreadyHasServerMsg) {
+            return prev.filter((m) => m.id !== optimisticId);
+          }
+          return prev.map((m) =>
             m.id === optimisticId
               ? {
                   ...result,
@@ -174,8 +185,8 @@ export function useRealtimeComments(
                   user_profile: m.user_profile,
                 }
               : m
-          )
-        );
+          );
+        });
 
         // Fire-and-forget: send Telegram notification (best-effort)
         const mentions = (result.mentions ?? []) as string[];
@@ -187,9 +198,13 @@ export function useRealtimeComments(
             mentions,
           }),
         }).catch(() => {});
-      } catch {
+      } catch (err) {
         // Remove optimistic message on failure
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        // Re-throw so the caller (ChatInput) can roll back pending
+        // attachment state — otherwise it would clear attachments as
+        // if the send succeeded and orphan document rows would linger.
+        throw err;
       }
     },
     [quoteId, userId]

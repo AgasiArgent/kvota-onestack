@@ -61,8 +61,12 @@ export function DocumentsStep({ quote, userId }: DocumentsStepProps) {
   }
 
   // Partition quote-scoped documents into:
-  //   - official: status='final' (direct uploads + promoted chat media)
-  //   - chat media: comment_id IS NOT NULL AND status='draft'
+  //   - official: document_type is set (direct uploads + promoted chat media
+  //     + legacy pre-migration docs, which always had document_type)
+  //   - chat media: document_type is NULL AND comment_id IS NOT NULL
+  // Docs with no document_type AND no comment_id are orphans from a failed
+  // chat upload — we hide them from the UI (they sit in the bucket/table
+  // until a cleanup job runs).
   // Everything with entity_type != 'quote' falls into "other" groups.
   const quoteOfficial: DocumentRow[] = [];
   const chatMedia: DocumentRow[] = [];
@@ -70,12 +74,12 @@ export function DocumentsStep({ quote, userId }: DocumentsStepProps) {
 
   for (const doc of documents) {
     if (doc.entity_type === "quote") {
-      if (doc.comment_id && doc.status !== "final") {
-        chatMedia.push(doc);
-      } else {
-        // Treat status=final, legacy nulls, and direct uploads as official.
+      if (doc.document_type) {
         quoteOfficial.push(doc);
+      } else if (doc.comment_id) {
+        chatMedia.push(doc);
       }
+      // else: orphan — skip
     } else {
       const group = nonQuoteByType.get(doc.entity_type) ?? [];
       group.push(doc);

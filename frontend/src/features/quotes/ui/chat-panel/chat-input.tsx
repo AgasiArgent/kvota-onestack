@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Paperclip, Send, X, Loader2, FileIcon, ImageIcon } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useChatAttachments } from "./use-chat-attachments";
 
@@ -147,6 +148,7 @@ export function ChatInput({
         mentions.length > 0 ? mentions : undefined,
         readyIds.length > 0 ? readyIds : undefined
       );
+      // Success path — clear composer state
       setValue("");
       setMentions([]);
       setMentionQuery(null);
@@ -154,6 +156,16 @@ export function ChatInput({
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
+    } catch (err) {
+      // Send failed — remove the orphaned uploaded attachments so they
+      // don't pile up in the bucket / documents table, and tell the user.
+      await Promise.all(
+        attachments
+          .filter((a) => a.documentId && !a.error)
+          .map((a) => removeAttachment(a.tempId))
+      );
+      const msg = err instanceof Error ? err.message : "Ошибка отправки";
+      toast.error(msg);
     } finally {
       setSending(false);
       textareaRef.current?.focus();
@@ -166,6 +178,8 @@ export function ChatInput({
     getReadyDocumentIds,
     isUploading,
     clearAttachments,
+    attachments,
+    removeAttachment,
   ]);
 
   const handleFileSelect = useCallback(
