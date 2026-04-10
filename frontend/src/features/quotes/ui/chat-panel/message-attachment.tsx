@@ -125,12 +125,14 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
 
   // Non-image: file card with two separate actions
   //   • clicking the filename / icon → opens the file in a new tab (preview)
-  //   • clicking the download icon on the right → forces a download
+  //   • clicking the right-side download tile → forces a download
+  // The download tile has a distinct background shade + left divider so
+  // it's clearly a separate click target, not blending into the card body.
   // Nested <a> is not allowed in HTML so the container is a plain <div>.
   return (
     <div
       className={cn(
-        "mt-1 flex items-center gap-2 rounded-md border px-2.5 py-1.5 max-w-[240px] text-xs transition-colors",
+        "mt-1 flex items-stretch rounded-md border max-w-[240px] text-xs overflow-hidden",
         isOwn
           ? "bg-primary/5 border-primary/20"
           : "bg-background"
@@ -143,7 +145,10 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
         onClick={(e) => {
           if (!viewUrl) e.preventDefault();
         }}
-        className="flex-1 flex items-center gap-2 min-w-0 rounded hover:opacity-80 transition-opacity"
+        className={cn(
+          "flex-1 flex items-center gap-2 min-w-0 px-2.5 py-1.5 transition-colors",
+          isOwn ? "hover:bg-primary/10" : "hover:bg-muted/60"
+        )}
       >
         <FileIcon className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
         <div className="flex-1 min-w-0">
@@ -167,11 +172,13 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
           if (!downloadUrl) e.preventDefault();
         }}
         className={cn(
-          "flex-shrink-0 flex items-center justify-center w-6 h-6 rounded",
-          "text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          "flex-shrink-0 flex items-center justify-center w-8 border-l transition-colors",
+          isOwn
+            ? "bg-primary/10 border-primary/20 text-primary hover:bg-primary/20"
+            : "bg-muted/60 border-border text-muted-foreground hover:bg-muted hover:text-foreground"
         )}
       >
-        <Download className="w-3 h-3" />
+        <Download className="w-3.5 h-3.5" />
       </a>
     </div>
   );
