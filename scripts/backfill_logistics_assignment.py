@@ -41,7 +41,9 @@ def fetch_stuck_quotes() -> List[Dict[str, Any]]:
         .is_("assigned_logistics_user", None)
         .execute()
     )
-    return response.data or []
+    # Narrow supabase-py's List[JSON] | list[Dict[str, Any]] union via isinstance
+    # so Pyright can resolve the return type without any-casts.
+    return [row for row in (response.data or []) if isinstance(row, dict)]
 
 
 def backfill_quote(quote: Dict[str, Any]) -> Dict[str, Any]:

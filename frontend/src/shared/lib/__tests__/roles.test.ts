@@ -189,6 +189,14 @@ describe("isCustomsOnly", () => {
     expect(isCustomsOnly(["customs", "sales"])).toBe(true);
   });
 
+  it("returns true for customs + logistics combo (customs stage tier wins over assigned-items)", () => {
+    // Order in the if/else chain: isCustomsOnly is checked BEFORE isAssignedItemsOnly,
+    // so a user holding both customs and logistics lands in CUSTOMS_STAGE tier rather
+    // than ASSIGNED_ITEMS. This is the documented intent of the CUSTOMS_STAGE tier —
+    // see queries.ts::fetchQuotesList role routing.
+    expect(isCustomsOnly(["customs", "logistics"])).toBe(true);
+  });
+
   // --- Should return FALSE (broader role overrides) ---
 
   it("returns false for customs + admin combo", () => {
@@ -241,6 +249,7 @@ describe("tier determination for real-world role combos", () => {
     { roles: ["procurement"], expected: "ASSIGNED_ITEMS" },
     { roles: ["logistics"], expected: "ASSIGNED_ITEMS" },
     { roles: ["customs"], expected: "CUSTOMS_STAGE" },
+    { roles: ["customs", "logistics"], expected: "CUSTOMS_STAGE" },
     { roles: ["procurement_senior"], expected: "PROCUREMENT_STAGE_ONLY" },
   ])("$roles → $expected", ({ roles, expected }) => {
     expect(determineTier(roles)).toBe(expected);
