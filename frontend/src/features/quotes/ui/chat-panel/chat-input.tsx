@@ -6,6 +6,7 @@ import {
   useCallback,
   useEffect,
   type ChangeEvent,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
 import { Paperclip, Send, X, Loader2, FileIcon, ImageIcon } from "lucide-react";
@@ -193,6 +194,50 @@ export function ChatInput({
     [addFiles]
   );
 
+  // ---- Drag & drop -------------------------------------------------------
+  // Users can drag files from their OS directly onto the chat input area.
+  // We count dragenter/dragleave events to distinguish "actually leaving"
+  // from "moving over a child element" (which fires leave+enter pairs).
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
+  const handleDragEnter = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer?.types?.includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: DragEvent) => {
+      if (!e.dataTransfer?.types?.includes("Files")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsDragOver(false);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 0) return;
+      await addFiles(files);
+    },
+    [addFiles]
+  );
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
       // Handle mention dropdown navigation
@@ -247,7 +292,25 @@ export function ChatInput({
   const showDropdown = mentionQuery !== null && filteredMembers.length > 0;
 
   return (
-    <div className="relative border-t border-border bg-background px-4 py-3">
+    <div
+      className={cn(
+        "relative border-t border-border bg-background px-4 py-3 transition-colors",
+        isDragOver && "bg-primary/5 ring-2 ring-inset ring-primary/40"
+      )}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drop overlay hint */}
+      {isDragOver && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+          <div className="rounded-lg bg-background/95 border border-primary/40 px-4 py-2 text-sm text-primary shadow-sm">
+            Отпустите файл для загрузки
+          </div>
+        </div>
+      )}
+
       {/* Mention dropdown — positioned above input */}
       {showDropdown && (
         <div
