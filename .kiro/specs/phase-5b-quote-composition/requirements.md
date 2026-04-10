@@ -156,8 +156,8 @@ Phase 5b extends OneStack's quoting system with a multi-supplier composition eng
 
 #### Acceptance Criteria
 
-1. The `kvota.invoice_item_prices` table shall have Row Level Security enabled with SELECT policies mirroring `kvota.invoices` visibility rules per `.kiro/steering/access-control.md`.
-2. The `kvota.invoice_item_prices` table shall have INSERT/UPDATE/DELETE policies restricted to roles `procurement`, `procurement_senior`, `head_of_procurement`, and `admin`.
+1. The `kvota.invoice_item_prices` table shall have Row Level Security enabled using the organization + role pattern already established by `kvota.item_price_offers`, `kvota.purchasing_companies`, `kvota.customer_contracts`, and most other org-scoped tables in the project. The table shall include a `organization_id UUID NOT NULL` column referencing `kvota.organizations(id)`. The SELECT policy shall gate on `organization_id IN (SELECT ur.organization_id FROM kvota.user_roles ur JOIN kvota.roles r ON r.id = ur.role_id WHERE ur.user_id = auth.uid() AND r.slug IN (…))` for roles `admin`, `top_manager`, `procurement`, `procurement_senior`, `head_of_procurement`, `sales`, `head_of_sales`, `finance`, `quote_controller`, `spec_controller`.
+2. The `kvota.invoice_item_prices` table shall have INSERT and UPDATE policies restricted to roles `admin`, `procurement`, `procurement_senior`, `head_of_procurement`, and a DELETE policy restricted to `admin` and `head_of_procurement` only. All write policies shall gate on `organization_id IN (…)` for the current user.
 3. The Composition API (GET and POST) shall apply the same quote-visibility filter as existing quote APIs — a user who cannot see a quote shall not see or modify its composition.
 4. The Composition API shall return HTTP 404 (not 403) when a user attempts to access composition data for a quote they cannot see, per the `access-control.md` "404 on denial" rule.
 5. Every query inside the Composition Service shall filter by `organization_id` as the outer boundary before applying any other filter.

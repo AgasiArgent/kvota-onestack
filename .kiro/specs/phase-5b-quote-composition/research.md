@@ -98,7 +98,7 @@ When the user picks a supplier, copy the selected price into `quote_items.purcha
 | Currency mismatch between competing supplier offers | Low | Already handled — per-item currency exists today at `main.py:13140-13150`; no new logic needed |
 | Row-level freeze check enforcement | Medium | Use service-layer guard (Python) rather than DB trigger — easier to test, easier to bypass in repair scripts, consistent with project's "business logic in services, not DB" pattern |
 | Concurrent composition edits from two tabs | Low | Optimistic concurrency check on `quotes.updated_at` at POST time; reject with 409 if stale |
-| RLS policy drift (invoice vs iip) | Medium | Write iip RLS as a thin reference to the invoices RLS predicate, not a copy — avoid drift over time |
+| RLS policy drift (invoice vs iip) | ~~Medium~~ **Resolved 2026-04-10** | ~~Write iip RLS as a thin reference to the invoices RLS predicate~~. Invalidated by pre-check: `kvota.invoices` has RLS disabled entirely. iip now uses the project-standard org+role pattern. See § "Pre-check findings" below. |
 
 ## Deferred questions (not blocking implementation)
 
@@ -118,3 +118,35 @@ When the user picks a supplier, copy the selected price into `quote_items.purcha
 | JSON diff format for edit-request payload | `{ "fields": {old: ..., new: ...}, "reason": "..." }` per field | Machine-readable for approval UI, human-readable for audit log |
 | Composition picker update cadence | On radio click → immediate POST (optimistic UI) | Avoids "save button" friction; aligns with typical shadcn/ui forms |
 | What to show when only one supplier covers an item | Disable the radio, show "only supplier" label | Clarifies that no choice exists, doesn't hide the picker structure |
+
+## Pre-check findings (2026-04-10, before applying migration 263)
+
+Before running the first SQL against prod, I verified the existing RLS state on `kvota.invoices` via SSH SELECT from `pg_policies` and `pg_class`. Two findings reshaped the design:
+
+### Finding 1: `kvota.invoices` has RLS disabled entirely
+
+```
+relname   | relrowsecurity | relforcerowsecurity
+invoices  | f              | f
+```
+
+Zero policies. This invalidates the original design's "reference predicate" for iip SELECT (`invoice_id IN (SELECT id FROM kvota.invoices)`) — the subquery would not filter anything, making the policy effectively a no-op.
+
+**Root cause:** access-control.md explicitly says *"Apply visibility filter to the query — never rely on RLS alone for this logic (too complex for policy SQL)"*. The project does complex quote visibility in the application layer (Python + Next.js queries with `canAccessQuote()` helpers), and `invoices` was left without RLS as a consequence.
+
+**Resolution:** iip uses the project's other standard pattern — org+role RLS as defense-in-depth against Next.js JS client direct reads. Matches `item_price_offers`, `purchasing_companies`, `customer_contracts`, and most other org-scoped kvota tables. Requires adding `organization_id NOT NULL` column to iip (populated in backfill via JOIN to `quotes`).
+
+### Finding 2: `kvota.item_price_offers` exists as an orphan prototype
+
+Table is on prod with 0 rows, 4 RLS policies, no references from `main.py`. Source: `features/procurement-offers-gemini/migrations/145_item_price_offers.sql` — a `features/` subdirectory (not the main `migrations/` dir). Migration `145_item_price_offers.sql` is NOT in `kvota.migrations` tracking table — whoever deployed it did so manually via psql, bypassing the standard flow. Sibling directory `features/procurement-offers-jsonb/` holds an alternative JSONB-based prototype.
+
+**Interpretation:** stranded AI-generated (Gemini) spike from an earlier design exploration. Never integrated into the main application. Shape does NOT support Decision #3 (logistics per-invoice) — `item_price_offers` links `(quote_item, supplier)` directly without invoice-level grouping, so it can't capture per-KP logistics data.
+
+**Resolution:** leave `item_price_offers` as-is (orphan is harmless, 0 rows, no consumers). Phase 5b still creates `invoice_item_prices` as originally designed — the invoice-level grouping is architecturally correct for the real workflow.
+
+### Auto-resolved → now manually resolved
+
+| Question | Previous auto-resolution | Updated resolution |
+|---|---|---|
+| RLS policy pattern for iip | Reference predicate via `invoices` | Org + role pattern matching `item_price_offers` and other org-scoped tables |
+| `organization_id` on iip | Not present | `UUID NOT NULL REFERENCES kvota.organizations(id)`, populated by backfill via JOIN to quotes, populated by INSERT paths from user context |

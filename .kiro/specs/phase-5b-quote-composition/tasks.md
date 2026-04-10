@@ -25,11 +25,12 @@
 - Create: `frontend/src/shared/types/database.types.ts` (regenerated, not hand-edited)
 
 **Steps:**
-- [ ] Write `migrations/263_invoice_item_prices.sql` with the full DDL from `design.md` § "Migration 263" — junction table + 3 indexes + 4 RLS policies + comments
+- [ ] Write `migrations/263_invoice_item_prices.sql` with the full DDL from `design.md` § "Migration 263" — junction table (including `organization_id NOT NULL` column) + 4 indexes + 4 RLS policies (org + role pattern) + comments
 - [ ] Dry-run locally: `cat migrations/263_invoice_item_prices.sql | grep -E "^(CREATE|ALTER|COMMENT|GRANT)"` and visually verify structure
 - [ ] Apply via SSH: `cat migrations/263_invoice_item_prices.sql | ssh beget-kvota 'docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1'`
 - [ ] Verify table exists: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c '\\dt kvota.invoice_item_prices'"` — expect one row
-- [ ] Verify columns: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c '\\d kvota.invoice_item_prices'"` — expect `invoice_id, quote_item_id, purchase_price_original, purchase_currency, base_price_vat, price_includes_vat, version, frozen_at, frozen_by, created_at, updated_at, created_by`
+- [ ] Verify columns: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c '\\d kvota.invoice_item_prices'"` — expect `invoice_id, quote_item_id, organization_id, purchase_price_original, purchase_currency, base_price_vat, price_includes_vat, version, frozen_at, frozen_by, created_at, updated_at, created_by`
+- [ ] Verify RLS enabled and policy count: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM pg_policies WHERE schemaname='kvota' AND tablename='invoice_item_prices'\""` — expect 4
 - [ ] Record in tracking table: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"INSERT INTO kvota.migrations (filename) VALUES ('263_invoice_item_prices.sql') ON CONFLICT DO NOTHING\""`
 - [ ] Reload PostgREST schema cache: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"NOTIFY pgrst, 'reload schema'\""`
 - [ ] Regenerate frontend types: `cd frontend && npm run db:types && cd ..`
@@ -42,8 +43,13 @@ feat(composition): migration 263 — invoice_item_prices junction
 
 Junction table for Phase 5b multi-supplier quote composition.
 Holds per-item prices from each supplier invoice with versioning
-(version + frozen_at columns). RLS policies mirror kvota.invoices
-via reference predicate to avoid drift.
+(version + frozen_at columns).
+
+RLS uses the project-standard org + role pattern with an
+explicit organization_id column. The original reference-predicate
+approach was dropped after pre-check revealed kvota.invoices has
+RLS disabled entirely — see .kiro/specs/phase-5b-quote-composition/
+research.md § "Pre-check findings".
 
 Part of Phase 5b — Quote Composition Engine.
 See: docs/plans/2026-04-10-phase-5b-quote-composition-engine.md
@@ -104,10 +110,11 @@ EOF
 - Create: `migrations/265_backfill_composition.sql`
 
 **Steps:**
-- [ ] Write `migrations/265_backfill_composition.sql` with the 3 idempotent statements from `design.md` § "Migration 265": INSERT ... ON CONFLICT DO NOTHING into invoice_item_prices from quote_items; UPDATE quote_items SET composition_selected_invoice_id = invoice_id WHERE composition_selected_invoice_id IS NULL; UPDATE invoices SET verified_at WHERE status='completed' AND verified_at IS NULL
+- [ ] Write `migrations/265_backfill_composition.sql` with the 3 idempotent statements from `design.md` § "Migration 265": INSERT ... ON CONFLICT DO NOTHING into invoice_item_prices from `quote_items JOIN quotes` (JOIN resolves `organization_id` for each iip row); UPDATE quote_items SET composition_selected_invoice_id = invoice_id WHERE composition_selected_invoice_id IS NULL; UPDATE invoices SET verified_at WHERE status='completed' AND verified_at IS NULL
 - [ ] Before applying: snapshot current state for regression: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM kvota.quote_items WHERE invoice_id IS NOT NULL\""` — remember this count for verification
 - [ ] Apply via SSH
 - [ ] Verify iip row count matches the quote_items count: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM kvota.invoice_item_prices WHERE version=1\""` — should equal the pre-apply count
+- [ ] Verify organization_id populated on every iip row: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM kvota.invoice_item_prices WHERE organization_id IS NULL\""` — expect 0
 - [ ] Verify composition pointer set: `ssh beget-kvota "docker exec supabase-db psql -U postgres -d postgres -c \"SELECT COUNT(*) FROM kvota.quote_items WHERE composition_selected_invoice_id IS NOT NULL\""` — should equal count from previous step
 - [ ] Verify idempotency: re-apply the migration and expect ZERO new iip rows + ZERO new pointer updates + ZERO new verified stamps
 - [ ] Record in `kvota.migrations` tracking table

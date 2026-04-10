@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS kvota.invoice_item_prices (
     invoice_id    UUID NOT NULL REFERENCES kvota.invoices(id)    ON DELETE CASCADE,
     quote_item_id UUID NOT NULL REFERENCES kvota.quote_items(id) ON DELETE CASCADE,
 
+    -- Organization boundary (used by RLS — added after 2026-04-10 pre-check
+    -- revealed kvota.invoices has RLS disabled, so iip uses the same
+    -- org+role pattern that item_price_offers and most other org-scoped
+    -- tables in the project use)
+    organization_id UUID NOT NULL REFERENCES kvota.organizations(id),
+
     -- Price fields — mirror quote_items shape so composition_service can overlay
     purchase_price_original NUMERIC(18,4) NOT NULL,
     purchase_currency       TEXT          NOT NULL,
@@ -79,6 +85,9 @@ CREATE INDEX IF NOT EXISTS idx_iip_invoice
 CREATE INDEX IF NOT EXISTS idx_iip_quote_item
     ON kvota.invoice_item_prices(quote_item_id);
 
+CREATE INDEX IF NOT EXISTS idx_iip_organization
+    ON kvota.invoice_item_prices(organization_id);
+
 -- Partial index for "current editable row" lookups — the 99% path
 CREATE INDEX IF NOT EXISTS idx_iip_active
     ON kvota.invoice_item_prices(quote_item_id, invoice_id)
@@ -90,50 +99,72 @@ COMMENT ON TABLE kvota.invoice_item_prices IS
 COMMENT ON COLUMN kvota.invoice_item_prices.frozen_at IS
     'NULL = editable; NOT NULL = frozen snapshot (set when KP is sent or manually frozen). Frozen rows are immutable — edits create a new version row.';
 
--- RLS — mirror the invoices table visibility via a reference predicate
+-- RLS — organization + role pattern matching item_price_offers (migration 145,
+-- outside main tracking) and most other org-scoped kvota tables. See research.md
+-- § "Pre-check findings" for why the original reference-predicate approach was
+-- wrong (kvota.invoices has RLS disabled entirely).
 ALTER TABLE kvota.invoice_item_prices ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY iip_select ON kvota.invoice_item_prices
+CREATE POLICY invoice_item_prices_select ON kvota.invoice_item_prices
     FOR SELECT
     USING (
-        invoice_id IN (SELECT id FROM kvota.invoices)
-        -- invoices RLS policy already filters by tier; referencing it keeps
-        -- iip visibility in sync automatically. Do not duplicate the predicate.
+        organization_id IN (
+            SELECT ur.organization_id
+            FROM kvota.user_roles ur
+            JOIN kvota.roles r ON r.id = ur.role_id
+            WHERE ur.user_id = auth.uid()
+              AND r.slug IN (
+                  'admin', 'top_manager',
+                  'procurement', 'procurement_senior', 'head_of_procurement',
+                  'sales', 'head_of_sales',
+                  'finance',
+                  'quote_controller', 'spec_controller'
+              )
+        )
     );
 
-CREATE POLICY iip_insert ON kvota.invoice_item_prices
+CREATE POLICY invoice_item_prices_insert ON kvota.invoice_item_prices
     FOR INSERT
     WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM kvota.user_roles ur
+        organization_id IN (
+            SELECT ur.organization_id
+            FROM kvota.user_roles ur
             JOIN kvota.roles r ON r.id = ur.role_id
             WHERE ur.user_id = auth.uid()
-              AND r.slug IN ('procurement', 'procurement_senior', 'head_of_procurement', 'admin')
+              AND r.slug IN ('admin', 'procurement', 'procurement_senior', 'head_of_procurement')
         )
     );
 
-CREATE POLICY iip_update ON kvota.invoice_item_prices
+CREATE POLICY invoice_item_prices_update ON kvota.invoice_item_prices
     FOR UPDATE
     USING (
-        EXISTS (
-            SELECT 1 FROM kvota.user_roles ur
+        organization_id IN (
+            SELECT ur.organization_id
+            FROM kvota.user_roles ur
             JOIN kvota.roles r ON r.id = ur.role_id
             WHERE ur.user_id = auth.uid()
-              AND r.slug IN ('procurement', 'procurement_senior', 'head_of_procurement', 'admin')
+              AND r.slug IN ('admin', 'procurement', 'procurement_senior', 'head_of_procurement')
         )
     );
 
-CREATE POLICY iip_delete ON kvota.invoice_item_prices
+CREATE POLICY invoice_item_prices_delete ON kvota.invoice_item_prices
     FOR DELETE
     USING (
-        EXISTS (
-            SELECT 1 FROM kvota.user_roles ur
+        organization_id IN (
+            SELECT ur.organization_id
+            FROM kvota.user_roles ur
             JOIN kvota.roles r ON r.id = ur.role_id
             WHERE ur.user_id = auth.uid()
-              AND r.slug IN ('head_of_procurement', 'admin')
+              AND r.slug IN ('admin', 'head_of_procurement')
         )
     );
 ```
+
+**Policy audience rationale:**
+- **SELECT** is broader (10 roles) because the composition picker is read by sales and various controller roles — anyone who can see a quote needs to see its composition data. `logistics` and `customs` are excluded because they only ever see items personally assigned to them (per `access-control.md` ASSIGNED_ITEMS tier) and composition is not part of their flow.
+- **INSERT/UPDATE** is procurement-only because iip rows are created during invoice creation and edited only via the verified-edit-approval flow — both are procurement actions.
+- **DELETE** is restricted to `head_of_procurement` and `admin` since deletion of a price row is a destructive repair action.
+- Python API uses the `service_role` key which bypasses RLS entirely — these policies primarily protect Next.js JS client direct reads via `useQuoteComposition`.
 
 ### Migration 264 — Composition pointer + verification columns
 
@@ -176,10 +207,12 @@ COMMENT ON COLUMN kvota.invoices.verified_at IS
 
 SET search_path TO kvota, public;
 
--- 1) Populate invoice_item_prices from existing quote_items.invoice_id assignments
+-- 1) Populate invoice_item_prices from existing quote_items.invoice_id assignments.
+-- JOIN to quotes to resolve organization_id (required NOT NULL column for RLS).
 INSERT INTO kvota.invoice_item_prices (
     invoice_id,
     quote_item_id,
+    organization_id,
     purchase_price_original,
     purchase_currency,
     base_price_vat,
@@ -192,6 +225,7 @@ INSERT INTO kvota.invoice_item_prices (
 SELECT
     qi.invoice_id,
     qi.id AS quote_item_id,
+    q.organization_id,
     COALESCE(qi.purchase_price_original, qi.base_price_vat, 0) AS purchase_price_original,
     COALESCE(qi.purchase_currency, 'USD') AS purchase_currency,
     qi.base_price_vat,
@@ -201,6 +235,7 @@ SELECT
     qi.updated_at,
     qi.created_by
 FROM kvota.quote_items qi
+JOIN kvota.quotes q ON q.id = qi.quote_id
 WHERE qi.invoice_id IS NOT NULL
 ON CONFLICT (invoice_id, quote_item_id, version) DO NOTHING;
 
