@@ -9,6 +9,7 @@ export type {
   ParsedTableState,
 } from "./types";
 
+export { DataTable, type DataTableProps } from "./data-table";
 export { ColumnFilter } from "./column-filter";
 export { RangeFilter } from "./range-filter";
 export { ColumnVisibility } from "./column-visibility";

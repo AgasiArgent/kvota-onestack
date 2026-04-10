@@ -10,15 +10,30 @@ export interface QuoteListItem {
   manager: { id: string; full_name: string } | null;
   version_count: number;
   current_version: number;
+  brands: readonly string[];
+  procurement_managers: readonly { id: string; full_name: string }[];
 }
 
 export interface QuotesFilterParams {
-  status?: string; // status group key or individual status
-  customer?: string; // customer UUID
-  manager?: string; // manager user UUID
-  search?: string; // search by quote number (idn_quote) or customer name
-  page?: number; // 1-based page number
-  pageSize?: number; // default 20
+  /** Multi-value status filter (workflow_status IN). Comma-separated in URL. */
+  status?: readonly string[];
+  /** Multi-value customer filter (customer_id IN). */
+  customer?: readonly string[];
+  /** Multi-value sales manager filter (created_by IN). */
+  manager?: readonly string[];
+  /** Multi-value brand filter (quote_items.brand IN → quote IDs). */
+  brand?: readonly string[];
+  /** Multi-value procurement manager filter (quote_items.assigned_procurement_user IN → quote IDs). */
+  procurement_manager?: readonly string[];
+  /** Amount range filter (total_amount_quote gte/lte). */
+  amount_min?: number;
+  amount_max?: number;
+  /** Sort field with optional leading minus for desc. Format: "amount" | "-amount" | "created_at". */
+  sort?: string;
+  /** Full-text search over idn_quote, customer name, and brand names. */
+  search?: string;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface QuotesListResult {
@@ -26,67 +41,6 @@ export interface QuotesListResult {
   total: number;
   page: number;
   pageSize: number;
-}
-
-export interface StatusGroup {
-  key: string;
-  label: string;
-  statuses: string[];
-  color: string;
-}
-
-export const STATUS_GROUPS: StatusGroup[] = [
-  {
-    key: "draft",
-    label: "Черновик",
-    statuses: ["draft"],
-    color: "bg-slate-100 text-slate-700",
-  },
-  {
-    key: "in_progress",
-    label: "В работе",
-    statuses: ["pending_procurement", "logistics", "pending_customs", "pending_logistics_and_customs"],
-    color: "bg-blue-100 text-blue-700",
-  },
-  {
-    key: "approval",
-    label: "Согласование",
-    statuses: [
-      "pending_quote_control",
-      "pending_spec_control",
-      "pending_sales_review",
-      "pending_approval",
-    ],
-    color: "bg-amber-100 text-amber-700",
-  },
-  {
-    key: "deal",
-    label: "Сделка",
-    statuses: ["approved", "sent_to_client", "accepted", "spec_signed", "deal"],
-    color: "bg-green-100 text-green-700",
-  },
-  {
-    key: "closed",
-    label: "Закрыт",
-    statuses: ["rejected", "cancelled"],
-    color: "bg-red-100 text-red-700",
-  },
-];
-
-const STATUS_GROUP_MAP = new Map<string, StatusGroup>();
-for (const group of STATUS_GROUPS) {
-  for (const status of group.statuses) {
-    STATUS_GROUP_MAP.set(status, group);
-  }
-}
-
-export function getStatusesForGroup(groupKey: string): string[] {
-  const group = STATUS_GROUPS.find((g) => g.key === groupKey);
-  return group?.statuses ?? [];
-}
-
-export function getGroupForStatus(status: string): StatusGroup | undefined {
-  return STATUS_GROUP_MAP.get(status);
 }
 
 const ROLE_ACTION_STATUSES: Record<string, string[]> = {

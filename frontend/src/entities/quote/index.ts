@@ -2,7 +2,6 @@ export type {
   QuoteListItem,
   QuotesFilterParams,
   QuotesListResult,
-  StatusGroup,
   QuoteDetail,
   QuoteItem,
   QuoteInvoice,
@@ -11,9 +10,6 @@ export type {
   QuoteStep,
 } from "./types";
 export {
-  STATUS_GROUPS,
-  getStatusesForGroup,
-  getGroupForStatus,
   getActionStatusesForUser,
   ROLE_ALLOWED_STEPS,
   ROLE_EDITABLE_STEPS,
