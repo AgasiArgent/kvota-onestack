@@ -23,14 +23,27 @@ interface MessageAttachmentProps {
 }
 
 /**
- * Renders a single comment attachment. Images are shown inline with a
- * click-to-expand behavior (opens the signed URL in a new tab). Other files
- * show as a compact download card.
+ * Renders a single comment attachment.
  *
- * Signed URLs have a 1-hour expiry which is generated lazily on mount.
+ * Images show inline with a small download-button overlay in the top-right
+ * corner. Clicking the image itself opens the preview in a new tab; clicking
+ * the download button forces a download.
+ *
+ * Non-image files render as a compact card; the whole card is a download
+ * link.
+ *
+ * We generate TWO signed URLs per attachment:
+ *   - viewUrl     — plain signed URL for inline preview / open-in-tab
+ *   - downloadUrl — signed URL created with { download: filename } so
+ *                   Supabase Storage serves the file with
+ *                   Content-Disposition: attachment. This works across
+ *                   origins, unlike the plain HTML `download` attribute
+ *                   which is ignored for cross-origin links.
+ * Both expire in 1 hour.
  */
 export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps) {
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [viewUrl, setViewUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [urlError, setUrlError] = useState(false);
 
   useEffect(() => {
@@ -38,24 +51,32 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
     const supabase = createClient();
 
     void (async () => {
-      const { data, error } = await supabase.storage
-        .from("kvota-documents")
-        .createSignedUrl(attachment.storage_path, 60 * 60);
+      const [viewRes, downloadRes] = await Promise.all([
+        supabase.storage
+          .from("kvota-documents")
+          .createSignedUrl(attachment.storage_path, 60 * 60),
+        supabase.storage
+          .from("kvota-documents")
+          .createSignedUrl(attachment.storage_path, 60 * 60, {
+            download: attachment.original_filename,
+          }),
+      ]);
       if (cancelled) return;
-      if (error || !data?.signedUrl) {
+      if (viewRes.error || !viewRes.data?.signedUrl) {
         setUrlError(true);
         return;
       }
-      setSignedUrl(data.signedUrl);
+      setViewUrl(viewRes.data.signedUrl);
+      setDownloadUrl(downloadRes.data?.signedUrl ?? viewRes.data.signedUrl);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [attachment.storage_path]);
+  }, [attachment.storage_path, attachment.original_filename]);
 
   if (isImage(attachment.mime_type)) {
-    if (!signedUrl) {
+    if (!viewUrl) {
       return (
         <div
           className={cn(
@@ -68,36 +89,52 @@ export function MessageAttachment({ attachment, isOwn }: MessageAttachmentProps)
       );
     }
     return (
-      <a
-        href={signedUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1 block max-w-xs rounded-md overflow-hidden border hover:opacity-90 transition-opacity"
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={signedUrl}
-          alt={attachment.original_filename}
-          className="w-full h-auto max-h-64 object-contain bg-muted/30"
-        />
-      </a>
+      <div className="mt-1 relative inline-block max-w-xs rounded-md overflow-hidden border">
+        <a
+          href={viewUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block hover:opacity-90 transition-opacity"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={viewUrl}
+            alt={attachment.original_filename}
+            className="w-full h-auto max-h-64 object-contain bg-muted/30"
+          />
+        </a>
+        {downloadUrl && (
+          <a
+            href={downloadUrl}
+            download={attachment.original_filename}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Скачать ${attachment.original_filename}`}
+            className={cn(
+              "absolute top-1.5 right-1.5 flex items-center justify-center w-7 h-7 rounded-full",
+              "bg-background/80 backdrop-blur-sm border shadow-sm",
+              "text-foreground hover:bg-background transition-colors"
+            )}
+          >
+            <Download className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
     );
   }
 
   // Non-image: compact download card.
-  // The `download` attribute tells Chrome to save the file with its
-  // original filename instead of rendering it (e.g. the PDF viewer),
-  // which both matches user intent for a file-attachment card and
-  // sidesteps Chrome's PDF viewer showing confusing error states for
-  // malformed files.
+  // The card's href uses the download-option signed URL, so clicking
+  // anywhere on the card triggers a file download (Content-Disposition:
+  // attachment from Supabase Storage).
   return (
     <a
-      href={signedUrl ?? "#"}
+      href={downloadUrl ?? "#"}
       download={attachment.original_filename}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => {
-        if (!signedUrl) e.preventDefault();
+        if (!downloadUrl) e.preventDefault();
       }}
       className={cn(
         "mt-1 flex items-center gap-2 rounded-md border px-2.5 py-1.5 max-w-[240px] text-xs transition-colors",
