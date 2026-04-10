@@ -1279,6 +1279,8 @@ export type Database = {
           package_count: number | null
           procurement_notes: string | null
           invoice_file_url: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           id?: string
@@ -1316,6 +1318,8 @@ export type Database = {
           package_count?: number | null
           procurement_notes?: string | null
           invoice_file_url?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           id?: string
@@ -1353,6 +1357,8 @@ export type Database = {
           package_count?: number | null
           procurement_notes?: string | null
           invoice_file_url?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }
@@ -3261,6 +3267,7 @@ export type Database = {
           customs_duty_per_kg: number | null
           import_banned: boolean | null
           import_ban_reason: string | null
+          composition_selected_invoice_id: string | null
         }
         Insert: {
           id?: string
@@ -3348,6 +3355,7 @@ export type Database = {
           customs_duty_per_kg?: number | null
           import_banned?: boolean | null
           import_ban_reason?: string | null
+          composition_selected_invoice_id?: string | null
         }
         Update: {
           id?: string
@@ -3435,6 +3443,7 @@ export type Database = {
           customs_duty_per_kg?: number | null
           import_banned?: boolean | null
           import_ban_reason?: string | null
+          composition_selected_invoice_id?: string | null
         }
         Relationships: []
       }
