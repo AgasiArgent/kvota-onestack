@@ -417,9 +417,13 @@ export function ChatInput({
             disabled={!canSend}
             className={cn(
               "flex items-center justify-center w-9 h-9 rounded-lg transition-colors",
+              // Empty state: same ghost style as the paperclip — no background
+              // block. Clicking does nothing because the button is disabled.
+              // With text/attachments: primary color on the icon so the user
+              // sees the button is now actionable, subtle hover fill.
               canSend
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
+                ? "text-primary hover:bg-primary/10"
+                : "text-muted-foreground cursor-not-allowed"
             )}
             aria-label="Отправить"
             type="button"
