@@ -13,6 +13,8 @@ import os
 
 from supabase import create_client, ClientOptions
 
+from services.currency_service import SUPPORTED_CURRENCIES
+
 logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -31,7 +33,7 @@ EXPENSE_SUBTYPE_LABELS = {
     "other":       "Прочее",
 }
 
-SUPPORTED_CURRENCIES = ["USD", "EUR", "RUB", "CNY", "TRY"]
+# SUPPORTED_CURRENCIES imported from services.currency_service — single source of truth.
 
 # Maps stage_code -> plan_fact_categories.code
 STAGE_TO_PLAN_FACT_CATEGORY = {

@@ -11,8 +11,7 @@ import {
   updateLogisticsExpense,
   deleteLogisticsExpense,
 } from "@/entities/quote/mutations";
-
-const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
+import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 
 interface ExpenseRow {
   id: string;
@@ -198,7 +197,7 @@ export function AdditionalExpenses({ invoiceId }: AdditionalExpensesProps) {
                       saveField(exp.id, "currency", e.target.value);
                     }}
                   >
-                    {CURRENCIES.map((c) => (
+                    {SUPPORTED_CURRENCIES.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>

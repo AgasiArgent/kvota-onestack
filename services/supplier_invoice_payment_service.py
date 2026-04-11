@@ -18,6 +18,8 @@ from decimal import Decimal
 import os
 from supabase import create_client
 
+from services.currency_service import SUPPORTED_CURRENCIES
+
 
 # Initialize Supabase client with service role for admin operations
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -62,9 +64,9 @@ PAYMENT_TYPE_COLORS = {
     PAYMENT_TYPE_REFUND: "red",
 }
 
-# Currency constants (duplicated from supplier_invoice_service for independence)
+# Currency constants
+# SUPPORTED_CURRENCIES imported from services.currency_service — single source of truth.
 DEFAULT_CURRENCY = "USD"
-SUPPORTED_CURRENCIES = ["USD", "EUR", "RUB", "CNY", "TRY"]
 
 
 # =============================================================================

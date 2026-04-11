@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { updateInvoiceLogistics } from "@/entities/quote/mutations";
 import type { QuoteInvoiceRow } from "@/entities/quote/queries";
-
-const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
+import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 
 interface Segment {
   key: string;
@@ -172,7 +171,7 @@ export function RouteSegments({ invoice, deliveryCity }: RouteSegmentsProps) {
                       saveToDb(s, "currency");
                     }}
                   >
-                    {CURRENCIES.map((c) => (
+                    {SUPPORTED_CURRENCIES.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>
