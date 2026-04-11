@@ -21,8 +21,9 @@ import {
   type CargoPlaceInput,
 } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
-
-const CURRENCIES = ["USD", "EUR", "CNY", "RUB"] as const;
+import { CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
+import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
+import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 
 interface Supplier {
   id: string;
@@ -57,7 +58,9 @@ export function InvoiceCreateModal({
   const router = useRouter();
   const [supplierId, setSupplierId] = useState("");
   const [buyerCompanyId, setBuyerCompanyId] = useState("");
+  const [countryCode, setCountryCode] = useState<string | null>(null);
   const [city, setCity] = useState("");
+  const [incoterms, setIncoterms] = useState<string>("");
   const [currency, setCurrency] = useState<string>("USD");
   const [boxes, setBoxes] = useState<
     Array<{ weight_kg: string; length_mm: string; width_mm: string; height_mm: string }>
@@ -73,7 +76,9 @@ export function InvoiceCreateModal({
   function resetForm() {
     setSupplierId("");
     setBuyerCompanyId("");
+    setCountryCode(null);
     setCity("");
+    setIncoterms("");
     setCurrency("USD");
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
     setErrors({});
@@ -133,7 +138,12 @@ export function InvoiceCreateModal({
         idn_quote: idnQuote,
         supplier_id: supplierId || undefined,
         buyer_company_id: buyerCompanyId || undefined,
+        pickup_country_override: countryCode
+          ? findCountryByCode(countryCode)?.nameRu
+          : undefined,
+        pickup_country_code: countryCode || undefined,
         pickup_city: city || undefined,
+        supplier_incoterms: incoterms || undefined,
         currency,
         boxes: parsedBoxes,
       });
@@ -207,6 +217,16 @@ export function InvoiceCreateModal({
           </div>
 
           <div className="space-y-1.5">
+            <Label>Страна отгрузки</Label>
+            <CountryCombobox
+              value={countryCode}
+              onChange={setCountryCode}
+              placeholder="Выберите страну…"
+              ariaLabel="Страна отгрузки"
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Город</Label>
             <Input
               value={city}
@@ -216,13 +236,29 @@ export function InvoiceCreateModal({
           </div>
 
           <div className="space-y-1.5">
+            <Label>Условия поставки</Label>
+            <select
+              value={incoterms}
+              onChange={(e) => setIncoterms(e.target.value)}
+              className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
+            >
+              <option value="">— не указано —</option>
+              {INCOTERMS_2020.map((term) => (
+                <option key={term.code} value={term.code}>
+                  {term.code} — {term.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
             <Label>Валюта</Label>
             <select
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               className="w-full h-8 px-2.5 text-sm border border-input rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring"
             >
-              {CURRENCIES.map((c) => (
+              {SUPPORTED_CURRENCIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

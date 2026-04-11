@@ -363,9 +363,9 @@ class TestConstants:
         assert "TRY" in SUPPORTED_CURRENCIES
 
     def test_supported_currencies_count(self):
-        """SUPPORTED_CURRENCIES has exactly 5 entries."""
+        """SUPPORTED_CURRENCIES has exactly 10 entries (Phase 3 expansion)."""
         from services.logistics_expense_service import SUPPORTED_CURRENCIES
-        assert len(SUPPORTED_CURRENCIES) == 5
+        assert len(SUPPORTED_CURRENCIES) == 10
 
     def test_stage_to_plan_fact_category_mapping(self):
         """STAGE_TO_PLAN_FACT_CATEGORY maps 6 stages (no gtd_upload)."""

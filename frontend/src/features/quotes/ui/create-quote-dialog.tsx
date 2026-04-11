@@ -28,6 +28,8 @@ import {
 } from "@/entities/quote/mutations";
 import { createCustomer } from "@/entities/customer/mutations";
 import { createClient } from "@/shared/lib/supabase/client";
+import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
+import { CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
 
 interface DaDataResult {
   found: boolean;
@@ -48,8 +50,6 @@ const DELIVERY_METHODS = [
   { value: "sea", label: "Море" },
   { value: "multimodal", label: "Любой" },
 ] as const;
-
-const INCOTERMS = ["DDP", "DAP", "CIF", "FOB", "EXW"] as const;
 
 interface CreateQuoteDialogProps {
   orgId: string;
@@ -95,7 +95,10 @@ export function CreateQuoteDialog({
   const [sellerCompanyId, setSellerCompanyId] = useState("");
 
   // Delivery fields
-  const [deliveryCountry, setDeliveryCountry] = useState("Россия");
+  // deliveryCountryCode holds the ISO-2 code selected in CountryCombobox;
+  // the Russian display name is resolved at submit time via findCountryByCode
+  // so the existing `quotes.delivery_country` text column keeps historical values.
+  const [deliveryCountryCode, setDeliveryCountryCode] = useState<string | null>("RU");
   const [deliveryCity, setDeliveryCity] = useState("Москва");
   const [deliveryMethod, setDeliveryMethod] = useState("");
   const [incoterms, setIncoterms] = useState("");
@@ -125,7 +128,7 @@ export function CreateQuoteDialog({
     setLookingUpDadata(false);
     setCreatingCustomer(false);
     setSellerCompanyId("");
-    setDeliveryCountry("Россия");
+    setDeliveryCountryCode("RU");
     setDeliveryCity("Москва");
     setDeliveryMethod("");
     setIncoterms("");
@@ -278,10 +281,15 @@ export function CreateQuoteDialog({
 
     setSubmitting(true);
     try {
+      // Write the Russian display name into the text column so historical
+      // rows and downstream reads continue to work unchanged (REQ 11.2, 11.3).
+      const deliveryCountryName =
+        findCountryByCode(deliveryCountryCode)?.nameRu ?? undefined;
+
       const result = await createQuote(orgId, userId, {
         customer_id: selectedCustomer.id,
         seller_company_id: sellerCompanyId || undefined,
-        delivery_country: deliveryCountry.trim() || undefined,
+        delivery_country: deliveryCountryName,
         delivery_city: deliveryCity.trim() || undefined,
         delivery_method: deliveryMethod || undefined,
         incoterms: incoterms || undefined,
@@ -444,10 +452,10 @@ export function CreateQuoteDialog({
               <Label className="text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Страна доставки
               </Label>
-              <Input
-                value={deliveryCountry}
-                onChange={(e) => setDeliveryCountry(e.target.value)}
-                placeholder="Россия"
+              <CountryCombobox
+                value={deliveryCountryCode}
+                onChange={setDeliveryCountryCode}
+                ariaLabel="Страна доставки"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -496,9 +504,9 @@ export function CreateQuoteDialog({
                 <SelectValue placeholder="-- Не указаны --" />
               </SelectTrigger>
               <SelectContent>
-                {INCOTERMS.map((term) => (
-                  <SelectItem key={term} value={term}>
-                    {term}
+                {INCOTERMS_2020.map((term) => (
+                  <SelectItem key={term.code} value={term.code}>
+                    {term.code} — {term.label}
                   </SelectItem>
                 ))}
               </SelectContent>

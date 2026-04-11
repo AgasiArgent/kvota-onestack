@@ -8,6 +8,7 @@ import Handsontable from "handsontable";
 import { toast } from "sonner";
 import { updateQuoteItem, unassignItemFromInvoice } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+import { isMoqViolation } from "./moq-warning";
 
 import "handsontable/styles/handsontable.css";
 import "handsontable/styles/ht-theme-main.css";
@@ -35,6 +36,7 @@ const COLUMN_KEYS = [
   "manufacturer_product_name",
   "product_name",
   "quantity",
+  "min_order_quantity",
   "purchase_price_original",
   "production_time_days",
   "weight_in_kg",
@@ -51,6 +53,7 @@ interface RowData {
   manufacturer_product_name: string;
   product_name: string;
   quantity: number | null;
+  min_order_quantity: number | null;
   purchase_price_original: number | null;
   purchase_currency: string;
   production_time_days: number | null;
@@ -97,6 +100,7 @@ function itemToRow(item: QuoteItemRow): RowData {
     manufacturer_product_name: item.manufacturer_product_name ?? "",
     product_name: item.product_name ?? "",
     quantity: item.quantity,
+    min_order_quantity: item.min_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
     purchase_currency: item.purchase_currency ?? "",
     production_time_days: item.production_time_days ?? null,
@@ -114,13 +118,11 @@ function itemToRow(item: QuoteItemRow): RowData {
 interface ProcurementHandsontableProps {
   items: QuoteItemRow[];
   invoiceId: string;
-  invoiceCurrency: string;
   procurementCompleted: boolean;
 }
 
 export function ProcurementHandsontable({
   items,
-  invoiceCurrency,
   procurementCompleted,
 }: ProcurementHandsontableProps) {
   const router = useRouter();
@@ -205,6 +207,52 @@ export function ProcurementHandsontable({
     [router]
   );
 
+  const moqWarningRenderer = useCallback(
+    (
+      instance: Handsontable,
+      td: HTMLTableCellElement,
+      row: number,
+      col: number,
+      prop: string | number,
+      value: unknown,
+      cellProperties: Handsontable.CellProperties
+    ) => {
+      // Delegate formatting to the default numeric renderer first
+      Handsontable.renderers.NumericRenderer(
+        instance,
+        td,
+        row,
+        col,
+        prop,
+        value,
+        cellProperties
+      );
+
+      const quantity = instance.getDataAtRowProp(row, "quantity") as
+        | number
+        | null
+        | undefined;
+      const violated = isMoqViolation({
+        quantity: quantity ?? null,
+        min_order_quantity:
+          typeof value === "number"
+            ? value
+            : value == null || value === ""
+              ? null
+              : Number(value),
+      });
+
+      if (violated) {
+        td.classList.add("moq-warning");
+        td.title = "Количество ниже минимального заказа поставщика";
+      } else {
+        td.classList.remove("moq-warning");
+        td.removeAttribute("title");
+      }
+    },
+    []
+  );
+
   const handleAfterChange = useCallback(
     (changes: Handsontable.CellChange[] | null, source: string) => {
       if (!changes || source === "loadData") return;
@@ -245,7 +293,8 @@ export function ProcurementHandsontable({
           } else if (
             field === "purchase_price_original" ||
             field === "weight_in_kg" ||
-            field === "production_time_days"
+            field === "production_time_days" ||
+            field === "min_order_quantity"
           ) {
             const parsed = parseFloat(String(val));
             updates[field] = isNaN(parsed) ? null : parsed;
@@ -303,7 +352,20 @@ export function ProcurementHandsontable({
 
   return (
     <div className="ht-theme-main">
-      <style>{`.locked-cell { background-color: var(--muted, #f4f4f5) !important; }`}</style>
+      <style>{`
+        .locked-cell { background-color: var(--muted, #f4f4f5) !important; }
+        .moq-warning { background-color: #fef3c7 !important; position: relative; }
+        .moq-warning::after {
+          content: "⚠";
+          position: absolute;
+          top: 2px;
+          right: 4px;
+          color: #b45309;
+          font-size: 11px;
+          line-height: 1;
+          pointer-events: none;
+        }
+      `}</style>
       <HotTable
         ref={hotRef}
         data={initialData}
@@ -315,6 +377,7 @@ export function ProcurementHandsontable({
           "Наим.произв.",
           "Наименование",
           "Кол",
+          "Мин. заказ",
           "Цена",
           "Срок, к.дн",
           "Вес, кг",
@@ -336,6 +399,12 @@ export function ProcurementHandsontable({
           { data: "manufacturer_product_name", type: "text", width: 90 },
           { data: "product_name", type: "text", width: 120, readOnly: true },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
+          {
+            data: "min_order_quantity",
+            type: "numeric",
+            width: 45,
+            renderer: moqWarningRenderer,
+          },
           { data: "purchase_price_original", type: "numeric", width: 55, readOnly: procurementCompleted },
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },

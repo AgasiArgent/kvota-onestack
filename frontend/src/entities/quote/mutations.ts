@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
+import { findCountryByName } from "@/shared/ui/geo";
 
 // ---------------------------------------------------------------------------
 // Workflow transition via Python API (handles validation, audit log, timestamps)
@@ -425,7 +426,19 @@ export async function createInvoice(data: {
   supplier_id?: string;
   buyer_company_id?: string;
   pickup_city?: string;
-  pickup_country?: string;
+  /**
+   * Explicit pickup country (Russian display name) chosen in the modal.
+   * When set, overrides both sibling inheritance (Phase 5b bypass) and the
+   * supplier-derived default (Phase 5a/Phase 3).
+   */
+  pickup_country_override?: string | null;
+  /**
+   * Explicit ISO 3166-1 alpha-2 code chosen in the modal. When set, overrides
+   * the code resolved from supplier.country via findCountryByName.
+   */
+  pickup_country_code?: string | null;
+  /** Incoterms 2020 code picked in the modal, e.g. "FOB", "CIF". */
+  supplier_incoterms?: string | null;
   currency?: string;
   boxes: CargoPlaceInput[];
 }): Promise<{
@@ -442,14 +455,22 @@ export async function createInvoice(data: {
     0
   );
 
-  // Phase 5b bypass detection (Decision #6):
-  //   If the quote already has another invoice from the same supplier, skip
-  //   the suppliers.country auto-derive and instead inherit pickup fields
-  //   from that sibling invoice. The user already provided this data on the
-  //   first invoice from this supplier — re-entering it is friction.
-  //   If the supplier is new to this quote, keep the Phase 5a auto-derive
-  //   from suppliers.country (Bug FB-260410-110450-4b85 fix).
-  let pickupCountry: string | null = data.pickup_country ?? null;
+  // Phase 5b bypass detection (Decision #6) + Phase 3 pickup_country_code/incoterms:
+  //   1. If the caller passes pickup_country_override (Phase 3 modal), that wins
+  //      absolutely.
+  //   2. Else if the quote already has another invoice from the same supplier
+  //      (Phase 5b "same_supplier" bypass), inherit pickup fields from that
+  //      sibling invoice — the user already filled them on the first KP from
+  //      this supplier. Re-entering is friction.
+  //   3. Else (new_supplier path), derive pickup_country from suppliers.country
+  //      as in Phase 5a (Bug FB-260410-110450-4b85 fix: keeps logistics
+  //      auto-assignment working).
+  //
+  //   After pickup_country is determined, resolve the alpha-2 code via
+  //   ICU-backed findCountryByName (Phase 3) — caller-provided code wins,
+  //   otherwise derive from the text name. Graceful degradation to null for
+  //   legacy free-text country values ICU doesn't know.
+  let pickupCountry: string | null = data.pickup_country_override ?? null;
   let pickupCity: string | null = data.pickup_city ?? null;
   let bypassReason: CreateInvoiceBypassReason = null;
 
@@ -486,6 +507,12 @@ export async function createInvoice(data: {
     }
   }
 
+  let pickupCountryCode: string | null = data.pickup_country_code ?? null;
+  if (!pickupCountryCode && pickupCountry) {
+    const match = findCountryByName(pickupCountry, "ru");
+    pickupCountryCode = match?.code ?? null;
+  }
+
   // Generate invoice number: INV-{idx}-{idn_quote}
   const { count } = await supabase
     .from("invoices")
@@ -504,6 +531,8 @@ export async function createInvoice(data: {
       buyer_company_id: data.buyer_company_id || null,
       pickup_city: pickupCity,
       pickup_country: pickupCountry,
+      pickup_country_code: pickupCountryCode,
+      supplier_incoterms: data.supplier_incoterms ?? null,
       currency: data.currency || "USD",
       total_weight_kg: totalWeightKg,
       total_volume_m3: totalVolumeM3,

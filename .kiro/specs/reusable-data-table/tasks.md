@@ -32,28 +32,28 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
 
 ---
 
-## 2. Filter and Visibility UI Primitives
+## 2. Filter and Visibility UI Primitives ✅ DONE
 
-- [ ] 2.1 (P) Build the multi-select column filter popover
+- [x] 2.1 (P) Build the multi-select column filter popover
   - `frontend/src/shared/ui/data-table/column-filter.tsx`
   - Search input + scrollable checkbox list + apply/reset
   - Select all toggles visible (post-search) options only
   - Count badge on trigger when filter is active
   - _Requirements: 2.1, 2.2, 2.3, 2.6, 2.7, 2.8, 10.4_
 
-- [ ] 2.2 (P) Build the numeric range filter popover
+- [x] 2.2 (P) Build the numeric range filter popover
   - `frontend/src/shared/ui/data-table/range-filter.tsx`
   - Min/max numeric inputs with optional unit label
   - Partial ranges (either bound undefined)
   - _Requirements: 3.1, 3.2, 3.3, 3.5_
 
-- [ ] 2.3 (P) Build the column visibility popover
+- [x] 2.3 (P) Build the column visibility popover
   - `frontend/src/shared/ui/data-table/column-visibility.tsx`
   - Checkbox per column (excluding `alwaysVisible`)
   - Immediate toggles, propagated via callback
   - _Requirements: 5.1, 5.2, 5.5, 5.6_
 
-- [ ] 2.4 Build the column header component
+- [x] 2.4 Build the column header component
   - `frontend/src/shared/ui/data-table/column-header.tsx`
   - Label + sort indicator + filter trigger
   - Sort tri-state (asc/desc/clear) via callback
@@ -62,37 +62,37 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
 
 ---
 
-## 3. Saved Views Entity and Selector
+## 3. Saved Views Entity and Selector ✅ DONE
 
-- [ ] 3.1 Build the table-view entity module
+- [x] 3.1 Build the table-view entity module
   - `frontend/src/entities/table-view/{types,queries,mutations,index}.ts`
   - TableView type matching migration schema
   - Fetch: listViews, fetchView
   - Mutations: createView, updateView, deleteView, setDefaultView (transactional)
   - _Requirements: 6.1, 6.3, 6.5, 6.6, 6.7, 6.9, 13.3, 13.6_
 
-- [ ] 3.2 Build the save-view dialog
+- [x] 3.2 Build the save-view dialog
   - Modes: "save as new" + "rename existing"
   - Inline validation for duplicate names
   - _Requirements: 6.3, 6.7, 6.8_
 
-- [ ] 3.3 Build the view selector dropdown
+- [x] 3.3 Build the view selector dropdown
   - Lists personal views for current tableKey
   - Actions: Save as new, Update current (when modified), Delete, Set as default, Clear
   - On select, populates URL from view state via useTableState
   - Auto-loads default view on first mount when URL has no view id
   - _Requirements: 6.1, 6.2, 6.4, 6.9_
 
-- [ ] 3.4 Build the manage-views dialog
+- [x] 3.4 Build the manage-views dialog
   - Rename + delete per view
   - Delete confirmation inline
   - _Requirements: 6.6, 6.7_
 
 ---
 
-## 4. DataTable Shell and Integration
+## 4. DataTable Shell and Integration ✅ DONE
 
-- [ ] 4.1 Build the DataTable shell component
+- [x] 4.1 Build the DataTable shell component
   - `frontend/src/shared/ui/data-table/data-table.tsx`
   - Generic `<DataTable<T>>` with rows, columns, pagination, grouping
   - Top bar: search + view selector + column visibility + custom actions slot
@@ -101,13 +101,13 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
   - Search debounce 300ms
   - _Requirements: 1.1, 1.2, 1.6, 1.7, 5.3, 5.4, 9.1, 9.2, 9.4, 9.5, 9.6, 10.1, 10.2, 10.3, 10.5_
 
-- [ ] 4.2 Expose the public API of the data-table shared module
+- [x] 4.2 Expose the public API of the data-table shared module
   - Barrel `shared/ui/data-table/index.ts` exporting DataTable + types
   - Barrel `shared/lib/data-table/index.ts` exporting hook + helpers
   - Verify no imports from features/ or entities/quote
   - _Requirements: 13.1, 13.2, 13.4, 13.5_
 
-- [ ] 4.3 Extend the quotes query for multi-value filters and range
+- [x] 4.3 Extend the quotes query for multi-value filters and range
   - Update `QuotesFilterParams`: status/customer/brand/manager/procurement_manager as arrays, amount __min/__max, sort
   - Multi-value → IN predicates
   - Range → gte/lte predicates
@@ -115,14 +115,19 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
   - Remove status-group-key expansion
   - _Requirements: 11.3, 12.5, 12.6_
 
-- [ ] 4.4 Extend fetchFilterOptions to include additional lookup values
+- [x] 4.4 Extend fetchFilterOptions to include additional lookup values
   - Distinct brands from quote_items
   - All workflow statuses with labels
   - Procurement managers (from quote_items.assigned_procurement_user)
   - Preserve customer + sales manager lookups
   - _Requirements: 10.3_
 
-- [ ] 4.5 Replace the quotes page and quotes-table implementation
+- [x] 4.5 Replace the quotes page and quotes-table implementation
+
+- [x] 4.6 Post-spec additions (shipped together as Phase 2 polish)
+  - Participants column (МОП/МОЗ/МОЛ/МОТ) with grouped-multi-select filter + AND/OR logic toggle
+  - Column resize via drag handles with localStorage persistence (`use-column-widths.ts`)
+  - Commits: `a06b470`, `b0b74e0`
   - Quotes page renders DataTable with declared column config
   - "Requires your action" row grouping via predicate
   - Row click → `/quotes/{id}`
@@ -134,7 +139,11 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
 
 ---
 
-## 5. Verification
+## 5. Verification — DEFERRED (post-procurement phases)
+
+> **Status:** Deferred. Do these after procurement improvements Phase 3-5 land,
+> ideally right before starting Group 6 (DataTable rollout to other registries)
+> so the tests protect against regressions during the rollout.
 
 - [ ] 5.1 Write unit tests for the serialization utilities
   - Round-trip parse + serialize for all filter types
@@ -172,3 +181,32 @@ Tasks grouped by architectural boundary to maximize parallel-capable work. Paral
   - Select all (post-search) behavior
   - Range filter reset on empty inputs
   - _Requirements: 2.2, 2.6, 3.3_
+
+---
+
+## 6. Rollout to Other Registries — DEFERRED (post-procurement phases)
+
+> **Status:** Deferred. The original spec scope included reuse on customers,
+> positions, and other registry pages — quotes was the first consumer.
+> Schedule after procurement Phases 3-5 so we migrate pages against a DataTable
+> that already has the country autocomplete column type baked in (if needed).
+
+- [ ] 6.1 Migrate the customers registry to DataTable
+  - Columns: name, INN, city/country, manager, created_at, total quotes/deals
+  - Filters: city, country, manager (multi-select); amount range if relevant
+  - Saved views enabled, tableKey `customers`
+  - Delete the legacy customers table implementation
+
+- [ ] 6.2 Migrate the positions registry to DataTable
+  - Columns: SKU, brand, name, supplier, country, unit
+  - Filters: brand, supplier, country (multi-select)
+  - tableKey `positions`
+
+- [ ] 6.3 Migrate the suppliers registry to DataTable
+  - Columns: name, country, city, contact, notes, last order
+  - Filters: country, city (multi-select)
+  - tableKey `suppliers`
+
+- [ ] 6.4 Audit remaining registries (deals, invoices, specifications, ERPS)
+  - For each, decide: migrate now, defer, or skip
+  - Document decisions inline in this spec

@@ -187,6 +187,7 @@ export interface QuoteItem {
   product_name: string;
   manufacturer_product_name: string | null;
   quantity: number;
+  min_order_quantity: number | null;
   unit: string | null;
   purchase_price_original: number | null;
   purchase_currency: string | null;

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 
 const SALE_TYPES = [
@@ -17,7 +18,6 @@ const SALE_TYPES = [
   { value: "транзит", label: "Транзит" },
 ];
 
-const INCOTERMS = ["DDP", "DAP", "CIF", "FOB", "EXW"];
 const CURRENCIES = ["RUB", "USD", "EUR", "CNY"];
 const DM_FEE_TYPES = [
   { value: "fixed", label: "Фикс." },
@@ -69,13 +69,13 @@ export function CalculationForm({
               value={formValues.offer_incoterms}
               onValueChange={(v) => onFieldChange("offer_incoterms", v ?? "")}
             >
-              <SelectTrigger className="w-24">
+              <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {INCOTERMS.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
+                {INCOTERMS_2020.map((t) => (
+                  <SelectItem key={t.code} value={t.code}>
+                    {t.code} — {t.label}
                   </SelectItem>
                 ))}
               </SelectContent>

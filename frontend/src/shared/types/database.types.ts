@@ -1281,6 +1281,8 @@ export type Database = {
           invoice_file_url: string | null
           verified_at: string | null
           verified_by: string | null
+          pickup_country_code: string | null
+          supplier_incoterms: string | null
         }
         Insert: {
           id?: string
@@ -1320,6 +1322,8 @@ export type Database = {
           invoice_file_url?: string | null
           verified_at?: string | null
           verified_by?: string | null
+          pickup_country_code?: string | null
+          supplier_incoterms?: string | null
         }
         Update: {
           id?: string
@@ -1359,6 +1363,8 @@ export type Database = {
           invoice_file_url?: string | null
           verified_at?: string | null
           verified_by?: string | null
+          pickup_country_code?: string | null
+          supplier_incoterms?: string | null
         }
         Relationships: []
       }
@@ -3268,6 +3274,7 @@ export type Database = {
           import_banned: boolean | null
           import_ban_reason: string | null
           composition_selected_invoice_id: string | null
+          min_order_quantity: number | null
         }
         Insert: {
           id?: string
@@ -3356,6 +3363,7 @@ export type Database = {
           import_banned?: boolean | null
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
+          min_order_quantity?: number | null
         }
         Update: {
           id?: string
@@ -3444,6 +3452,7 @@ export type Database = {
           import_banned?: boolean | null
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
+          min_order_quantity?: number | null
         }
         Relationships: []
       }

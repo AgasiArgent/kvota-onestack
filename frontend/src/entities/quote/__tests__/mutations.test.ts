@@ -240,6 +240,88 @@ describe("createInvoice — pickup_country derivation", () => {
 
     expect(fakeSupabase.insertedRows).toHaveLength(0);
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 3 Section 4: pickup_country_code and supplier_incoterms dual-write.
+  // Schema migration 266 added pickup_country_code (CHAR(2)) and
+  // supplier_incoterms (TEXT). The mutation now populates both alongside the
+  // legacy pickup_country text field, and an explicit user pick from the
+  // modal always wins over the supplier-derived default.
+  // -------------------------------------------------------------------------
+
+  it("prefers explicit pickup_country_override and pickup_country_code over supplier.country", async () => {
+    // Supplier says Китай, but user explicitly picks Турция in the modal.
+    fakeSupabase.suppliersCountry = "Китай";
+    const { createInvoice } = await import("../mutations");
+
+    await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-1",
+      buyer_company_id: "buyer-1",
+      currency: "USD",
+      pickup_country_override: "Турция",
+      pickup_country_code: "TR",
+      supplier_incoterms: "FOB",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(fakeSupabase.insertedRows).toHaveLength(1);
+    const row = fakeSupabase.insertedRows[0];
+    expect(row.pickup_country).toBe("Турция");
+    expect(row.pickup_country_code).toBe("TR");
+    expect(row.supplier_incoterms).toBe("FOB");
+  });
+
+  it("derives both pickup_country and pickup_country_code from supplier.country via findCountryByName", async () => {
+    // No explicit override — supplier country must populate BOTH fields.
+    // "Германия" is a Russian ICU name, so the code resolves to "DE".
+    fakeSupabase.suppliersCountry = "Германия";
+    const { createInvoice } = await import("../mutations");
+
+    await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-1",
+      buyer_company_id: "buyer-1",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(fakeSupabase.supplierQueryCount).toBe(1);
+    expect(fakeSupabase.insertedRows).toHaveLength(1);
+    const row = fakeSupabase.insertedRows[0];
+    expect(row.pickup_country).toBe("Германия");
+    expect(row.pickup_country_code).toBe("DE");
+    expect(row.supplier_incoterms).toBeNull();
+  });
+
+  it("preserves supplier country text but leaves pickup_country_code null when ICU cannot resolve the name", async () => {
+    // Legacy free-text country that ICU doesn't know. Graceful degradation:
+    // text field keeps the original value, code field stays null.
+    fakeSupabase.suppliersCountry = "Выдуманная страна";
+    const { createInvoice } = await import("../mutations");
+
+    await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-1",
+      buyer_company_id: "buyer-1",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(fakeSupabase.insertedRows).toHaveLength(1);
+    const row = fakeSupabase.insertedRows[0];
+    expect(row.pickup_country).toBe("Выдуманная страна");
+    expect(row.pickup_country_code).toBeNull();
+  });
 });
 
 describe("createInvoice — Phase 5b bypass logic", () => {
@@ -296,7 +378,7 @@ describe("createInvoice — Phase 5b bypass logic", () => {
     expect(fakeSupabase.insertedRows[0].pickup_city).toBe("Istanbul");
   });
 
-  it("respects caller-provided pickup_country even on same_supplier bypass (user override)", async () => {
+  it("respects caller-provided pickup_country_override even on same_supplier bypass (user override)", async () => {
     fakeSupabase.existingSameSupplierInvoice = {
       id: "first-invoice",
       pickup_country: "Turkey",
@@ -308,7 +390,7 @@ describe("createInvoice — Phase 5b bypass logic", () => {
       quote_id: "quote-1",
       idn_quote: "Q-202604-0001",
       supplier_id: "supplier-italcarrelli",
-      pickup_country: "Greece", // explicit override
+      pickup_country_override: "Греция", // Phase 3 modal explicit override
       pickup_city: "Athens",
       currency: "USD",
       boxes: [
@@ -317,7 +399,7 @@ describe("createInvoice — Phase 5b bypass logic", () => {
     });
 
     expect(result.bypass_reason).toBe("same_supplier");
-    expect(fakeSupabase.insertedRows[0].pickup_country).toBe("Greece");
+    expect(fakeSupabase.insertedRows[0].pickup_country).toBe("Греция");
     expect(fakeSupabase.insertedRows[0].pickup_city).toBe("Athens");
   });
 

@@ -16,23 +16,37 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Supported currencies
-SUPPORTED_CURRENCIES = ['USD', 'EUR', 'RUB', 'CNY', 'TRY']
+# Supported currencies (must stay in sync with frontend/src/shared/lib/currencies.ts).
+# Order is load-bearing for dropdown rendering — update both files in the same commit.
+SUPPORTED_CURRENCIES = [
+    'USD', 'EUR', 'RUB', 'CNY', 'TRY',
+    'AED', 'KZT', 'JPY', 'GBP', 'CHF',
+]
 
 # CBR currency codes mapping (CBR uses different codes)
 CBR_CURRENCY_CODES = {
-    'USD': 'R01235',  # US Dollar
-    'EUR': 'R01239',  # Euro
-    'CNY': 'R01375',  # Chinese Yuan
-    'TRY': 'R01700J', # Turkish Lira
+    'USD': 'R01235',   # US Dollar
+    'EUR': 'R01239',   # Euro
+    'CNY': 'R01375',   # Chinese Yuan
+    'TRY': 'R01700J',  # Turkish Lira
+    'AED': 'R01230',   # UAE Dirham
+    'KZT': 'R01335',   # Kazakhstan Tenge
+    'JPY': 'R01820',   # Japanese Yen (CBR publishes per 100 units; Nominal handled in fetch_cbr_rates)
+    'GBP': 'R01035',   # British Pound
+    'CHF': 'R01775',   # Swiss Franc
 }
 
-# CBR XML currency char codes
+# CBR XML currency char codes (ISO 4217, used to parse CBR XML Valute entries)
 CBR_CHAR_CODES = {
     'USD': 'USD',
     'EUR': 'EUR',
     'CNY': 'CNY',
     'TRY': 'TRY',
+    'AED': 'AED',
+    'KZT': 'KZT',
+    'JPY': 'JPY',
+    'GBP': 'GBP',
+    'CHF': 'CHF',
 }
 
 
@@ -126,19 +140,21 @@ def get_rates_from_db(rate_date: date) -> dict[str, Decimal]:
     """Get exchange rates from database for today (latest fetched).
 
     Returns dict: {currency: rate_to_rub}
-    Specifically fetches USD, EUR, CNY, TRY rates.
+    Fetches all non-RUB SUPPORTED_CURRENCIES. RUB is excluded because its
+    rate-to-RUB is identity (1.0) and it is never stored in exchange_rates.
     """
     try:
         supabase = _get_supabase()
 
-        # Get latest rates for required currencies -> RUB
-        required_currencies = ['USD', 'EUR', 'CNY', 'TRY']
+        # Get latest rates for all supported non-RUB currencies -> RUB.
+        # Pulled from SUPPORTED_CURRENCIES so new currencies are cached by default.
+        required_currencies = [c for c in SUPPORTED_CURRENCIES if c != 'RUB']
         result = supabase.table("exchange_rates")\
             .select("from_currency, rate")\
             .eq("to_currency", "RUB")\
             .in_("from_currency", required_currencies)\
             .order("fetched_at", desc=True)\
-            .limit(20)\
+            .limit(len(required_currencies) * 4)\
             .execute()
 
         rates = {}
@@ -298,7 +314,9 @@ def format_rates_for_display(rates: Optional[dict[str, Decimal]] = None) -> list
     usd_rate = rates.get('USD', Decimal(1))
 
     result = []
-    for currency in ['USD', 'EUR', 'CNY', 'TRY']:
+    # Iterate supported currencies (except RUB, which is appended below)
+    # so newly added currencies surface automatically in the rates UI.
+    for currency in [c for c in SUPPORTED_CURRENCIES if c != 'RUB']:
         if currency in rates:
             rate_to_rub = rates[currency]
             rate_to_usd = rate_to_rub / usd_rate if usd_rate else Decimal(1)
