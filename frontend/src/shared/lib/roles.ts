@@ -159,3 +159,35 @@ export function isCustomsOnly(roles: string[]): boolean {
     !roles.some((r) => ROLES_BROADER_THAN_CUSTOMS.includes(r))
   );
 }
+
+/** Roles allowed to edit quote composition (pick per-item supplier).
+ *
+ * Phase 5b composition is a sales/procurement collaboration surface:
+ * sales opens the picker to decide per-item which supplier to go with;
+ * procurement roles need the same view to verify the state. Matches the
+ * api/composition.py COMPOSITION_WRITE_ROLES set.
+ *
+ * Excluded: logistics, customs (ASSIGNED_ITEMS tier — composition is not
+ * in their flow), head_of_logistics (org-wide logistics, not procurement).
+ */
+const COMPOSITION_EDIT_ROLES = [
+  "admin",
+  "top_manager",
+  "procurement",
+  "procurement_senior",
+  "head_of_procurement",
+  "sales",
+  "head_of_sales",
+  "finance",
+  "quote_controller",
+  "spec_controller",
+];
+
+/**
+ * Returns true if the user may edit composition (POST to
+ * /api/quotes/{id}/composition). Mirrors the backend's
+ * COMPOSITION_WRITE_ROLES role set in api/composition.py.
+ */
+export function canEditComposition(roles: string[]): boolean {
+  return roles.some((r) => COMPOSITION_EDIT_ROLES.includes(r));
+}
