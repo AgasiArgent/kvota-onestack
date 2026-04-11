@@ -1182,6 +1182,66 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_item_prices: {
+        Row: {
+          id: string
+          invoice_id: string
+          quote_item_id: string
+          organization_id: string
+          purchase_price_original: number
+          purchase_currency: string
+          base_price_vat: number | null
+          price_includes_vat: boolean
+          production_time_days: number | null
+          minimum_order_quantity: number | null
+          supplier_notes: string | null
+          version: number
+          frozen_at: string | null
+          frozen_by: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          quote_item_id: string
+          organization_id: string
+          purchase_price_original: number
+          purchase_currency: string
+          base_price_vat?: number | null
+          price_includes_vat?: boolean
+          production_time_days?: number | null
+          minimum_order_quantity?: number | null
+          supplier_notes?: string | null
+          version?: number
+          frozen_at?: string | null
+          frozen_by?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          quote_item_id?: string
+          organization_id?: string
+          purchase_price_original?: number
+          purchase_currency?: string
+          base_price_vat?: number | null
+          price_includes_vat?: boolean
+          production_time_days?: number | null
+          minimum_order_quantity?: number | null
+          supplier_notes?: string | null
+          version?: number
+          frozen_at?: string | null
+          frozen_by?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           id: string
@@ -1219,6 +1279,10 @@ export type Database = {
           package_count: number | null
           procurement_notes: string | null
           invoice_file_url: string | null
+          verified_at: string | null
+          verified_by: string | null
+          pickup_country_code: string | null
+          supplier_incoterms: string | null
         }
         Insert: {
           id?: string
@@ -1256,6 +1320,10 @@ export type Database = {
           package_count?: number | null
           procurement_notes?: string | null
           invoice_file_url?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          pickup_country_code?: string | null
+          supplier_incoterms?: string | null
         }
         Update: {
           id?: string
@@ -1293,6 +1361,10 @@ export type Database = {
           package_count?: number | null
           procurement_notes?: string | null
           invoice_file_url?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+          pickup_country_code?: string | null
+          supplier_incoterms?: string | null
         }
         Relationships: []
       }
@@ -3201,6 +3273,8 @@ export type Database = {
           customs_duty_per_kg: number | null
           import_banned: boolean | null
           import_ban_reason: string | null
+          composition_selected_invoice_id: string | null
+          min_order_quantity: number | null
         }
         Insert: {
           id?: string
@@ -3288,6 +3362,8 @@ export type Database = {
           customs_duty_per_kg?: number | null
           import_banned?: boolean | null
           import_ban_reason?: string | null
+          composition_selected_invoice_id?: string | null
+          min_order_quantity?: number | null
         }
         Update: {
           id?: string
@@ -3375,6 +3451,8 @@ export type Database = {
           customs_duty_per_kg?: number | null
           import_banned?: boolean | null
           import_ban_reason?: string | null
+          composition_selected_invoice_id?: string | null
+          min_order_quantity?: number | null
         }
         Relationships: []
       }
@@ -4654,6 +4732,7 @@ export type Database = {
           default_payment_terms: string | null
           created_by: string | null
           registration_number: string | null
+          notes: string | null
         }
         Insert: {
           id?: string
@@ -4673,6 +4752,7 @@ export type Database = {
           default_payment_terms?: string | null
           created_by?: string | null
           registration_number?: string | null
+          notes?: string | null
         }
         Update: {
           id?: string
@@ -4692,6 +4772,7 @@ export type Database = {
           default_payment_terms?: string | null
           created_by?: string | null
           registration_number?: string | null
+          notes?: string | null
         }
         Relationships: []
       }
@@ -5025,6 +5106,51 @@ export type Database = {
           setting_value?: Json
           created_at?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_table_views: {
+        Row: {
+          id: string
+          user_id: string
+          table_key: string
+          name: string
+          filters: Json
+          sort: string | null
+          visible_columns: Json
+          is_shared: boolean
+          organization_id: string | null
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          table_key: string
+          name: string
+          filters?: Json
+          sort?: string | null
+          visible_columns?: Json
+          is_shared?: boolean
+          organization_id?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          table_key?: string
+          name?: string
+          filters?: Json
+          sort?: string | null
+          visible_columns?: Json
+          is_shared?: boolean
+          organization_id?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
