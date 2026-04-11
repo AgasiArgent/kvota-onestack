@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
+import { findCountryByCode } from "@/shared/ui/geo";
 
 type InvoiceExtras = {
   invoice_file_url?: string | null;
@@ -65,6 +66,18 @@ export function InvoiceCard({
   const buyerName =
     (invoice.buyer_company as { name: string; company_code: string } | null)?.name ?? null;
   const pickupCity = invoice.pickup_city ?? null;
+  const pickupCountryCode = invoice.pickup_country_code ?? null;
+  const pickupCountryRu = pickupCountryCode
+    ? findCountryByCode(pickupCountryCode)?.nameRu ?? null
+    : null;
+  const pickupLocationLabel =
+    pickupCity && pickupCountryRu && pickupCountryCode
+      ? `${pickupCity}, ${pickupCountryRu} (${pickupCountryCode})`
+      : pickupCity ??
+        (pickupCountryRu && pickupCountryCode
+          ? `${pickupCountryRu} (${pickupCountryCode})`
+          : null);
+  const supplierIncoterms = invoice.supplier_incoterms ?? null;
   const totalAmount = items.reduce((sum, item) => {
     const price = item.purchase_price_original ?? 0;
     return sum + price * item.quantity;
@@ -158,9 +171,15 @@ export function InvoiceCard({
             </span>
           )}
 
-          {pickupCity && (
+          {pickupLocationLabel && (
             <span className="text-xs text-muted-foreground truncate hidden sm:inline">
-              {pickupCity}
+              {pickupLocationLabel}
+            </span>
+          )}
+
+          {supplierIncoterms && (
+            <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+              Условия: {supplierIncoterms}
             </span>
           )}
 
@@ -291,7 +310,7 @@ export function InvoiceCard({
             </div>
           )}
           <div className="overflow-x-auto">
-            <ProcurementItemsEditor items={items} invoiceId={invoice.id} invoiceCurrency={currency} procurementCompleted={procurementCompleted} />
+            <ProcurementItemsEditor items={items} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
           </div>
         </div>
       )}

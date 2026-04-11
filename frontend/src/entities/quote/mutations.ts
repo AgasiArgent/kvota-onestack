@@ -1,5 +1,6 @@
 import { createClient } from "@/shared/lib/supabase/client";
 import { escapePostgrestFilter } from "@/shared/lib/supabase/escape-filter";
+import { findCountryByName } from "@/shared/ui/geo";
 
 // ---------------------------------------------------------------------------
 // Workflow transition via Python API (handles validation, audit log, timestamps)
@@ -358,6 +359,18 @@ export async function createInvoice(data: {
   supplier_id?: string;
   buyer_company_id?: string;
   pickup_city?: string;
+  /**
+   * Explicit pickup country (Russian display name) chosen in the modal.
+   * When set, overrides the supplier-derived default.
+   */
+  pickup_country_override?: string | null;
+  /**
+   * Explicit ISO 3166-1 alpha-2 code chosen in the modal. When set, overrides
+   * the code resolved from supplier.country via findCountryByName.
+   */
+  pickup_country_code?: string | null;
+  /** Incoterms 2020 code picked in the modal, e.g. "FOB", "CIF". */
+  supplier_incoterms?: string | null;
   currency?: string;
   boxes: CargoPlaceInput[];
 }) {
@@ -375,8 +388,14 @@ export async function createInvoice(data: {
   // rate by country. Without this, invoices stay with NULL pickup_country
   // and logistics users never receive them. (Bug FB-260410-110450-4b85,
   // FB-260410-123751-4b94.)
-  let pickupCountry: string | null = null;
-  if (data.supplier_id) {
+  //
+  // Explicit user choice from the modal (pickup_country_override /
+  // pickup_country_code) takes precedence. When only the text is known
+  // (supplier-derived or legacy), resolve the alpha-2 code via ICU-backed
+  // findCountryByName — leaves code null when the name is not recognised
+  // (graceful degradation for free-text legacy values).
+  let pickupCountry: string | null = data.pickup_country_override ?? null;
+  if (!pickupCountry && data.supplier_id) {
     const { data: supplier, error: supplierError } = await supabase
       .from("suppliers")
       .select("country")
@@ -384,6 +403,12 @@ export async function createInvoice(data: {
       .maybeSingle();
     if (supplierError) throw supplierError;
     pickupCountry = supplier?.country ?? null;
+  }
+
+  let pickupCountryCode: string | null = data.pickup_country_code ?? null;
+  if (!pickupCountryCode && pickupCountry) {
+    const match = findCountryByName(pickupCountry, "ru");
+    pickupCountryCode = match?.code ?? null;
   }
 
   // Generate invoice number: INV-{idx}-{idn_quote}
@@ -404,6 +429,8 @@ export async function createInvoice(data: {
       buyer_company_id: data.buyer_company_id || null,
       pickup_city: data.pickup_city || null,
       pickup_country: pickupCountry,
+      pickup_country_code: pickupCountryCode,
+      supplier_incoterms: data.supplier_incoterms ?? null,
       currency: data.currency || "USD",
       total_weight_kg: totalWeightKg,
       total_volume_m3: totalVolumeM3,
