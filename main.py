@@ -48142,6 +48142,42 @@ async def post_deals(request):
     return await api_create_deal(request)
 
 
+# --- Composition JSON API (Phase 5b — multi-supplier quote composition) ---
+
+from api.composition import (
+    get_composition as api_get_composition,
+    apply_composition_endpoint as api_apply_composition,
+    verify_invoice as api_verify_invoice,
+    request_invoice_edit as api_request_invoice_edit,
+    approve_invoice_edit as api_approve_invoice_edit,
+    reject_invoice_edit as api_reject_invoice_edit,
+)
+
+@rt("/api/quotes/{quote_id}/composition", methods=["GET"])
+async def get_quote_composition(request, quote_id: str):
+    return await api_get_composition(request, quote_id)
+
+@rt("/api/quotes/{quote_id}/composition", methods=["POST"])
+async def post_quote_composition(request, quote_id: str):
+    return await api_apply_composition(request, quote_id)
+
+@rt("/api/invoices/{invoice_id}/verify", methods=["POST"])
+async def post_invoice_verify(request, invoice_id: str):
+    return await api_verify_invoice(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/edit-request", methods=["POST"])
+async def post_invoice_edit_request(request, invoice_id: str):
+    return await api_request_invoice_edit(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/approve", methods=["POST"])
+async def post_invoice_edit_approve(request, invoice_id: str, approval_id: str):
+    return await api_approve_invoice_edit(request, invoice_id, approval_id)
+
+@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/reject", methods=["POST"])
+async def post_invoice_edit_reject(request, invoice_id: str, approval_id: str):
+    return await api_reject_invoice_edit(request, invoice_id, approval_id)
+
+
 # --- Admin User Management JSON API (for Next.js frontend) ---
 
 from api.admin_users import (
