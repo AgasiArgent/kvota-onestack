@@ -225,12 +225,77 @@ export async function assignItemsToInvoice(
 ) {
   const supabase = createClient();
 
+  if (itemIds.length === 0) return;
+
+  // 1) Legacy pointer + composition pointer move in lockstep on initial
+  //    assignment. If the user later opens the CompositionPicker and picks
+  //    a different invoice for an item, composition_selected_invoice_id
+  //    will diverge from invoice_id — which is fine (Decision #1).
   const { error } = await supabase
     .from("quote_items")
-    .update({ invoice_id: invoiceId })
+    .update({
+      invoice_id: invoiceId,
+      composition_selected_invoice_id: invoiceId,
+    })
     .in("id", itemIds);
-
   if (error) throw error;
+
+  // 2) Phase 5b — insert invoice_item_prices rows for every assigned item
+  //    so the CompositionPicker has data to show and the calculation path
+  //    (composition_service.get_composed_items) finds an overlay source.
+  //    Two queries (no FK join) to sidestep the empty-Relationships
+  //    limitation in generated database.types.ts (see database.md).
+  const { data: items, error: fetchErr } = await supabase
+    .from("quote_items")
+    .select(
+      "id, quote_id, purchase_price_original, purchase_currency, base_price_vat, price_includes_vat"
+    )
+    .in("id", itemIds);
+  if (fetchErr) throw fetchErr;
+  if (!items || items.length === 0) return;
+
+  const quoteIds = Array.from(new Set(items.map((i) => i.quote_id)));
+  const { data: quotes, error: quotesErr } = await supabase
+    .from("quotes")
+    .select("id, organization_id")
+    .in("id", quoteIds);
+  if (quotesErr) throw quotesErr;
+
+  const orgByQuote = new Map<string, string>(
+    (quotes ?? []).map((q) => [q.id, q.organization_id])
+  );
+
+  const iipRows = items
+    .map((item) => {
+      const orgId = orgByQuote.get(item.quote_id);
+      if (!orgId) return null; // skip items whose quote lacks org_id
+      return {
+        invoice_id: invoiceId,
+        quote_item_id: item.id,
+        organization_id: orgId,
+        purchase_price_original:
+          Number(item.purchase_price_original ?? item.base_price_vat ?? 0),
+        purchase_currency: item.purchase_currency ?? "USD",
+        base_price_vat: item.base_price_vat,
+        price_includes_vat: item.price_includes_vat ?? false,
+        version: 1,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  if (iipRows.length === 0) return;
+
+  // Upsert with ignoreDuplicates: re-assigning the same items to the same
+  // invoice is a no-op on the junction. Different (invoice, item) pairs
+  // accumulate — that's the point, alternatives build up as multi-supplier
+  // procurement progresses.
+  const { error: iipError } = await supabase
+    .from("invoice_item_prices")
+    .upsert(iipRows, {
+      onConflict: "invoice_id,quote_item_id,version",
+      ignoreDuplicates: true,
+    });
+  if (iipError) throw iipError;
 }
 
 export async function unassignItemFromInvoice(itemId: string) {
@@ -352,15 +417,22 @@ export interface CargoPlaceInput {
   height_mm: number;
 }
 
+export type CreateInvoiceBypassReason = "same_supplier" | "new_supplier" | null;
+
 export async function createInvoice(data: {
   quote_id: string;
   idn_quote: string;
   supplier_id?: string;
   buyer_company_id?: string;
   pickup_city?: string;
+  pickup_country?: string;
   currency?: string;
   boxes: CargoPlaceInput[];
-}) {
+}): Promise<{
+  id: string;
+  invoice_number: string;
+  bypass_reason: CreateInvoiceBypassReason;
+}> {
   const supabase = createClient();
 
   // Compute totals from boxes
@@ -370,20 +442,48 @@ export async function createInvoice(data: {
     0
   );
 
-  // Derive pickup_country from supplier.country so that logistics
-  // auto-assignment (assign_logistics_to_invoices) can match a logistics
-  // rate by country. Without this, invoices stay with NULL pickup_country
-  // and logistics users never receive them. (Bug FB-260410-110450-4b85,
-  // FB-260410-123751-4b94.)
-  let pickupCountry: string | null = null;
+  // Phase 5b bypass detection (Decision #6):
+  //   If the quote already has another invoice from the same supplier, skip
+  //   the suppliers.country auto-derive and instead inherit pickup fields
+  //   from that sibling invoice. The user already provided this data on the
+  //   first invoice from this supplier — re-entering it is friction.
+  //   If the supplier is new to this quote, keep the Phase 5a auto-derive
+  //   from suppliers.country (Bug FB-260410-110450-4b85 fix).
+  let pickupCountry: string | null = data.pickup_country ?? null;
+  let pickupCity: string | null = data.pickup_city ?? null;
+  let bypassReason: CreateInvoiceBypassReason = null;
+
   if (data.supplier_id) {
-    const { data: supplier, error: supplierError } = await supabase
-      .from("suppliers")
-      .select("country")
-      .eq("id", data.supplier_id)
+    const { data: sibling, error: siblingError } = await supabase
+      .from("invoices")
+      .select("id, pickup_country, pickup_city")
+      .eq("quote_id", data.quote_id)
+      .eq("supplier_id", data.supplier_id)
+      .limit(1)
       .maybeSingle();
-    if (supplierError) throw supplierError;
-    pickupCountry = supplier?.country ?? null;
+    if (siblingError) throw siblingError;
+
+    if (sibling) {
+      // Same-supplier bypass: inherit pickup from sibling when user didn't
+      // explicitly override. Do NOT fall through to suppliers.country lookup.
+      bypassReason = "same_supplier";
+      pickupCountry = pickupCountry ?? sibling.pickup_country ?? null;
+      pickupCity = pickupCity ?? sibling.pickup_city ?? null;
+    } else {
+      // New-supplier path: derive from suppliers.country if caller didn't
+      // provide it. This preserves the Phase 5a auto-fill so logistics
+      // auto-assignment keeps working.
+      bypassReason = "new_supplier";
+      if (!pickupCountry) {
+        const { data: supplier, error: supplierError } = await supabase
+          .from("suppliers")
+          .select("country")
+          .eq("id", data.supplier_id)
+          .maybeSingle();
+        if (supplierError) throw supplierError;
+        pickupCountry = supplier?.country ?? null;
+      }
+    }
   }
 
   // Generate invoice number: INV-{idx}-{idn_quote}
@@ -402,7 +502,7 @@ export async function createInvoice(data: {
       invoice_number: invoiceNumber,
       supplier_id: data.supplier_id || null,
       buyer_company_id: data.buyer_company_id || null,
-      pickup_city: data.pickup_city || null,
+      pickup_city: pickupCity,
       pickup_country: pickupCountry,
       currency: data.currency || "USD",
       total_weight_kg: totalWeightKg,
@@ -431,7 +531,7 @@ export async function createInvoice(data: {
     if (cargoError) throw cargoError;
   }
 
-  return invoice;
+  return { ...invoice, bypass_reason: bypassReason };
 }
 
 // ---------------------------------------------------------------------------

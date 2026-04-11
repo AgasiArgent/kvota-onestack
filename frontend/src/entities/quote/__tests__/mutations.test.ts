@@ -25,18 +25,28 @@ interface FakeSupabase {
   insertedRows: Record<string, unknown>[];
   insertError: Error | null;
   supplierQueryCount: number;
+  /** Phase 5b: when set, the sibling-invoice check returns this row. */
+  existingSameSupplierInvoice: {
+    id: string;
+    pickup_country: string | null;
+    pickup_city: string | null;
+  } | null;
+  /** Phase 5b: count of sibling-invoice queries (for assert). */
+  siblingQueryCount: number;
   from(table: string): unknown;
 }
 
 let fakeSupabase: FakeSupabase;
 
-function makeFakeSupabase(overrides: Partial<FakeSupabase> = {}): FakeSupabase {
+function makeFakeSupabase(): FakeSupabase {
   const state: FakeSupabase = {
     suppliersCountry: undefined,
     suppliersError: null,
     insertedRows: [],
     insertError: null,
     supplierQueryCount: 0,
+    existingSameSupplierInvoice: null,
+    siblingQueryCount: 0,
     from(table: string) {
       if (table === "suppliers") {
         state.supplierQueryCount += 1;
@@ -66,14 +76,47 @@ function makeFakeSupabase(overrides: Partial<FakeSupabase> = {}): FakeSupabase {
                 eq: async () => ({ count: 0, error: null }),
               };
             }
-            // .insert(...).select(...).single()
+            // Non-head select — used by two flows:
+            //   A) Phase 5b sibling-invoice check:
+            //      .select('id, pickup_country, pickup_city')
+            //      .eq('quote_id', ...).eq('supplier_id', ...).limit(1).maybeSingle()
+            //   B) Insert-then-select:
+            //      .insert(...).select('id, invoice_number').single()
+            // Differentiate by .eq() chain vs .single() chain.
             return {
-              single: async (): Promise<QueryResult<{ id: string; invoice_number: string }>> => {
+              eq: () => ({
+                eq: () => ({
+                  limit: () => ({
+                    maybeSingle: async (): Promise<
+                      QueryResult<
+                        | {
+                            id: string;
+                            pickup_country: string | null;
+                            pickup_city: string | null;
+                          }
+                        | null
+                      >
+                    > => {
+                      state.siblingQueryCount += 1;
+                      return {
+                        data: state.existingSameSupplierInvoice,
+                        error: null,
+                      };
+                    },
+                  }),
+                }),
+              }),
+              single: async (): Promise<
+                QueryResult<{ id: string; invoice_number: string }>
+              > => {
                 if (state.insertError) {
                   return { data: null, error: state.insertError };
                 }
                 return {
-                  data: { id: "invoice-123", invoice_number: "INV-01-Q-202604-0001" },
+                  data: {
+                    id: "invoice-123",
+                    invoice_number: "INV-01-Q-202604-0001",
+                  },
                   error: null,
                 };
               },
@@ -83,7 +126,9 @@ function makeFakeSupabase(overrides: Partial<FakeSupabase> = {}): FakeSupabase {
             state.insertedRows.push(row);
             return {
               select: () => ({
-                single: async (): Promise<QueryResult<{ id: string; invoice_number: string }>> => {
+                single: async (): Promise<
+                  QueryResult<{ id: string; invoice_number: string }>
+                > => {
                   if (state.insertError) {
                     return { data: null, error: state.insertError };
                   }
@@ -107,7 +152,6 @@ function makeFakeSupabase(overrides: Partial<FakeSupabase> = {}): FakeSupabase {
       }
       throw new Error(`Unexpected table: ${table}`);
     },
-    ...overrides,
   };
   return state;
 }
@@ -195,5 +239,103 @@ describe("createInvoice — pickup_country derivation", () => {
     ).rejects.toThrow("db down");
 
     expect(fakeSupabase.insertedRows).toHaveLength(0);
+  });
+});
+
+describe("createInvoice — Phase 5b bypass logic", () => {
+  beforeEach(() => {
+    fakeSupabase = makeFakeSupabase();
+  });
+
+  it("returns bypass_reason='new_supplier' and pre-fills pickup_country when supplier is new to this quote", async () => {
+    fakeSupabase.suppliersCountry = "Italy";
+    fakeSupabase.existingSameSupplierInvoice = null; // no sibling
+    const { createInvoice } = await import("../mutations");
+
+    const result = await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-italcarrelli",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(result.bypass_reason).toBe("new_supplier");
+    expect(fakeSupabase.siblingQueryCount).toBe(1);
+    expect(fakeSupabase.supplierQueryCount).toBe(1);
+    expect(fakeSupabase.insertedRows[0].pickup_country).toBe("Italy");
+  });
+
+  it("returns bypass_reason='same_supplier' and inherits pickup_country from sibling without touching suppliers table", async () => {
+    fakeSupabase.existingSameSupplierInvoice = {
+      id: "first-invoice",
+      pickup_country: "Turkey",
+      pickup_city: "Istanbul",
+    };
+    const { createInvoice } = await import("../mutations");
+
+    const result = await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-italcarrelli",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(result.bypass_reason).toBe("same_supplier");
+    expect(fakeSupabase.siblingQueryCount).toBe(1);
+    expect(
+      fakeSupabase.supplierQueryCount,
+      "suppliers table should NOT be queried on same_supplier bypass"
+    ).toBe(0);
+    expect(fakeSupabase.insertedRows[0].pickup_country).toBe("Turkey");
+    expect(fakeSupabase.insertedRows[0].pickup_city).toBe("Istanbul");
+  });
+
+  it("respects caller-provided pickup_country even on same_supplier bypass (user override)", async () => {
+    fakeSupabase.existingSameSupplierInvoice = {
+      id: "first-invoice",
+      pickup_country: "Turkey",
+      pickup_city: "Istanbul",
+    };
+    const { createInvoice } = await import("../mutations");
+
+    const result = await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      supplier_id: "supplier-italcarrelli",
+      pickup_country: "Greece", // explicit override
+      pickup_city: "Athens",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(result.bypass_reason).toBe("same_supplier");
+    expect(fakeSupabase.insertedRows[0].pickup_country).toBe("Greece");
+    expect(fakeSupabase.insertedRows[0].pickup_city).toBe("Athens");
+  });
+
+  it("returns bypass_reason=null and skips sibling check when supplier_id is omitted", async () => {
+    const { createInvoice } = await import("../mutations");
+
+    const result = await createInvoice({
+      quote_id: "quote-1",
+      idn_quote: "Q-202604-0001",
+      buyer_company_id: "buyer-1",
+      currency: "USD",
+      boxes: [
+        { weight_kg: 10, length_mm: 100, width_mm: 100, height_mm: 100 },
+      ],
+    });
+
+    expect(result.bypass_reason).toBeNull();
+    expect(fakeSupabase.siblingQueryCount).toBe(0);
+    expect(fakeSupabase.supplierQueryCount).toBe(0);
   });
 });
