@@ -6,6 +6,7 @@ import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { CalculationForm } from "./calculation-form";
 import { CalculationResults } from "./calculation-results";
 import { CalculationActionBar } from "./calculation-action-bar";
+import { CompositionPicker } from "./composition-picker";
 
 interface CalculationStepProps {
   quote: QuoteDetailRow;
@@ -49,6 +50,9 @@ export function CalculationStep({
           formValues={formValues}
           onFieldChange={handleFieldChange}
         />
+        {/* Phase 5b — Multi-supplier composition picker (renders nothing
+            when there is no multi-supplier choice to make). */}
+        <CompositionPicker quoteId={quote.id} />
         <CalculationResults quote={quote} items={items} />
       </div>
       <Toaster position="top-right" richColors />
