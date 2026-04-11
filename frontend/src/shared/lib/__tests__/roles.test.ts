@@ -5,6 +5,7 @@ import {
   isProcurementOnly,
   isProcurementSeniorOnly,
   isCustomsOnly,
+  canEditComposition,
 } from "../roles";
 
 describe("isSalesOnly", () => {
@@ -374,5 +375,56 @@ describe("role tier mutual exclusivity", () => {
         `Role [${role}] matched ${matches.length} tiers: ${matches.join(", ")}`
       ).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe("canEditComposition", () => {
+  // --- Roles that CAN edit composition (Phase 5b: sales/procurement collab) ---
+
+  it.each([
+    ["admin"],
+    ["top_manager"],
+    ["sales"],
+    ["head_of_sales"],
+    ["procurement"],
+    ["procurement_senior"],
+    ["head_of_procurement"],
+    ["finance"],
+    ["quote_controller"],
+    ["spec_controller"],
+  ])("returns true for %s", (role) => {
+    expect(canEditComposition([role])).toBe(true);
+  });
+
+  it("returns true for sales + admin combo", () => {
+    expect(canEditComposition(["sales", "admin"])).toBe(true);
+  });
+
+  // --- Roles that CANNOT edit composition ---
+
+  it("returns false for logistics only", () => {
+    expect(canEditComposition(["logistics"])).toBe(false);
+  });
+
+  it("returns false for customs only", () => {
+    expect(canEditComposition(["customs"])).toBe(false);
+  });
+
+  it("returns false for head_of_logistics only", () => {
+    expect(canEditComposition(["head_of_logistics"])).toBe(false);
+  });
+
+  it("returns false for empty roles", () => {
+    expect(canEditComposition([])).toBe(false);
+  });
+
+  it("returns false for unknown role", () => {
+    expect(canEditComposition(["unknown_role_xyz"])).toBe(false);
+  });
+
+  // --- Mixed cases: any matching role grants access (OR semantics, not AND) ---
+
+  it("returns true when sales + logistics combo (one matching role is enough)", () => {
+    expect(canEditComposition(["sales", "logistics"])).toBe(true);
   });
 });

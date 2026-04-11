@@ -61,6 +61,13 @@ from services.workflow_service import (
 # Import approval service (Feature #65, #86)
 from services.approval_service import request_approval, count_pending_approvals, get_pending_approvals_for_user, get_approvals_with_details
 
+# Import composition service (Phase 5b — multi-supplier quote composition adapter).
+# Replaces the three quote_items reads that feed build_calculation_inputs() with
+# a single helper that overlays prices from invoice_item_prices when a
+# composition pointer is set on the item. Falls back to legacy quote_items
+# values when no composition exists, so pre-Phase-5b quotes compute identically.
+from services.composition_service import get_composed_items
+
 # Import deal service (Feature #86)
 from services.deal_service import count_deals_by_status, get_deals_by_status
 from services.logistics_service import (
@@ -13299,13 +13306,12 @@ def post(
     # Note: 'currency' comes from form parameter (user's selection)
     # Don't override with quote.get("currency")
 
-    # Get items
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    items = items_result.data or []
+    # Get items via composition_service (Phase 5b): overlays purchase price
+    # fields from invoice_item_prices when the item has an active composition
+    # pointer, otherwise returns the quote_items row unchanged. The dict shape
+    # is identical to a plain quote_items SELECT, so build_calculation_inputs()
+    # sees no difference.
+    items = get_composed_items(quote_id, supabase)
 
     if not items:
         return Div("Add products to preview.", cls="alert alert-info", id="preview-panel")
@@ -13989,13 +13995,12 @@ def post(
     # Note: 'currency' comes from form parameter (user's selection on calculate page)
     # Don't override with quote.get("currency") - the form value is what user wants
 
-    # Get items
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    items = items_result.data or []
+    # Get items via composition_service (Phase 5b): overlays purchase price
+    # fields from invoice_item_prices when the item has an active composition
+    # pointer, otherwise returns the quote_items row unchanged. The dict shape
+    # is identical to a plain quote_items SELECT, so build_calculation_inputs()
+    # sees no difference.
+    items = get_composed_items(quote_id, supabase)
 
     if not items:
         return page_layout("Error",
@@ -14676,13 +14681,12 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
 
     quote = quote_result.data[0]
 
-    # Get items
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    items = items_result.data or []
+    # Get items via composition_service (Phase 5b): overlays purchase price
+    # fields from invoice_item_prices when the item has an active composition
+    # pointer, otherwise returns the quote_items row unchanged. The dict shape
+    # is identical to a plain quote_items SELECT, so build_calculation_inputs()
+    # sees no difference.
+    items = get_composed_items(quote_id, supabase)
 
     if not items:
         return JSONResponse({"error": "Cannot calculate - no products in quote"}, status_code=400)
@@ -48262,6 +48266,42 @@ from api.deals import create_deal as api_create_deal
 @rt("/api/deals", methods=["POST"])
 async def post_deals(request):
     return await api_create_deal(request)
+
+
+# --- Composition JSON API (Phase 5b — multi-supplier quote composition) ---
+
+from api.composition import (
+    get_composition as api_get_composition,
+    apply_composition_endpoint as api_apply_composition,
+    verify_invoice as api_verify_invoice,
+    request_invoice_edit as api_request_invoice_edit,
+    approve_invoice_edit as api_approve_invoice_edit,
+    reject_invoice_edit as api_reject_invoice_edit,
+)
+
+@rt("/api/quotes/{quote_id}/composition", methods=["GET"])
+async def get_quote_composition(request, quote_id: str):
+    return await api_get_composition(request, quote_id)
+
+@rt("/api/quotes/{quote_id}/composition", methods=["POST"])
+async def post_quote_composition(request, quote_id: str):
+    return await api_apply_composition(request, quote_id)
+
+@rt("/api/invoices/{invoice_id}/verify", methods=["POST"])
+async def post_invoice_verify(request, invoice_id: str):
+    return await api_verify_invoice(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/edit-request", methods=["POST"])
+async def post_invoice_edit_request(request, invoice_id: str):
+    return await api_request_invoice_edit(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/approve", methods=["POST"])
+async def post_invoice_edit_approve(request, invoice_id: str, approval_id: str):
+    return await api_approve_invoice_edit(request, invoice_id, approval_id)
+
+@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/reject", methods=["POST"])
+async def post_invoice_edit_reject(request, invoice_id: str, approval_id: str):
+    return await api_reject_invoice_edit(request, invoice_id, approval_id)
 
 
 # --- Admin User Management JSON API (for Next.js frontend) ---

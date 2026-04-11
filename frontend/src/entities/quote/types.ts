@@ -1,3 +1,47 @@
+// ============================================================================
+// Phase 5b — Composition (multi-supplier quote composition)
+// ============================================================================
+// These types mirror the response shape of GET /api/quotes/{id}/composition
+// in api/composition.py. The picker UI consumes this shape directly.
+
+/** A single supplier invoice alternative for one quote_item. */
+export interface CompositionAlternative {
+  invoice_id: string;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  supplier_country: string | null;
+  purchase_price_original: number | null;
+  purchase_currency: string | null;
+  base_price_vat: number | null;
+  price_includes_vat: boolean | null;
+  production_time_days: number | null;
+  version: number | null;
+  frozen_at: string | null;
+}
+
+/** One row in the CompositionPicker — a quote_item with its alternatives. */
+export interface CompositionItem {
+  quote_item_id: string;
+  brand: string | null;
+  sku: string | null;
+  name: string | null;
+  quantity: number | null;
+  selected_invoice_id: string | null;
+  alternatives: CompositionAlternative[];
+}
+
+/** Full response from GET /api/quotes/{id}/composition. */
+export interface CompositionView {
+  quote_id: string;
+  items: CompositionItem[];
+  composition_complete: boolean;
+  can_edit: boolean;
+}
+
+// ============================================================================
+// Quotes list — existing types
+// ============================================================================
+
 export interface QuoteListItem {
   id: string;
   idn_quote: string;
