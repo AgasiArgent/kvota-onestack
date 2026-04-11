@@ -29,7 +29,7 @@ import pytest
 from services import here_service
 from services.here_service import (
     _alpha3_to_alpha2,
-    _search_cities_cached,
+    _clear_cache,
     search_cities,
 )
 
@@ -57,11 +57,11 @@ BERLIN_RESPONSE = {
 
 
 @pytest.fixture(autouse=True)
-def _clear_lru_cache():
+def _reset_cache():
     """Every test starts with a cold cache so call-count assertions are stable."""
-    _search_cities_cached.cache_clear()
+    _clear_cache()
     yield
-    _search_cities_cached.cache_clear()
+    _clear_cache()
 
 
 # ============================================================================

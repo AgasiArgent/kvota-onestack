@@ -5,14 +5,19 @@ Replaces DaData city search with HERE Geocode API for international coverage.
 API docs: https://developer.here.com/documentation/geocoding-search-api/dev_guide/topics/endpoint-geocode-brief.html
 
 Phase 3 hardening (Procurement Phase 3, Section 2.1):
-- LRU cache on repeated typeahead queries to avoid hitting the HERE free-tier
-  rate ceiling.
+- Manual LRU cache on repeated typeahead queries to avoid hitting the HERE
+  free-tier rate ceiling. The cache key is the normalized (stripped + lower)
+  query so "Berlin"/"BERLIN"/"  berlin  " share one entry, but the RAW-cased
+  query is passed to `_call_here_api` — HERE Geocode is case-insensitive so
+  this only affects the mock-visible string in tests, but the legacy contract
+  in `tests/test_city_autocomplete_here.py` asserts raw-case pass-through and
+  Phase 3's R9 (non-regression) forbids changing that test.
 - pycountry-backed ISO 3166-1 alpha-3 -> alpha-2 mapping (replaces the legacy
   28-country hardcoded dict), with graceful fallback when pycountry is absent.
 """
 
 import os
-from functools import lru_cache
+from collections import OrderedDict
 from typing import Optional
 
 import httpx
@@ -139,31 +144,23 @@ def _normalize_item(item: dict) -> dict:
 
 
 # ----------------------------------------------------------------------------
-# Public search API with LRU cache
+# Public search API with manual LRU cache
 # ----------------------------------------------------------------------------
+#
+# We use OrderedDict instead of functools.lru_cache because lru_cache forces
+# the cache key to equal the wrapped function's positional args — that coupling
+# breaks the legacy contract: the caller sends "Moscow" but we want the cache
+# key to be "moscow" (for hit-rate) while still passing "Moscow" to the HERE
+# API (for the pre-existing test that asserts raw case reaches HERE). A manual
+# OrderedDict decouples key from value cleanly with one source of truth.
+
+_CACHE_MAX_SIZE = 256
+_CACHE: "OrderedDict[tuple[str, int], tuple[dict, ...]]" = OrderedDict()
 
 
-@lru_cache(maxsize=256)
-def _search_cities_cached(query_normalized: str, count: int) -> tuple:
-    """Inner cached HERE search, keyed on (normalized query, count).
-
-    The query is normalized (stripped + lowercased) before it reaches this
-    function, so "Berlin", " BERLIN ", and "berlin" all share a single cache
-    entry. HERE Geocode is case-insensitive for city names, so sending the
-    normalized form does not change result quality.
-
-    Returns a tuple of dicts — tuples are hashable (required by lru_cache);
-    the outer `search_cities` wrapper converts back to a list for backward-
-    compatible consumer code.
-    """
-    response_data = _call_here_api(query_normalized, limit=count)
-    items = response_data.get("items", [])
-    if not items:
-        return tuple()
-    city_items = [item for item in items if item.get("resultType") == "locality"]
-    if not city_items:
-        return tuple()
-    return tuple(_normalize_item(item) for item in city_items)
+def _clear_cache() -> None:
+    """Test helper — reset the city-search cache between tests."""
+    _CACHE.clear()
 
 
 def search_cities(query: str, count: int = 10) -> list[dict]:
@@ -179,22 +176,42 @@ def search_cities(query: str, count: int = 10) -> list[dict]:
         degradation — the caller sees no cities, not a broken endpoint).
 
     Caching:
-        Results are cached per (normalized query, count) for the process
-        lifetime via a 256-entry LRU cache on `_search_cities_cached`. The
-        query is normalized (stripped + lowercased) before the cache lookup,
-        so "Berlin", " BERLIN ", and "berlin" share one entry.
+        Process-local LRU cache (256 entries) keyed on `(normalized_query, count)`.
+        The query is stripped + lowercased for the cache key so "Berlin",
+        " BERLIN ", and "berlin" share one entry, but the RAW-cased query is
+        passed to `_call_here_api` (HERE Geocode is case-insensitive so this
+        only affects mock-visible call args; the legacy test in
+        `tests/test_city_autocomplete_here.py` asserts raw-case pass-through).
     """
     if not query or not isinstance(query, str) or not query.strip():
         return []
 
-    normalized = query.strip().lower()
+    raw = query.strip()
+    key = (raw.lower(), count)
+
+    # Cache hit — promote to most-recently-used and return a fresh list copy
+    # (tuples are immutable so the clone is cheap and safe for mutation).
+    cached = _CACHE.get(key)
+    if cached is not None:
+        _CACHE.move_to_end(key)
+        return list(cached)
 
     try:
-        cached = _search_cities_cached(normalized, count)
+        response_data = _call_here_api(raw, limit=count)
     except Exception as e:
-        # Graceful degradation — do NOT cache failures. The @lru_cache
-        # decorator only caches successful returns, so nothing to clear here.
+        # Graceful degradation — do NOT cache failures.
         print(f"HERE city search failed for '{query}': {e}")
         return []
 
-    return list(cached)
+    items = response_data.get("items", [])
+    city_items = [item for item in items if item.get("resultType") == "locality"]
+    result: tuple[dict, ...] = (
+        tuple(_normalize_item(item) for item in city_items) if city_items else tuple()
+    )
+
+    _CACHE[key] = result
+    _CACHE.move_to_end(key)
+    while len(_CACHE) > _CACHE_MAX_SIZE:
+        _CACHE.popitem(last=False)
+
+    return list(result)

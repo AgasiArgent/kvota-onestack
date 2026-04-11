@@ -264,23 +264,23 @@ def app_client():
 
 @pytest.fixture(autouse=True)
 def _reset_here_service_cache():
-    """Clear the HERE service LRU cache between tests.
+    """Clear the HERE service city-search cache between tests.
 
-    Phase 3 added `@lru_cache` to `_search_cities_cached` for free-tier rate
-    protection. Tests that mock `_call_here_api` must start with a cold cache,
-    otherwise results from earlier tests leak across test boundaries. This
-    fixture is autouse and cheap (a single `cache_clear()` call), so it applies
-    globally without requiring every HERE test to opt in.
+    Phase 3 added a process-local LRU cache (`_CACHE` in here_service) for
+    free-tier rate protection. Tests that mock `_call_here_api` must start with
+    a cold cache, otherwise results from earlier tests leak across test
+    boundaries. This fixture is autouse and cheap (a single `_clear_cache()`
+    call), so it applies globally without requiring every HERE test to opt in.
     """
     try:
         from services import here_service
-        here_service._search_cities_cached.cache_clear()
+        here_service._clear_cache()
     except Exception:
         pass
     yield
     try:
         from services import here_service
-        here_service._search_cities_cached.cache_clear()
+        here_service._clear_cache()
     except Exception:
         pass
 
