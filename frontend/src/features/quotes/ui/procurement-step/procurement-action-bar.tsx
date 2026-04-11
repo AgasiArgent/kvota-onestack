@@ -1,9 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import { Plus, CheckCircle, Loader2, UserCheck, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { QuoteItemRow } from "@/entities/quote/queries";
+import { isMoqViolation } from "./moq-warning";
 
 type ProcurementSubStage = "assignment" | "pricing" | "ready";
 
@@ -46,6 +48,16 @@ export function ProcurementActionBar({
   const readyCount = items.filter(
     (i) => i.purchase_price_original != null || i.is_unavailable === true
   ).length;
+  const moqViolationCount = useMemo(
+    () =>
+      items.filter((i) =>
+        isMoqViolation({
+          quantity: i.quantity,
+          min_order_quantity: i.min_order_quantity,
+        })
+      ).length,
+    [items]
+  );
   const incomplete = totalItems > 0 && readyCount < totalItems;
   const subStage = getSubStage(items);
   const stageConfig = SUB_STAGE_CONFIG[subStage];
@@ -91,8 +103,20 @@ export function ProcurementActionBar({
         </Button>
       )}
 
+      {moqViolationCount > 0 && (
+        <Badge
+          variant="outline"
+          className="ml-auto gap-1 bg-amber-100 text-amber-700 border-amber-200"
+          title="Количество ниже минимального заказа поставщика"
+        >
+          ⚠ MOQ: {moqViolationCount}
+        </Badge>
+      )}
+
       <span
-        className={`ml-auto text-sm tabular-nums ${
+        className={`${
+          moqViolationCount > 0 ? "" : "ml-auto"
+        } text-sm tabular-nums ${
           incomplete ? "text-warning font-medium" : "text-muted-foreground"
         }`}
       >
