@@ -170,7 +170,7 @@ def get_send_history(invoice_id: str) -> list[dict]:
         sb.table("invoice_letter_drafts")
         .select("*")
         .eq("invoice_id", invoice_id)
-        .not_("sent_at", "is", "null")
+        .not_.is_("sent_at", "null")
         .order("sent_at", desc=True)
         .execute()
     )

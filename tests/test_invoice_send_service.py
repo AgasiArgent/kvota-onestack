@@ -219,9 +219,9 @@ class TestGetSendHistory:
             {"id": "draft-2", "sent_at": "2026-04-11T12:00:00+00:00", "method": "letter_draft"},
             {"id": "draft-1", "sent_at": "2026-04-11T10:00:00+00:00", "method": "xls_download"},
         ]
-        # Supabase .not_("col", "is", "null") returns a chainable object
+        # Supabase .not_.is_("col", "null") — .not_ is a property, .is_() is the call
         mock_chain = mock_sb.table.return_value.select.return_value.eq.return_value
-        mock_chain.not_.return_value.order.return_value.execute.return_value.data = history
+        mock_chain.not_.is_.return_value.order.return_value.execute.return_value.data = history
 
         result = get_send_history("inv-001")
 
@@ -236,7 +236,7 @@ class TestGetSendHistory:
         mock_get_sb.return_value = mock_sb
 
         mock_chain = mock_sb.table.return_value.select.return_value.eq.return_value
-        mock_chain.not_.return_value.order.return_value.execute.return_value.data = []
+        mock_chain.not_.is_.return_value.order.return_value.execute.return_value.data = []
 
         result = get_send_history("inv-001")
         assert result == []
