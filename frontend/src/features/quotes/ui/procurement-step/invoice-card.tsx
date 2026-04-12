@@ -2,15 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Paperclip, Undo2, Loader2, Trash2, Package, Weight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Trash2, Undo2, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
+import { SendHistoryPanel } from "./send-history-panel";
+import { EditApprovalButton } from "./edit-approval-button";
+import { LetterDraftComposer } from "./letter-draft-composer";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
+import { downloadInvoiceXls } from "@/entities/invoice/mutations";
 import { findCountryByCode } from "@/shared/ui/geo";
 
 type InvoiceExtras = {
@@ -38,6 +42,7 @@ interface InvoiceCardProps {
   items: QuoteItemRow[];
   defaultExpanded?: boolean;
   procurementCompleted: boolean;
+  userRoles?: string[];
 }
 
 export function InvoiceCard({
@@ -45,17 +50,27 @@ export function InvoiceCard({
   items,
   defaultExpanded = false,
   procurementCompleted,
+  userRoles = [],
 }: InvoiceCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [unassigning, setUnassigning] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [downloadingXls, setDownloadingXls] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [cargoPlaces, setCargoPlaces] = useState<
     Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
   >([]);
   const [weightKg, setWeightKg] = useState(invoice.total_weight_kg?.toString() ?? "");
   const [volumeM3, setVolumeM3] = useState(invoice.total_volume_m3?.toString() ?? "");
   const isEmpty = items.length === 0;
+  const isSent = invoice.sent_at != null;
+  const canSend =
+    items.length > 0 &&
+    (userRoles.includes("admin") ||
+      userRoles.includes("procurement") ||
+      userRoles.includes("head_of_procurement") ||
+      userRoles.includes("procurement_senior"));
 
   useEffect(() => {
     fetchCargoPlaces(invoice.id).then(setCargoPlaces);
@@ -108,6 +123,19 @@ export function InvoiceCard({
       router.refresh();
     } catch {
       toast.error("Не удалось сохранить");
+    }
+  }
+
+  async function handleDownloadXls() {
+    setDownloadingXls(true);
+    try {
+      await downloadInvoiceXls(invoice.id);
+      toast.success("XLS скачан");
+      router.refresh();
+    } catch {
+      toast.error("Не удалось скачать XLS");
+    } finally {
+      setDownloadingXls(false);
     }
   }
 
@@ -211,12 +239,22 @@ export function InvoiceCard({
             </Badge>
           )}
 
+          {isSent && (
+            <Badge variant="default" className="shrink-0 text-xs bg-green-600">
+              Отправлено {new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(new Date(invoice.sent_at!))}
+            </Badge>
+          )}
+
           {hasFile && (
             <Paperclip size={14} className="shrink-0 text-muted-foreground" />
           )}
         </button>
 
-        {isEmpty ? (
+        {isSent ? (
+          <div className="mr-2">
+            <EditApprovalButton invoiceId={invoice.id} />
+          </div>
+        ) : isEmpty ? (
           <Button
             variant="ghost"
             size="sm"
@@ -309,11 +347,58 @@ export function InvoiceCard({
               </div>
             </div>
           )}
+          {canSend && (
+            <div className="px-4 py-2 bg-muted/30 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={handleDownloadXls}
+                  disabled={downloadingXls}
+                >
+                  {downloadingXls ? (
+                    <Loader2 size={14} className="animate-spin mr-1" />
+                  ) : (
+                    <Download size={14} className="mr-1" />
+                  )}
+                  Скачать XLS
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => setComposerOpen(true)}
+                >
+                  <Mail size={14} className="mr-1" />
+                  Подготовить письмо
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <SendHistoryPanel invoiceId={invoice.id} />
+
           <div className="overflow-x-auto">
             <ProcurementItemsEditor items={items} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
           </div>
         </div>
       )}
+
+      <LetterDraftComposer
+        open={composerOpen}
+        onClose={() => {
+          setComposerOpen(false);
+          router.refresh();
+        }}
+        invoiceId={invoice.id}
+        supplierName={supplierName}
+        supplierEmail={(invoice.supplier as { email?: string } | null)?.email ?? null}
+        items={items}
+        currency={currency}
+        incoterms={supplierIncoterms}
+        pickupCountry={pickupCountryRu}
+      />
     </Card>
   );
 }

@@ -30,12 +30,14 @@ interface ProcurementStepProps {
   quote: QuoteDetailRow;
   items: QuoteItemRow[];
   invoices: QuoteInvoiceRow[];
+  userRoles?: string[];
 }
 
 export function ProcurementStep({
   quote,
   items,
   invoices,
+  userRoles = [],
 }: ProcurementStepProps) {
   const router = useRouter();
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -149,6 +151,7 @@ export function ProcurementStep({
             items={invoiceItemsMap.get(invoice.id) ?? []}
             defaultExpanded={invoices.length === 1}
             procurementCompleted={quote.procurement_completed_at != null}
+            userRoles={userRoles}
           />
         ))}
 

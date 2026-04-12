@@ -76,6 +76,7 @@ export function QuoteStepContent({
           quote={quote}
           items={items}
           invoices={invoices}
+          userRoles={userRoles}
         />
       );
     case "logistics":

@@ -16,6 +16,7 @@ import {
   MessageSquare,
   MessageCircle,
   GitBranch,
+  Percent,
   Settings,
   SplitSquareHorizontal,
 } from "lucide-react";
@@ -203,11 +204,18 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       href: "/admin/routing",
     });
     if (isAdmin) {
-      adminItems.push({
-        icon: Settings,
-        label: "Настройки",
-        href: "/settings",
-      });
+      adminItems.push(
+        {
+          icon: Percent,
+          label: "Ставки НДС",
+          href: "/admin/vat-rates",
+        },
+        {
+          icon: Settings,
+          label: "Настройки",
+          href: "/settings",
+        },
+      );
     }
     sections.push({ title: "Администрирование", items: adminItems });
   }

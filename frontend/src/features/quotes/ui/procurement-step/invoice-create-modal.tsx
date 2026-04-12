@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Plus, RotateCcw, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ import type { QuoteItemRow } from "@/entities/quote/queries";
 import { CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
+import { fetchVatRate } from "@/entities/invoice/queries";
+import { Badge } from "@/components/ui/badge";
 
 interface Supplier {
   id: string;
@@ -65,8 +67,28 @@ export function InvoiceCreateModal({
   const [boxes, setBoxes] = useState<
     Array<{ weight_kg: string; length_mm: string; width_mm: string; height_mm: string }>
   >([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
+  const [vatRate, setVatRate] = useState("");
+  const [vatManuallyOverridden, setVatManuallyOverridden] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Auto-fill VAT rate when country changes (unless manually overridden)
+  useEffect(() => {
+    if (!countryCode || vatManuallyOverridden) return;
+
+    let cancelled = false;
+
+    fetchVatRate(countryCode).then((result) => {
+      if (cancelled) return;
+      if (result) {
+        setVatRate(result.rate.toString());
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [countryCode, vatManuallyOverridden]);
 
   function handleClose() {
     resetForm();
@@ -80,6 +102,8 @@ export function InvoiceCreateModal({
     setCity("");
     setIncoterms("");
     setCurrency("USD");
+    setVatRate("");
+    setVatManuallyOverridden(false);
     setBoxes([{ weight_kg: "", length_mm: "", width_mm: "", height_mm: "" }]);
     setErrors({});
   }
@@ -153,6 +177,16 @@ export function InvoiceCreateModal({
           selectedItems.map((i) => i.id),
           invoice.id
         );
+
+        // Write VAT rate to assigned items when provided
+        const parsedVat = vatRate.trim() ? parseFloat(vatRate) : null;
+        if (parsedVat !== null && !isNaN(parsedVat)) {
+          const supabase = (await import("@/shared/lib/supabase/client")).createClient();
+          await supabase
+            .from("quote_items")
+            .update({ vat_rate: parsedVat })
+            .in("id", selectedItems.map((i) => i.id));
+        }
       }
 
       toast.success("КП поставщику создано");
@@ -264,6 +298,50 @@ export function InvoiceCreateModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Ставка НДС, %</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={vatRate}
+                onChange={(e) => {
+                  setVatRate(e.target.value);
+                  if (!vatManuallyOverridden) {
+                    setVatManuallyOverridden(true);
+                  }
+                }}
+                placeholder="Ставка НДС"
+                className="h-8 w-28 text-sm tabular-nums"
+              />
+              {vatManuallyOverridden && (
+                <>
+                  <Badge variant="outline" className="text-xs">
+                    вручную
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setVatManuallyOverridden(false);
+                      // Trigger re-fetch by clearing override — useEffect will pick up countryCode
+                      if (countryCode) {
+                        setVatRate("");
+                      }
+                    }}
+                  >
+                    <RotateCcw size={12} className="mr-1" />
+                    Сбросить
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">

@@ -1242,6 +1242,48 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_letter_drafts: {
+        Row: {
+          id: string
+          invoice_id: string
+          created_by: string
+          language: string
+          method: string
+          recipient_email: string | null
+          subject: string | null
+          body_text: string | null
+          created_at: string
+          updated_at: string
+          sent_at: string | null
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          created_by: string
+          language?: string
+          method: string
+          recipient_email?: string | null
+          subject?: string | null
+          body_text?: string | null
+          created_at?: string
+          updated_at?: string
+          sent_at?: string | null
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          created_by?: string
+          language?: string
+          method?: string
+          recipient_email?: string | null
+          subject?: string | null
+          body_text?: string | null
+          created_at?: string
+          updated_at?: string
+          sent_at?: string | null
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           id: string
@@ -1283,6 +1325,7 @@ export type Database = {
           verified_by: string | null
           pickup_country_code: string | null
           supplier_incoterms: string | null
+          sent_at: string | null
         }
         Insert: {
           id?: string
@@ -1324,6 +1367,7 @@ export type Database = {
           verified_by?: string | null
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
+          sent_at?: string | null
         }
         Update: {
           id?: string
@@ -1365,6 +1409,7 @@ export type Database = {
           verified_by?: string | null
           pickup_country_code?: string | null
           supplier_incoterms?: string | null
+          sent_at?: string | null
         }
         Relationships: []
       }
@@ -5151,6 +5196,30 @@ export type Database = {
           is_default?: boolean
           created_at?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      vat_rates_by_country: {
+        Row: {
+          country_code: string
+          rate: number
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          country_code: string
+          rate?: number
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          country_code?: string
+          rate?: number
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
