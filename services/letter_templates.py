@@ -46,16 +46,16 @@ LETTER_TEMPLATE_RU: str = """\
 LETTER_TEMPLATE_EN: str = """\
 Dear {greeting},
 
-We would like to request pricing for the following items:
+Please consider providing a quotation for the following items:
 
 {items_list}
 
 Delivery terms: {incoterms}
-Destination country: {delivery_country}
+Delivery destination: {delivery_country}
 Currency: {currency}
 
 Detailed specification is attached.
-Please provide your prices and lead times.
+Please send us your prices and delivery times.
 
 Best regards,
 {sender_name}

@@ -166,6 +166,64 @@ class TestRenderLetterEn:
         assert "Supplier" in body
         assert "{items_list}" not in body
 
+    def test_render_en_full_context_produces_complete_letter(self):
+        """EN template renders the full business letter with all sections."""
+        context = {
+            "greeting": "Mr. Chen",
+            "items_list": "- Ball Bearing SKF 6205 (qty 100)\n- V-Belt Gates K060923 (qty 50)",
+            "delivery_country": "Russia",
+            "incoterms": "FOB Shanghai",
+            "currency": "USD",
+            "sender_name": "Maria Sidorova",
+            "sender_email": "maria@kvota.ru",
+            "sender_phone": "+7 999 123-45-67",
+            "skus": "SKF 6205, Gates K060923",
+        }
+
+        subject, body = render_letter("en", context)
+
+        # Opening
+        assert body.startswith("Dear Mr. Chen,")
+        # Body paragraphs
+        assert "Please consider providing a quotation" in body
+        assert "Ball Bearing SKF 6205" in body
+        assert "V-Belt Gates K060923" in body
+        # Logistics section
+        assert "Delivery terms: FOB Shanghai" in body
+        assert "Delivery destination: Russia" in body
+        assert "Currency: USD" in body
+        # Closing
+        assert "Detailed specification is attached." in body
+        assert "Please send us your prices and delivery times." in body
+        assert "Best regards," in body
+        assert "Maria Sidorova" in body
+        assert "maria@kvota.ru" in body
+        assert "+7 999 123-45-67" in body
+        # No unsubstituted placeholders
+        assert "{" not in body
+        assert "}" not in body
+
+    def test_render_en_uses_dear_supplier_fallback(self):
+        """When caller passes 'Supplier' as greeting (fallback for missing contact name),
+        EN template renders 'Dear Supplier,'."""
+        subject, body = render_letter("en", {"greeting": "Supplier"})
+
+        assert "Dear Supplier," in body
+
+    def test_render_en_subject_contains_skus(self):
+        """EN subject template renders with SKU references."""
+        context = {
+            "skus": "SKF 6205, Gates K060923, FAG 22220",
+        }
+
+        subject, _ = render_letter("en", context)
+
+        assert "SKF 6205" in subject
+        assert "Gates K060923" in subject
+        assert "FAG 22220" in subject
+        # English wording
+        assert "Request for quotation" in subject
+
     def test_render_returns_tuple(self):
         """render_letter always returns a (subject, body) tuple."""
         result = render_letter("en", {})

@@ -199,6 +199,84 @@ class TestGenerateInvoiceXls:
         assert ws.cell(row=3, column=name_col_index).value == "Подшипник роликовый"
 
     @patch("services.xls_export_service.get_supabase")
+    def test_en_mixed_items_some_with_name_en_some_without(self, mock_get_sb):
+        """EN XLS handles mixed items: some with name_en, some without — both present."""
+        mixed_items = [
+            {
+                "id": "item-a",
+                "brand": "SKF",
+                "idn_sku": "SKF-A",
+                "supplier_sku": "A-1",
+                "manufacturer_product_name": "SKF",
+                "product_name": "Подшипник A",
+                "name_en": "Bearing A",
+                "quantity": 10,
+                "min_order_quantity": 5,
+                "purchase_price_original": 1.0,
+                "production_time_days": 10,
+                "weight_kg": 0.1,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "procurement_notes": None,
+            },
+            {
+                "id": "item-b",
+                "brand": "FAG",
+                "idn_sku": "FAG-B",
+                "supplier_sku": "B-1",
+                "manufacturer_product_name": "FAG",
+                "product_name": "Подшипник B",
+                "name_en": None,
+                "quantity": 20,
+                "min_order_quantity": None,
+                "purchase_price_original": 2.0,
+                "production_time_days": 20,
+                "weight_kg": 0.2,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "procurement_notes": None,
+            },
+            {
+                "id": "item-c",
+                "brand": "NSK",
+                "idn_sku": "NSK-C",
+                "supplier_sku": "C-1",
+                "manufacturer_product_name": "NSK",
+                "product_name": "Подшипник C",
+                "name_en": "Bearing C",
+                "quantity": 30,
+                "min_order_quantity": None,
+                "purchase_price_original": 3.0,
+                "production_time_days": 30,
+                "weight_kg": 0.3,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "procurement_notes": None,
+            },
+        ]
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, mixed_items)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="en")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        name_col = EN_HEADERS.index("Item Name") + 1
+        # Row 2: name_en present -> English
+        assert ws.cell(row=2, column=name_col).value == "Bearing A"
+        # Row 3: name_en NULL -> Russian fallback
+        assert ws.cell(row=3, column=name_col).value == "Подшипник B"
+        # Row 4: name_en present -> English
+        assert ws.cell(row=4, column=name_col).value == "Bearing C"
+
+        # All three items are in the sheet
+        assert ws.max_row == 4  # 1 header + 3 items
+
+    @patch("services.xls_export_service.get_supabase")
     def test_ru_always_uses_russian_name(self, mock_get_sb):
         """When language='ru', always uses product_name regardless of name_en."""
         mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)

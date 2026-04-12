@@ -58,6 +58,7 @@ export function InvoiceCard({
   const [deleting, setDeleting] = useState(false);
   const [downloadingXls, setDownloadingXls] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [language, setLanguage] = useState<"ru" | "en">("ru");
   const [cargoPlaces, setCargoPlaces] = useState<
     Array<{ position: number; weight_kg: number; length_mm: number; width_mm: number; height_mm: number }>
   >([]);
@@ -129,7 +130,7 @@ export function InvoiceCard({
   async function handleDownloadXls() {
     setDownloadingXls(true);
     try {
-      await downloadInvoiceXls(invoice.id);
+      await downloadInvoiceXls(invoice.id, language);
       toast.success("XLS скачан");
       router.refresh();
     } catch {
@@ -349,7 +350,39 @@ export function InvoiceCard({
           )}
           {canSend && (
             <div className="px-4 py-2 bg-muted/30 border-b border-border">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div
+                  role="radiogroup"
+                  aria-label="Язык документов"
+                  className="inline-flex rounded-md border border-border overflow-hidden"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={language === "ru"}
+                    onClick={() => setLanguage("ru")}
+                    className={`px-2 py-1 text-xs font-medium transition-colors ${
+                      language === "ru"
+                        ? "bg-accent text-white"
+                        : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    RU
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={language === "en"}
+                    onClick={() => setLanguage("en")}
+                    className={`px-2 py-1 text-xs font-medium transition-colors border-l border-border ${
+                      language === "en"
+                        ? "bg-accent text-white"
+                        : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                  >
+                    EN
+                  </button>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -398,6 +431,7 @@ export function InvoiceCard({
         currency={currency}
         incoterms={supplierIncoterms}
         pickupCountry={pickupCountryRu}
+        initialLanguage={language}
       />
     </Card>
   );

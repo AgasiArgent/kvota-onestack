@@ -35,6 +35,7 @@ const COLUMN_KEYS = [
   "supplier_sku",
   "manufacturer_product_name",
   "product_name",
+  "name_en",
   "quantity",
   "min_order_quantity",
   "purchase_price_original",
@@ -52,6 +53,7 @@ interface RowData {
   supplier_sku: string;
   manufacturer_product_name: string;
   product_name: string;
+  name_en: string;
   quantity: number | null;
   min_order_quantity: number | null;
   purchase_price_original: number | null;
@@ -92,6 +94,7 @@ function parseDimensions(
 
 function itemToRow(item: QuoteItemRow): RowData {
   const extras = ext<ItemExtras>(item);
+  const nameEn = (item as { name_en?: string | null }).name_en ?? "";
   return {
     id: item.id,
     brand: item.brand ?? "",
@@ -99,6 +102,7 @@ function itemToRow(item: QuoteItemRow): RowData {
     supplier_sku: item.supplier_sku ?? "",
     manufacturer_product_name: item.manufacturer_product_name ?? "",
     product_name: item.product_name ?? "",
+    name_en: nameEn,
     quantity: item.quantity,
     min_order_quantity: item.min_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
@@ -376,6 +380,7 @@ export function ProcurementHandsontable({
           "Арт.произ.",
           "Наим.произв.",
           "Наименование",
+          "Наим. (EN)",
           "Кол",
           "Мин. заказ",
           "Цена",
@@ -398,6 +403,7 @@ export function ProcurementHandsontable({
           },
           { data: "manufacturer_product_name", type: "text", width: 90 },
           { data: "product_name", type: "text", width: 120, readOnly: true },
+          { data: "name_en", type: "text", width: 120 },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
           {
             data: "min_order_quantity",

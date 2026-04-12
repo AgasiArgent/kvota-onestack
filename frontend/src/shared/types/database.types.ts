@@ -3320,6 +3320,7 @@ export type Database = {
           import_ban_reason: string | null
           composition_selected_invoice_id: string | null
           min_order_quantity: number | null
+          name_en: string | null
         }
         Insert: {
           id?: string
@@ -3409,6 +3410,7 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           min_order_quantity?: number | null
+          name_en?: string | null
         }
         Update: {
           id?: string
@@ -3498,6 +3500,7 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           min_order_quantity?: number | null
+          name_en?: string | null
         }
         Relationships: []
       }
