@@ -446,7 +446,7 @@ class TestBulkUpdateValidation:
             if func_start == -1:
                 pytest.skip("api_bulk_update_items function not found")
 
-            func_body = content[func_start:func_start + 3000]
+            func_body = content[func_start:func_start + 4000]
 
             # Should handle these fields
             assert 'purchase_price_original' in func_body

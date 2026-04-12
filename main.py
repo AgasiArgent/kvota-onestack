@@ -19120,6 +19120,15 @@ async def api_update_invoice(quote_id: str, session, request):
     if not invoice_id:
         return JSONResponse({"success": False, "error": "Invoice ID required"}, status_code=400)
 
+    # Edit-after-send guard: block edits on sent invoices unless user has override role
+    from services.invoice_send_service import check_edit_permission
+    user_roles = user.get("roles", [])
+    if not check_edit_permission(invoice_id, user_roles):
+        return JSONResponse(
+            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            status_code=403,
+        )
+
     supabase = get_supabase()
 
     # Build update data for invoices table (procurement workflow)
@@ -19580,6 +19589,15 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
     if not item_ids or not invoice_id:
         return JSONResponse({"success": False, "error": "item_ids and invoice_id required"}, status_code=400)
 
+    # Edit-after-send guard: block item assignment changes on sent invoices
+    from services.invoice_send_service import check_edit_permission
+    user_roles = user.get("roles", [])
+    if not check_edit_permission(invoice_id, user_roles):
+        return JSONResponse(
+            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            status_code=403,
+        )
+
     supabase = get_supabase()
 
     # Verify quote belongs to user's organization
@@ -19665,10 +19683,25 @@ async def api_bulk_update_items(quote_id: str, session, request):
         return JSONResponse({"success": False, "error": "No valid item IDs"}, status_code=400)
 
     valid_items_result = supabase.table("quote_items") \
-        .select("id") \
+        .select("id, invoice_id") \
         .eq("quote_id", quote_id) \
         .in_("id", item_ids) \
         .execute()
+
+    # Edit-after-send guard: check if any items belong to sent invoices
+    from services.invoice_send_service import check_edit_permission
+    user_roles = user.get("roles", [])
+    sent_invoice_ids = set()
+    for qi in (valid_items_result.data or []):
+        inv_id = qi.get("invoice_id")
+        if inv_id:
+            sent_invoice_ids.add(inv_id)
+    for inv_id in sent_invoice_ids:
+        if not check_edit_permission(inv_id, user_roles):
+            return JSONResponse(
+                {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "Some items belong to a sent invoice. Request approval to edit."}},
+                status_code=403,
+            )
 
     valid_item_ids = set(item["id"] for item in valid_items_result.data or [])
 
@@ -48323,6 +48356,60 @@ async def patch_admin_user_roles(request, user_id: str):
 @rt("/api/admin/users/{user_id}", methods=["PATCH"])
 async def patch_admin_user(request, user_id: str):
     return await admin_update_user_status(request, user_id)
+
+
+# --- VAT Rate JSON API (for Next.js frontend) ---
+
+from api.geo import get_vat_rate as api_get_vat_rate, update_vat_rate as api_update_vat_rate
+
+@rt("/api/geo/vat-rate", methods=["GET"])
+async def get_geo_vat_rate(request):
+    return await api_get_vat_rate(request)
+
+@rt("/api/admin/vat-rates", methods=["PUT"])
+async def put_admin_vat_rates(request):
+    return await api_update_vat_rate(request)
+
+
+# --- Invoice Send Flow JSON API (for Next.js frontend) ---
+
+from api.invoices import (
+    download_invoice_xls as api_download_invoice_xls,
+    get_letter_draft as api_get_letter_draft,
+    save_letter_draft as api_save_letter_draft,
+    send_letter_draft as api_send_letter_draft,
+    delete_letter_draft as api_delete_letter_draft,
+    get_send_history as api_get_send_history,
+    request_edit_approval as api_request_edit_approval,
+)
+
+@rt("/api/invoices/{invoice_id}/download-xls", methods=["POST"])
+async def post_invoice_download_xls(request, invoice_id: str):
+    return await api_download_invoice_xls(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/letter-draft", methods=["GET"])
+async def get_invoice_letter_draft(request, invoice_id: str):
+    return await api_get_letter_draft(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/letter-draft", methods=["POST"])
+async def post_invoice_letter_draft(request, invoice_id: str):
+    return await api_save_letter_draft(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/letter-draft/send", methods=["POST"])
+async def post_invoice_letter_draft_send(request, invoice_id: str):
+    return await api_send_letter_draft(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/letter-draft/{draft_id}", methods=["DELETE"])
+async def delete_invoice_letter_draft(request, invoice_id: str, draft_id: str):
+    return await api_delete_letter_draft(request, invoice_id, draft_id)
+
+@rt("/api/invoices/{invoice_id}/letter-drafts/history", methods=["GET"])
+async def get_invoice_send_history(request, invoice_id: str):
+    return await api_get_send_history(request, invoice_id)
+
+@rt("/api/invoices/{invoice_id}/edit-request-approval", methods=["POST"])
+async def post_invoice_edit_request_approval(request, invoice_id: str):
+    return await api_request_edit_approval(request, invoice_id)
 
 
 # --- Cron JSON API (for scheduled background tasks) ---
