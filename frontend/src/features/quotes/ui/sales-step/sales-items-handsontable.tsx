@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  createQuoteItem,
   createQuoteItemsBatch,
   updateQuoteItem,
   deleteQuoteItem,
@@ -150,6 +149,16 @@ export function SalesItemsHandsontable({
         changedRows.get(row)!.set(field, newVal);
       }
 
+      // Split into (a) updates to existing rows, (b) new rows needing creation.
+      // New rows are collected so we can batch-insert them in a single request
+      // when more than one row was changed (typical for Ctrl-V paste). A single
+      // batch avoids the race where parallel createQuoteItem calls all fetched
+      // the same next `position` value (see commit 7a4cde8, FB-260403-095930-b42c).
+      const newRowsToCreate: {
+        rowIndex: number;
+        payload: ReturnType<typeof rowToCreatePayload>;
+      }[] = [];
+
       for (const [rowIndex, fieldChanges] of changedRows) {
         const rowId = rowIdsRef.current[rowIndex];
         const rowData = hot.getSourceDataAtRow(rowIndex) as
@@ -158,7 +167,7 @@ export function SalesItemsHandsontable({
         if (!rowData) continue;
 
         if (rowId) {
-          // Existing row: update changed fields
+          // Existing row: update changed fields immediately.
           const updates: Record<string, unknown> = {};
           for (const [field, val] of fieldChanges) {
             if (field === "quantity") {
@@ -176,29 +185,55 @@ export function SalesItemsHandsontable({
           updateQuoteItem(rowId, updates)
             .catch(() => toast.error("Не удалось сохранить"))
             .finally(() => pendingOps.current.delete(lockKey));
-        } else if (hasContent(rowData) && source !== "CopyPaste.paste") {
-          // Validate required fields: brand and article (product_code)
-          if (!rowData.brand?.trim() || !rowData.product_code?.trim()) {
-            // Don't create yet — wait for required fields
-            continue;
-          }
+        } else if (hasContent(rowData)) {
+          // New row. Require both Бренд and Артикул before persisting, matching
+          // the "*" markers in the column headers — but queue the row regardless
+          // of `source`. Previously we skipped all CopyPaste.paste sources here
+          // and relied on a separate afterPaste hook; that hook silently dropped
+          // pasted rows when any validation or state-sync edge case fired
+          // (FB-260413-161304-7ac0). Handling paste via the same afterChange
+          // path with batch-insert keeps one code path for both flows.
+          if (!rowData.brand?.trim() || !rowData.product_code?.trim()) continue;
 
-          // New row with content: create item (skip during paste — handled by afterPaste)
           const lockKey = `create-${rowIndex}`;
           if (pendingOps.current.has(lockKey)) continue;
           pendingOps.current.add(lockKey);
 
-          createQuoteItem(quoteId, rowToCreatePayload(rowData))
-            .then((created) => {
-              rowIdsRef.current[rowIndex] = created.id;
-              hot.setSourceDataAtCell(rowIndex, "id", created.id);
-              ensureSpareRow(hot);
-              router.refresh();
-            })
-            .catch(() => toast.error("Не удалось создать позицию"))
-            .finally(() => pendingOps.current.delete(lockKey));
+          newRowsToCreate.push({
+            rowIndex,
+            payload: rowToCreatePayload(rowData),
+          });
         }
       }
+
+      if (newRowsToCreate.length === 0) return;
+
+      // One request for all new rows — atomic position assignment.
+      createQuoteItemsBatch(
+        quoteId,
+        newRowsToCreate.map((r) => r.payload)
+      )
+        .then((created) => {
+          for (let i = 0; i < created.length; i++) {
+            const { rowIndex } = newRowsToCreate[i];
+            rowIdsRef.current[rowIndex] = created[i].id;
+            hot.setSourceDataAtCell(rowIndex, "id", created[i].id);
+          }
+          ensureSpareRow(hot);
+          router.refresh();
+        })
+        .catch(() => {
+          toast.error(
+            newRowsToCreate.length === 1
+              ? "Не удалось создать позицию"
+              : "Не удалось сохранить позиции"
+          );
+        })
+        .finally(() => {
+          for (const { rowIndex } of newRowsToCreate) {
+            pendingOps.current.delete(`create-${rowIndex}`);
+          }
+        });
     },
     [quoteId, router]
   );
@@ -240,52 +275,6 @@ export function SalesItemsHandsontable({
       }
     },
     []
-  );
-
-  const handleAfterPaste = useCallback(
-    (data: unknown[][], coords: { startRow: number; endRow: number }[]) => {
-      if (!data.length || !coords.length) return;
-
-      const hot = hotRef.current?.hotInstance;
-      if (!hot) return;
-
-      const { startRow, endRow } = coords[0];
-
-      // Collect new rows that need to be created
-      const newRows: { rowIndex: number; payload: ReturnType<typeof rowToCreatePayload> }[] = [];
-
-      for (let r = startRow; r <= endRow; r++) {
-        const rowId = rowIdsRef.current[r];
-        if (rowId) continue;
-
-        const rowData = hot.getSourceDataAtRow(r) as RowData | undefined;
-        if (!rowData || !hasContent(rowData)) continue;
-        if (!rowData.brand?.trim() || !rowData.product_code?.trim()) continue;
-
-        newRows.push({ rowIndex: r, payload: rowToCreatePayload(rowData) });
-      }
-
-      if (newRows.length === 0) return;
-
-      // Single batch insert — no race condition on position
-      createQuoteItemsBatch(
-        quoteId,
-        newRows.map((r) => r.payload)
-      )
-        .then((created) => {
-          for (let i = 0; i < created.length; i++) {
-            const { rowIndex } = newRows[i];
-            rowIdsRef.current[rowIndex] = created[i].id;
-            hot.setSourceDataAtCell(rowIndex, "id", created[i].id);
-          }
-          ensureSpareRow(hot);
-          router.refresh();
-        })
-        .catch(() => {
-          toast.error("Не удалось сохранить позиции");
-        });
-    },
-    [quoteId, router]
   );
 
   function handleAddRow() {
@@ -349,7 +338,6 @@ export function SalesItemsHandsontable({
           afterChange={handleAfterChange}
           afterRemoveRow={handleAfterRemoveRow}
           afterCreateRow={handleAfterCreateRow}
-          afterPaste={handleAfterPaste}
           className="htLeft"
         />
       </div>
