@@ -230,7 +230,7 @@ export function CountryCombobox({
           </button>
         }
       />
-      <PopoverContent className="z-[300] w-72 p-0" side="bottom" align="start">
+      <PopoverContent className="w-72 p-0" side="bottom" align="start">
         <div className="flex flex-col">
           {/* Search input */}
           <div className="border-b border-border p-2">

@@ -38,11 +38,16 @@ function PopoverContent({
         side={side}
         align={align}
         sideOffset={sideOffset}
+        // Positioner is the position:absolute element, so z-index must live
+        // here (not on Popup which is position:static — z-index is a no-op
+        // on static elements per CSS spec). z-[300] sits above the Dialog
+        // overlay (z-[200]) so popovers work inside modal forms.
+        className="z-[300]"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "z-[200] min-w-[8rem] rounded-xl bg-background p-3 text-sm ring-1 ring-foreground/10 shadow-md outline-none",
+            "min-w-[8rem] rounded-xl bg-background p-3 text-sm ring-1 ring-foreground/10 shadow-md outline-none",
             "data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95",
             "data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
             className
