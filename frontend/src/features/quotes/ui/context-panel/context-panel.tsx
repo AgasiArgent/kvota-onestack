@@ -127,7 +127,7 @@ function QuoteInfoBlock({
           )}
         </InfoRow>
         <InfoRow label="Город доставки" dataField="delivery_city">
-          <span className="text-sm font-medium">
+          <span className="block truncate text-sm font-medium">
             {quote.delivery_city ?? "\u2014"}
           </span>
         </InfoRow>
@@ -167,7 +167,7 @@ function QuoteInfoBlock({
           </span>
         </InfoRow>
         <InfoRow label="Оплата">
-          <span className="text-sm font-medium">
+          <span className="block truncate text-sm font-medium">
             {quote.payment_terms ?? "\u2014"}
           </span>
         </InfoRow>
@@ -271,7 +271,14 @@ function InfoRow({
       {...(dataField ? { "data-field": dataField } : {})}
     >
       <span className="text-xs text-muted-foreground shrink-0">{label}</span>
-      <span className="min-w-0 [&>*]:truncate">{children}</span>
+      {/*
+        NOTE: do NOT apply blanket truncate (e.g. `[&>*]:truncate`) here.
+        truncate sets `overflow:hidden` on the child, which clips
+        absolutely-positioned popovers (contact / address dropdowns) to a
+        ~30px sliver — see FB-260413-094409-0e1f. Each child is responsible
+        for its own truncation; long text values use `truncate` directly.
+      */}
+      <span className="min-w-0">{children}</span>
     </div>
   );
 }

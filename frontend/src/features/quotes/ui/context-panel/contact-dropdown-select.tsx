@@ -160,7 +160,7 @@ export function ContactDropdownSelect({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute top-full right-0 z-[300] mt-1 min-w-[240px] rounded-lg border bg-popover shadow-md">
+        <div className="absolute top-full left-0 z-[300] mt-1 min-w-[240px] rounded-lg border bg-popover shadow-md">
           {addFormOpen ? (
             <AddContactForm
               customerId={customerId}
