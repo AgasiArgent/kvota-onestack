@@ -258,10 +258,10 @@ function KanbanColumn({
   const isDisabledTarget =
     fromActive !== null && fromActive !== substatus && !isValidTarget;
 
-  const { setNodeRef, isOver } = useDroppable({
-    id: substatus,
-    disabled: fromActive !== null && !isValidTarget,
-  });
+  // Keep the droppable enabled even when the target is visually disabled —
+  // the drop still reaches handleDragEnd, which emits the "Недопустимый
+  // переход" toast + rolls back. Silent rejection is worse UX.
+  const { setNodeRef, isOver } = useDroppable({ id: substatus });
 
   return (
     <div
