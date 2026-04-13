@@ -163,6 +163,11 @@ export async function requestEditApproval(invoiceId: string): Promise<void> {
       "Content-Type": "application/json",
       ...headers,
     },
+    // Send a valid empty JSON body — fasthtml's request middleware parses
+    // application/json content-type before the handler runs and throws a
+    // JSONDecodeError on empty body, bypassing the handler's optional-body
+    // try/except. Sending {} keeps the contract honest.
+    body: JSON.stringify({}),
   });
 
   const json = await res.json();
