@@ -917,3 +917,88 @@ export async function patchQuote(
 
   if (error) throw error;
 }
+
+// ---------------------------------------------------------------------------
+// Procurement substatus transitions (kanban)
+// ---------------------------------------------------------------------------
+
+export interface StatusHistoryEntry {
+  id: string;
+  quote_id: string;
+  from_status: string | null;
+  to_status: string;
+  from_substatus: string | null;
+  to_substatus: string | null;
+  transitioned_by: string | null;
+  transitioned_by_name: string | null;
+  reason: string | null;
+  transitioned_at: string;
+}
+
+/**
+ * GET /api/quotes/{id}/status-history — returns the full transition audit log
+ * for a quote, ordered by transitioned_at.
+ */
+export async function fetchStatusHistory(
+  quoteId: string
+): Promise<StatusHistoryEntry[]> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/status-history`, {
+    headers: {
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) return [];
+  return (json.data ?? []) as StatusHistoryEntry[];
+}
+
+export interface SubstatusTransitionResult {
+  quote_id: string;
+  from_substatus: string | null;
+  to_substatus: string;
+}
+
+/**
+ * POST /api/quotes/{id}/substatus — moves a quote between procurement kanban
+ * columns. Backward moves require a non-empty reason (validated server-side).
+ */
+export async function transitionSubstatus(
+  quoteId: string,
+  toSubstatus: string,
+  reason?: string
+): Promise<SubstatusTransitionResult> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/substatus`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+    body: JSON.stringify({
+      to_substatus: toSubstatus,
+      ...(reason ? { reason } : {}),
+    }),
+  });
+
+  const json = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(
+      json?.error?.message ?? `Failed to transition (HTTP ${res.status})`
+    );
+  }
+  return json.data as SubstatusTransitionResult;
+}

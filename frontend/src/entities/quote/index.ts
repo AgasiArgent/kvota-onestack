@@ -46,5 +46,11 @@ export {
   escalateQuote,
   submitToProcurementWithChecklist,
   patchQuote,
+  transitionSubstatus,
+  fetchStatusHistory,
 } from "./mutations";
-export type { CreateQuoteInput } from "./mutations";
+export type {
+  CreateQuoteInput,
+  SubstatusTransitionResult,
+  StatusHistoryEntry,
+} from "./mutations";

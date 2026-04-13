@@ -48412,6 +48412,27 @@ async def post_invoice_edit_request_approval(request, invoice_id: str):
     return await api_request_edit_approval(request, invoice_id)
 
 
+# --- Procurement Sub-Status JSON API (Phase 4c Kanban — for Next.js frontend) ---
+
+from api.procurement import (
+    get_kanban as api_get_kanban,
+    post_substatus as api_post_substatus,
+    get_status_history as api_get_status_history,
+)
+
+@rt("/api/quotes/kanban", methods=["GET"])
+async def get_quotes_kanban(request):
+    return await api_get_kanban(request)
+
+@rt("/api/quotes/{quote_id}/substatus", methods=["POST"])
+async def post_quote_substatus(request, quote_id: str):
+    return await api_post_substatus(request, quote_id)
+
+@rt("/api/quotes/{quote_id}/status-history", methods=["GET"])
+async def get_quote_status_history(request, quote_id: str):
+    return await api_get_status_history(request, quote_id)
+
+
 # --- Cron JSON API (for scheduled background tasks) ---
 
 from api.cron import cron_check_overdue

@@ -19,6 +19,7 @@ import {
   Percent,
   Settings,
   SplitSquareHorizontal,
+  LayoutGrid,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -102,6 +103,13 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
       ...(unassignedDistributionCount > 0
         ? { badge: unassignedDistributionCount }
         : {}),
+    });
+  }
+  if (hasRole("head_of_procurement", "procurement_senior", "procurement")) {
+    mainItems.push({
+      icon: LayoutGrid,
+      label: "Канбан закупок",
+      href: "/procurement/kanban",
     });
   }
   if (hasRole("top_manager")) {

@@ -2995,3 +2995,158 @@ def show_invoice_and_spec(status) -> bool:
     """
     status_str = status.value if isinstance(status, WorkflowStatus) else str(status)
     return status_str in _DEAL_STATUSES
+
+
+# =============================================================================
+# SUB-STATE MACHINE (Phase 4c — Procurement Kanban)
+# =============================================================================
+# Reusable sub-state transition pattern. Mirrors StatusTransition but for the
+# sub-state axis. Future departments (logistics, customs) can add their own
+# transition lists and plug into the same transition_substatus() function.
+
+@dataclass
+class SubStateTransition:
+    """Represents a valid sub-status transition within a parent workflow status.
+
+    Attributes:
+        parent_status: Parent workflow_status the sub-state belongs to (e.g., 'pending_procurement')
+        from_substatus: Current sub-status
+        to_substatus: Target sub-status
+        allowed_roles: Roles that can perform this transition
+        requires_reason: Whether a reason is required (True for backward moves)
+        auto_transition: Whether this happens automatically (not used in Phase 4c, reserved)
+    """
+    parent_status: str
+    from_substatus: str
+    to_substatus: str
+    allowed_roles: List[str]
+    requires_reason: bool = False
+    auto_transition: bool = False
+
+
+# Allowed procurement sub-status transitions
+# Forward flow: distributing → searching_supplier → waiting_prices → prices_ready
+# Backward moves require a reason (to prevent sloppy rollbacks)
+PROCUREMENT_SUBSTATUS_TRANSITIONS: List[SubStateTransition] = [
+    # Forward
+    SubStateTransition(
+        "pending_procurement", "distributing", "searching_supplier",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=False,
+    ),
+    SubStateTransition(
+        "pending_procurement", "searching_supplier", "waiting_prices",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=False,
+    ),
+    SubStateTransition(
+        "pending_procurement", "waiting_prices", "prices_ready",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=False,
+    ),
+    # Backward (require reason)
+    SubStateTransition(
+        "pending_procurement", "searching_supplier", "distributing",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=True,
+    ),
+    SubStateTransition(
+        "pending_procurement", "waiting_prices", "searching_supplier",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=True,
+    ),
+    SubStateTransition(
+        "pending_procurement", "prices_ready", "waiting_prices",
+        ["procurement", "admin", "head_of_procurement"],
+        requires_reason=True,
+    ),
+]
+
+
+# O(1) lookup: (parent_status, from_substatus) -> list of valid transitions
+_SUBSTATE_TRANSITIONS_BY_KEY: Dict[tuple, List[SubStateTransition]] = {}
+for _t in PROCUREMENT_SUBSTATUS_TRANSITIONS:
+    _key = (_t.parent_status, _t.from_substatus)
+    _SUBSTATE_TRANSITIONS_BY_KEY.setdefault(_key, []).append(_t)
+
+
+def can_transition_substatus(
+    parent_status: str,
+    from_substatus: Optional[str],
+    to_substatus: str,
+    user_roles: List[str],
+) -> tuple[bool, Optional[SubStateTransition]]:
+    """Check whether a sub-status transition is allowed.
+
+    Returns (allowed, matching_transition). matching_transition is None if no match.
+    """
+    if from_substatus is None:
+        return False, None
+    for t in _SUBSTATE_TRANSITIONS_BY_KEY.get((parent_status, from_substatus), []):
+        if t.to_substatus == to_substatus and set(user_roles) & set(t.allowed_roles):
+            return True, t
+    return False, None
+
+
+def transition_substatus(
+    quote_id: str,
+    to_substatus: str,
+    user_id: str,
+    user_roles: List[str],
+    reason: str = "",
+) -> dict:
+    """Validate and execute a sub-status transition atomically.
+
+    1. Fetch quote's current workflow_status + procurement_substatus
+    2. Validate transition is allowed (role, from→to, reason-if-required)
+    3. Write status_history audit row
+    4. Update quotes.procurement_substatus
+    5. Return the updated quote dict
+
+    Raises ValueError for invalid transitions (caller converts to HTTP 400/403).
+    """
+    sb = get_supabase()
+
+    # Fetch current state
+    quote_result = (
+        sb.table("quotes")
+        .select("id, workflow_status, procurement_substatus")
+        .eq("id", quote_id)
+        .execute()
+    )
+    if not quote_result.data:
+        raise ValueError(f"Quote {quote_id} not found")
+    quote = quote_result.data[0]
+    parent_status = quote["workflow_status"]
+    from_substatus = quote.get("procurement_substatus")
+
+    allowed, transition = can_transition_substatus(
+        parent_status, from_substatus, to_substatus, user_roles
+    )
+    if not allowed:
+        raise ValueError(
+            f"Invalid substatus transition: {parent_status}/{from_substatus} → {to_substatus} "
+            f"for roles {user_roles}"
+        )
+    if transition.requires_reason and not reason.strip():
+        raise ValueError("Reason required for backward transitions")
+
+    # Write audit row
+    sb.table("status_history").insert({
+        "quote_id": quote_id,
+        "from_status": parent_status,
+        "from_substatus": from_substatus,
+        "to_status": parent_status,  # parent unchanged for sub-state moves
+        "to_substatus": to_substatus,
+        "transitioned_by": user_id,
+        "reason": reason or "",
+    }).execute()
+
+    # Update sub-status
+    update_result = (
+        sb.table("quotes")
+        .update({"procurement_substatus": to_substatus})
+        .eq("id", quote_id)
+        .execute()
+    )
+    return update_result.data[0] if update_result.data else {"id": quote_id, "procurement_substatus": to_substatus}

@@ -3779,6 +3779,7 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           incoterms: string | null
+          procurement_substatus: string | null
         }
         Insert: {
           id?: string
@@ -3901,6 +3902,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
+          procurement_substatus?: string | null
         }
         Update: {
           id?: string
@@ -4023,6 +4025,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
+          procurement_substatus?: string | null
         }
         Relationships: []
       }
@@ -4515,6 +4518,42 @@ export type Database = {
           deadline_hours?: number
           created_at?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      status_history: {
+        Row: {
+          id: string
+          quote_id: string
+          from_status: string | null
+          from_substatus: string | null
+          to_status: string | null
+          to_substatus: string | null
+          transitioned_at: string
+          transitioned_by: string
+          reason: string
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          from_status?: string | null
+          from_substatus?: string | null
+          to_status?: string | null
+          to_substatus?: string | null
+          transitioned_at?: string
+          transitioned_by: string
+          reason?: string
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          from_status?: string | null
+          from_substatus?: string | null
+          to_status?: string | null
+          to_substatus?: string | null
+          transitioned_at?: string
+          transitioned_by?: string
+          reason?: string
         }
         Relationships: []
       }
