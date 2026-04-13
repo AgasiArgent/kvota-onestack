@@ -21,7 +21,7 @@ import {
   type CargoPlaceInput,
 } from "@/entities/quote/mutations";
 import type { QuoteItemRow } from "@/entities/quote/queries";
-import { CountryCombobox, findCountryByCode } from "@/shared/ui/geo";
+import { CountryCombobox, findCountryByCode, findCountryByName } from "@/shared/ui/geo";
 import { INCOTERMS_2020 } from "@/shared/lib/incoterms";
 import { SUPPORTED_CURRENCIES } from "@/shared/lib/currencies";
 import { fetchVatRate } from "@/entities/invoice/queries";
@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 interface Supplier {
   id: string;
   name: string;
+  country: string | null;
 }
 
 interface BuyerCompany {
@@ -218,7 +219,20 @@ export function InvoiceCreateModal({
             </Label>
             <select
               value={supplierId}
-              onChange={(e) => { setSupplierId(e.target.value); setErrors((prev) => { const { supplier, ...rest } = prev; return rest; }); }}
+              onChange={(e) => {
+                const newSupplierId = e.target.value;
+                setSupplierId(newSupplierId);
+                setErrors((prev) => { const { supplier, ...rest } = prev; return rest; });
+                // Auto-fill country from supplier when user hasn't manually picked one.
+                // useEffect on countryCode then triggers VAT autofill.
+                if (!vatManuallyOverridden && newSupplierId) {
+                  const supplier = suppliers.find((s) => s.id === newSupplierId);
+                  if (supplier?.country) {
+                    const match = findCountryByName(supplier.country, "ru");
+                    if (match) setCountryCode(match.code);
+                  }
+                }
+              }}
               className={`w-full h-8 px-2.5 text-sm border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring ${errors.supplier ? "border-destructive" : "border-input"}`}
             >
               <option value="">Выберите поставщика</option>

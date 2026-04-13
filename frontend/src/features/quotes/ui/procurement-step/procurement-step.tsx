@@ -18,6 +18,7 @@ import { InvoiceCreateModal } from "./invoice-create-modal";
 interface Supplier {
   id: string;
   name: string;
+  country: string | null;
 }
 
 interface BuyerCompany {
@@ -52,7 +53,7 @@ export function ProcurementStep({
 
     supabase
       .from("suppliers")
-      .select("id, name")
+      .select("id, name, country")
       .eq("organization_id", quote.organization_id)
       .order("name")
       .then(({ data }) => setSuppliers(data ?? []));
