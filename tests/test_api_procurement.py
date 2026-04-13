@@ -226,7 +226,7 @@ class TestGetKanban:
                     {"roles": {"slug": "procurement"}}
                 ]
             elif name == "quote_brand_substates":
-                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = qbs_rows
+                tbl.select.return_value.eq.return_value.eq.return_value.is_.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = history_rows
             elif name == "quote_items":

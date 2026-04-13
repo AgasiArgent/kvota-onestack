@@ -167,6 +167,10 @@ async def get_kanban(request) -> JSONResponse:
         )
         .eq("quotes.workflow_status", "pending_procurement")
         .eq("quotes.organization_id", user["org_id"])
+        # Exclude soft-deleted quotes — their quote_brand_substates rows
+        # survive via CASCADE only on HARD delete; soft delete (deleted_at
+        # IS NOT NULL) leaves orphans that would otherwise show on kanban.
+        .is_("quotes.deleted_at", "null")
         .execute()
     )
     qbs_rows = _rows(qbs_result)
