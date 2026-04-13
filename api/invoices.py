@@ -206,7 +206,8 @@ async def get_letter_draft(request, id: str) -> JSONResponse:
 
     Path: GET /api/invoices/{id}/letter-draft
     Returns:
-        Draft object or 404 if no active draft exists.
+        200 with `data: <draft>` when an active draft exists, or
+        200 with `data: null` when no active draft exists (per API contract).
     Roles: procurement, admin, head_of_procurement
     """
     user, err = _get_procurement_user(request)
@@ -220,12 +221,6 @@ async def get_letter_draft(request, id: str) -> JSONResponse:
     from services.invoice_send_service import get_active_draft
 
     draft = get_active_draft(id)
-    if draft is None:
-        return JSONResponse(
-            {"success": False, "error": {"code": "NOT_FOUND", "message": "No active draft for this invoice"}},
-            status_code=404,
-        )
-
     return JSONResponse({"success": True, "data": draft}, status_code=200)
 
 

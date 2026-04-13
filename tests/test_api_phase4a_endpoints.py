@@ -428,7 +428,13 @@ class TestLetterDraft:
         assert data["data"]["recipient_email"] == "supplier@example.com"
 
     @pytest.mark.asyncio
-    async def test_get_draft_returns_404_when_no_draft(self):
+    async def test_get_draft_returns_200_with_null_when_no_draft(self):
+        """Per API contract: missing draft returns 200 + data:null, not 404.
+
+        Frontend distinguishes "no draft yet" (empty form) from auth/ownership
+        failures by relying on a 200 response body — a 404 forces it down the
+        generic error path instead.
+        """
         user_id = _uuid()
         org_id = _uuid()
         invoice_id = _uuid()
@@ -446,7 +452,10 @@ class TestLetterDraft:
                 request = _mock_request(api_user=api_user)
                 response = await get_letter_draft(request, invoice_id)
 
-        assert response.status_code == 404
+        assert response.status_code == 200
+        data = json.loads(response.body)
+        assert data["success"] is True
+        assert data["data"] is None
 
     @pytest.mark.asyncio
     async def test_save_draft_creates_draft(self):
