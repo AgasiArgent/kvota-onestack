@@ -121,7 +121,8 @@ class TestGetKanban:
                 "idn_quote": "Q-202604-0001",
                 "procurement_substatus": "distributing",
                 "updated_at": three_days_ago,
-                "assigned_procurement_users": ["u1"],
+                "assigned_procurement_users": ["u1", "u2"],
+                "created_by": "creator-1",
                 "customers": {"name": "Acme"},
             },
             {
@@ -130,6 +131,7 @@ class TestGetKanban:
                 "procurement_substatus": "waiting_prices",
                 "updated_at": three_days_ago,
                 "assigned_procurement_users": [],
+                "created_by": None,
                 "customers": {"name": "Beta"},
             },
         ]
@@ -146,6 +148,39 @@ class TestGetKanban:
                 "transitioned_at": three_days_ago,
                 "reason": "price delayed",
             },
+        ]
+        # Two items on q1 with brands; q1 invoice has both items priced.
+        quote_items_rows = [
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2},
+            {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5},
+            {"id": "item-3", "quote_id": "q2", "brand": None, "quantity": 1},
+        ]
+        invoices_rows = [
+            {
+                "id": "inv-1",
+                "quote_id": "q1",
+                "invoice_number": "INV-01-Q-202604-0001",
+                "currency": "USD",
+            },
+        ]
+        invoice_item_prices_rows = [
+            {
+                "invoice_id": "inv-1",
+                "quote_item_id": "item-1",
+                "purchase_price_original": 100.0,  # 100 × 2 = 200
+                "purchase_currency": "USD",
+            },
+            {
+                "invoice_id": "inv-1",
+                "quote_item_id": "item-2",
+                "purchase_price_original": 50.0,  # 50 × 5 = 250
+                "purchase_currency": "USD",
+            },
+        ]
+        user_profiles_rows = [
+            {"user_id": "creator-1", "full_name": "Алиса Петрова"},
+            {"user_id": "u1", "full_name": "Борис Сидоров"},
+            {"user_id": "u2", "full_name": "Виктор Орлов"},
         ]
 
         sb = MagicMock()
@@ -164,6 +199,14 @@ class TestGetKanban:
                 tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = quote_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = history_rows
+            elif name == "quote_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
+            elif name == "invoices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = invoices_rows
+            elif name == "invoice_item_prices":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = invoice_item_prices_rows
+            elif name == "user_profiles":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = user_profiles_rows
             return tbl
 
         sb.table.side_effect = table_side_effect
@@ -185,12 +228,26 @@ class TestGetKanban:
             "prices_ready",
         }
         assert len(cols["distributing"]) == 1
-        assert cols["distributing"][0]["id"] == "q1"
-        assert cols["distributing"][0]["customer_name"] == "Acme"
-        assert cols["distributing"][0]["days_in_state"] == 3
-        assert cols["distributing"][0]["assignees"] == ["u1"]
+        q1 = cols["distributing"][0]
+        assert q1["id"] == "q1"
+        assert q1["customer_name"] == "Acme"
+        assert q1["days_in_state"] == 3
+        assert q1["assignees"] == ["u1", "u2"]
+        # New fields
+        assert q1["brands"] == ["ABB", "Siemens"]  # alphabetical
+        assert q1["manager_name"] == "Алиса Петрова"
+        assert q1["procurement_user_names"] == ["Борис Сидоров", "Виктор Орлов"]
+        assert q1["invoice_sums"] == [
+            {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 450.0}
+        ]
         assert len(cols["waiting_prices"]) == 1
-        assert cols["waiting_prices"][0]["latest_reason"] == "price delayed"
+        q2 = cols["waiting_prices"][0]
+        assert q2["latest_reason"] == "price delayed"
+        # q2 has no brands, no manager, no procurement assignees, no priced invoices
+        assert q2["brands"] == []
+        assert q2["manager_name"] is None
+        assert q2["procurement_user_names"] == []
+        assert q2["invoice_sums"] == []
         assert cols["searching_supplier"] == []
         assert cols["prices_ready"] == []
 

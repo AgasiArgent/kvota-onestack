@@ -2,8 +2,9 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import Link from "next/link";
 import { Clock } from "lucide-react";
-import type { KanbanQuoteCard } from "../model/types";
+import type { KanbanInvoiceSum, KanbanQuoteCard } from "../model/types";
 
 export interface KanbanCardProps {
   card: KanbanQuoteCard;
@@ -11,10 +12,23 @@ export interface KanbanCardProps {
   pending?: boolean;
 }
 
+const EM_DASH = "—";
+const NBSP = "\u00A0";
+
+const numberFormatter = new Intl.NumberFormat("ru-RU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatInvoiceAmount(sum: KanbanInvoiceSum): string {
+  return `${numberFormatter.format(sum.total)}${NBSP}${sum.currency}`;
+}
+
 /**
- * Draggable quote card. Clicking it (without dragging) opens the status
- * history panel. dnd-kit's activation constraint lets us distinguish a click
- * from a drag by requiring 4px of movement to start a drag.
+ * Draggable quote card. Clicking the card body (without dragging) opens the
+ * status history panel. The Quote IDN is a link that navigates to the quote
+ * detail page at the procurement step; its pointer events are isolated so
+ * dnd-kit does not start a drag and the history panel does not open.
  */
 export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
@@ -33,6 +47,13 @@ export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) 
   };
 
   const reason = card.latest_reason?.trim();
+  const brandsText = card.brands.length > 0 ? card.brands.join(", ") : EM_DASH;
+  const managerText = card.manager_name?.trim() || EM_DASH;
+  const procurementText =
+    card.procurement_user_names.length > 0
+      ? card.procurement_user_names.join(", ")
+      : EM_DASH;
+  const hasInvoices = card.invoice_sums.length > 0;
 
   return (
     <div
@@ -57,7 +78,15 @@ export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) 
       tabIndex={0}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium text-foreground">{card.idn_quote}</span>
+        <Link
+          href={`/quotes/${card.id}?step=procurement`}
+          className="font-medium text-foreground hover:underline"
+          // Stop drag activation and the card-level click that opens history.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {card.idn_quote}
+        </Link>
         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
           <Clock className="size-3" />
           {card.days_in_state}д
@@ -68,6 +97,29 @@ export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) 
           {card.customer_name}
         </p>
       )}
+      <div className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+        <p className="truncate">
+          <span className="font-medium">Бренды:</span> {brandsText}
+        </p>
+        <p className="truncate">
+          <span className="font-medium">МОП:</span> {managerText}
+        </p>
+        <p className="truncate">
+          <span className="font-medium">МОЗ:</span> {procurementText}
+        </p>
+        {hasInvoices ? (
+          card.invoice_sums.map((sum) => (
+            <p key={sum.invoice_number} className="truncate">
+              <span className="font-medium">{sum.invoice_number}:</span>{" "}
+              {formatInvoiceAmount(sum)}
+            </p>
+          ))
+        ) : (
+          <p className="truncate">
+            <span className="font-medium">Сумма:</span> {EM_DASH}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

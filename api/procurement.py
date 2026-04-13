@@ -118,8 +118,20 @@ async def get_kanban(request) -> JSONResponse:
           "status": "pending_procurement",
           "columns": { <substatus>: [quote_row, ...] }
         }
-        Each quote row: id, idn_quote, customer_name, procurement_substatus,
-        days_in_state, assignees, latest_reason.
+        Each quote row:
+          - id (str)
+          - idn_quote (str)
+          - customer_name (str | None)
+          - procurement_substatus (str)
+          - days_in_state (int)
+          - assignees (list[str]) — raw user UUIDs from quotes.assigned_procurement_users
+          - latest_reason (str | None)
+          - brands (list[str]) — distinct sorted quote_items.brand values
+          - manager_name (str | None) — МОП full name (resolved via quotes.created_by)
+          - procurement_user_names (list[str]) — МОЗ full names (resolved from assignees)
+          - invoice_sums (list[dict]) — per-supplier-invoice totals:
+              [{"invoice_number": str, "currency": str, "total": float}, ...]
+    Side Effects: none (read-only)
     Roles: procurement, admin, head_of_procurement
     """
     user, err = _resolve_user_context(request, _PROCUREMENT_ROLES)
@@ -146,7 +158,7 @@ async def get_kanban(request) -> JSONResponse:
         sb.table("quotes")
         .select(
             "id, idn_quote, procurement_substatus, updated_at, assigned_procurement_users, "
-            "customers!customer_id(name)"
+            "created_by, customers!customer_id(name)"
         )
         .eq("workflow_status", "pending_procurement")
         .eq("organization_id", user["org_id"])
@@ -170,6 +182,111 @@ async def get_kanban(request) -> JSONResponse:
             if qid not in latest_by_quote:
                 latest_by_quote[qid] = row
 
+    # Batch-fetch quote_items: brands + per-item (id, quantity) for invoice totals.
+    brands_by_quote: dict[str, set[str]] = {}
+    item_qty_by_id: dict[str, float] = {}
+    item_quote_by_id: dict[str, str] = {}
+    if quote_ids:
+        items_result = (
+            sb.table("quote_items")
+            .select("id, quote_id, brand, quantity")
+            .in_("quote_id", quote_ids)
+            .execute()
+        )
+        for it in _rows(items_result):
+            qid = str(it.get("quote_id"))
+            brand = it.get("brand")
+            if brand:
+                brands_by_quote.setdefault(qid, set()).add(str(brand))
+            item_id = it.get("id")
+            if item_id:
+                item_qty_by_id[str(item_id)] = float(it.get("quantity") or 0)
+                item_quote_by_id[str(item_id)] = qid
+
+    # Batch-fetch supplier invoices for these quotes.
+    invoices_by_quote: dict[str, list[dict]] = {}
+    invoice_quote_by_id: dict[str, str] = {}
+    invoice_meta_by_id: dict[str, dict] = {}
+    if quote_ids:
+        invoices_result = (
+            sb.table("invoices")
+            .select("id, quote_id, invoice_number, currency")
+            .in_("quote_id", quote_ids)
+            .execute()
+        )
+        for inv in _rows(invoices_result):
+            inv_id = str(inv.get("id"))
+            qid = str(inv.get("quote_id"))
+            invoice_quote_by_id[inv_id] = qid
+            invoice_meta_by_id[inv_id] = {
+                "invoice_number": inv.get("invoice_number") or "",
+                "currency": inv.get("currency") or "",
+            }
+            invoices_by_quote.setdefault(qid, []).append(inv)
+
+    # Batch-fetch invoice_item_prices for these invoices and accumulate totals.
+    # Total = SUM(purchase_price_original × quote_items.quantity) per invoice.
+    # Currency falls back to invoice_item_prices.purchase_currency if invoice has none.
+    invoice_totals: dict[str, float] = {}
+    invoice_currency_from_prices: dict[str, str] = {}
+    invoice_ids = list(invoice_quote_by_id.keys())
+    if invoice_ids:
+        prices_result = (
+            sb.table("invoice_item_prices")
+            .select("invoice_id, quote_item_id, purchase_price_original, purchase_currency")
+            .in_("invoice_id", invoice_ids)
+            .execute()
+        )
+        for p in _rows(prices_result):
+            inv_id = str(p.get("invoice_id"))
+            item_id = str(p.get("quote_item_id"))
+            qty = item_qty_by_id.get(item_id, 0.0)
+            try:
+                price = float(p.get("purchase_price_original") or 0)
+            except (TypeError, ValueError):
+                price = 0.0
+            invoice_totals[inv_id] = invoice_totals.get(inv_id, 0.0) + price * qty
+            # Capture first non-empty purchase_currency seen per invoice (fallback only).
+            cur = p.get("purchase_currency")
+            if cur and inv_id not in invoice_currency_from_prices:
+                invoice_currency_from_prices[inv_id] = str(cur)
+
+    # Build invoice_sums list per quote — one entry per invoice that has priced items.
+    invoice_sums_by_quote: dict[str, list[dict]] = {}
+    for inv_id, total in invoice_totals.items():
+        qid = invoice_quote_by_id.get(inv_id)
+        if not qid:
+            continue
+        meta = invoice_meta_by_id.get(inv_id, {})
+        currency = meta.get("currency") or invoice_currency_from_prices.get(inv_id, "")
+        invoice_sums_by_quote.setdefault(qid, []).append({
+            "invoice_number": meta.get("invoice_number", ""),
+            "currency": currency,
+            "total": round(total, 2),
+        })
+
+    # Batch-resolve user names for МОП (created_by) + МОЗ (assigned_procurement_users).
+    user_ids_to_resolve: set[str] = set()
+    for q in quote_rows:
+        creator = q.get("created_by")
+        if creator:
+            user_ids_to_resolve.add(str(creator))
+        for uid in q.get("assigned_procurement_users") or []:
+            if uid:
+                user_ids_to_resolve.add(str(uid))
+
+    name_by_user: dict[str, str] = {}
+    if user_ids_to_resolve:
+        profiles_result = (
+            sb.table("user_profiles")
+            .select("user_id, full_name")
+            .in_("user_id", list(user_ids_to_resolve))
+            .execute()
+        )
+        for p in _rows(profiles_result):
+            uid = str(p.get("user_id"))
+            name_by_user[uid] = p.get("full_name") or ""
+
     columns: dict[str, list[dict]] = {s: [] for s in _PROCUREMENT_SUBSTATUSES}
 
     for q in quote_rows:
@@ -189,9 +306,23 @@ async def get_kanban(request) -> JSONResponse:
         customer_data = q.get("customers") or {}
         customer_name = customer_data.get("name") if isinstance(customer_data, dict) else None
 
-        assignees = q.get("assigned_procurement_users") or []
-        if not isinstance(assignees, list):
-            assignees = []
+        assignees_raw = q.get("assigned_procurement_users") or []
+        if not isinstance(assignees_raw, list):
+            assignees_raw = []
+        assignees = [str(a) for a in assignees_raw if a]
+
+        creator_id = str(q.get("created_by")) if q.get("created_by") else None
+        manager_name = name_by_user.get(creator_id) if creator_id else None
+        if manager_name == "":
+            manager_name = None
+
+        procurement_user_names = [
+            name_by_user[uid] for uid in assignees if name_by_user.get(uid)
+        ]
+
+        brands = sorted(brands_by_quote.get(qid, set()))
+
+        invoice_sums = invoice_sums_by_quote.get(qid, [])
 
         columns[substatus].append({
             "id": qid,
@@ -199,8 +330,12 @@ async def get_kanban(request) -> JSONResponse:
             "customer_name": customer_name,
             "procurement_substatus": substatus,
             "days_in_state": days,
-            "assignees": [str(a) for a in assignees],
+            "assignees": assignees,
             "latest_reason": latest_reason,
+            "brands": brands,
+            "manager_name": manager_name,
+            "procurement_user_names": procurement_user_names,
+            "invoice_sums": invoice_sums,
         })
 
     return JSONResponse(
