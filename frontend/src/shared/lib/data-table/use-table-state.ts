@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import type {
@@ -94,10 +94,16 @@ function columnsDefaultVisible(
  * Reconcile persisted column visibility with the current column config.
  *
  * - Drops stale keys (columns that no longer exist in config) — R5.6
- * - Adds new columns that appeared since the persisted snapshot if they are
- *   marked `defaultVisible !== false`. This ensures newly added columns show
- *   up automatically for users who already have a persisted visibility list.
  * - Returns keys in config order for stable rendering.
+ *
+ * Note: previously this also re-added any `defaultVisible !== false` column
+ * that wasn't in `persisted`, intended to surface newly-introduced columns
+ * automatically. Side effect: every user toggle that *removed* such a column
+ * was immediately undone — the reconciliation could not distinguish
+ * "deliberately hidden" from "never seen". That broke the column visibility
+ * checkboxes (FB-260413-144241-4567). If we ever want auto-surfacing of
+ * brand-new columns, persist a separate "known columns" snapshot to compare
+ * against, instead of merging defaults into every reconcile.
  */
 function reconcileVisibleColumns(
   persisted: readonly string[],
@@ -105,11 +111,6 @@ function reconcileVisibleColumns(
 ): readonly string[] {
   const known = new Set(columns.map((c) => c.key));
   const persistedSet = new Set(persisted.filter((key) => known.has(key)));
-  for (const column of columns) {
-    if (column.defaultVisible !== false && !persistedSet.has(column.key)) {
-      persistedSet.add(column.key);
-    }
-  }
   return columns.map((c) => c.key).filter((k) => persistedSet.has(k));
 }
 
@@ -152,15 +153,35 @@ export function useTableState({
 
   const sort = useMemo(() => parseSortString(parsed.sort), [parsed.sort]);
 
-  const visibleColumns = useMemo<readonly string[]>(() => {
-    // When a view is active, the parent is expected to sync visibility into
-    // localStorage via setVisibleColumns. When no view is active, read from localStorage.
-    const stored = readVisibilityFromStorage(tableKey);
-    if (stored) {
-      return reconcileVisibleColumns(stored, columns);
+  // Visible columns are mirrored into React state so that toggles trigger a
+  // re-render. localStorage remains the persistence layer; setVisibleColumns
+  // writes to both. A useMemo over localStorage would freeze on first read
+  // (storage writes don't invalidate memo deps), which is what broke the
+  // column visibility checkboxes — see FB-260413-144241-4567.
+  const [visibleColumns, setVisibleColumnsState] = useState<readonly string[]>(
+    () => {
+      const stored = readVisibilityFromStorage(tableKey);
+      if (stored) return reconcileVisibleColumns(stored, columns);
+      return defaultVisibleColumns ?? columnsDefaultVisible(columns);
     }
-    return defaultVisibleColumns ?? columnsDefaultVisible(columns);
-  }, [tableKey, columns, defaultVisibleColumns]);
+  );
+
+  // Re-reconcile visibility when the column config changes (e.g. a new column
+  // is added) so newly-introduced defaultVisible columns appear automatically.
+  useEffect(() => {
+    setVisibleColumnsState((prev) => {
+      const reconciled = reconcileVisibleColumns(prev, columns);
+      // Bail out if nothing changed to avoid an extra render loop.
+      if (
+        reconciled.length === prev.length &&
+        reconciled.every((k, i) => k === prev[i])
+      ) {
+        return prev;
+      }
+      writeVisibilityToStorage(tableKey, reconciled);
+      return reconciled;
+    });
+  }, [columns, tableKey]);
 
   const navigate = useCallback(
     (mutator: (sp: URLSearchParams) => void) => {
@@ -258,10 +279,13 @@ export function useTableState({
     (keys: readonly string[]) => {
       const reconciled = reconcileVisibleColumns(keys, columns);
       writeVisibilityToStorage(tableKey, reconciled);
-      // No URL update — visibility is a local preference unless stored in a view.
-      router.refresh();
+      // Update React state so all consumers re-render with the new value.
+      // (router.refresh() only reruns Server Components — it does NOT busts
+      // client-side memos, which is why the previous useMemo+refresh approach
+      // left the popover checkboxes visually frozen.)
+      setVisibleColumnsState(reconciled);
     },
-    [columns, tableKey, router]
+    [columns, tableKey]
   );
 
   const clearAllFilters = useCallback(() => {
