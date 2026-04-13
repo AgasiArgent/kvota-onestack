@@ -118,7 +118,7 @@ async def get_kanban(request) -> JSONResponse:
           "status": "pending_procurement",
           "columns": { <substatus>: [quote_row, ...] }
         }
-        Each quote row: id, idn, customer_name, procurement_substatus,
+        Each quote row: id, idn_quote, customer_name, procurement_substatus,
         days_in_state, assignees, latest_reason.
     Roles: procurement, admin, head_of_procurement
     """
@@ -145,7 +145,7 @@ async def get_kanban(request) -> JSONResponse:
     quotes_result = (
         sb.table("quotes")
         .select(
-            "id, idn, procurement_substatus, updated_at, assigned_procurement_users, "
+            "id, idn_quote, procurement_substatus, updated_at, assigned_procurement_users, "
             "customers!customer_id(name)"
         )
         .eq("workflow_status", "pending_procurement")
@@ -195,7 +195,7 @@ async def get_kanban(request) -> JSONResponse:
 
         columns[substatus].append({
             "id": qid,
-            "idn": q.get("idn"),
+            "idn_quote": q.get("idn_quote"),
             "customer_name": customer_name,
             "procurement_substatus": substatus,
             "days_in_state": days,

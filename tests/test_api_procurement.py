@@ -118,7 +118,7 @@ class TestGetKanban:
         quote_rows = [
             {
                 "id": "q1",
-                "idn": "Q-202604-0001",
+                "idn_quote": "Q-202604-0001",
                 "procurement_substatus": "distributing",
                 "updated_at": three_days_ago,
                 "assigned_procurement_users": ["u1"],
@@ -126,7 +126,7 @@ class TestGetKanban:
             },
             {
                 "id": "q2",
-                "idn": "Q-202604-0002",
+                "idn_quote": "Q-202604-0002",
                 "procurement_substatus": "waiting_prices",
                 "updated_at": three_days_ago,
                 "assigned_procurement_users": [],
