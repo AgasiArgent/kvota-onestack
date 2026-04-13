@@ -210,33 +210,23 @@ export async function fetchProcurementWorkload(
   }));
 }
 
-/** Count of unassigned brand-groups (unique quote+brand pairs) for sidebar badge */
+/**
+ * Count of brand-slices currently in the `distributing` substatus for the
+ * sidebar badge. Mirrors the kanban's "Распределение" column exactly: one
+ * row per (quote, brand) slice where the quote is alive + pending_procurement
+ * + in the user's org. Replaces the old item-level count so the sidebar and
+ * kanban agree on the unit of work.
+ */
 export async function fetchUnassignedItemCount(orgId: string): Promise<number> {
   const supabase = createAdminClient();
 
-  const { data: quoteRows } = await supabase
-    .from("quotes")
-    .select("id")
-    .eq("organization_id", orgId)
-    .is("deleted_at", null)
-    .not("workflow_status", "in", "(cancelled,rejected,draft)");
+  const { count } = await supabase
+    .from("quote_brand_substates")
+    .select("quote_id, quotes!inner(id)", { count: "exact", head: true })
+    .eq("substatus", "distributing")
+    .eq("quotes.workflow_status", "pending_procurement")
+    .eq("quotes.organization_id", orgId)
+    .is("quotes.deleted_at", null);
 
-  if (!quoteRows || quoteRows.length === 0) return 0;
-
-  const { data: items } = await supabase
-    .from("quote_items")
-    .select("quote_id, brand")
-    .in("quote_id", quoteRows.map((q) => q.id))
-    .is("assigned_procurement_user", null);
-
-  if (!items || items.length === 0) return 0;
-
-  // Count unique quote+brand pairs (brand-groups)
-  const groups = new Set<string>();
-  for (const item of items) {
-    const key = `${item.quote_id}::${(item.brand ?? "__null__").toLowerCase()}`;
-    groups.add(key);
-  }
-
-  return groups.size;
+  return count ?? 0;
 }
