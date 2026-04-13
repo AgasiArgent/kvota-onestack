@@ -1,8 +1,31 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { Toaster } from "sonner";
-import { KanbanBoard } from "./kanban-board";
 import type { KanbanResponse } from "../model/types";
+
+// Board is interactive only (dnd-kit). Rendering it on the server produces
+// hydration mismatches (React error #418) because @dnd-kit/core injects
+// attributes (aria-describedby, data-*) whose generated values differ between
+// server and client. There's no SEO value in pre-rendering a drag-and-drop
+// surface, so skip SSR entirely — the enclosing page.tsx still fetches data
+// on the server and passes it down as a prop.
+const KanbanBoard = dynamic(
+  () => import("./kanban-board").then((m) => ({ default: m.KanbanBoard })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="min-h-[300px] rounded-lg border bg-muted/40 p-3"
+          />
+        ))}
+      </div>
+    ),
+  }
+);
 
 export interface KanbanPageProps {
   data: KanbanResponse;
