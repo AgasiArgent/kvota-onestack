@@ -115,10 +115,21 @@ function renderTransitionLabel(entry: StatusHistoryEntry): string {
   const toLabel =
     to && isProcurementSubstatus(to) ? SUBSTATUS_LABELS_RU[to] : to;
 
-  if (fromLabel && toLabel) return `${fromLabel} → ${toLabel}`;
-  if (toLabel) return `→ ${toLabel}`;
+  // Brand-scoped transitions on the kanban get a suffix so the history
+  // distinguishes per-brand moves from quote-level ones. brand === null means
+  // a quote-level transition; brand === "" is an unbranded slice; a string
+  // is the brand name.
+  const brandSuffix =
+    entry.brand === null
+      ? ""
+      : entry.brand === ""
+      ? " (без бренда)"
+      : ` (${entry.brand})`;
+
+  if (fromLabel && toLabel) return `${fromLabel} → ${toLabel}${brandSuffix}`;
+  if (toLabel) return `→ ${toLabel}${brandSuffix}`;
   // Workflow-level transition (no substatus).
-  return `${entry.from_status ?? "—"} → ${entry.to_status}`;
+  return `${entry.from_status ?? "—"} → ${entry.to_status}${brandSuffix}`;
 }
 
 function formatDateTime(iso: string): string {

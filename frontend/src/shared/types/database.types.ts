@@ -2706,6 +2706,30 @@ export type Database = {
         }
         Relationships: []
       }
+      quote_brand_substates: {
+        Row: {
+          quote_id: string
+          brand: string
+          substatus: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          quote_id: string
+          brand: string
+          substatus?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          quote_id?: string
+          brand?: string
+          substatus?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       quote_calculation_products_versioned: {
         Row: {
           id: string
@@ -3779,7 +3803,6 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           incoterms: string | null
-          procurement_substatus: string | null
         }
         Insert: {
           id?: string
@@ -3902,7 +3925,6 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
-          procurement_substatus?: string | null
         }
         Update: {
           id?: string
@@ -4025,7 +4047,6 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
-          procurement_substatus?: string | null
         }
         Relationships: []
       }
@@ -4532,6 +4553,7 @@ export type Database = {
           transitioned_at: string
           transitioned_by: string
           reason: string
+          brand: string | null
         }
         Insert: {
           id?: string
@@ -4543,6 +4565,7 @@ export type Database = {
           transitioned_at?: string
           transitioned_by: string
           reason?: string
+          brand?: string | null
         }
         Update: {
           id?: string
@@ -4554,6 +4577,7 @@ export type Database = {
           transitioned_at?: string
           transitioned_by?: string
           reason?: string
+          brand?: string | null
         }
         Relationships: []
       }

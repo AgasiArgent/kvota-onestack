@@ -30,24 +30,33 @@ export interface SubstatusReasonDialogProps {
   fromSubstatus: ProcurementSubstatus | null;
   toSubstatus: ProcurementSubstatus | null;
   quoteIdn: string | null;
+  /**
+   * Brand of the (quote, brand) card being moved. `""` → unbranded; `null` →
+   * dialog closed / not applicable.
+   */
+  brand: string | null;
   onConfirm: (reason: string) => void | Promise<void>;
   onCancel: () => void;
   submitting?: boolean;
 }
 
 /**
- * Confirmation dialog shown when a user drags a card backward on the kanban.
- * A non-empty reason is required (trimmed). Cancel rolls back the optimistic
- * drag in the parent.
+ * Confirmation dialog shown when a user drags a (quote, brand) card backward
+ * on the kanban. A non-empty reason is required (trimmed). Cancel rolls back
+ * the optimistic drag in the parent.
  */
 export function SubstatusReasonDialog(props: SubstatusReasonDialogProps) {
-  const { open, onCancel, submitting = false, quoteIdn } = props;
+  const { open, onCancel, submitting = false, quoteIdn, brand } = props;
 
   // Remount the form whenever the dialog opens for a new transition — this
-  // resets local reason state without an effect+setState.
+  // resets local reason state without an effect+setState. Brand is part of
+  // the identity because the same quote can have multiple cards in flight.
   const formKey = open
-    ? `${quoteIdn ?? ""}-${props.fromSubstatus ?? ""}-${props.toSubstatus ?? ""}`
+    ? `${quoteIdn ?? ""}-${brand ?? ""}-${props.fromSubstatus ?? ""}-${props.toSubstatus ?? ""}`
     : "closed";
+
+  const brandLabel =
+    brand === null ? "" : brand === "" ? " (без бренда)" : ` (${brand})`;
 
   return (
     <Dialog
@@ -60,7 +69,7 @@ export function SubstatusReasonDialog(props: SubstatusReasonDialogProps) {
         <DialogHeader>
           <DialogTitle>Возврат на предыдущий этап</DialogTitle>
           <DialogDescription>
-            {quoteIdn ? `${quoteIdn}: ` : ""}
+            {quoteIdn ? `${quoteIdn}${brandLabel}: ` : ""}
             {props.fromSubstatus
               ? SUBSTATUS_LABELS_RU[props.fromSubstatus]
               : ""}

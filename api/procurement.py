@@ -1,9 +1,12 @@
 """
 Procurement sub-status state machine API endpoints for Next.js frontend and AI agents.
 
-GET    /api/quotes/kanban                      — Quotes grouped by procurement_substatus
-POST   /api/quotes/{id}/substatus                — Transition a quote's sub-status
-GET    /api/quotes/{id}/status-history           — Full audit log for a quote
+GET    /api/quotes/kanban                      — (Quote, brand) cards grouped by substatus
+POST   /api/quotes/{id}/substatus              — Transition a (quote, brand)'s sub-status
+GET    /api/quotes/{id}/status-history         — Full audit log for a quote
+
+Unit of work on the kanban is (quote_id, brand) — a quote with N distinct
+brands flows through the procurement pipeline as N independent cards.
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user).
 Roles: procurement, admin, head_of_procurement (sales can read status-history).
@@ -23,7 +26,7 @@ logger = logging.getLogger(__name__)
 _PROCUREMENT_ROLES = {"procurement", "admin", "head_of_procurement"}
 _READ_HISTORY_ROLES = {"procurement", "admin", "head_of_procurement", "sales", "head_of_sales"}
 
-# Fixed set of procurement sub-statuses — matches migration 272 check constraint
+# Fixed set of procurement sub-statuses — matches migration 274 check constraint
 _PROCUREMENT_SUBSTATUSES = ("distributing", "searching_supplier", "waiting_prices", "prices_ready")
 
 
@@ -108,7 +111,7 @@ def _days_since(iso_timestamp: str | None) -> int:
 
 
 async def get_kanban(request) -> JSONResponse:
-    """Return quotes grouped by procurement_substatus for Kanban board.
+    """Return (quote, brand) cards grouped by procurement_substatus for Kanban board.
 
     Path: GET /api/quotes/kanban
     Params:
@@ -116,21 +119,21 @@ async def get_kanban(request) -> JSONResponse:
     Returns:
         {
           "status": "pending_procurement",
-          "columns": { <substatus>: [quote_row, ...] }
+          "columns": { <substatus>: [card_row, ...] }
         }
-        Each quote row:
-          - id (str)
+        Each card row is keyed by (quote_id, brand). A quote with 2 distinct
+        brands produces 2 cards.
+          - quote_id (str)
+          - brand (str) — '' for unbranded items
           - idn_quote (str)
           - customer_name (str | None)
           - procurement_substatus (str)
           - days_in_state (int)
-          - assignees (list[str]) — raw user UUIDs from quotes.assigned_procurement_users
-          - latest_reason (str | None)
-          - brands (list[str]) — distinct sorted quote_items.brand values
-          - manager_name (str | None) — МОП full name (resolved via quotes.created_by)
-          - procurement_user_names (list[str]) — МОЗ full names (resolved from assignees)
-          - invoice_sums (list[dict]) — per-supplier-invoice totals:
+          - manager_name (str | None) — МОП (quotes.created_by → full_name)
+          - procurement_user_names (list[str]) — МОЗ (distinct item.assigned_procurement_user for this brand → full_name)
+          - invoice_sums (list[dict]) — per-supplier-invoice totals restricted to this brand:
               [{"invoice_number": str, "currency": str, "total": float}, ...]
+          - latest_reason (str | None)
     Side Effects: none (read-only)
     Roles: procurement, admin, head_of_procurement
     """
@@ -154,59 +157,60 @@ async def get_kanban(request) -> JSONResponse:
 
     sb = get_supabase()
 
-    quotes_result = (
-        sb.table("quotes")
+    # Pull (quote, brand) rows joined with their parent quote + customer.
+    qbs_result = (
+        sb.table("quote_brand_substates")
         .select(
-            "id, idn_quote, procurement_substatus, updated_at, assigned_procurement_users, "
-            "created_by, customers!customer_id(name)"
+            "quote_id, brand, substatus, updated_at, "
+            "quotes!inner(id, idn_quote, workflow_status, organization_id, created_by, "
+            "customers!customer_id(name))"
         )
-        .eq("workflow_status", "pending_procurement")
-        .eq("organization_id", user["org_id"])
+        .eq("quotes.workflow_status", "pending_procurement")
+        .eq("quotes.organization_id", user["org_id"])
         .execute()
     )
-    quote_rows = _rows(quotes_result)
-    quote_ids = [str(q["id"]) for q in quote_rows if q.get("id")]
+    qbs_rows = _rows(qbs_result)
 
-    # Batch-fetch latest status_history row per quote (single query, no N+1).
-    latest_by_quote: dict[str, dict] = {}
+    quote_ids = list({str(r["quote_id"]) for r in qbs_rows if r.get("quote_id")})
+
+    # Batch-fetch status_history: latest row per (quote_id, brand, to_substatus=current).
+    history_by_key: dict[tuple[str, str], list[dict]] = {}
     if quote_ids:
         history_result = (
             sb.table("status_history")
-            .select("quote_id, to_substatus, transitioned_at, reason")
+            .select("quote_id, brand, to_substatus, transitioned_at, reason")
             .in_("quote_id", quote_ids)
             .order("transitioned_at", desc=True)
             .execute()
         )
         for row in _rows(history_result):
             qid = str(row.get("quote_id"))
-            if qid not in latest_by_quote:
-                latest_by_quote[qid] = row
+            brand = row.get("brand") or ""
+            history_by_key.setdefault((qid, brand), []).append(row)
 
-    # Batch-fetch quote_items: brands + per-item (id, quantity) for invoice totals.
-    brands_by_quote: dict[str, set[str]] = {}
+    # Batch-fetch items: group by (quote_id, brand) for МОЗ + invoice_sums scoping.
+    items_by_key: dict[tuple[str, str], list[dict]] = {}
     item_qty_by_id: dict[str, float] = {}
-    item_quote_by_id: dict[str, str] = {}
+    item_key_by_id: dict[str, tuple[str, str]] = {}  # item_id -> (quote_id, brand)
     if quote_ids:
         items_result = (
             sb.table("quote_items")
-            .select("id, quote_id, brand, quantity")
+            .select("id, quote_id, brand, quantity, assigned_procurement_user")
             .in_("quote_id", quote_ids)
             .execute()
         )
         for it in _rows(items_result):
             qid = str(it.get("quote_id"))
-            brand = it.get("brand")
-            if brand:
-                brands_by_quote.setdefault(qid, set()).add(str(brand))
+            brand = it.get("brand") or ""
+            key = (qid, brand)
+            items_by_key.setdefault(key, []).append(it)
             item_id = it.get("id")
             if item_id:
                 item_qty_by_id[str(item_id)] = float(it.get("quantity") or 0)
-                item_quote_by_id[str(item_id)] = qid
+                item_key_by_id[str(item_id)] = key
 
     # Batch-fetch supplier invoices for these quotes.
-    invoices_by_quote: dict[str, list[dict]] = {}
-    invoice_quote_by_id: dict[str, str] = {}
-    invoice_meta_by_id: dict[str, dict] = {}
+    invoice_meta_by_id: dict[str, dict] = {}  # inv_id -> {invoice_number, currency, quote_id}
     if quote_ids:
         invoices_result = (
             sb.table("invoices")
@@ -216,20 +220,18 @@ async def get_kanban(request) -> JSONResponse:
         )
         for inv in _rows(invoices_result):
             inv_id = str(inv.get("id"))
-            qid = str(inv.get("quote_id"))
-            invoice_quote_by_id[inv_id] = qid
             invoice_meta_by_id[inv_id] = {
                 "invoice_number": inv.get("invoice_number") or "",
                 "currency": inv.get("currency") or "",
+                "quote_id": str(inv.get("quote_id") or ""),
             }
-            invoices_by_quote.setdefault(qid, []).append(inv)
 
-    # Batch-fetch invoice_item_prices for these invoices and accumulate totals.
-    # Total = SUM(purchase_price_original × quote_items.quantity) per invoice.
-    # Currency falls back to invoice_item_prices.purchase_currency if invoice has none.
-    invoice_totals: dict[str, float] = {}
-    invoice_currency_from_prices: dict[str, str] = {}
-    invoice_ids = list(invoice_quote_by_id.keys())
+    # Batch-fetch invoice_item_prices. Per (invoice, item) line: price × item qty.
+    # Accumulate per (quote_id, brand, invoice_id) because each line's brand is
+    # derived from the item's brand.
+    sums_by_card_inv: dict[tuple[str, str, str], float] = {}
+    currency_fallback_by_inv: dict[str, str] = {}
+    invoice_ids = list(invoice_meta_by_id.keys())
     if invoice_ids:
         prices_result = (
             sb.table("invoice_item_prices")
@@ -245,33 +247,40 @@ async def get_kanban(request) -> JSONResponse:
                 price = float(p.get("purchase_price_original") or 0)
             except (TypeError, ValueError):
                 price = 0.0
-            invoice_totals[inv_id] = invoice_totals.get(inv_id, 0.0) + price * qty
-            # Capture first non-empty purchase_currency seen per invoice (fallback only).
+            key = item_key_by_id.get(item_id)
+            if not key:
+                continue
+            qid, brand = key
+            card_inv_key = (qid, brand, inv_id)
+            sums_by_card_inv[card_inv_key] = sums_by_card_inv.get(card_inv_key, 0.0) + price * qty
             cur = p.get("purchase_currency")
-            if cur and inv_id not in invoice_currency_from_prices:
-                invoice_currency_from_prices[inv_id] = str(cur)
+            if cur and inv_id not in currency_fallback_by_inv:
+                currency_fallback_by_inv[inv_id] = str(cur)
 
-    # Build invoice_sums list per quote — one entry per invoice that has priced items.
-    invoice_sums_by_quote: dict[str, list[dict]] = {}
-    for inv_id, total in invoice_totals.items():
-        qid = invoice_quote_by_id.get(inv_id)
-        if not qid:
+    # Build invoice_sums list per (quote, brand) — one entry per invoice with priced items in this brand.
+    invoice_sums_by_key: dict[tuple[str, str], list[dict]] = {}
+    for (qid, brand, inv_id), total in sums_by_card_inv.items():
+        if total == 0:
             continue
         meta = invoice_meta_by_id.get(inv_id, {})
-        currency = meta.get("currency") or invoice_currency_from_prices.get(inv_id, "")
-        invoice_sums_by_quote.setdefault(qid, []).append({
+        currency = meta.get("currency") or currency_fallback_by_inv.get(inv_id, "")
+        invoice_sums_by_key.setdefault((qid, brand), []).append({
             "invoice_number": meta.get("invoice_number", ""),
             "currency": currency,
             "total": round(total, 2),
         })
 
-    # Batch-resolve user names for МОП (created_by) + МОЗ (assigned_procurement_users).
+    # Batch-resolve user names: МОП (quotes.created_by) + МОЗ (items.assigned_procurement_user).
     user_ids_to_resolve: set[str] = set()
-    for q in quote_rows:
-        creator = q.get("created_by")
-        if creator:
-            user_ids_to_resolve.add(str(creator))
-        for uid in q.get("assigned_procurement_users") or []:
+    for r in qbs_rows:
+        parent = r.get("quotes") or {}
+        if isinstance(parent, dict):
+            creator = parent.get("created_by")
+            if creator:
+                user_ids_to_resolve.add(str(creator))
+    for items in items_by_key.values():
+        for it in items:
+            uid = it.get("assigned_procurement_user")
             if uid:
                 user_ids_to_resolve.add(str(uid))
 
@@ -289,53 +298,62 @@ async def get_kanban(request) -> JSONResponse:
 
     columns: dict[str, list[dict]] = {s: [] for s in _PROCUREMENT_SUBSTATUSES}
 
-    for q in quote_rows:
-        qid = str(q.get("id"))
-        substatus = q.get("procurement_substatus") or "distributing"
+    for r in qbs_rows:
+        qid = str(r.get("quote_id"))
+        brand = r.get("brand") or ""
+        substatus = r.get("substatus") or "distributing"
         if substatus not in columns:
             continue
 
-        latest = latest_by_quote.get(qid)
-        if latest and latest.get("to_substatus") == substatus:
-            days = _days_since(latest.get("transitioned_at"))
-            latest_reason = latest.get("reason") or None
-        else:
-            days = _days_since(q.get("updated_at"))
-            latest_reason = None
+        parent = r.get("quotes") or {}
+        if not isinstance(parent, dict):
+            continue
 
-        customer_data = q.get("customers") or {}
+        # days_in_state + latest_reason: first history row matching this (quote, brand, current substatus).
+        days = 0
+        latest_reason = None
+        history_rows = history_by_key.get((qid, brand), [])
+        matched = next(
+            (h for h in history_rows if h.get("to_substatus") == substatus),
+            None,
+        )
+        if matched:
+            days = _days_since(matched.get("transitioned_at"))
+            latest_reason = matched.get("reason") or None
+        else:
+            days = _days_since(r.get("updated_at"))
+
+        customer_data = parent.get("customers") or {}
         customer_name = customer_data.get("name") if isinstance(customer_data, dict) else None
 
-        assignees_raw = q.get("assigned_procurement_users") or []
-        if not isinstance(assignees_raw, list):
-            assignees_raw = []
-        assignees = [str(a) for a in assignees_raw if a]
-
-        creator_id = str(q.get("created_by")) if q.get("created_by") else None
+        creator_id = str(parent.get("created_by")) if parent.get("created_by") else None
         manager_name = name_by_user.get(creator_id) if creator_id else None
-        if manager_name == "":
+        if not manager_name:
             manager_name = None
 
-        procurement_user_names = [
-            name_by_user[uid] for uid in assignees if name_by_user.get(uid)
-        ]
+        # МОЗ: distinct assigned_procurement_user UUIDs among items for this (quote, brand).
+        moz_ids: set[str] = set()
+        for it in items_by_key.get((qid, brand), []):
+            uid = it.get("assigned_procurement_user")
+            if uid:
+                moz_ids.add(str(uid))
+        procurement_user_names = sorted(
+            (name_by_user[uid] for uid in moz_ids if name_by_user.get(uid))
+        )
 
-        brands = sorted(brands_by_quote.get(qid, set()))
-
-        invoice_sums = invoice_sums_by_quote.get(qid, [])
+        invoice_sums = invoice_sums_by_key.get((qid, brand), [])
 
         columns[substatus].append({
-            "id": qid,
-            "idn_quote": q.get("idn_quote"),
+            "quote_id": qid,
+            "brand": brand,
+            "idn_quote": parent.get("idn_quote"),
             "customer_name": customer_name,
             "procurement_substatus": substatus,
             "days_in_state": days,
-            "assignees": assignees,
-            "latest_reason": latest_reason,
-            "brands": brands,
             "manager_name": manager_name,
             "procurement_user_names": procurement_user_names,
             "invoice_sums": invoice_sums,
+            "latest_reason": latest_reason,
         })
 
     return JSONResponse(
@@ -350,17 +368,18 @@ async def get_kanban(request) -> JSONResponse:
 
 
 async def post_substatus(request, id: str) -> JSONResponse:
-    """Transition a quote's procurement sub-status.
+    """Transition a (quote, brand)'s procurement sub-status.
 
     Path: POST /api/quotes/{id}/substatus
     Params (JSON body):
+        brand: str (required) — brand of the card. Use "" for unbranded.
         to_substatus: str (required) — target sub-status
         reason: str (optional) — required for backward transitions
     Returns:
-        { "id": quote_id, "procurement_substatus": <new_substatus> }
+        { "quote_id": ..., "brand": ..., "procurement_substatus": <new_substatus> }
     Side Effects:
-        - Writes status_history audit row
-        - Updates quotes.procurement_substatus
+        - Writes status_history audit row (brand populated)
+        - Updates quote_brand_substates.substatus + updated_at + updated_by
     Roles: procurement, admin, head_of_procurement
     """
     user, err = _resolve_user_context(request, _PROCUREMENT_ROLES)
@@ -378,6 +397,18 @@ async def post_substatus(request, id: str) -> JSONResponse:
 
     to_substatus = (body.get("to_substatus") or "").strip()
     reason = (body.get("reason") or "").strip()
+    # brand is required but may be "" (unbranded) — distinguish absence from empty.
+    if "brand" not in body:
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "brand is required"}},
+            status_code=400,
+        )
+    brand = body.get("brand")
+    if not isinstance(brand, str):
+        return JSONResponse(
+            {"success": False, "error": {"code": "VALIDATION_ERROR", "message": "brand must be a string"}},
+            status_code=400,
+        )
 
     if not to_substatus:
         return JSONResponse(
@@ -388,6 +419,7 @@ async def post_substatus(request, id: str) -> JSONResponse:
     try:
         updated = transition_substatus(
             quote_id=id,
+            brand=brand,
             to_substatus=to_substatus,
             user_id=user["id"],
             user_roles=list(user["role_slugs"]),
@@ -419,8 +451,9 @@ async def post_substatus(request, id: str) -> JSONResponse:
         {
             "success": True,
             "data": {
-                "id": str(updated.get("id", id)),
-                "procurement_substatus": updated.get("procurement_substatus", to_substatus),
+                "quote_id": str(updated.get("quote_id", id)),
+                "brand": updated.get("brand", brand),
+                "procurement_substatus": updated.get("substatus", to_substatus),
             },
         },
         status_code=200,
@@ -438,8 +471,9 @@ async def get_status_history(request, id: str) -> JSONResponse:
     Path: GET /api/quotes/{id}/status-history
     Returns:
         List of history rows ordered by transitioned_at DESC. Each row:
-        id, from_status, from_substatus, to_status, to_substatus,
+        id, brand, from_status, from_substatus, to_status, to_substatus,
         transitioned_at, transitioned_by, transitioned_by_name, reason.
+        `brand` is null for quote-level transitions, non-null for per-brand ones.
     Roles: procurement, admin, head_of_procurement, sales, head_of_sales
     """
     _, err = _resolve_user_context(request, _READ_HISTORY_ROLES)
@@ -450,7 +484,7 @@ async def get_status_history(request, id: str) -> JSONResponse:
 
     history_result = (
         sb.table("status_history")
-        .select("id, from_status, from_substatus, to_status, to_substatus, "
+        .select("id, brand, from_status, from_substatus, to_status, to_substatus, "
                 "transitioned_at, transitioned_by, reason")
         .eq("quote_id", id)
         .order("transitioned_at", desc=True)
@@ -477,6 +511,7 @@ async def get_status_history(request, id: str) -> JSONResponse:
         actor_id = str(r.get("transitioned_by")) if r.get("transitioned_by") else None
         enriched.append({
             "id": str(r.get("id")),
+            "brand": r.get("brand"),  # None for quote-level rows, str for per-brand rows
             "from_status": r.get("from_status"),
             "from_substatus": r.get("from_substatus"),
             "to_status": r.get("to_status"),

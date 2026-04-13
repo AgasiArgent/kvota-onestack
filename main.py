@@ -19635,6 +19635,25 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
             .eq("quote_id", quote_id) \
             .execute()
 
+        # Auto-advance (quote, brand) substates out of 'distributing' when the
+        # brand is fully routed. Safe/idempotent — silent on failure.
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+        try:
+            brand_rows = supabase.table("quote_items") \
+                .select("brand") \
+                .in_("id", item_ids) \
+                .execute()
+            from services.workflow_service import maybe_advance_after_distribution
+            brands_affected = {(it.get("brand") or "") for it in (brand_rows.data or [])}
+            for b in brands_affected:
+                try:
+                    maybe_advance_after_distribution(quote_id, b, user["id"])
+                except Exception as e:
+                    _log.warning(f"auto-advance failed for {quote_id}/{b!r}: {e}")
+        except Exception as e:
+            _log.warning(f"auto-advance brand fetch failed for {quote_id}: {e}")
+
         return JSONResponse({"success": True, "updated": len(item_ids)})
 
     except Exception as e:
@@ -19748,6 +19767,26 @@ async def api_bulk_update_items(quote_id: str, session, request):
                     .eq("id", item_id) \
                     .execute()
                 updated += 1
+
+        # Auto-advance (quote, brand) substates out of 'distributing' when the
+        # brand is fully routed. is_unavailable toggles can complete a brand.
+        # Safe/idempotent — silent on failure.
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+        try:
+            brand_rows = supabase.table("quote_items") \
+                .select("brand") \
+                .in_("id", list(valid_item_ids)) \
+                .execute()
+            from services.workflow_service import maybe_advance_after_distribution
+            brands_affected = {(it.get("brand") or "") for it in (brand_rows.data or [])}
+            for b in brands_affected:
+                try:
+                    maybe_advance_after_distribution(quote_id, b, user["id"])
+                except Exception as e:
+                    _log.warning(f"auto-advance failed for {quote_id}/{b!r}: {e}")
+        except Exception as e:
+            _log.warning(f"auto-advance brand fetch failed for {quote_id}: {e}")
 
         return JSONResponse({"success": True, "updated": updated})
 
@@ -48431,6 +48470,96 @@ async def post_quote_substatus(request, quote_id: str):
 @rt("/api/quotes/{quote_id}/status-history", methods=["GET"])
 async def get_quote_status_history(request, quote_id: str):
     return await api_get_status_history(request, quote_id)
+
+
+@rt("/api/procurement/{quote_id}/check-distribution", methods=["POST"])
+async def post_check_distribution(request, quote_id: str):
+    """Trigger auto-advance for a (quote, brand) after МОЗ assignment.
+
+    Called by the frontend Server Action (procurement-distribution/api/mutations.ts)
+    after it writes assigned_procurement_user directly to Supabase. Accepts:
+        body: {brand?: str}  — if omitted, checks every brand on the quote.
+
+    If the brand is fully routed (every item has assigned_procurement_user or
+    is_unavailable=true), moves quote_brand_substates.substatus from
+    'distributing' to 'searching_supplier' and writes a status_history row.
+    Idempotent — no-ops if already past 'distributing' or not fully routed.
+
+    Auth: JWT via ApiAuthMiddleware (request.state.api_user).
+    Roles: procurement, admin, head_of_procurement.
+    """
+    api_user = getattr(request.state, "api_user", None)
+    if not api_user:
+        return JSONResponse(
+            {"success": False, "error": {"code": "UNAUTHORIZED", "message": "Authentication required"}},
+            status_code=401,
+        )
+    user_id = str(api_user.id)
+
+    # Role check via DB (same pattern as api/procurement.py).
+    supabase = get_supabase()
+    om = supabase.table("organization_members") \
+        .select("organization_id") \
+        .eq("user_id", user_id) \
+        .eq("status", "active") \
+        .limit(1) \
+        .execute()
+    om_rows = om.data or []
+    if not om_rows:
+        return JSONResponse(
+            {"success": False, "error": {"code": "FORBIDDEN", "message": "No active organization"}},
+            status_code=403,
+        )
+    org_id = str(om_rows[0].get("organization_id", ""))
+    roles_result = supabase.table("user_roles") \
+        .select("roles!inner(slug)") \
+        .eq("user_id", user_id) \
+        .eq("organization_id", org_id) \
+        .execute()
+    role_slugs: set[str] = set()
+    for row in (roles_result.data or []):
+        rd = row.get("roles")
+        if isinstance(rd, dict) and rd.get("slug"):
+            role_slugs.add(str(rd["slug"]))
+    if not role_slugs & {"procurement", "admin", "head_of_procurement"}:
+        return JSONResponse(
+            {"success": False, "error": {"code": "FORBIDDEN", "message": "Insufficient permissions"}},
+            status_code=403,
+        )
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    from services.workflow_service import maybe_advance_after_distribution
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    # If brand provided → only that one. Else → every brand on the quote.
+    advanced: list[dict] = []
+    brand_val = body.get("brand") if isinstance(body, dict) else None
+    if isinstance(brand_val, str):
+        brands_to_check = {brand_val}
+    else:
+        items = supabase.table("quote_items") \
+            .select("brand") \
+            .eq("quote_id", quote_id) \
+            .execute()
+        brands_to_check = {(it.get("brand") or "") for it in (items.data or [])}
+
+    for b in brands_to_check:
+        try:
+            result = maybe_advance_after_distribution(quote_id, b, user_id)
+            if result:
+                advanced.append({
+                    "brand": result.get("brand", b),
+                    "substatus": result.get("substatus"),
+                })
+        except Exception as e:
+            _log.warning(f"check-distribution failed for {quote_id}/{b!r}: {e}")
+
+    return JSONResponse({"success": True, "data": {"advanced": advanced}}, status_code=200)
 
 
 # --- Cron JSON API (for scheduled background tasks) ---

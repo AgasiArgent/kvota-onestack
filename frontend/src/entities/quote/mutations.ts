@@ -925,6 +925,12 @@ export async function patchQuote(
 export interface StatusHistoryEntry {
   id: string;
   quote_id: string;
+  /**
+   * Brand this transition applies to. `null` means a quote-level transition
+   * (no brand scope); a string (possibly `""` for unbranded) means the
+   * transition only moved that (quote, brand) slice on the kanban.
+   */
+  brand: string | null;
   from_status: string | null;
   to_status: string;
   from_substatus: string | null;
@@ -962,16 +968,18 @@ export async function fetchStatusHistory(
 
 export interface SubstatusTransitionResult {
   quote_id: string;
-  from_substatus: string | null;
-  to_substatus: string;
+  brand: string;
+  procurement_substatus: string;
 }
 
 /**
- * POST /api/quotes/{id}/substatus — moves a quote between procurement kanban
- * columns. Backward moves require a non-empty reason (validated server-side).
+ * POST /api/quotes/{id}/substatus — moves a (quote, brand) card between
+ * procurement kanban columns. Backward moves require a non-empty reason
+ * (validated server-side). `brand` is required; use `""` for unbranded slices.
  */
 export async function transitionSubstatus(
   quoteId: string,
+  brand: string,
   toSubstatus: string,
   reason?: string
 ): Promise<SubstatusTransitionResult> {
@@ -989,6 +997,7 @@ export async function transitionSubstatus(
         : {}),
     },
     body: JSON.stringify({
+      brand,
       to_substatus: toSubstatus,
       ...(reason ? { reason } : {}),
     }),

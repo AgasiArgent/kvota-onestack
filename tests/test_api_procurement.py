@@ -1,10 +1,10 @@
 """
-Tests for api/procurement.py — Phase 4c Kanban + sub-status endpoints.
+Tests for api/procurement.py — Kanban at (quote, brand) grain + sub-status endpoints.
 
 Covers:
-- GET  /api/quotes/kanban                 — grouping, days_in_state, auth, role gate, status validation
-- POST /api/quotes/{id}/substatus          — happy path, validation errors, auth, role gate
-- GET  /api/quotes/{id}/status-history     — ordered list, actor name enrichment, empty case, auth
+- GET  /api/quotes/kanban                 — (quote, brand) cards, days_in_state, auth, role gate, status validation
+- POST /api/quotes/{id}/substatus          — happy path, brand required, validation errors, auth, role gate
+- GET  /api/quotes/{id}/status-history     — ordered list with brand field, actor name enrichment, empty case, auth
 """
 
 import os
@@ -30,7 +30,6 @@ def _make_request(
     body: dict | None = None,
     api_user_id: str | None = "user-1",
 ):
-    """Build a minimal Starlette-style request mock."""
     req = MagicMock()
     req.state = SimpleNamespace(api_user=SimpleNamespace(id=api_user_id) if api_user_id else None)
     req.query_params = query or {}
@@ -45,12 +44,6 @@ def _make_request(
 
 
 def _mock_supabase_with_user(role_slugs: list[str], org_id: str = "org-1"):
-    """Return a MagicMock supabase client that answers the auth lookups.
-
-    organization_members → [{"organization_id": org_id}]
-    user_roles           → one row per role slug
-    Any further .table() calls should be chained by the caller via .configure_mock.
-    """
     sb = MagicMock()
 
     def table_side_effect(name: str):
@@ -70,7 +63,6 @@ def _mock_supabase_with_user(role_slugs: list[str], org_id: str = "org-1"):
 
 
 def _run(coro):
-    """Run a coroutine from a sync test in a fresh event loop."""
     import asyncio
 
     loop = asyncio.new_event_loop()
@@ -111,49 +103,85 @@ class TestGetKanban:
         assert payload["error"]["code"] == "INVALID_STATUS"
 
     @patch("api.procurement.get_supabase")
-    def test_happy_path_groups_quotes_by_substatus(self, mock_get_sb):
-        # Separate mock: same side_effect handler across all calls
+    def test_happy_path_groups_cards_by_substatus(self, mock_get_sb):
+        """Two quotes, three cards: q1 has two brands (two cards), q2 has one unbranded card."""
         three_days_ago = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
 
-        quote_rows = [
+        # qbs rows — one per (quote, brand). q1 has both Siemens (distributing)
+        # and ABB (distributing); q2 has '' (waiting_prices).
+        qbs_rows = [
             {
-                "id": "q1",
-                "idn_quote": "Q-202604-0001",
-                "procurement_substatus": "distributing",
+                "quote_id": "q1",
+                "brand": "Siemens",
+                "substatus": "distributing",
                 "updated_at": three_days_ago,
-                "assigned_procurement_users": ["u1", "u2"],
-                "created_by": "creator-1",
-                "customers": {"name": "Acme"},
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
             },
             {
-                "id": "q2",
-                "idn_quote": "Q-202604-0002",
-                "procurement_substatus": "waiting_prices",
+                "quote_id": "q1",
+                "brand": "ABB",
+                "substatus": "distributing",
                 "updated_at": three_days_ago,
-                "assigned_procurement_users": [],
-                "created_by": None,
-                "customers": {"name": "Beta"},
+                "quotes": {
+                    "id": "q1",
+                    "idn_quote": "Q-202604-0001",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": "creator-1",
+                    "customers": {"name": "Acme"},
+                },
+            },
+            {
+                "quote_id": "q2",
+                "brand": "",
+                "substatus": "waiting_prices",
+                "updated_at": three_days_ago,
+                "quotes": {
+                    "id": "q2",
+                    "idn_quote": "Q-202604-0002",
+                    "workflow_status": "pending_procurement",
+                    "organization_id": "org-1",
+                    "created_by": None,
+                    "customers": {"name": "Beta"},
+                },
             },
         ]
         history_rows = [
             {
                 "quote_id": "q1",
+                "brand": "Siemens",
+                "to_substatus": "distributing",
+                "transitioned_at": three_days_ago,
+                "reason": "",
+            },
+            {
+                "quote_id": "q1",
+                "brand": "ABB",
                 "to_substatus": "distributing",
                 "transitioned_at": three_days_ago,
                 "reason": "",
             },
             {
                 "quote_id": "q2",
+                "brand": "",
                 "to_substatus": "waiting_prices",
                 "transitioned_at": three_days_ago,
                 "reason": "price delayed",
             },
         ]
-        # Two items on q1 with brands; q1 invoice has both items priced.
+        # Items: q1 has 1 Siemens item (qty 2, assigned u1) + 1 ABB item (qty 5, assigned u2);
+        # q2 has 1 unbranded item (qty 1, no assignee).
         quote_items_rows = [
-            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2},
-            {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5},
-            {"id": "item-3", "quote_id": "q2", "brand": None, "quantity": 1},
+            {"id": "item-1", "quote_id": "q1", "brand": "Siemens", "quantity": 2, "assigned_procurement_user": "u1"},
+            {"id": "item-2", "quote_id": "q1", "brand": "ABB", "quantity": 5, "assigned_procurement_user": "u2"},
+            {"id": "item-3", "quote_id": "q2", "brand": None, "quantity": 1, "assigned_procurement_user": None},
         ]
         invoices_rows = [
             {
@@ -164,16 +192,18 @@ class TestGetKanban:
             },
         ]
         invoice_item_prices_rows = [
+            # item-1 is Siemens → this invoice line belongs to (q1, Siemens): 100 × 2 = 200
             {
                 "invoice_id": "inv-1",
                 "quote_item_id": "item-1",
-                "purchase_price_original": 100.0,  # 100 × 2 = 200
+                "purchase_price_original": 100.0,
                 "purchase_currency": "USD",
             },
+            # item-2 is ABB → this invoice line belongs to (q1, ABB): 50 × 5 = 250
             {
                 "invoice_id": "inv-1",
                 "quote_item_id": "item-2",
-                "purchase_price_original": 50.0,  # 50 × 5 = 250
+                "purchase_price_original": 50.0,
                 "purchase_currency": "USD",
             },
         ]
@@ -195,8 +225,8 @@ class TestGetKanban:
                 tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
                     {"roles": {"slug": "procurement"}}
                 ]
-            elif name == "quotes":
-                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = quote_rows
+            elif name == "quote_brand_substates":
+                tbl.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = qbs_rows
             elif name == "status_history":
                 tbl.select.return_value.in_.return_value.order.return_value.execute.return_value.data = history_rows
             elif name == "quote_items":
@@ -227,27 +257,43 @@ class TestGetKanban:
             "waiting_prices",
             "prices_ready",
         }
-        assert len(cols["distributing"]) == 1
-        q1 = cols["distributing"][0]
-        assert q1["id"] == "q1"
-        assert q1["customer_name"] == "Acme"
-        assert q1["days_in_state"] == 3
-        assert q1["assignees"] == ["u1", "u2"]
-        # New fields
-        assert q1["brands"] == ["ABB", "Siemens"]  # alphabetical
-        assert q1["manager_name"] == "Алиса Петрова"
-        assert q1["procurement_user_names"] == ["Борис Сидоров", "Виктор Орлов"]
-        assert q1["invoice_sums"] == [
-            {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 450.0}
+
+        # q1 contributes TWO cards to distributing (one per brand).
+        distributing_cards = cols["distributing"]
+        assert len(distributing_cards) == 2
+
+        by_brand = {c["brand"]: c for c in distributing_cards}
+        assert set(by_brand.keys()) == {"Siemens", "ABB"}
+
+        siemens_card = by_brand["Siemens"]
+        assert siemens_card["quote_id"] == "q1"
+        assert siemens_card["idn_quote"] == "Q-202604-0001"
+        assert siemens_card["customer_name"] == "Acme"
+        assert siemens_card["procurement_substatus"] == "distributing"
+        assert siemens_card["days_in_state"] == 3
+        assert siemens_card["manager_name"] == "Алиса Петрова"
+        assert siemens_card["procurement_user_names"] == ["Борис Сидоров"]
+        assert siemens_card["invoice_sums"] == [
+            {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 200.0}
         ]
+
+        abb_card = by_brand["ABB"]
+        assert abb_card["procurement_user_names"] == ["Виктор Орлов"]
+        assert abb_card["invoice_sums"] == [
+            {"invoice_number": "INV-01-Q-202604-0001", "currency": "USD", "total": 250.0}
+        ]
+
+        # q2 — unbranded card in waiting_prices.
         assert len(cols["waiting_prices"]) == 1
-        q2 = cols["waiting_prices"][0]
-        assert q2["latest_reason"] == "price delayed"
-        # q2 has no brands, no manager, no procurement assignees, no priced invoices
-        assert q2["brands"] == []
-        assert q2["manager_name"] is None
-        assert q2["procurement_user_names"] == []
-        assert q2["invoice_sums"] == []
+        q2_card = cols["waiting_prices"][0]
+        assert q2_card["quote_id"] == "q2"
+        assert q2_card["brand"] == ""
+        assert q2_card["latest_reason"] == "price delayed"
+        assert q2_card["manager_name"] is None
+        assert q2_card["procurement_user_names"] == []
+        assert q2_card["invoice_sums"] == []
+
+        # Empty columns remain empty.
         assert cols["searching_supplier"] == []
         assert cols["prices_ready"] == []
 
@@ -260,14 +306,17 @@ class TestGetKanban:
 class TestPostSubstatus:
     @patch("api.procurement.get_supabase")
     def test_requires_authentication(self, mock_get_sb):
-        req = _make_request(body={"to_substatus": "searching_supplier"}, api_user_id=None)
+        req = _make_request(
+            body={"brand": "ABB", "to_substatus": "searching_supplier"},
+            api_user_id=None,
+        )
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 401
 
     @patch("api.procurement.get_supabase")
     def test_rejects_sales_role(self, mock_get_sb):
         mock_get_sb.return_value = _mock_supabase_with_user(["sales"])
-        req = _make_request(body={"to_substatus": "searching_supplier"})
+        req = _make_request(body={"brand": "ABB", "to_substatus": "searching_supplier"})
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 403
 
@@ -275,8 +324,10 @@ class TestPostSubstatus:
     @patch("api.procurement.get_supabase")
     def test_happy_path_forward_transition(self, mock_get_sb, mock_transition):
         mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
-        mock_transition.return_value = {"id": "q1", "procurement_substatus": "searching_supplier"}
-        req = _make_request(body={"to_substatus": "searching_supplier"})
+        mock_transition.return_value = {
+            "quote_id": "q1", "brand": "ABB", "substatus": "searching_supplier"
+        }
+        req = _make_request(body={"brand": "ABB", "to_substatus": "searching_supplier"})
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 200
 
@@ -284,15 +335,42 @@ class TestPostSubstatus:
 
         payload = json.loads(resp.body)
         assert payload["success"] is True
+        assert payload["data"]["brand"] == "ABB"
         assert payload["data"]["procurement_substatus"] == "searching_supplier"
-        mock_transition.assert_called_once()
+        # Transition called with brand kw.
+        _, kwargs = mock_transition.call_args
+        assert kwargs["brand"] == "ABB"
+
+    @patch("api.procurement.get_supabase")
+    def test_missing_brand_is_validation_error(self, mock_get_sb):
+        mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
+        req = _make_request(body={"to_substatus": "searching_supplier"})
+        resp = _run(post_substatus(req, "q1"))
+        assert resp.status_code == 400
+        import json
+
+        payload = json.loads(resp.body)
+        assert payload["error"]["code"] == "VALIDATION_ERROR"
+        assert "brand" in payload["error"]["message"].lower()
+
+    @patch("api.procurement.transition_substatus")
+    @patch("api.procurement.get_supabase")
+    def test_empty_string_brand_is_accepted(self, mock_get_sb, mock_transition):
+        """brand='' is valid (unbranded items)."""
+        mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
+        mock_transition.return_value = {
+            "quote_id": "q1", "brand": "", "substatus": "searching_supplier"
+        }
+        req = _make_request(body={"brand": "", "to_substatus": "searching_supplier"})
+        resp = _run(post_substatus(req, "q1"))
+        assert resp.status_code == 200
 
     @patch("api.procurement.transition_substatus")
     @patch("api.procurement.get_supabase")
     def test_reason_required_error(self, mock_get_sb, mock_transition):
         mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
         mock_transition.side_effect = ValueError("Reason required for backward transitions")
-        req = _make_request(body={"to_substatus": "distributing"})
+        req = _make_request(body={"brand": "ABB", "to_substatus": "distributing"})
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 400
 
@@ -308,7 +386,7 @@ class TestPostSubstatus:
         mock_transition.side_effect = ValueError(
             "Invalid substatus transition: pending_procurement/distributing → prices_ready"
         )
-        req = _make_request(body={"to_substatus": "prices_ready"})
+        req = _make_request(body={"brand": "ABB", "to_substatus": "prices_ready"})
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 400
 
@@ -319,10 +397,10 @@ class TestPostSubstatus:
 
     @patch("api.procurement.transition_substatus")
     @patch("api.procurement.get_supabase")
-    def test_quote_not_found_error(self, mock_get_sb, mock_transition):
+    def test_quote_brand_not_found_error(self, mock_get_sb, mock_transition):
         mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
-        mock_transition.side_effect = ValueError("Quote q-missing not found")
-        req = _make_request(body={"to_substatus": "searching_supplier"})
+        mock_transition.side_effect = ValueError("Quote/brand not found: q-missing/'ABB'")
+        req = _make_request(body={"brand": "ABB", "to_substatus": "searching_supplier"})
         resp = _run(post_substatus(req, "q-missing"))
         assert resp.status_code == 404
 
@@ -334,7 +412,7 @@ class TestPostSubstatus:
     @patch("api.procurement.get_supabase")
     def test_missing_to_substatus_is_validation_error(self, mock_get_sb):
         mock_get_sb.return_value = _mock_supabase_with_user(["procurement"])
-        req = _make_request(body={})
+        req = _make_request(body={"brand": "ABB"})
         resp = _run(post_substatus(req, "q1"))
         assert resp.status_code == 400
 
@@ -357,10 +435,11 @@ class TestGetStatusHistory:
         assert resp.status_code == 401
 
     @patch("api.procurement.get_supabase")
-    def test_returns_ordered_list_with_actor_name(self, mock_get_sb):
+    def test_returns_ordered_list_with_brand_and_actor(self, mock_get_sb):
         history_rows = [
             {
                 "id": "h2",
+                "brand": "ABB",
                 "from_status": "pending_procurement",
                 "from_substatus": "searching_supplier",
                 "to_status": "pending_procurement",
@@ -371,6 +450,7 @@ class TestGetStatusHistory:
             },
             {
                 "id": "h1",
+                "brand": None,  # quote-level historical row (pre-refactor)
                 "from_status": "pending_procurement",
                 "from_substatus": "distributing",
                 "to_status": "pending_procurement",
@@ -414,7 +494,9 @@ class TestGetStatusHistory:
         assert payload["success"] is True
         assert len(payload["data"]) == 2
         assert payload["data"][0]["id"] == "h2"
+        assert payload["data"][0]["brand"] == "ABB"
         assert payload["data"][0]["transitioned_by_name"] == "Иван Иванов"
+        assert payload["data"][1]["brand"] is None  # pre-brand rows stay nullable
 
     @patch("api.procurement.get_supabase")
     def test_empty_history(self, mock_get_sb):

@@ -3,7 +3,12 @@ import {
   PROCUREMENT_SUBSTATUSES,
   SUBSTATUS_LABELS_RU,
 } from "@/shared/lib/workflow-substates";
-import type { KanbanColumns } from "../model/types";
+import {
+  brandCardKey,
+  parseBrandCardKey,
+  type KanbanBrandCard,
+  type KanbanColumns,
+} from "../model/types";
 
 /**
  * Board-layout invariants. We verify that the 4 column keys and their Russian
@@ -39,20 +44,7 @@ describe("KanbanBoard — column configuration", () => {
 
   it("card counts can be derived per column from KanbanColumns shape", () => {
     const state: KanbanColumns = {
-      distributing: [
-        {
-          id: "q1",
-          idn_quote: "Q-202604-0001",
-          customer_name: "Acme",
-          days_in_state: 2,
-          latest_reason: null,
-          procurement_substatus: "distributing",
-          brands: [],
-          manager_name: null,
-          procurement_user_names: [],
-          invoice_sums: [],
-        },
-      ],
+      distributing: [makeCard({ quote_id: "q1", brand: "ABB" })],
       searching_supplier: [],
       waiting_prices: [],
       prices_ready: [],
@@ -62,3 +54,98 @@ describe("KanbanBoard — column configuration", () => {
     expect(counts.reduce((a, b) => a + b, 0)).toBe(1);
   });
 });
+
+describe("KanbanBrandCard — identity", () => {
+  it("brandCardKey joins quote_id and brand with a pipe", () => {
+    const card = makeCard({ quote_id: "q1", brand: "ABB" });
+    expect(brandCardKey(card)).toBe("q1|ABB");
+  });
+
+  it("brandCardKey uses empty string for unbranded cards", () => {
+    const card = makeCard({ quote_id: "q1", brand: "" });
+    expect(brandCardKey(card)).toBe("q1|");
+  });
+
+  it("parseBrandCardKey round-trips for branded cards", () => {
+    expect(parseBrandCardKey("q1|ABB")).toEqual({
+      quote_id: "q1",
+      brand: "ABB",
+    });
+  });
+
+  it("parseBrandCardKey round-trips for unbranded cards", () => {
+    expect(parseBrandCardKey("q1|")).toEqual({ quote_id: "q1", brand: "" });
+  });
+
+  it("parseBrandCardKey preserves pipes inside brand names", () => {
+    // Defensive: if a brand ever contained a literal '|', only the FIRST pipe
+    // separates quote_id from the rest.
+    expect(parseBrandCardKey("q1|A|B")).toEqual({
+      quote_id: "q1",
+      brand: "A|B",
+    });
+  });
+});
+
+describe("KanbanBoard — per-(quote, brand) slicing", () => {
+  it("allows the same quote to appear under multiple brands in one column", () => {
+    const q1Abb = makeCard({ quote_id: "q1", brand: "ABB" });
+    const q1Siemens = makeCard({ quote_id: "q1", brand: "Siemens" });
+    const state: KanbanColumns = {
+      distributing: [q1Abb, q1Siemens],
+      searching_supplier: [],
+      waiting_prices: [],
+      prices_ready: [],
+    };
+    expect(state.distributing).toHaveLength(2);
+    expect(brandCardKey(state.distributing[0])).not.toBe(
+      brandCardKey(state.distributing[1])
+    );
+  });
+
+  it("allows the same quote to span columns when brands are at different substatuses", () => {
+    const q1Abb = makeCard({
+      quote_id: "q1",
+      brand: "ABB",
+      procurement_substatus: "distributing",
+    });
+    const q1Siemens = makeCard({
+      quote_id: "q1",
+      brand: "Siemens",
+      procurement_substatus: "waiting_prices",
+    });
+    const state: KanbanColumns = {
+      distributing: [q1Abb],
+      searching_supplier: [],
+      waiting_prices: [q1Siemens],
+      prices_ready: [],
+    };
+    // Both cards share the same quote_id but live in different columns.
+    expect(state.distributing[0].quote_id).toBe(state.waiting_prices[0].quote_id);
+    expect(brandCardKey(state.distributing[0])).not.toBe(
+      brandCardKey(state.waiting_prices[0])
+    );
+  });
+
+  it("unbranded cards are valid and render as brand=''", () => {
+    const unbranded = makeCard({ quote_id: "q2", brand: "" });
+    expect(unbranded.brand).toBe("");
+    expect(brandCardKey(unbranded)).toBe("q2|");
+  });
+});
+
+function makeCard(overrides: Partial<KanbanBrandCard>): KanbanBrandCard {
+  return {
+    quote_id: "q1",
+    brand: "",
+    idn_quote: "Q-202604-0001",
+    customer_name: "Acme",
+    days_in_state: 2,
+    latest_reason: null,
+    procurement_substatus: "distributing",
+    manager_name: null,
+    procurement_user_names: [],
+    invoice_sums: [],
+    ...overrides,
+  };
+}

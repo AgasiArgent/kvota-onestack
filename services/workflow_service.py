@@ -3090,35 +3090,41 @@ def can_transition_substatus(
 
 def transition_substatus(
     quote_id: str,
+    brand: str,
     to_substatus: str,
     user_id: str,
     user_roles: List[str],
     reason: str = "",
 ) -> dict:
-    """Validate and execute a sub-status transition atomically.
+    """Validate and execute a per-(quote, brand) sub-status transition atomically.
 
-    1. Fetch quote's current workflow_status + procurement_substatus
+    Unit of work on the procurement kanban is (quote_id, brand) — a quote with
+    N distinct brands moves through the pipeline as N independent rows. Empty
+    string brand means unbranded items.
+
+    1. Fetch the row from quote_brand_substates for (quote_id, brand)
     2. Validate transition is allowed (role, from→to, reason-if-required)
-    3. Write status_history audit row
-    4. Update quotes.procurement_substatus
-    5. Return the updated quote dict
+    3. Write status_history audit row with brand populated
+    4. Update quote_brand_substates.substatus + updated_at + updated_by
+    5. Return the updated dict ({quote_id, brand, substatus})
 
     Raises ValueError for invalid transitions (caller converts to HTTP 400/403).
     """
     sb = get_supabase()
 
-    # Fetch current state
-    quote_result = (
-        sb.table("quotes")
-        .select("id, workflow_status, procurement_substatus")
-        .eq("id", quote_id)
+    # Fetch current (quote, brand) state
+    qbs_result = (
+        sb.table("quote_brand_substates")
+        .select("quote_id, brand, substatus")
+        .eq("quote_id", quote_id)
+        .eq("brand", brand)
         .execute()
     )
-    if not quote_result.data:
-        raise ValueError(f"Quote {quote_id} not found")
-    quote = quote_result.data[0]
-    parent_status = quote["workflow_status"]
-    from_substatus = quote.get("procurement_substatus")
+    if not qbs_result.data:
+        raise ValueError(f"Quote/brand not found: {quote_id}/{brand!r}")
+    row = qbs_result.data[0]
+    from_substatus = row.get("substatus")
+    parent_status = "pending_procurement"  # qbs only exists under this parent
 
     allowed, transition = can_transition_substatus(
         parent_status, from_substatus, to_substatus, user_roles
@@ -3134,6 +3140,7 @@ def transition_substatus(
     # Write audit row
     sb.table("status_history").insert({
         "quote_id": quote_id,
+        "brand": brand,
         "from_status": parent_status,
         "from_substatus": from_substatus,
         "to_status": parent_status,  # parent unchanged for sub-state moves
@@ -3144,9 +3151,94 @@ def transition_substatus(
 
     # Update sub-status
     update_result = (
-        sb.table("quotes")
-        .update({"procurement_substatus": to_substatus})
-        .eq("id", quote_id)
+        sb.table("quote_brand_substates")
+        .update({
+            "substatus": to_substatus,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user_id,
+        })
+        .eq("quote_id", quote_id)
+        .eq("brand", brand)
         .execute()
     )
-    return update_result.data[0] if update_result.data else {"id": quote_id, "procurement_substatus": to_substatus}
+    if update_result.data:
+        return update_result.data[0]
+    return {"quote_id": quote_id, "brand": brand, "substatus": to_substatus}
+
+
+def maybe_advance_after_distribution(
+    quote_id: str,
+    brand: str,
+    user_id: str,
+) -> Optional[dict]:
+    """Auto-advance a (quote, brand) from 'distributing' to 'searching_supplier'
+    when every item belonging to that brand has either an assigned МОЗ or is
+    marked unavailable.
+
+    Idempotent: if the row is missing or already past 'distributing', returns
+    None without raising.
+
+    Returns the updated quote_brand_substates row, or None if no advance happened.
+    """
+    sb = get_supabase()
+
+    qbs_result = (
+        sb.table("quote_brand_substates")
+        .select("quote_id, brand, substatus")
+        .eq("quote_id", quote_id)
+        .eq("brand", brand)
+        .execute()
+    )
+    if not qbs_result.data:
+        return None
+    row = qbs_result.data[0]
+    if row.get("substatus") != "distributing":
+        return None
+
+    # Fetch items for this (quote, brand). COALESCE(brand,'') comparison must
+    # happen client-side since PostgREST lacks a COALESCE filter.
+    items_result = (
+        sb.table("quote_items")
+        .select("id, brand, assigned_procurement_user, is_unavailable")
+        .eq("quote_id", quote_id)
+        .execute()
+    )
+    items = [
+        it for it in (items_result.data or [])
+        if (it.get("brand") or "") == brand
+    ]
+    if not items:
+        return None
+
+    for it in items:
+        assigned = it.get("assigned_procurement_user")
+        unavailable = bool(it.get("is_unavailable"))
+        if not assigned and not unavailable:
+            return None  # at least one item still unrouted
+
+    # All items routed — advance to searching_supplier.
+    sb.table("status_history").insert({
+        "quote_id": quote_id,
+        "brand": brand,
+        "from_status": "pending_procurement",
+        "from_substatus": "distributing",
+        "to_status": "pending_procurement",
+        "to_substatus": "searching_supplier",
+        "transitioned_by": user_id,
+        "reason": "",
+    }).execute()
+
+    update_result = (
+        sb.table("quote_brand_substates")
+        .update({
+            "substatus": "searching_supplier",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user_id,
+        })
+        .eq("quote_id", quote_id)
+        .eq("brand", brand)
+        .execute()
+    )
+    if update_result.data:
+        return update_result.data[0]
+    return {"quote_id": quote_id, "brand": brand, "substatus": "searching_supplier"}

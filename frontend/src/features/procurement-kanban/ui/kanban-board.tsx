@@ -24,20 +24,28 @@ import {
   type ProcurementSubstatus,
 } from "@/shared/lib/workflow-substates";
 import { transitionSubstatus } from "@/entities/quote/mutations";
-import type { KanbanColumns, KanbanQuoteCard } from "../model/types";
+import {
+  brandCardKey,
+  type KanbanColumns,
+  type KanbanBrandCard,
+} from "../model/types";
 
 export interface KanbanBoardProps {
   initialColumns: KanbanColumns;
 }
 
 interface PendingBackwardMove {
-  card: KanbanQuoteCard;
+  card: KanbanBrandCard;
   from: ProcurementSubstatus;
   to: ProcurementSubstatus;
 }
 
 /**
  * Four-column kanban board with drag-and-drop transitions.
+ *
+ * Each card represents a single (quote, brand) slice. The same quote can
+ * appear in multiple columns simultaneously if its brands are at different
+ * substatuses — the kanban axis is (quote_id, brand), not quote_id alone.
  *
  * Optimistic update flow:
  *   1. Drop event → move card locally immediately.
@@ -49,78 +57,81 @@ interface PendingBackwardMove {
  */
 export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
   const [columns, setColumns] = useState<KanbanColumns>(initialColumns);
-  const [activeCard, setActiveCard] = useState<KanbanQuoteCard | null>(null);
+  const [activeCard, setActiveCard] = useState<KanbanBrandCard | null>(null);
   const [pendingBackward, setPendingBackward] =
     useState<PendingBackwardMove | null>(null);
   const [submittingReason, setSubmittingReason] = useState(false);
-  const [historyQuote, setHistoryQuote] = useState<KanbanQuoteCard | null>(
+  const [historyQuote, setHistoryQuote] = useState<KanbanBrandCard | null>(
     null
   );
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
   );
 
   function moveCard(
-    cardId: string,
+    cardKey: string,
     from: ProcurementSubstatus,
     to: ProcurementSubstatus,
     nextSubstatus?: ProcurementSubstatus
-  ): KanbanQuoteCard | null {
-    let moved: KanbanQuoteCard | null = null;
+  ): KanbanBrandCard | null {
+    let moved: KanbanBrandCard | null = null;
     setColumns((prev) => {
       const fromCol = prev[from];
-      const card = fromCol.find((c) => c.id === cardId);
+      const card = fromCol.find((c) => brandCardKey(c) === cardKey);
       if (!card) return prev;
       moved = card;
-      const updatedCard: KanbanQuoteCard = {
+      const updatedCard: KanbanBrandCard = {
         ...card,
         procurement_substatus: nextSubstatus ?? to,
         days_in_state: 0,
       };
       return {
         ...prev,
-        [from]: fromCol.filter((c) => c.id !== cardId),
+        [from]: fromCol.filter((c) => brandCardKey(c) !== cardKey),
         [to]: [updatedCard, ...prev[to]],
       };
     });
     return moved;
   }
 
-  function markPending(id: string, pending: boolean) {
-    setPendingIds((prev) => {
+  function markPending(key: string, pending: boolean) {
+    setPendingKeys((prev) => {
       const next = new Set(prev);
-      if (pending) next.add(id);
-      else next.delete(id);
+      if (pending) next.add(key);
+      else next.delete(key);
       return next;
     });
   }
 
   async function commitTransition(
-    card: KanbanQuoteCard,
+    card: KanbanBrandCard,
     from: ProcurementSubstatus,
     to: ProcurementSubstatus,
     reason?: string
   ) {
-    markPending(card.id, true);
+    const key = brandCardKey(card);
+    markPending(key, true);
     try {
-      await transitionSubstatus(card.id, to, reason);
+      await transitionSubstatus(card.quote_id, card.brand, to, reason);
       toast.success(
         `${card.idn_quote}: ${SUBSTATUS_LABELS_RU[from]} → ${SUBSTATUS_LABELS_RU[to]}`
       );
     } catch (err) {
       // Rollback: move the card back to its original column.
-      moveCard(card.id, to, from, from);
+      moveCard(key, to, from, from);
       const msg = err instanceof Error ? err.message : "Не удалось сохранить";
       toast.error(msg);
     } finally {
-      markPending(card.id, false);
+      markPending(key, false);
     }
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const card = event.active.data.current?.card as KanbanQuoteCard | undefined;
+    const card = event.active.data.current?.card as
+      | KanbanBrandCard
+      | undefined;
     if (card) setActiveCard(card);
   }
 
@@ -136,7 +147,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     const from = active.data.current?.fromSubstatus as
       | ProcurementSubstatus
       | undefined;
-    const card = active.data.current?.card as KanbanQuoteCard | undefined;
+    const card = active.data.current?.card as KanbanBrandCard | undefined;
     if (!from || !card) return;
     if (from === to) return; // no-op
     if (!isValidTransition(from, to)) {
@@ -145,7 +156,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     }
 
     // Optimistic move first so the UI feels instant.
-    moveCard(card.id, from, to);
+    moveCard(brandCardKey(card), from, to);
 
     if (isBackwardTransition(from, to)) {
       setPendingBackward({ card, from, to });
@@ -170,7 +181,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     if (!pendingBackward) return;
     const { card, from, to } = pendingBackward;
     // Roll back the optimistic move.
-    moveCard(card.id, to, from, from);
+    moveCard(brandCardKey(card), to, from, from);
     setPendingBackward(null);
   }
 
@@ -193,7 +204,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
                   : null
               }
               onCardClick={setHistoryQuote}
-              pendingIds={pendingIds}
+              pendingKeys={pendingKeys}
             />
           ))}
         </div>
@@ -209,6 +220,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
         fromSubstatus={pendingBackward?.from ?? null}
         toSubstatus={pendingBackward?.to ?? null}
         quoteIdn={pendingBackward?.card.idn_quote ?? null}
+        brand={pendingBackward?.card.brand ?? null}
         onConfirm={handleReasonConfirm}
         onCancel={handleReasonCancel}
         submitting={submittingReason}
@@ -216,7 +228,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
 
       <StatusHistoryPanel
         open={historyQuote !== null}
-        quoteId={historyQuote?.id ?? null}
+        quoteId={historyQuote?.quote_id ?? null}
         quoteIdn={historyQuote?.idn_quote ?? null}
         onClose={() => setHistoryQuote(null)}
       />
@@ -226,10 +238,10 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
 
 interface KanbanColumnProps {
   substatus: ProcurementSubstatus;
-  cards: KanbanQuoteCard[];
+  cards: KanbanBrandCard[];
   fromActive: ProcurementSubstatus | null;
-  onCardClick: (card: KanbanQuoteCard) => void;
-  pendingIds: Set<string>;
+  onCardClick: (card: KanbanBrandCard) => void;
+  pendingKeys: Set<string>;
 }
 
 function KanbanColumn({
@@ -237,7 +249,7 @@ function KanbanColumn({
   cards,
   fromActive,
   onCardClick,
-  pendingIds,
+  pendingKeys,
 }: KanbanColumnProps) {
   const isValidTarget =
     fromActive !== null &&
@@ -277,14 +289,17 @@ function KanbanColumn({
             Пусто
           </p>
         ) : (
-          cards.map((card) => (
-            <KanbanCard
-              key={card.id}
-              card={card}
-              onClick={onCardClick}
-              pending={pendingIds.has(card.id)}
-            />
-          ))
+          cards.map((card) => {
+            const key = brandCardKey(card);
+            return (
+              <KanbanCard
+                key={key}
+                card={card}
+                onClick={onCardClick}
+                pending={pendingKeys.has(key)}
+              />
+            );
+          })
         )}
       </div>
     </div>

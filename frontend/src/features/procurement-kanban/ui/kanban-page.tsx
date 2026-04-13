@@ -50,8 +50,8 @@ export function KanbanPage({ data }: KanbanPageProps) {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {totalCards === 0
-              ? "Нет заявок в работе"
-              : `${totalCards} ${pluralizeQuotes(totalCards)} в работе`}
+              ? "Нет карточек в работе"
+              : `${totalCards} ${pluralizeCards(totalCards)} в работе`}
           </p>
         </header>
 
@@ -62,11 +62,11 @@ export function KanbanPage({ data }: KanbanPageProps) {
   );
 }
 
-function pluralizeQuotes(n: number): string {
+function pluralizeCards(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return "заявка";
+  if (mod10 === 1 && mod100 !== 11) return "карточка";
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
-    return "заявки";
-  return "заявок";
+    return "карточки";
+  return "карточек";
 }
