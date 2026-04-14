@@ -98,13 +98,23 @@ async function sendTelegramNotification(data: RegistrationInput) {
   const text = lines.join("\n");
 
   const results = await Promise.allSettled(
-    chatIds.map((chat_id) =>
-      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id, text, parse_mode: "HTML" }),
-      })
-    )
+    chatIds.map(async (chat_id) => {
+      const res = await fetch(
+        `https://api.telegram.org/bot${token}/sendMessage`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id, text, parse_mode: "HTML" }),
+        }
+      );
+      // Telegram returns 400/403/429 for chat-not-found, bot-blocked, rate-limit.
+      // These are fulfilled HTTP responses — must throw to surface in allSettled.
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`Telegram HTTP ${res.status}: ${body.slice(0, 200)}`);
+      }
+      return res;
+    })
   );
 
   results.forEach((r, i) => {
