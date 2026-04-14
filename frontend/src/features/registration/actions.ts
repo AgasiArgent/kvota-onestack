@@ -71,9 +71,18 @@ export async function submitRegistration(
 
 async function sendTelegramNotification(data: RegistrationInput) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.ADMIN_TELEGRAM_CHAT_ID;
+  // Multi-chat support: prefer ADMIN_TELEGRAM_CHAT_IDS (comma-separated).
+  // Fallback to ADMIN_TELEGRAM_CHAT_ID for backwards compatibility.
+  const rawChatIds =
+    process.env.ADMIN_TELEGRAM_CHAT_IDS ??
+    process.env.ADMIN_TELEGRAM_CHAT_ID ??
+    "";
+  const chatIds = rawChatIds
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
-  if (!token || !chatId) return;
+  if (!token || chatIds.length === 0) return;
 
   const lines = [
     `📋 <b>Новая заявка на регистрацию</b>`,
@@ -86,13 +95,24 @@ async function sendTelegramNotification(data: RegistrationInput) {
   if (data.department) lines.push(`🏢 ${data.department}`);
   if (data.manager) lines.push(`👔 Руководитель: ${data.manager}`);
 
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: lines.join("\n"),
-      parse_mode: "HTML",
-    }),
+  const text = lines.join("\n");
+
+  const results = await Promise.allSettled(
+    chatIds.map((chat_id) =>
+      fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id, text, parse_mode: "HTML" }),
+      })
+    )
+  );
+
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(
+        `Telegram notify failed for chat_id=${chatIds[i]}:`,
+        r.reason
+      );
+    }
   });
 }
