@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
-import { assignBrandGroup } from "@/entities/quote";
+import { assignBrandGroup } from "@/entities/quote/server-actions";
 import type {
   QuoteWithBrandGroups,
   BrandGroup,

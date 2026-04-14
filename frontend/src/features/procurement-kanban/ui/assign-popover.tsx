@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
-import { assignBrandGroup } from "@/entities/quote";
+import { assignBrandGroup } from "@/entities/quote/server-actions";
 import { createClient } from "@/shared/lib/supabase/client";
 import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import type { KanbanBrandCard } from "../model/types";
