@@ -3749,7 +3749,6 @@ export type Database = {
           delivery_city: string | null
           cargo_type: string | null
           deal_type: string | null
-          assigned_procurement_users: Json | null
           assigned_logistics_user: string | null
           assigned_customs_user: string | null
           procurement_completed_at: string | null
@@ -3871,7 +3870,6 @@ export type Database = {
           delivery_city?: string | null
           cargo_type?: string | null
           deal_type?: string | null
-          assigned_procurement_users?: Json | null
           assigned_logistics_user?: string | null
           assigned_customs_user?: string | null
           procurement_completed_at?: string | null
@@ -3993,7 +3991,6 @@ export type Database = {
           delivery_city?: string | null
           cargo_type?: string | null
           deal_type?: string | null
-          assigned_procurement_users?: Json | null
           assigned_logistics_user?: string | null
           assigned_customs_user?: string | null
           procurement_completed_at?: string | null
