@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -24,6 +25,8 @@ import {
   type ProcurementSubstatus,
 } from "@/shared/lib/workflow-substates";
 import { transitionSubstatus } from "@/entities/quote/mutations";
+import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
+import { countUnassignedItems } from "../lib/count-unassigned";
 import {
   brandCardKey,
   type KanbanColumns,
@@ -32,7 +35,12 @@ import {
 
 export interface KanbanBoardProps {
   initialColumns: KanbanColumns;
+  workload: ProcurementUserWorkload[];
+  orgId: string;
 }
+
+const FORCED_ASSIGN_NOTICE =
+  "Не все позиции назначены. Назначьте оставшиеся.";
 
 interface PendingBackwardMove {
   card: KanbanBrandCard;
@@ -55,7 +63,12 @@ interface PendingBackwardMove {
  * Invalid drops are rejected visually at the column (useDroppable disabled)
  * but also defensively here so a malformed drop does nothing.
  */
-export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
+export function KanbanBoard({
+  initialColumns,
+  workload,
+  orgId,
+}: KanbanBoardProps) {
+  const router = useRouter();
   const [columns, setColumns] = useState<KanbanColumns>(initialColumns);
   const [activeCard, setActiveCard] = useState<KanbanBrandCard | null>(null);
   const [pendingBackward, setPendingBackward] =
@@ -65,6 +78,14 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     null
   );
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
+  // Which card (if any) has its assign popover open. Only one at a time.
+  const [openAssignCardKey, setOpenAssignCardKey] = useState<string | null>(
+    null
+  );
+  // If non-null, the drag-guard forced this card's popover open with a notice.
+  const [forcedAssignCardKey, setForcedAssignCardKey] = useState<string | null>(
+    null
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -135,7 +156,7 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     if (card) setActiveCard(card);
   }
 
-  function handleDragEnd(event: DragEndEvent) {
+  async function handleDragEnd(event: DragEndEvent) {
     setActiveCard(null);
     const { active, over } = event;
     if (!over) return;
@@ -153,6 +174,29 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
     if (!isValidTransition(from, to)) {
       toast.error("Недопустимый переход");
       return;
+    }
+
+    // Guard: moving out of "distributing" requires all items to be assigned.
+    // We check before the optimistic move so no rollback is needed on rejection.
+    if (from === "distributing" && to === "searching_supplier") {
+      try {
+        const unassigned = await countUnassignedItems(
+          card.quote_id,
+          card.brand
+        );
+        if (unassigned > 0) {
+          toast.error("Не все позиции назначены");
+          const key = brandCardKey(card);
+          setForcedAssignCardKey(key);
+          setOpenAssignCardKey(key);
+          return;
+        }
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Не удалось проверить позиции";
+        toast.error(msg);
+        return;
+      }
     }
 
     // Optimistic move first so the UI feels instant.
@@ -205,6 +249,19 @@ export function KanbanBoard({ initialColumns }: KanbanBoardProps) {
               }
               onCardClick={setHistoryQuote}
               pendingKeys={pendingKeys}
+              workload={workload}
+              orgId={orgId}
+              openAssignCardKey={openAssignCardKey}
+              forcedAssignCardKey={forcedAssignCardKey}
+              onAssignOpenChange={(key, open) => {
+                setOpenAssignCardKey(open ? key : null);
+                if (!open) setForcedAssignCardKey(null);
+              }}
+              onAssigned={() => {
+                setOpenAssignCardKey(null);
+                setForcedAssignCardKey(null);
+                router.refresh();
+              }}
             />
           ))}
         </div>
@@ -242,6 +299,12 @@ interface KanbanColumnProps {
   fromActive: ProcurementSubstatus | null;
   onCardClick: (card: KanbanBrandCard) => void;
   pendingKeys: Set<string>;
+  workload: ProcurementUserWorkload[];
+  orgId: string;
+  openAssignCardKey: string | null;
+  forcedAssignCardKey: string | null;
+  onAssignOpenChange: (cardKey: string, open: boolean) => void;
+  onAssigned: () => void;
 }
 
 function KanbanColumn({
@@ -250,6 +313,12 @@ function KanbanColumn({
   fromActive,
   onCardClick,
   pendingKeys,
+  workload,
+  orgId,
+  openAssignCardKey,
+  forcedAssignCardKey,
+  onAssignOpenChange,
+  onAssigned,
 }: KanbanColumnProps) {
   const isValidTarget =
     fromActive !== null &&
@@ -291,12 +360,20 @@ function KanbanColumn({
         ) : (
           cards.map((card) => {
             const key = brandCardKey(card);
+            const isAssignOpen = openAssignCardKey === key;
+            const isForced = forcedAssignCardKey === key;
             return (
               <KanbanCard
                 key={key}
                 card={card}
                 onClick={onCardClick}
                 pending={pendingKeys.has(key)}
+                workload={workload}
+                orgId={orgId}
+                assignOpen={isAssignOpen}
+                onAssignOpenChange={(open) => onAssignOpenChange(key, open)}
+                assignNotice={isForced ? FORCED_ASSIGN_NOTICE : undefined}
+                onAssigned={onAssigned}
               />
             );
           })

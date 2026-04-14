@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ProcurementUserWorkload } from "../model/types";
+import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 
 interface Props {
   users: ProcurementUserWorkload[];
@@ -12,6 +12,11 @@ interface Props {
   disabled?: boolean;
 }
 
+/**
+ * Searchable dropdown for selecting a procurement user (МОЗ). Shows current
+ * active-quote workload next to each name so dispatchers can balance load at
+ * a glance. Used on the distribution page and on kanban assign popovers.
+ */
 export function UserSearchSelect({
   users,
   value,

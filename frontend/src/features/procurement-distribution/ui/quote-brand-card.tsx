@@ -7,8 +7,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserSearchSelect } from "./user-search-select";
-import { assignBrandGroup } from "../api/mutations";
+import { UserSearchSelect } from "@/shared/ui/procurement/user-search-select";
+import { assignBrandGroup } from "@/entities/quote";
 import type {
   QuoteWithBrandGroups,
   BrandGroup,

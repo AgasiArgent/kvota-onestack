@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser, fetchProcurementWorkload } from "@/entities/user";
 import { DistributionPage } from "@/features/procurement-distribution";
-import {
-  fetchDistributionData,
-  fetchProcurementWorkload,
-} from "@/features/procurement-distribution/api/server-queries";
+import { fetchDistributionData } from "@/features/procurement-distribution/api/server-queries";
 
 export default async function ProcurementDistributionPage() {
   const user = await getSessionUser();

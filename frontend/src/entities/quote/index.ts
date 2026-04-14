@@ -54,3 +54,4 @@ export type {
   SubstatusTransitionResult,
   StatusHistoryEntry,
 } from "./mutations";
+export { assignBrandGroup } from "./server-actions";

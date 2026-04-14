@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Toaster } from "sonner";
+import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
 import type { KanbanResponse } from "../model/types";
 
 // Board is interactive only (dnd-kit). Rendering it on the server produces
@@ -29,13 +30,15 @@ const KanbanBoard = dynamic(
 
 export interface KanbanPageProps {
   data: KanbanResponse;
+  workload: ProcurementUserWorkload[];
+  orgId: string;
 }
 
 /**
  * Top-level kanban screen. Server component fetches state once; subsequent
  * board mutations happen client-side with optimistic updates.
  */
-export function KanbanPage({ data }: KanbanPageProps) {
+export function KanbanPage({ data, workload, orgId }: KanbanPageProps) {
   const totalCards = Object.values(data.columns).reduce(
     (sum, col) => sum + col.length,
     0
@@ -55,7 +58,11 @@ export function KanbanPage({ data }: KanbanPageProps) {
           </p>
         </header>
 
-        <KanbanBoard initialColumns={data.columns} />
+        <KanbanBoard
+          initialColumns={data.columns}
+          workload={workload}
+          orgId={orgId}
+        />
       </div>
       <Toaster position="top-right" richColors />
     </>

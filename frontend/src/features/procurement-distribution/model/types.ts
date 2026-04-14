@@ -30,9 +30,8 @@ export interface QuoteWithBrandGroups {
   brandGroups: BrandGroup[];
 }
 
-/** Procurement user with current workload (counted in quotes, not items) */
-export interface ProcurementUserWorkload {
-  user_id: string;
-  full_name: string | null;
-  active_quotes: number;
-}
+/**
+ * Re-export from shared so existing imports within this slice keep working.
+ * Canonical definition lives in `@/shared/types/procurement-user`.
+ */
+export type { ProcurementUserWorkload } from "@/shared/types/procurement-user";

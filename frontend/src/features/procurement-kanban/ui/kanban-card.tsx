@@ -4,6 +4,8 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { Clock } from "lucide-react";
+import type { ProcurementUserWorkload } from "@/shared/types/procurement-user";
+import { AssignPopover } from "./assign-popover";
 import {
   brandCardKey,
   type KanbanBrandCard,
@@ -14,6 +16,21 @@ export interface KanbanCardProps {
   card: KanbanBrandCard;
   onClick: (card: KanbanBrandCard) => void;
   pending?: boolean;
+  /** Procurement users with workload — required for distributing cards. */
+  workload?: ProcurementUserWorkload[];
+  /** Org id — required when the assign popover can be opened. */
+  orgId?: string;
+  /**
+   * Whether the inline assign popover is open. Controlled by Board so only
+   * one popover is visible at a time.
+   */
+  assignOpen?: boolean;
+  /** Called when the popover requests to open/close. */
+  onAssignOpenChange?: (open: boolean) => void;
+  /** Optional notice shown inside the popover (set by drag-guard). */
+  assignNotice?: string;
+  /** Called after a successful assignment. */
+  onAssigned?: () => void;
 }
 
 const EM_DASH = "—";
@@ -35,7 +52,20 @@ function formatInvoiceAmount(sum: KanbanInvoiceSum): string {
  * isolated so dnd-kit does not start a drag and the history panel does not
  * open.
  */
-export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) {
+export function KanbanCard({
+  card,
+  onClick,
+  pending = false,
+  workload,
+  orgId,
+  assignOpen = false,
+  onAssignOpenChange,
+  assignNotice,
+  onAssigned,
+}: KanbanCardProps) {
+  const isDistributing = card.procurement_substatus === "distributing";
+  const canAssign =
+    isDistributing && workload !== undefined && orgId !== undefined;
   const key = brandCardKey(card);
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
@@ -137,6 +167,20 @@ export function KanbanCard({ card, onClick, pending = false }: KanbanCardProps) 
           </p>
         )}
       </div>
+      {canAssign && workload && orgId && (
+        <AssignPopover
+          card={card}
+          users={workload}
+          orgId={orgId}
+          open={assignOpen}
+          onOpenChange={(next) => onAssignOpenChange?.(next)}
+          notice={assignNotice}
+          onAssigned={() => {
+            onAssignOpenChange?.(false);
+            onAssigned?.();
+          }}
+        />
+      )}
     </div>
   );
 }

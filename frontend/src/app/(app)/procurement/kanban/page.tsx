@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getSessionUser } from "@/entities/user";
+import { getSessionUser, fetchProcurementWorkload } from "@/entities/user";
 import { KanbanPage } from "@/features/procurement-kanban";
 import { fetchKanbanData } from "@/features/procurement-kanban/api/server-queries";
 
@@ -14,7 +14,11 @@ export default async function ProcurementKanbanPage() {
     user.roles.includes("procurement");
   if (!isAllowed) redirect("/quotes");
 
-  const data = await fetchKanbanData();
+  const orgId = user.orgId;
+  const [data, workload] = await Promise.all([
+    fetchKanbanData(),
+    fetchProcurementWorkload(orgId),
+  ]);
 
-  return <KanbanPage data={data} />;
+  return <KanbanPage data={data} workload={workload} orgId={orgId} />;
 }

@@ -4,6 +4,15 @@ import { createAdminClient } from "@/shared/lib/supabase/server";
 import { getSessionUser } from "@/entities/user";
 import { revalidatePath } from "next/cache";
 
+/**
+ * Assigns a brand-slice of quote items to a procurement user (МОЗ) and
+ * optionally pins the brand so future quotes with the same brand auto-route
+ * to the same user.
+ *
+ * Server Action — called both from the distribution page and from the kanban
+ * assign popover. Authorization is enforced server-side (admin,
+ * head_of_procurement, procurement_senior).
+ */
 export async function assignBrandGroup(
   itemIds: string[],
   userId: string,
@@ -57,5 +66,6 @@ export async function assignBrandGroup(
   }
 
   revalidatePath("/procurement/distribution");
+  revalidatePath("/procurement/kanban");
   return { success: true };
 }
