@@ -134,7 +134,7 @@ def get_overdue_quotes(org_id: str) -> list[dict]:
         client.table("quotes")
         .select("id, idn, workflow_status, stage_entered_at, "
                 "stage_deadline_override_hours, overdue_notified_at, "
-                "assigned_procurement_users, assigned_logistics_user, "
+                "assigned_logistics_user, "
                 "assigned_customs_user, created_by_user_id")
         .eq("organization_id", org_id)
         .is_("overdue_notified_at", "null")
@@ -142,11 +142,22 @@ def get_overdue_quotes(org_id: str) -> list[dict]:
     )
     deadlines_map = _fetch_deadlines_map(org_id)
 
+    quotes_data = resp.data or []
+
+    # Batch-resolve procurement assignments from quote_items (single source of truth)
+    # for quotes currently in procurement stage — avoids N+1 queries.
+    procurement_quote_ids = [
+        q["id"] for q in quotes_data if q.get("workflow_status") == "pending_procurement"
+    ]
+    procurement_users_by_quote = _fetch_procurement_users_by_quote(client, procurement_quote_ids)
+
     overdue = []
-    for q in (resp.data or []):
+    for q in quotes_data:
         timer = _build_timer(q, deadlines_map)
         if timer["status"] == "overdue":
-            assigned = _get_assigned_user_for_stage(q, timer["stage"])
+            assigned = _get_assigned_user_for_stage(
+                q, timer["stage"], procurement_users_by_quote
+            )
             overdue.append({
                 "quote_id": q["id"],
                 "idn": q.get("idn", ""),
@@ -159,10 +170,41 @@ def get_overdue_quotes(org_id: str) -> list[dict]:
     return overdue
 
 
-def _get_assigned_user_for_stage(quote: dict, stage: str) -> str | None:
+def _fetch_procurement_users_by_quote(
+    client, quote_ids: list[str]
+) -> dict[str, list[str]]:
+    """Fetch distinct procurement users per quote from quote_items.
+
+    Returns {quote_id: [user_id, ...]} for given quote_ids. Quotes with no
+    assigned items are omitted from the mapping.
+    """
+    if not quote_ids:
+        return {}
+    resp = (
+        client.table("quote_items")
+        .select("quote_id, assigned_procurement_user")
+        .in_("quote_id", quote_ids)
+        .not_.is_("assigned_procurement_user", "null")
+        .execute()
+    )
+    by_quote: dict[str, set[str]] = {}
+    for row in (resp.data or []):
+        qid = row.get("quote_id")
+        uid = row.get("assigned_procurement_user")
+        if not qid or not uid:
+            continue
+        by_quote.setdefault(qid, set()).add(uid)
+    return {qid: list(users) for qid, users in by_quote.items()}
+
+
+def _get_assigned_user_for_stage(
+    quote: dict,
+    stage: str,
+    procurement_users_by_quote: dict[str, list[str]] | None = None,
+) -> str | None:
     """Get the assigned user ID for the current stage."""
     if stage in ("pending_procurement",):
-        users = quote.get("assigned_procurement_users") or []
+        users = (procurement_users_by_quote or {}).get(quote.get("id")) or []
         return users[0] if users else None
     elif stage in ("pending_logistics", "pending_logistics_and_customs"):
         return quote.get("assigned_logistics_user")

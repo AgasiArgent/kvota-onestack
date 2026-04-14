@@ -2186,10 +2186,6 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
                 .execute()
 
             assigned_users_list = [group_procurement_user]
-            supabase.table("quotes") \
-                .update({"assigned_procurement_users": assigned_users_list}) \
-                .eq("id", quote_id) \
-                .execute()
 
             return {
                 "success": True,
@@ -2241,14 +2237,8 @@ def assign_procurement_users_to_quote(quote_id: str) -> Dict:
             else:
                 unassigned_brands.add(brand)
 
-        # Update quote with array of assigned procurement users
+        # Derived list of assigned procurement users (item-level is the source of truth).
         assigned_users_list = list(assigned_user_ids)
-
-        if assigned_users_list:
-            supabase.table("quotes") \
-                .update({"assigned_procurement_users": assigned_users_list}) \
-                .eq("id", quote_id) \
-                .execute()
 
         return {
             "success": True,
@@ -2606,7 +2596,7 @@ def get_quote_procurement_status(quote_id: str) -> Dict:
     try:
         # Get quote info
         quote_response = supabase.table("quotes") \
-            .select("assigned_procurement_users, procurement_completed_at, workflow_status") \
+            .select("procurement_completed_at, workflow_status") \
             .eq("id", quote_id) \
             .single() \
             .execute()
@@ -2623,6 +2613,13 @@ def get_quote_procurement_status(quote_id: str) -> Dict:
             .execute()
 
         items = items_response.data or []
+
+        # Derive distinct procurement users from items (single source of truth).
+        assigned_procurement_users = list({
+            item["assigned_procurement_user"]
+            for item in items
+            if item.get("assigned_procurement_user")
+        })
 
         # Calculate stats
         total_items = len(items)
@@ -2653,7 +2650,7 @@ def get_quote_procurement_status(quote_id: str) -> Dict:
         return {
             "quote_id": quote_id,
             "workflow_status": quote.get("workflow_status"),
-            "assigned_procurement_users": quote.get("assigned_procurement_users", []),
+            "assigned_procurement_users": assigned_procurement_users,
             "procurement_completed_at": quote.get("procurement_completed_at"),
             "total_items": total_items,
             "completed_items": completed_items,

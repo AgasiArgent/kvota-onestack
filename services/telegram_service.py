@@ -3218,10 +3218,11 @@ async def notify_assigned_users_of_status_change(
                 "error": "Database connection error"
             }
 
-        # Get quote details with all assigned users
+        # Get quote details with all assigned users.
+        # Procurement users are derived from quote_items (single source of truth).
         quote_response = supabase.table("quotes").select(
             "id, idn, created_by, organization_id, "
-            "assigned_procurement_users, assigned_logistics_user, assigned_customs_user, "
+            "assigned_logistics_user, assigned_customs_user, "
             "customer:customers(name)"
         ).eq("id", quote_id).execute()
 
@@ -3248,8 +3249,15 @@ async def notify_assigned_users_of_status_change(
         if creator_id and creator_id != actor_id:
             user_ids_to_notify.add(creator_id)
 
-        # Add procurement users
-        procurement_users = quote.get("assigned_procurement_users") or []
+        # Add procurement users — derived from quote_items (single source of truth)
+        items_response = supabase.table("quote_items").select(
+            "assigned_procurement_user"
+        ).eq("quote_id", quote_id).not_.is_("assigned_procurement_user", "null").execute()
+        procurement_users = list({
+            item["assigned_procurement_user"]
+            for item in (items_response.data or [])
+            if item.get("assigned_procurement_user")
+        })
         for user_id in procurement_users:
             if user_id and user_id != actor_id:
                 user_ids_to_notify.add(user_id)

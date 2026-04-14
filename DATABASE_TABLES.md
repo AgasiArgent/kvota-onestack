@@ -93,7 +93,6 @@
 - `customer_id` - Клиент
 - `workflow_status` - Статус в workflow (draft, pending_procurement, pending_logistics, pending_customs, pending_sales_review, pending_quote_control, pending_approval, approved, sent_to_client, client_negotiation, pending_spec_control, pending_signature, deal, rejected, cancelled)
 - `deal_type` - Тип сделки (supply/transit)
-- `assigned_procurement_users` - Массив UUID менеджеров по закупкам
 - `assigned_logistics_user` - Логист
 - `assigned_customs_user` - Менеджер ТО
 - `current_version_id` - Текущая версия КП

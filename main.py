@@ -5789,9 +5789,11 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
             q1 = supabase.table("quotes").select(_qs) \
                 .eq("organization_id", org_id).in_("customer_id", my_customer_ids).execute()
             q1_data = q1.data or []
-        # Also find quotes where user is assigned in any department
-        q2 = supabase.table("quotes").select(_qs) \
-            .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]).execute()
+        # Also find quotes where user is assigned in any department.
+        # Procurement assignment lives on quote_items now (single source of truth) —
+        # use an inner join so the parent row comes back when ≥1 item matches.
+        q2 = supabase.table("quotes").select(f"{_qs}, quote_items!inner(id)") \
+            .eq("organization_id", org_id).eq("quote_items.assigned_procurement_user", user_id).execute()
         q3 = supabase.table("quotes").select(_qs) \
             .eq("organization_id", org_id).eq("assigned_logistics_user", user_id).execute()
         q4 = supabase.table("quotes").select(_qs) \
@@ -5834,8 +5836,10 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
                 .eq("organization_id", org_id).in_("customer_id", my_customer_ids) \
                 .order("created_at", desc=True).limit(10).execute()
             rq1_data = rq1.data or []
-        rq2 = supabase.table("quotes").select(_rselect) \
-            .eq("organization_id", org_id).contains("assigned_procurement_users", [user_id]) \
+        # Procurement assignment is item-level — inner-join filters to quotes
+        # where ≥1 non-deleted item is assigned to this user.
+        rq2 = supabase.table("quotes").select(f"{_rselect}, quote_items!inner(id)") \
+            .eq("organization_id", org_id).eq("quote_items.assigned_procurement_user", user_id) \
             .order("created_at", desc=True).limit(10).execute()
         rq3 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).eq("assigned_logistics_user", user_id) \
@@ -5977,7 +5981,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
     Visibility logic (routing cascade):
     1. Admin users see ALL quotes
     2. Regular procurement users see quotes where:
-       a) They are in assigned_procurement_users array (sales_group routing), OR
+       a) They are assigned to ≥1 quote_item (item-level assignment, single source of truth), OR
        b) Quote items match their brand assignments (brand routing fallback)
     """
     # Check if user is admin - bypass brand filtering
@@ -5989,19 +5993,20 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
 
     quotes_with_details = []
 
-    # Step 1: For non-admin users, get quote IDs where user is in assigned_procurement_users
-    # This covers sales_group routing (and any future routing methods that write to this array)
+    # Step 1: For non-admin users, get quote IDs where user is assigned at item level.
+    # Source of truth is quote_items.assigned_procurement_user.
     assigned_quote_ids = set()
     if not is_admin:
         try:
-            assigned_result = supabase.table("quotes") \
-                .select("id") \
-                .eq("organization_id", org_id) \
-                .contains("assigned_procurement_users", [user_id]) \
+            assigned_result = supabase.table("quote_items") \
+                .select("quote_id") \
+                .eq("assigned_procurement_user", user_id) \
                 .execute()
-            assigned_quote_ids = set(q["id"] for q in (assigned_result.data or []))
+            assigned_quote_ids = set(
+                row["quote_id"] for row in (assigned_result.data or []) if row.get("quote_id")
+            )
         except Exception as e:
-            print(f"Warning: Could not query assigned_procurement_users: {e}")
+            print(f"Warning: Could not query item-level procurement assignments: {e}")
 
     # Step 2: Brand-based filtering (existing logic) + admin bypass
     if is_admin or my_brands or assigned_quote_ids:
@@ -16983,11 +16988,32 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
     # Filter by assignment for non-admin users
     # Department heads and top_manager bypass assignment check for their department
     if quote and user_id and "admin" not in user_roles and "top_manager" not in user_roles:
+        # Resolve procurement assignment via quote_items (single source of truth).
+        # Lazy-computed so non-procurement tab lookups don't hit the DB.
+        _procurement_assigned_cache: dict = {}
+
+        def _user_has_procurement_item(qid: str, uid: str) -> bool:
+            cached = _procurement_assigned_cache.get("has")
+            if cached is not None:
+                return cached
+            try:
+                result = get_supabase().table("quote_items") \
+                    .select("id") \
+                    .eq("quote_id", qid) \
+                    .eq("assigned_procurement_user", uid) \
+                    .limit(1) \
+                    .execute()
+                has = bool(result.data)
+            except Exception:
+                has = False
+            _procurement_assigned_cache["has"] = has
+            return has
+
         def is_assigned(tab_id):
             if tab_id == "procurement":
                 if "head_of_procurement" in user_roles:
                     return True
-                return user_id in (quote.get("assigned_procurement_users") or [])
+                return _user_has_procurement_item(quote_id, user_id)
             elif tab_id == "logistics":
                 if "head_of_logistics" in user_roles:
                     return True

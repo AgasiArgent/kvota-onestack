@@ -69,11 +69,13 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
     async function load() {
       const supabase = createClient();
 
-      // Fetch quote to get responsible user IDs
+      // Fetch quote to get responsible user IDs.
+      // Procurement assignment lives per-item on quote_items.assigned_procurement_user
+      // (single source of truth — see .kiro/specs/procurement-users-single-source/).
       const { data: quote } = await supabase
         .from("quotes")
         .select(
-          "created_by, assigned_procurement_users, assigned_customs_user"
+          "created_by, assigned_customs_user, quote_items(assigned_procurement_user)"
         )
         .eq("id", quoteId)
         .single();
@@ -85,13 +87,18 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
 
       // Extract user IDs
       const salesUserId = quote.created_by ?? null;
-      const procurementUsers = quote.assigned_procurement_users as
-        | string[]
-        | null;
+      const quoteItems = (quote.quote_items ?? []) as unknown as Array<{
+        assigned_procurement_user: string | null;
+      }>;
+      const procurementUsers: string[] = Array.from(
+        new Set(
+          quoteItems
+            .map((i) => i.assigned_procurement_user)
+            .filter((id): id is string => !!id)
+        )
+      );
       const procurementUserId =
-        Array.isArray(procurementUsers) && procurementUsers.length > 0
-          ? procurementUsers[0]
-          : null;
+        procurementUsers.length > 0 ? procurementUsers[0] : null;
       const customsUserId = (quote.assigned_customs_user as string) ?? null;
 
       // Collect unique user IDs to batch-fetch profiles

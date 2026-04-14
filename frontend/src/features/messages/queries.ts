@@ -91,9 +91,34 @@ export async function fetchAllChats(
   } else if (isAssignedItemsOnly(user.roles)) {
     // Operational roles (procurement, logistics, customs) see chats only on
     // quotes where they are personally assigned.
-    quotesQuery = quotesQuery.or(
-      `assigned_procurement_users.cs.{${user.id}},assigned_logistics_user.eq.${user.id},assigned_customs_user.eq.${user.id}`
+    //
+    // Procurement assignment lives per-item on quote_items.assigned_procurement_user
+    // (single source of truth — see .kiro/specs/procurement-users-single-source/).
+    // Supabase-js cannot combine an embedded-filter join with .or(), so we
+    // fetch quote_ids with item-level assignment first, then combine with the
+    // quote-level logistics/customs assignments in a single .or() clause.
+    const { data: itemAssignedRows } = await supabase
+      .from("quote_items")
+      .select("quote_id")
+      .eq("assigned_procurement_user", user.id);
+
+    const procurementQuoteIds = Array.from(
+      new Set(
+        (itemAssignedRows ?? [])
+          .map((r) => r.quote_id)
+          .filter((id): id is string => !!id)
+      )
     );
+
+    const orClauses = [
+      `assigned_logistics_user.eq.${user.id}`,
+      `assigned_customs_user.eq.${user.id}`,
+    ];
+    if (procurementQuoteIds.length > 0) {
+      orClauses.unshift(`id.in.(${procurementQuoteIds.join(",")})`);
+    }
+
+    quotesQuery = quotesQuery.or(orClauses.join(","));
   }
 
   const { data: quotes, error: quotesError } = await quotesQuery;
