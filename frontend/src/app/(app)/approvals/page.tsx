@@ -30,6 +30,7 @@ export default async function ApprovalsPage() {
     )
     .eq("organization_id", user.orgId!)
     .eq("workflow_status", "pending_approval")
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
   // Cast through unknown: generated types lack FK relationships metadata,

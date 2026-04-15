@@ -259,7 +259,8 @@ export async function assignItemsToInvoice(
   const { data: quotes, error: quotesErr } = await supabase
     .from("quotes")
     .select("id, organization_id")
-    .in("id", quoteIds);
+    .in("id", quoteIds)
+    .is("deleted_at", null);
   if (quotesErr) throw quotesErr;
 
   const orgByQuote = new Map<string, string>(
@@ -692,21 +693,41 @@ export async function rejectQuote(
 }
 
 // ---------------------------------------------------------------------------
-// Soft-delete / restore (admin-only) — hits the Python API which cascades
-// across quotes/specifications/deals within one transaction.
+// Soft-delete + Restore (admin-only) — hit the Python API which cascades
+// across quotes/specifications/deals in one transaction. UI gates (DeleteMenu,
+// Trash page) are defense-in-depth; the Python endpoint re-validates admin
+// role. Same shared result shape for both.
 // ---------------------------------------------------------------------------
 
-export async function restoreQuote(quoteId: string): Promise<{
+export interface SoftDeleteResult {
   quote_affected: number;
   spec_affected: number;
   deal_affected: number;
-}> {
+}
+
+export async function softDeleteQuote(
+  quoteId: string
+): Promise<SoftDeleteResult> {
+  return _callLifecycleAction(quoteId, "soft-delete", "Soft-delete failed");
+}
+
+export async function restoreQuote(
+  quoteId: string
+): Promise<SoftDeleteResult> {
+  return _callLifecycleAction(quoteId, "restore", "Restore failed");
+}
+
+async function _callLifecycleAction(
+  quoteId: string,
+  action: "soft-delete" | "restore",
+  genericError: string
+): Promise<SoftDeleteResult> {
   const supabase = createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const res = await fetch(`/api/quotes/${quoteId}/restore`, {
+  const res = await fetch(`/api/quotes/${quoteId}/${action}`, {
     method: "POST",
     headers: {
       ...(session?.access_token
@@ -715,24 +736,11 @@ export async function restoreQuote(quoteId: string): Promise<{
     },
   });
 
-  let json: {
-    success?: boolean;
-    data?: {
-      quote_affected: number;
-      spec_affected: number;
-      deal_affected: number;
-    };
-    error?: { message?: string };
-  };
-  try {
-    json = await res.json();
-  } catch {
-    throw new Error("Restore failed");
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.error?.message ?? genericError);
   }
-  if (!json.success || !json.data) {
-    throw new Error(json.error?.message ?? "Restore failed");
-  }
-  return json.data;
+  return json.data as SoftDeleteResult;
 }
 
 export async function cancelQuote(quoteId: string, reason: string) {

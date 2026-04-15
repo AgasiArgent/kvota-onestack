@@ -30,7 +30,8 @@ export async function fetchDeals(
   const { data: allDeals } = await admin
     .from("deals")
     .select("id, status, quote_id")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
 
   const dealRows = allDeals ?? [];
 
@@ -48,6 +49,7 @@ export async function fetchDeals(
         .from("quotes")
         .select("id, total_amount_usd")
         .in("id", allQuoteIds)
+        .is("deleted_at", null)
     : { data: [] as { id: string; total_amount_usd: number | null }[] };
 
   const summaryQuoteMap = new Map(
@@ -87,6 +89,7 @@ export async function fetchDeals(
       count: "exact",
     })
     .eq("organization_id", orgId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (filters.status) {
@@ -119,6 +122,7 @@ export async function fetchDeals(
           "id, specification_number, sign_date, client_payment_terms, payment_deferral_days, delivery_period_days"
         )
         .in("id", specIds)
+        .is("deleted_at", null)
     : { data: [] as { id: string; specification_number: string | null; sign_date: string | null; client_payment_terms: string | null; payment_deferral_days: number | null; delivery_period_days: number | null }[] };
 
   const specMap = new Map(
@@ -139,6 +143,7 @@ export async function fetchDeals(
         .from("quotes")
         .select("id, idn_quote, total_amount_usd, total_profit_usd, customer_id")
         .in("id", quoteIds)
+        .is("deleted_at", null)
     : { data: [] as { id: string; idn_quote: string; total_amount_usd: number | null; total_profit_usd: number | null; customer_id: string | null }[] };
 
   const quoteMap = new Map(
@@ -256,7 +261,8 @@ export async function fetchPayments(
   const { data: orgDeals } = await admin
     .from("deals")
     .select("id, deal_number, quote_id")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
 
   const orgDealIds = (orgDeals ?? []).map((d) => d.id);
   if (orgDealIds.length === 0) {
@@ -327,6 +333,7 @@ export async function fetchPayments(
         .from("quotes")
         .select("id, customer_id")
         .in("id", quoteIds)
+        .is("deleted_at", null)
     : { data: [] as { id: string; customer_id: string | null }[] };
 
   const quoteMap = new Map(

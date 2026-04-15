@@ -33,6 +33,7 @@ export async function GET(
     .from("specifications")
     .select("id, quote_id, contract_id, specification_number, sign_date, readiness_period, status")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (specError || !spec) {
@@ -45,6 +46,7 @@ export async function GET(
       .from("quotes")
       .select("id, idn_quote, customer_id, currency")
       .eq("id", spec.quote_id)
+      .is("deleted_at", null)
       .single(),
     spec.contract_id
       ? supabase

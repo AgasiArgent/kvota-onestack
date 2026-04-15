@@ -150,6 +150,7 @@ export async function fetchQuotesList(
         .from("quotes")
         .select("id")
         .eq("organization_id", user.orgId)
+        .is("deleted_at", null)
         .in("created_by", byRole.sales);
       roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
     }
@@ -167,6 +168,7 @@ export async function fetchQuotesList(
         .from("quotes")
         .select("id")
         .eq("organization_id", user.orgId)
+        .is("deleted_at", null)
         .in("assigned_logistics_user", byRole.logistics);
       roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
     }
@@ -176,6 +178,7 @@ export async function fetchQuotesList(
         .from("quotes")
         .select("id")
         .eq("organization_id", user.orgId)
+        .is("deleted_at", null)
         .in("assigned_customs_user", byRole.customs);
       roleQuoteIdSets.push(new Set((data ?? []).map((r) => r.id)));
     }
@@ -419,6 +422,7 @@ export async function fetchQuoteDetail(quoteId: string) {
     .from("quotes")
     .select("*")
     .eq("id", quoteId)
+    .is("deleted_at", null)
     .single();
 
   if (error || !quote) return null;
@@ -666,6 +670,7 @@ export async function fetchStageDeadline(
     .from("quotes")
     .select("*")
     .eq("id", quoteId)
+    .is("deleted_at", null)
     .single();
 
   const quoteRow = quoteRes.data as Record<string, unknown> | null;
@@ -708,6 +713,7 @@ export async function fetchDealIdForQuote(
     .from("specifications")
     .select("id")
     .eq("quote_id", quoteId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!spec) return null;
@@ -717,6 +723,7 @@ export async function fetchDealIdForQuote(
     .from("deals")
     .select("id")
     .eq("specification_id", spec.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   return deal?.id ?? null;
@@ -742,6 +749,7 @@ export async function canAccessQuote(
       .select("workflow_status")
       .eq("id", quoteId)
       .eq("organization_id", user.orgId)
+      .is("deleted_at", null)
       .maybeSingle();
     return (
       data?.workflow_status === "pending_customs" ||
@@ -760,6 +768,7 @@ export async function canAccessQuote(
       .select("created_by, customer_id")
       .eq("id", quoteId)
       .eq("organization_id", user.orgId)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (!data) return false;
@@ -776,6 +785,7 @@ export async function canAccessQuote(
       .select("workflow_status")
       .eq("id", quoteId)
       .eq("organization_id", user.orgId)
+      .is("deleted_at", null)
       .maybeSingle();
     return data?.workflow_status === "pending_procurement";
   }

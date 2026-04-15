@@ -104,6 +104,7 @@ export function SpecificationStep({
         .from("specifications")
         .select("id, quote_id, quote_version_id, contract_id, specification_number, sign_date, status, readiness_period, signed_scan_url, created_at, updated_at")
         .eq("quote_id", quote.id)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),

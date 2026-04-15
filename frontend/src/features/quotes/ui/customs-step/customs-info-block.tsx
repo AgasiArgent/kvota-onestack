@@ -78,6 +78,7 @@ export function CustomsInfoBlock({ quoteId, orgId }: CustomsInfoBlockProps) {
           "created_by, assigned_customs_user, quote_items(assigned_procurement_user)"
         )
         .eq("id", quoteId)
+        .is("deleted_at", null)
         .single();
 
       if (!quote) {

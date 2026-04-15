@@ -145,6 +145,7 @@ export async function fetchDealsMetrics(
     .from("deals")
     .select("id, total_amount, quote_id")
     .eq("organization_id", orgId)
+    .is("deleted_at", null)
     .gte("created_at", range.from)
     .lte("created_at", range.to);
 
@@ -157,7 +158,7 @@ export async function fetchDealsMetrics(
 
   const [profitRes, cohortRes] = await Promise.all([
     quoteIds.length > 0
-      ? admin.from("quotes").select("total_profit_usd").in("id", quoteIds)
+      ? admin.from("quotes").select("total_profit_usd").in("id", quoteIds).is("deleted_at", null)
       : Promise.resolve({ data: [] }),
     // Cohort: how many quotes created in this period ever became deals?
     admin

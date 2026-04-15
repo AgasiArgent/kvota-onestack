@@ -5216,6 +5216,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             .select("id, idn_quote, customers(name), workflow_status, created_at") \
             .eq("organization_id", org_id) \
             .eq("workflow_status", "pending_procurement") \
+            .is_("deleted_at", None) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -5274,6 +5275,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             .select("id, idn_quote, customers(name), workflow_status, created_at") \
             .eq("organization_id", org_id) \
             .in_("workflow_status", ["pending_logistics", "pending_logistics_and_customs"]) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -5316,6 +5318,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             .select("id, idn_quote, customers(name), workflow_status, created_at") \
             .eq("organization_id", org_id) \
             .in_("workflow_status", ["pending_customs", "pending_logistics_and_customs"]) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -5358,6 +5361,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             .select("id, idn_quote, customers(name), workflow_status, total_amount, currency, created_at") \
             .eq("organization_id", org_id) \
             .eq("workflow_status", "pending_quote_control") \
+            .is_("deleted_at", None) \
             .order("created_at", desc=False) \
             .limit(5) \
             .execute()
@@ -5404,6 +5408,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
             .select("id", count="exact") \
             .eq("organization_id", org_id) \
             .eq("workflow_status", "pending_spec_control") \
+            .is_("deleted_at", None) \
             .execute()
         pending_spec_quotes = spec_quotes_result.count or 0
 
@@ -5415,6 +5420,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 .select("id, specification_number, status, created_at, quotes(id, idn_quote, customers(name))") \
                 .eq("organization_id", org_id) \
                 .in_("status", ["draft", "pending_review"]) \
+                .is_("deleted_at", None) \
                 .order("created_at", desc=True) \
                 .limit(5) \
                 .execute()
@@ -5425,6 +5431,7 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
                 .select("id, idn_quote, customers(name), created_at") \
                 .eq("organization_id", org_id) \
                 .eq("workflow_status", "pending_spec_control") \
+                .is_("deleted_at", None) \
                 .order("created_at", desc=True) \
                 .limit(5) \
                 .execute()
@@ -5559,7 +5566,8 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         sales_query = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), workflow_status, total_amount, currency") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "pending_sales_review")
+            .eq("workflow_status", "pending_sales_review") \
+            .is_("deleted_at", None)
         if my_customer_ids is not None:
             sales_query = sales_query.in_("customer_id", my_customer_ids) if my_customer_ids else None
         if sales_query:
@@ -5603,7 +5611,8 @@ def _get_role_tasks_sections(user_id: str, org_id: str, roles: list, supabase) -
         approved_query = supabase.table("quotes") \
             .select("id, idn_quote, customers(name), total_amount, currency") \
             .eq("organization_id", org_id) \
-            .eq("workflow_status", "approved")
+            .eq("workflow_status", "approved") \
+            .is_("deleted_at", None)
         if my_customer_ids is not None:
             approved_query = approved_query.in_("customer_id", my_customer_ids) if my_customer_ids else None
         if approved_query:
@@ -5663,6 +5672,7 @@ def _get_sales_summary_blocks(user_id: str, org_id: str, date_from: str, date_to
         .select("id, total_amount, workflow_status") \
         .eq("organization_id", org_id) \
         .eq("created_by", user_id) \
+        .is_("deleted_at", None) \
         .gte("created_at", date_from) \
         .lte("created_at", date_to_end) \
         .execute()
@@ -5687,6 +5697,7 @@ def _get_sales_summary_blocks(user_id: str, org_id: str, date_from: str, date_to
         .select("id, created_at, quotes!inner(created_by, total_amount)") \
         .eq("organization_id", org_id) \
         .eq("quotes.created_by", user_id) \
+        .is_("deleted_at", None) \
         .gte("created_at", date_from) \
         .lte("created_at", date_to_end) \
         .execute()
@@ -5774,7 +5785,8 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
     if is_admin:
         quotes_query = supabase.table("quotes") \
             .select("id, status, workflow_status, total_amount") \
-            .eq("organization_id", org_id)
+            .eq("organization_id", org_id) \
+            .is_("deleted_at", None)
         quotes_result = quotes_query.execute()
         quotes = quotes_result.data or []
     else:
@@ -5787,17 +5799,21 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         q1_data = []
         if my_customer_ids:
             q1 = supabase.table("quotes").select(_qs) \
-                .eq("organization_id", org_id).in_("customer_id", my_customer_ids).execute()
+                .eq("organization_id", org_id).in_("customer_id", my_customer_ids) \
+                .is_("deleted_at", None).execute()
             q1_data = q1.data or []
         # Also find quotes where user is assigned in any department.
         # Procurement assignment lives on quote_items now (single source of truth) —
         # use an inner join so the parent row comes back when ≥1 item matches.
         q2 = supabase.table("quotes").select(f"{_qs}, quote_items!inner(id)") \
-            .eq("organization_id", org_id).eq("quote_items.assigned_procurement_user", user_id).execute()
+            .eq("organization_id", org_id).eq("quote_items.assigned_procurement_user", user_id) \
+            .is_("deleted_at", None).execute()
         q3 = supabase.table("quotes").select(_qs) \
-            .eq("organization_id", org_id).eq("assigned_logistics_user", user_id).execute()
+            .eq("organization_id", org_id).eq("assigned_logistics_user", user_id) \
+            .is_("deleted_at", None).execute()
         q4 = supabase.table("quotes").select(_qs) \
-            .eq("organization_id", org_id).eq("assigned_customs_user", user_id).execute()
+            .eq("organization_id", org_id).eq("assigned_customs_user", user_id) \
+            .is_("deleted_at", None).execute()
         # Merge and deduplicate by quote ID
         seen_ids = set()
         quotes = []
@@ -5822,6 +5838,7 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         recent_query = supabase.table("quotes") \
             .select("id, idn_quote, customer_id, customers(name), status, workflow_status, total_amount, created_at") \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=True) \
             .limit(5)
         recent_result = recent_query.execute()
@@ -5834,18 +5851,22 @@ def _dashboard_overview_content(user_id: str, org_id: str, roles: list, user: di
         if my_customer_ids:
             rq1 = supabase.table("quotes").select(_rselect) \
                 .eq("organization_id", org_id).in_("customer_id", my_customer_ids) \
+                .is_("deleted_at", None) \
                 .order("created_at", desc=True).limit(10).execute()
             rq1_data = rq1.data or []
         # Procurement assignment is item-level — inner-join filters to quotes
         # where ≥1 non-deleted item is assigned to this user.
         rq2 = supabase.table("quotes").select(f"{_rselect}, quote_items!inner(id)") \
             .eq("organization_id", org_id).eq("quote_items.assigned_procurement_user", user_id) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=True).limit(10).execute()
         rq3 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).eq("assigned_logistics_user", user_id) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=True).limit(10).execute()
         rq4 = supabase.table("quotes").select(_rselect) \
             .eq("organization_id", org_id).eq("assigned_customs_user", user_id) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=True).limit(10).execute()
         # Merge, deduplicate, sort by created_at, take top 5
         seen_ids = set()
@@ -6041,6 +6062,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
                 .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at") \
                 .eq("organization_id", org_id) \
                 .in_("id", all_visible_quote_ids) \
+                .is_("deleted_at", None) \
                 .order("created_at", desc=True)
 
             quotes_result = quotes_query.execute()
@@ -6276,7 +6298,8 @@ def _dashboard_logistics_content(user_id: str, org_id: str, supabase, status_fil
     is_admin = roles and ("admin" in roles or "head_of_logistics" in roles)
     quotes_query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_logistics_user") \
-        .eq("organization_id", org_id)
+        .eq("organization_id", org_id) \
+        .is_("deleted_at", None)
     if not is_admin:
         quotes_query = quotes_query.eq("assigned_logistics_user", user_id)
     quotes_result = quotes_query.order("created_at", desc=True).execute()
@@ -6481,7 +6504,8 @@ def _dashboard_customs_content(user_id: str, org_id: str, supabase, status_filte
     is_admin = roles and ("admin" in roles or "head_of_customs" in roles)
     quotes_query = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, logistics_completed_at, customs_completed_at, assigned_customs_user") \
-        .eq("organization_id", org_id)
+        .eq("organization_id", org_id) \
+        .is_("deleted_at", None)
     if not is_admin:
         quotes_query = quotes_query.eq("assigned_customs_user", user_id)
     quotes_result = quotes_query.order("created_at", desc=True).execute()
@@ -6686,6 +6710,7 @@ def _dashboard_quote_control_content(user_id: str, org_id: str, supabase, status
     quotes_result = supabase.table("quotes") \
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, created_at, deal_type, current_version_id") \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .order("created_at", desc=True) \
         .execute()
 
@@ -6917,6 +6942,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
         .select("id, idn_quote, customer_id, customers(name), workflow_status, status, total_amount, currency, created_at, deal_type, current_version_id") \
         .eq("organization_id", org_id) \
         .eq("workflow_status", "pending_spec_control") \
+        .is_("deleted_at", None) \
         .order("created_at", desc=True) \
         .execute()
 
@@ -6926,6 +6952,7 @@ def _dashboard_spec_control_content(user_id: str, org_id: str, supabase, status_
     specs_result = supabase.table("specifications") \
         .select("id, quote_id, specification_number, proposal_idn, status, sign_date, specification_currency, created_at, updated_at, quotes(idn_quote, total_amount_usd, total_profit_usd, customers(name))") \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .order("created_at", desc=True) \
         .execute()
 
@@ -7351,6 +7378,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
         .eq("organization_id", org_id) \
         .eq("created_by", user_id) \
         .eq("workflow_status", "deal") \
+        .is_("deleted_at", None) \
         .gte("updated_at", first_day_of_month.isoformat()) \
         .execute()
 
@@ -7377,6 +7405,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
         .eq("organization_id", org_id) \
         .eq("created_by", user_id) \
         .neq("status", "signed") \
+        .is_("deleted_at", None) \
         .order("created_at", desc=True) \
         .limit(10) \
         .execute()
@@ -7399,6 +7428,7 @@ def _dashboard_sales_content(user_id: str, org_id: str, user: dict, supabase) ->
         .eq("organization_id", org_id) \
         .eq("created_by", user_id) \
         .not_.in_("workflow_status", ["deal", "rejected", "cancelled"]) \
+        .is_("deleted_at", None) \
         .order("created_at", desc=True) \
         .limit(10) \
         .execute()
@@ -7670,25 +7700,29 @@ def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
     # Procurement tasks
     if 'procurement' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_procurement").execute()
+            .eq("organization_id", org_id).eq("workflow_status", "pending_procurement") \
+            .is_("deleted_at", None).execute()
         total += result.count or 0
 
     # Logistics tasks (pending_logistics + pending_logistics_and_customs)
     if 'logistics' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).in_("workflow_status", ["pending_logistics", "pending_logistics_and_customs"]).execute()
+            .eq("organization_id", org_id).in_("workflow_status", ["pending_logistics", "pending_logistics_and_customs"]) \
+            .is_("deleted_at", None).execute()
         total += result.count or 0
 
     # Customs tasks (pending_customs + pending_logistics_and_customs)
     if 'customs' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).in_("workflow_status", ["pending_customs", "pending_logistics_and_customs"]).execute()
+            .eq("organization_id", org_id).in_("workflow_status", ["pending_customs", "pending_logistics_and_customs"]) \
+            .is_("deleted_at", None).execute()
         total += result.count or 0
 
     # Quote controller tasks
     if 'quote_controller' in roles or 'admin' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_quote_control").execute()
+            .eq("organization_id", org_id).eq("workflow_status", "pending_quote_control") \
+            .is_("deleted_at", None).execute()
         total += result.count or 0
 
     # Spec controller tasks
@@ -7696,7 +7730,8 @@ def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
         spec_counts = count_specifications_by_status(org_id)
         total += spec_counts.get('pending_review', 0) + spec_counts.get('draft', 0)
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_spec_control").execute()
+            .eq("organization_id", org_id).eq("workflow_status", "pending_spec_control") \
+            .is_("deleted_at", None).execute()
         total += result.count or 0
 
     # Finance tasks
@@ -8153,6 +8188,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
                 .select(_select) \
                 .eq("organization_id", user["org_id"]) \
                 .in_("customer_id", my_customer_ids) \
+                .is_("deleted_at", None) \
                 .order("created_at", desc=True) \
                 .execute()
         else:
@@ -8161,6 +8197,7 @@ def get(session, status: str = "", customer_id: str = "", manager_id: str = ""):
         result = supabase.table("quotes") \
             .select(_select) \
             .eq("organization_id", user["org_id"]) \
+            .is_("deleted_at", None) \
             .order("created_at", desc=True) \
             .execute()
 
@@ -25514,6 +25551,7 @@ def get(session):
         .select("*, customers(name, inn)") \
         .eq("organization_id", org_id) \
         .eq("workflow_status", "pending_approval") \
+        .is_("deleted_at", None) \
         .order("updated_at", desc=True) \
         .execute()
 
@@ -30339,6 +30377,7 @@ def finance_invoices_tab(session, user, org_id):
         quotes_result = supabase.table("quotes") \
             .select("id") \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .execute()
         org_quote_ids = [q["id"] for q in (quotes_result.data or [])]
 
@@ -43172,6 +43211,7 @@ def get(session, q: str = "", supplier_id: str = "", status: str = ""):
             # Get quote_ids that have deals
             deals_resp = supabase.table("deals") \
                 .select("specifications!inner(quote_id)") \
+                .is_("deleted_at", None) \
                 .execute()
             deal_quote_ids = list(set(
                 (d.get("specifications") or {}).get("quote_id")
@@ -48496,6 +48536,24 @@ async def post_quote_substatus(request, quote_id: str):
 @rt("/api/quotes/{quote_id}/status-history", methods=["GET"])
 async def get_quote_status_history(request, quote_id: str):
     return await api_get_status_history(request, quote_id)
+
+
+# --- Soft-delete / restore JSON API (Task 2 of soft-delete-entity-lifecycle) ---
+
+from api.soft_delete import (
+    soft_delete_quote as api_soft_delete_quote,
+    restore_quote as api_restore_quote,
+)
+
+
+@rt("/api/quotes/{quote_id}/soft-delete", methods=["POST"])
+async def post_quote_soft_delete(request, quote_id: str):
+    return await api_soft_delete_quote(request, quote_id)
+
+
+@rt("/api/quotes/{quote_id}/restore", methods=["POST"])
+async def post_quote_restore(request, quote_id: str):
+    return await api_restore_quote(request, quote_id)
 
 
 @rt("/api/procurement/{quote_id}/check-distribution", methods=["POST"])

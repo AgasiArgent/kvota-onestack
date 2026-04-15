@@ -33,6 +33,7 @@ export async function GET(
     .from("quotes")
     .select("*")
     .eq("id", id)
+    .is("deleted_at", null)
     .single();
 
   if (quoteError || !quote) {
