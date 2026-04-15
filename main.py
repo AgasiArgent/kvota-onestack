@@ -48498,6 +48498,24 @@ async def get_quote_status_history(request, quote_id: str):
     return await api_get_status_history(request, quote_id)
 
 
+# --- Soft-delete / restore JSON API (Task 2 of soft-delete-entity-lifecycle) ---
+
+from api.soft_delete import (
+    soft_delete_quote as api_soft_delete_quote,
+    restore_quote as api_restore_quote,
+)
+
+
+@rt("/api/quotes/{quote_id}/soft-delete", methods=["POST"])
+async def post_quote_soft_delete(request, quote_id: str):
+    return await api_soft_delete_quote(request, quote_id)
+
+
+@rt("/api/quotes/{quote_id}/restore", methods=["POST"])
+async def post_quote_restore(request, quote_id: str):
+    return await api_restore_quote(request, quote_id)
+
+
 @rt("/api/procurement/{quote_id}/check-distribution", methods=["POST"])
 async def post_check_distribution(request, quote_id: str):
     """Trigger auto-advance for a (quote, brand) after МОЗ assignment.
