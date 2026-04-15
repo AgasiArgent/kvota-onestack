@@ -21,6 +21,15 @@
   "clickup_list": "kvota",
   "clickup_lists": ["kvota", "sprint"],
   "base_url": "https://kvotaflow.ru",
+  "browser_test_url": "http://localhost:3000",
+  "dev_command": "cd frontend && npm run dev",
+  "browser_test_auth": {
+    "strategy": "login_form",
+    "login_url": "/login",
+    "username": "admin@test.kvota.ru",
+    "password_env": "TEST_PASSWORD"
+  },
+  "deploy_url": "https://kvotaflow.ru",
   "commands": {
     "test": "pytest -v",
     "lint": "ruff check .",

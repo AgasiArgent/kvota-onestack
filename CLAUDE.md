@@ -1,7 +1,7 @@
 # OneStack (Kvota Quotation Management System)
 
 **Stack:** FastHTML + HTMX | **DB:** Supabase PostgreSQL (schema: `kvota`) | **Deploy:** Docker on beget-kvota
-**Domain:** kvotaflow.ru | **Container:** kvota-onestack | **Latest migration:** 187
+**Domain:** kvotaflow.ru | **Container:** kvota-onestack | **Latest migration:** 279
 
 ---
 
