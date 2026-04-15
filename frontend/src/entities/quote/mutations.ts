@@ -259,7 +259,8 @@ export async function assignItemsToInvoice(
   const { data: quotes, error: quotesErr } = await supabase
     .from("quotes")
     .select("id, organization_id")
-    .in("id", quoteIds);
+    .in("id", quoteIds)
+    .is("deleted_at", null);
   if (quotesErr) throw quotesErr;
 
   const orgByQuote = new Map<string, string>(

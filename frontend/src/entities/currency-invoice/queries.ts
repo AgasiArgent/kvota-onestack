@@ -54,7 +54,8 @@ export async function fetchCurrencyInvoices(
   const { data: deals } = await admin
     .from("deals")
     .select("id, deal_number, quote_id")
-    .in("id", dealIds);
+    .in("id", dealIds)
+    .is("deleted_at", null);
 
   const dealMap = new Map(
     (deals ?? []).map((d) => [d.id, { deal_number: d.deal_number, quote_id: d.quote_id }])
@@ -74,6 +75,7 @@ export async function fetchCurrencyInvoices(
         .from("quotes")
         .select("id, idn_quote, customer_id")
         .in("id", quoteIds)
+        .is("deleted_at", null)
     : { data: [] as { id: string; idn_quote: string; customer_id: string | null }[] };
 
   const quoteMap = new Map(
@@ -194,6 +196,7 @@ export async function fetchCurrencyInvoiceDetail(
     .from("deals")
     .select("id, deal_number, quote_id")
     .eq("id", row.deal_id)
+    .is("deleted_at", null)
     .single();
 
   let quoteIdn: string | null = null;
@@ -205,6 +208,7 @@ export async function fetchCurrencyInvoiceDetail(
       .from("quotes")
       .select("idn_quote, customer_id")
       .eq("id", deal.quote_id)
+      .is("deleted_at", null)
       .single();
 
     quoteIdn = quote?.idn_quote ?? null;

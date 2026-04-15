@@ -31,7 +31,8 @@ export default async function PaymentsCalendarPage() {
     const { data: specs } = await admin
       .from("specifications")
       .select("id, specification_number")
-      .in("id", specIds);
+      .in("id", specIds)
+      .is("deleted_at", null);
 
     for (const s of specs ?? []) {
       specMap.set(s.id, s.specification_number);
