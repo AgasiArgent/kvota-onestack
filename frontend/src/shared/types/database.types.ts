@@ -5336,7 +5336,412 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      active_deals: {
+        Row: {
+          id: string | null
+          specification_id: string | null
+          quote_id: string | null
+          organization_id: string | null
+          deal_number: string | null
+          signed_at: string | null
+          total_amount: number | null
+          currency: string | null
+          status: string | null
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+        }
+        Relationships: []
+      }
+      active_quotes: {
+        Row: {
+          id: string | null
+          organization_id: string | null
+          customer_id: string | null
+          idn_quote: string | null
+          title: string | null
+          description: string | null
+          status: string | null
+          valid_until: string | null
+          subtotal: number | null
+          tax_rate: number | null
+          tax_amount: number | null
+          total_amount: number | null
+          notes: string | null
+          terms_conditions: string | null
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          quote_date: string | null
+          deleted_at: string | null
+          delivery_address: string | null
+          contact_id: string | null
+          created_by_user_id: string | null
+          manager_name: string | null
+          manager_phone: string | null
+          manager_email: string | null
+          workflow_state: string | null
+          logistics_complete: boolean | null
+          customs_complete: boolean | null
+          current_assignee_role: string | null
+          assigned_at: string | null
+          senior_approvals_required: number | null
+          senior_approvals_received: number | null
+          current_version: number | null
+          accepted_version_id: string | null
+          last_financial_comment: string | null
+          last_sendback_reason: string | null
+          financial_reviewed_at: string | null
+          financial_reviewed_by: string | null
+          submission_comment: string | null
+          last_approval_comment: string | null
+          current_version_id: string | null
+          total_usd: number | null
+          total_quote_currency: number | null
+          last_calculated_at: string | null
+          version_count: number | null
+          currency: string | null
+          total_profit_usd: number | null
+          total_vat_on_import_usd: number | null
+          total_vat_payable_usd: number | null
+          usd_to_quote_rate: number | null
+          exchange_rate_source: string | null
+          exchange_rate_timestamp: string | null
+          total_amount_quote: number | null
+          total_with_vat_quote: number | null
+          total_with_vat_usd: number | null
+          payment_terms: string | null
+          delivery_days: number | null
+          delivery_terms: string | null
+          document_folder_link: string | null
+          executor_user_id: string | null
+          spec_sign_date: string | null
+          total_quantity: number | null
+          total_weight_kg: number | null
+          delivery_city: string | null
+          cargo_type: string | null
+          deal_type: string | null
+          assigned_logistics_user: string | null
+          assigned_customs_user: string | null
+          procurement_completed_at: string | null
+          logistics_completed_at: string | null
+          customs_completed_at: string | null
+          workflow_status: string | null
+          approvals: Json | null
+          seller_company_id: string | null
+          delivery_country: string | null
+          delivery_method: string | null
+          revision_department: string | null
+          revision_comment: string | null
+          revision_returned_at: string | null
+          approval_reason: string | null
+          approval_justification: string | null
+          needs_justification: boolean | null
+          exchange_rate_to_usd: number | null
+          subtotal_usd: number | null
+          total_amount_usd: number | null
+          sent_at: string | null
+          sent_to_email: string | null
+          partial_recalc: string | null
+          rejection_reason: string | null
+          rejection_comment: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          validity_days: number | null
+          delivery_priority: string | null
+          contact_person_id: string | null
+          sales_checklist: Json | null
+          profit_quote_currency: number | null
+          quote_controller_id: string | null
+          quote_control_completed_at: string | null
+          spec_controller_id: string | null
+          spec_control_completed_at: string | null
+          additional_info: string | null
+          is_phmb: boolean | null
+          phmb_advance_pct: number | null
+          phmb_markup_pct: number | null
+          phmb_payment_days: number | null
+          cogs_quote_currency: number | null
+          revenue_no_vat_quote_currency: number | null
+          idn: string | null
+          tender_type: string | null
+          competitors: string | null
+          cancellation_reason: string | null
+          cancellation_comment: string | null
+          stage_entered_at: string | null
+          stage_deadline_override_hours: number | null
+          overdue_notified_at: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          incoterms: string | null
+          deleted_by: string | null
+        }
+        Relationships: []
+      }
+      active_specs: {
+        Row: {
+          id: string | null
+          quote_id: string | null
+          quote_version_id: string | null
+          organization_id: string | null
+          specification_number: string | null
+          proposal_idn: string | null
+          sign_date: string | null
+          validity_period: string | null
+          specification_currency: string | null
+          exchange_rate_to_ruble: number | null
+          client_payment_terms: string | null
+          cargo_pickup_country: string | null
+          readiness_period: string | null
+          delivery_city_russia: string | null
+          cargo_type: string | null
+          logistics_period: string | null
+          our_legal_entity: string | null
+          client_legal_entity: string | null
+          signed_scan_url: string | null
+          status: string | null
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+          approvals: Json | null
+          advance_percent_from_client: number | null
+          payment_deferral_days: number | null
+          delivery_period_days: number | null
+          days_from_delivery_to_advance: number | null
+          comment: string | null
+          actual_delivery_date: string | null
+          planned_dovoz_date: string | null
+          priority_tag: string | null
+          client_payment_term_after_upd: number | null
+          contract_id: string | null
+          item_ind_sku: string | null
+          goods_shipment_country: string | null
+          supplier_payment_country: string | null
+          delivery_days_type: string | null
+          delivery_days: number | null
+          signed_scan_document_id: string | null
+          specification_date: string | null
+          export_data: Json | null
+          deleted_at: string | null
+          deleted_by: string | null
+        }
+        Relationships: []
+      }
+      brand_procurement_assignments: {
+        Row: {
+          id: string | null
+          organization_id: string | null
+          brand: string | null
+          user_id: string | null
+          created_at: string | null
+          created_by: string | null
+        }
+        Relationships: []
+      }
+      erps_registry: {
+        Row: {
+          specification_id: string | null
+          organization_id: string | null
+          deal_id: string | null
+          idn: string | null
+          client_name: string | null
+          customer_id: string | null
+          sign_date: string | null
+          deal_type: string | null
+          payment_terms: string | null
+          advance_percent: number | null
+          payment_deferral_days: number | null
+          spec_sum_usd: number | null
+          spec_profit_usd: number | null
+          delivery_deadline: string | null
+          advance_payment_deadline: string | null
+          days_until_advance: number | null
+          planned_advance_usd: number | null
+          total_paid_usd: number | null
+          remaining_payment_usd: number | null
+          remaining_payment_percent: number | null
+          delivery_period_calendar_days: number | null
+          delivery_period_working_days: number | null
+          days_until_next_payment: number | null
+          days_waiting_payment: number | null
+          last_payment_date: string | null
+          first_payment_date: string | null
+          advance_payment_date: string | null
+          comment: string | null
+          supplier_payment_date: string | null
+          total_spent_usd: number | null
+          planned_delivery_date: string | null
+          actual_delivery_date: string | null
+          planned_dovoz_date: string | null
+          priority_tag: string | null
+          actual_profit_usd: number | null
+          created_by: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
+      positions_registry_view: {
+        Row: {
+          brand: string | null
+          product_code: string | null
+          product_name: string | null
+          latest_price: number | null
+          latest_currency: string | null
+          last_moz_name: string | null
+          last_moz_id: string | null
+          last_updated: string | null
+          entry_count: number | null
+          organization_id: string | null
+          availability_status: string | null
+        }
+        Relationships: []
+      }
+      user_statistics: {
+        Row: {
+          user_id: string | null
+          organization_id: string | null
+          total_customers: number | null
+          total_quotes: number | null
+          total_quotes_sum_usd: number | null
+          total_quotes_sum: number | null
+          total_specifications: number | null
+          total_specifications_sum_usd: number | null
+          total_specifications_sum: number | null
+          total_profit_usd: number | null
+        }
+        Relationships: []
+      }
+      v_approvals_with_modifications: {
+        Row: {
+          id: string | null
+          quote_id: string | null
+          requested_by: string | null
+          approver_id: string | null
+          approval_type: string | null
+          reason: string | null
+          status: string | null
+          decision_comment: string | null
+          modifications: Json | null
+          requested_at: string | null
+          decided_at: string | null
+          quote_idn: string | null
+          quote_status: string | null
+          requester_email: string | null
+          approver_email: string | null
+          modified_items_count: number | null
+        }
+        Relationships: []
+      }
+      v_quote_items_logistics: {
+        Row: {
+          item_id: string | null
+          quote_id: string | null
+          quote_idn: string | null
+          item_idn: string | null
+          position: number | null
+          product_name: string | null
+          brand: string | null
+          quantity: number | null
+          weight_kg: number | null
+          volume_m3: number | null
+          pickup_location_id: string | null
+          pickup_country: string | null
+          pickup_city: string | null
+          logistics_supplier_to_hub: number | null
+          logistics_hub_to_customs: number | null
+          logistics_customs_to_customer: number | null
+          logistics_total_cost: number | null
+          logistics_total_days: number | null
+          logistics_complete: boolean | null
+          workflow_status: string | null
+          customer_id: string | null
+          customer_name: string | null
+          organization_id: string | null
+        }
+        Relationships: []
+      }
+      v_specifications_list: {
+        Row: {
+          id: string | null
+          organization_id: string | null
+          quote_id: string | null
+          quote_idn: string | null
+          quote_title: string | null
+          contract_id: string | null
+          contract_number: string | null
+          customer_name: string | null
+          specification_number: string | null
+          specification_date: string | null
+          sign_date: string | null
+          specification_currency: string | null
+          our_legal_entity: string | null
+          client_legal_entity: string | null
+          status: string | null
+          has_signed_scan: boolean | null
+          created_by: string | null
+          created_by_email: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
+      v_supplier_invoice_payments_full: {
+        Row: {
+          payment_id: string | null
+          invoice_id: string | null
+          invoice_number: string | null
+          supplier_id: string | null
+          supplier_name: string | null
+          supplier_code: string | null
+          organization_id: string | null
+          payment_date: string | null
+          amount: number | null
+          currency: string | null
+          exchange_rate: number | null
+          amount_rub: number | null
+          payment_type: string | null
+          buyer_company_id: string | null
+          buyer_company_name: string | null
+          buyer_company_code: string | null
+          payment_document: string | null
+          notes: string | null
+          invoice_total: number | null
+          invoice_status: string | null
+          created_at: string | null
+          created_by: string | null
+          created_by_email: string | null
+        }
+        Relationships: []
+      }
+      v_supplier_invoices_with_payments: {
+        Row: {
+          id: string | null
+          organization_id: string | null
+          supplier_id: string | null
+          supplier_name: string | null
+          supplier_code: string | null
+          invoice_number: string | null
+          invoice_date: string | null
+          due_date: string | null
+          total_amount: number | null
+          currency: string | null
+          paid_amount: number | null
+          remaining_amount: number | null
+          payment_count: number | null
+          status: string | null
+          is_overdue: boolean | null
+          days_until_due: number | null
+          notes: string | null
+          invoice_file_url: string | null
+          created_at: string | null
+          updated_at: string | null
+          created_by: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
