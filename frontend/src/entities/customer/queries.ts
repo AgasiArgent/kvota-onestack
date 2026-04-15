@@ -181,7 +181,8 @@ export async function fetchCustomerStats(
   const { data: quotes } = await supabase
     .from("quotes")
     .select("id, status")
-    .eq("customer_id", customerId);
+    .eq("customer_id", customerId)
+    .is("deleted_at", null);
 
   const quotesList = quotes ?? [];
   const inReview = quotesList.filter((q) => q.status === "in_review").length;
@@ -193,7 +194,8 @@ export async function fetchCustomerStats(
   const { data: specs } = await supabase
     .from("specifications")
     .select("id, status, quotes!inner(customer_id)")
-    .eq("quotes.customer_id", customerId);
+    .eq("quotes.customer_id", customerId)
+    .is("deleted_at", null);
 
   const specsList = specs ?? [];
   const active = specsList.filter(
@@ -270,6 +272,7 @@ export async function fetchCustomerQuotes(customerId: string) {
       "id, idn_quote, total_amount, profit_quote_currency, created_at, status"
     )
     .eq("customer_id", customerId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   return (data ?? []).map((row) => ({
@@ -291,6 +294,7 @@ export async function fetchCustomerSpecs(customerId: string) {
       "id, specification_number, status, created_at, quotes!inner(customer_id)"
     )
     .eq("quotes.customer_id", customerId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   return (data ?? []).map((row) => ({

@@ -1010,6 +1010,8 @@ export type Database = {
           created_by: string | null
           created_at: string | null
           updated_at: string | null
+          deleted_at: string | null
+          deleted_by: string | null
         }
         Insert: {
           id?: string
@@ -1024,6 +1026,8 @@ export type Database = {
           created_by?: string | null
           created_at?: string | null
           updated_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
         }
         Update: {
           id?: string
@@ -1038,6 +1042,8 @@ export type Database = {
           created_by?: string | null
           created_at?: string | null
           updated_at?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
         }
         Relationships: []
       }
@@ -3802,6 +3808,7 @@ export type Database = {
           cancelled_at: string | null
           cancelled_by: string | null
           incoterms: string | null
+          deleted_by: string | null
         }
         Insert: {
           id?: string
@@ -3923,6 +3930,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
+          deleted_by?: string | null
         }
         Update: {
           id?: string
@@ -4044,6 +4052,7 @@ export type Database = {
           cancelled_at?: string | null
           cancelled_by?: string | null
           incoterms?: string | null
+          deleted_by?: string | null
         }
         Relationships: []
       }
@@ -4421,6 +4430,8 @@ export type Database = {
           signed_scan_document_id: string | null
           specification_date: string | null
           export_data: Json | null
+          deleted_at: string | null
+          deleted_by: string | null
         }
         Insert: {
           id?: string
@@ -4465,6 +4476,8 @@ export type Database = {
           signed_scan_document_id?: string | null
           specification_date?: string | null
           export_data?: Json | null
+          deleted_at?: string | null
+          deleted_by?: string | null
         }
         Update: {
           id?: string
@@ -4509,6 +4522,8 @@ export type Database = {
           signed_scan_document_id?: string | null
           specification_date?: string | null
           export_data?: Json | null
+          deleted_at?: string | null
+          deleted_by?: string | null
         }
         Relationships: []
       }

@@ -47,6 +47,7 @@ export async function fetchQuoteContextData(
     .from("quotes")
     .select("sales_checklist, created_by, contact_person_id")
     .eq("id", quoteId)
+    .is("deleted_at", null)
     .single();
 
   if (!quoteRow) {
