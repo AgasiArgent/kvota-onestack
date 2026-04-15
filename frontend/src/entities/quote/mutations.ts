@@ -691,6 +691,50 @@ export async function rejectQuote(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Soft-delete / restore (admin-only) — hits the Python API which cascades
+// across quotes/specifications/deals within one transaction.
+// ---------------------------------------------------------------------------
+
+export async function restoreQuote(quoteId: string): Promise<{
+  quote_affected: number;
+  spec_affected: number;
+  deal_affected: number;
+}> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/restore`, {
+    method: "POST",
+    headers: {
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+  });
+
+  let json: {
+    success?: boolean;
+    data?: {
+      quote_affected: number;
+      spec_affected: number;
+      deal_affected: number;
+    };
+    error?: { message?: string };
+  };
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error("Restore failed");
+  }
+  if (!json.success || !json.data) {
+    throw new Error(json.error?.message ?? "Restore failed");
+  }
+  return json.data;
+}
+
 export async function cancelQuote(quoteId: string, reason: string) {
   const supabase = createClient();
   const {
