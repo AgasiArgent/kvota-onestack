@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { cancelQuote } from "@/entities/quote/mutations";
 import type { QuoteDetailRow } from "@/entities/quote/queries";
 import type { QuoteStep } from "@/entities/quote/types";
+import { DeleteMenu } from "./delete-menu/delete-menu";
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -243,6 +244,12 @@ export function QuoteStickyHeader({
                 Маржа {marginDisplay}
               </span>
             )}
+
+            <DeleteMenu
+              quoteId={quote.id}
+              entityName={quote.idn_quote}
+              roles={userRoles}
+            />
           </div>
         </div>
 
