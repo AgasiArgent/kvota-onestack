@@ -691,6 +691,43 @@ export async function rejectQuote(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Soft-delete (Task 4 — admin-only). Python API re-validates admin role; the
+// UI gate (DeleteMenu in features/quotes) is defense-in-depth, not the
+// primary check. The endpoint cascades the soft-delete to the attached
+// specification and deal rows (same entity lifecycle).
+// ---------------------------------------------------------------------------
+
+export interface SoftDeleteResult {
+  quote_affected: number;
+  spec_affected: number;
+  deal_affected: number;
+}
+
+export async function softDeleteQuote(
+  quoteId: string
+): Promise<SoftDeleteResult> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const res = await fetch(`/api/quotes/${quoteId}/soft-delete`, {
+    method: "POST",
+    headers: {
+      ...(session?.access_token
+        ? { Authorization: `Bearer ${session.access_token}` }
+        : {}),
+    },
+  });
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.error?.message ?? "Soft-delete failed");
+  }
+  return json.data as SoftDeleteResult;
+}
+
 export async function cancelQuote(quoteId: string, reason: string) {
   const supabase = createClient();
   const {
