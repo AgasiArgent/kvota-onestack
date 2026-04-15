@@ -20,6 +20,7 @@ import {
   Settings,
   SplitSquareHorizontal,
   LayoutGrid,
+  Trash2,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -217,6 +218,11 @@ export function buildMenuSections(config: MenuConfig): MenuSection[] {
           icon: Percent,
           label: "Ставки НДС",
           href: "/admin/vat-rates",
+        },
+        {
+          icon: Trash2,
+          label: "Корзина",
+          href: "/quotes/trash",
         },
         {
           icon: Settings,

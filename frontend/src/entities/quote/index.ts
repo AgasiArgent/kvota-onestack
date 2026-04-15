@@ -48,6 +48,7 @@ export {
   patchQuote,
   transitionSubstatus,
   fetchStatusHistory,
+  restoreQuote,
 } from "./mutations";
 export type {
   CreateQuoteInput,

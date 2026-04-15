@@ -693,10 +693,10 @@ export async function rejectQuote(
 }
 
 // ---------------------------------------------------------------------------
-// Soft-delete (Task 4 — admin-only). Python API re-validates admin role; the
-// UI gate (DeleteMenu in features/quotes) is defense-in-depth, not the
-// primary check. The endpoint cascades the soft-delete to the attached
-// specification and deal rows (same entity lifecycle).
+// Soft-delete + Restore (admin-only) — hit the Python API which cascades
+// across quotes/specifications/deals in one transaction. UI gates (DeleteMenu,
+// Trash page) are defense-in-depth; the Python endpoint re-validates admin
+// role. Same shared result shape for both.
 // ---------------------------------------------------------------------------
 
 export interface SoftDeleteResult {
@@ -708,12 +708,26 @@ export interface SoftDeleteResult {
 export async function softDeleteQuote(
   quoteId: string
 ): Promise<SoftDeleteResult> {
+  return _callLifecycleAction(quoteId, "soft-delete", "Soft-delete failed");
+}
+
+export async function restoreQuote(
+  quoteId: string
+): Promise<SoftDeleteResult> {
+  return _callLifecycleAction(quoteId, "restore", "Restore failed");
+}
+
+async function _callLifecycleAction(
+  quoteId: string,
+  action: "soft-delete" | "restore",
+  genericError: string
+): Promise<SoftDeleteResult> {
   const supabase = createClient();
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  const res = await fetch(`/api/quotes/${quoteId}/soft-delete`, {
+  const res = await fetch(`/api/quotes/${quoteId}/${action}`, {
     method: "POST",
     headers: {
       ...(session?.access_token
@@ -724,7 +738,7 @@ export async function softDeleteQuote(
 
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.success) {
-    throw new Error(json?.error?.message ?? "Soft-delete failed");
+    throw new Error(json?.error?.message ?? genericError);
   }
   return json.data as SoftDeleteResult;
 }
