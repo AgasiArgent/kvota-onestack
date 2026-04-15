@@ -95,19 +95,56 @@ class _FakeQuery:
         return _Response(list(rows))
 
 
+class _FakeRpc:
+    """Captures supabase.rpc(name, params).execute() calls."""
+
+    def __init__(
+        self,
+        name: str,
+        params: dict[str, Any],
+        call_log: list[tuple[str, str]],
+        rpc_returns: dict[str, list[dict[str, Any]]],
+        rpc_raises: dict[str, Exception],
+    ) -> None:
+        self._name = name
+        self._params = params
+        self._call_log = call_log
+        self._rpc_returns = rpc_returns
+        self._rpc_raises = rpc_raises
+
+    def execute(self) -> _Response:
+        self._call_log.append(("rpc", self._name))
+        if self._name in self._rpc_raises:
+            raise self._rpc_raises[self._name]
+        data = self._rpc_returns.get(
+            self._name,
+            [{"deals_deleted": 1, "specs_deleted": 1, "quotes_deleted": 1}],
+        )
+        return _Response(data)
+
+
 class _FakeSupabase:
     def __init__(
         self,
         fetch_map: dict[tuple[str, str, str], list[dict[str, Any]]] | None = None,
         delete_returns: dict[str, list[dict[str, Any]]] | None = None,
+        rpc_returns: dict[str, list[dict[str, Any]]] | None = None,
+        rpc_raises: dict[str, Exception] | None = None,
     ) -> None:
         self.call_log: list[tuple[str, str]] = []
         self._fetch_map = fetch_map or {}
         self._delete_returns = delete_returns or {}
+        self._rpc_returns = rpc_returns or {}
+        self._rpc_raises = rpc_raises or {}
 
     def table(self, name: str) -> _FakeQuery:
         return _FakeQuery(
             name, self.call_log, self._fetch_map, self._delete_returns
+        )
+
+    def rpc(self, name: str, params: dict[str, Any]) -> _FakeRpc:
+        return _FakeRpc(
+            name, params, self.call_log, self._rpc_returns, self._rpc_raises
         )
 
 
@@ -152,51 +189,51 @@ def test_purges_quotes_older_than_retention() -> None:
     old_a = {"id": "qA", "idn_quote": "Q-A", "deleted_at": _iso_days_ago(400)}
     old_b = {"id": "qB", "idn_quote": "Q-B", "deleted_at": _iso_days_ago(500)}
     fake = _FakeSupabase(
-        fetch_map={
-            ("quotes", "lt", "deleted_at"): [old_a, old_b],
-            # Both have no specs — simplifies delete-order test elsewhere.
-            ("specifications", "eq", "quote_id"): [],
-        }
+        fetch_map={("quotes", "lt", "deleted_at"): [old_a, old_b]}
     )
     with patch.object(purge, "get_supabase", return_value=fake):
         rc = purge.run([])
 
     assert rc == 0
-    # Two quote deletes issued.
-    quote_deletes = [entry for entry in fake.call_log if entry == ("delete", "quotes")]
-    assert len(quote_deletes) == 2
+    # One rpc per quote — hard_purge_quote wraps the 3 deletes atomically.
+    rpc_calls = [entry for entry in fake.call_log if entry == ("rpc", "hard_purge_quote")]
+    assert len(rpc_calls) == 2
 
 
 @pytest.mark.unit
-def test_delete_order_is_deal_then_spec_then_quote() -> None:
-    """Verify per-quote delete order: deals -> specifications -> quotes."""
+def test_real_run_invokes_hard_purge_quote_rpc() -> None:
+    """Verify the real-run path calls kvota.hard_purge_quote once per quote —
+    the PL/pgSQL function owns the transactional delete order internally
+    (migration 281), so tests assert the rpc is invoked, not individual DELETEs."""
     quote = {"id": "q1", "idn_quote": "Q-1", "deleted_at": _iso_days_ago(400)}
     fake = _FakeSupabase(
-        fetch_map={
-            ("quotes", "lt", "deleted_at"): [quote],
-            ("specifications", "eq", "quote_id"): [{"id": "s1"}, {"id": "s2"}],
-        }
+        fetch_map={("quotes", "lt", "deleted_at"): [quote]}
     )
     with patch.object(purge, "get_supabase", return_value=fake):
         rc = purge.run([])
 
     assert rc == 0
-    delete_sequence = [tbl for op, tbl in fake.call_log if op == "delete"]
-    assert delete_sequence == ["deals", "specifications", "quotes"], delete_sequence
+    # Exactly one rpc call, zero raw DELETE calls.
+    rpc_calls = [e for e in fake.call_log if e[0] == "rpc"]
+    delete_calls = [e for e in fake.call_log if e[0] == "delete"]
+    assert rpc_calls == [("rpc", "hard_purge_quote")], rpc_calls
+    assert delete_calls == [], "no raw DELETEs — purge must go through the rpc"
 
 
 @pytest.mark.unit
 def test_skip_missing_row_no_error(caplog: pytest.LogCaptureFixture) -> None:
-    """If a quote row is gone by the time we delete, next quote still processes."""
+    """If a quote row is gone by the time we purge, next quote still processes.
+    Triggered by the rpc returning quotes_deleted=0."""
     a = {"id": "qA", "idn_quote": "Q-A", "deleted_at": _iso_days_ago(400)}
     b = {"id": "qB", "idn_quote": "Q-B", "deleted_at": _iso_days_ago(500)}
     fake = _FakeSupabase(
-        fetch_map={
-            ("quotes", "lt", "deleted_at"): [a, b],
-            ("specifications", "eq", "quote_id"): [],
+        fetch_map={("quotes", "lt", "deleted_at"): [a, b]},
+        # rpc reports 0 rows affected for BOTH — loop must keep going and log [SKIP].
+        rpc_returns={
+            "hard_purge_quote": [
+                {"deals_deleted": 0, "specs_deleted": 0, "quotes_deleted": 0}
+            ]
         },
-        # quotes delete returns empty list for BOTH — but loop must keep going.
-        delete_returns={"quotes": []},
     )
     with patch.object(purge, "get_supabase", return_value=fake), caplog.at_level(
         logging.INFO, logger="purge_old_deleted_quotes"
@@ -291,35 +328,19 @@ def test_unexpected_error_returns_exit_code_1(caplog: pytest.LogCaptureFixture) 
 def test_fk_restrict_violation_aborts_batch_with_exit_1(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """If a delete raises (e.g., FK RESTRICT on deals.quote_id because a deal
-    orphan snuck in), main() should log the exception and exit non-zero rather
-    than silently swallowing — no partial purge should go undetected."""
-
-    class _RestrictQuery(_FakeQuery):
-        def execute(self) -> _Response:  # type: ignore[override]
-            # Raise on the first delete call, pass-through on selects.
-            if self._op == "delete" and self._table == "quotes":
-                raise RuntimeError(
-                    'APIError: update or delete on table "quotes" violates '
-                    'foreign key constraint "deals_quote_id_fkey"'
-                )
-            return super().execute()
-
-    class _RestrictSupabase(_FakeSupabase):
-        def table(self, name: str) -> _FakeQuery:  # type: ignore[override]
-            return _RestrictQuery(
-                name, self.call_log, self._fetch_map, self._delete_returns
-            )
+    """If the rpc raises (e.g., FK RESTRICT inside hard_purge_quote because of
+    unexpected related-row state), main() must log the exception and exit
+    non-zero rather than silently swallowing — no partial purge undetected."""
 
     quote = {"id": "qX", "idn_quote": "Q-X", "deleted_at": _iso_days_ago(400)}
-    fake = _RestrictSupabase(
-        fetch_map={
-            ("quotes", "lt", "deleted_at"): [quote],
-            ("specifications", "eq", "quote_id"): [],
+    fake = _FakeSupabase(
+        fetch_map={("quotes", "lt", "deleted_at"): [quote]},
+        rpc_raises={
+            "hard_purge_quote": RuntimeError(
+                'APIError: update or delete on table "quotes" violates '
+                'foreign key constraint "deals_quote_id_fkey"'
+            ),
         },
-        # deals/specs deletes return empty (no rows matched to delete) — that's
-        # fine. The quote delete is the one that raises.
-        delete_returns={"deals": [], "specifications": [], "quotes": []},
     )
     with patch.object(purge, "get_supabase", return_value=fake), caplog.at_level(
         logging.ERROR, logger="purge_old_deleted_quotes"
