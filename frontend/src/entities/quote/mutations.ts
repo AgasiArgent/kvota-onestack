@@ -220,94 +220,175 @@ export async function updateQuoteItem(
   return data;
 }
 
+/**
+ * Phase 5c assignment: non-destructive, writes to invoice_items +
+ * invoice_item_coverage (the new schema). Each assignment creates one
+ * invoice_item row per quote_item (seeded from quote_items defaults) plus a
+ * matching coverage row with ratio=1. Re-assigning the same (invoice,
+ * quote_item) pair is a no-op via ON CONFLICT DO NOTHING.
+ *
+ * Legacy writes (quote_items.invoice_id, invoice_item_prices) are removed —
+ * both are dropped in migration 284.
+ *
+ * `invoice_items` and `invoice_item_coverage` are not yet in the generated
+ * database.types.ts (migrations 281-282 added them). We bypass the missing
+ * types via an `any`-cast on `from` — same pattern used in queries.ts for
+ * stage_deadlines while the types generator catches up.
+ */
 export async function assignItemsToInvoice(
   itemIds: string[],
   invoiceId: string
 ) {
-  const supabase = createClient();
-
   if (itemIds.length === 0) return;
 
-  // 1) Legacy pointer + composition pointer move in lockstep on initial
-  //    assignment. If the user later opens the CompositionPicker and picks
-  //    a different invoice for an item, composition_selected_invoice_id
-  //    will diverge from invoice_id — which is fine (Decision #1).
-  const { error } = await supabase
-    .from("quote_items")
-    .update({
-      invoice_id: invoiceId,
-      composition_selected_invoice_id: invoiceId,
-    })
-    .in("id", itemIds);
-  if (error) throw error;
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
 
-  // 2) Phase 5b — insert invoice_item_prices rows for every assigned item
-  //    so the CompositionPicker has data to show and the calculation path
-  //    (composition_service.get_composed_items) finds an overlay source.
-  //    Two queries (no FK join) to sidestep the empty-Relationships
-  //    limitation in generated database.types.ts (see database.md).
-  const { data: items, error: fetchErr } = await supabase
+  // 1. Fetch quote_items for seeding invoice_items defaults.
+  //    Include every field build_calculation_inputs sees on the supplier
+  //    side: name, SKU, brand, qty, idn_sku, vat_rate. Purchase price is
+  //    left null here and filled by procurement in the invoice-card editor.
+  const { data: items, error: itemsErr } = await supabase
     .from("quote_items")
-    .select(
-      "id, quote_id, purchase_price_original, purchase_currency, base_price_vat, price_includes_vat"
-    )
+    .select("id, quote_id, product_name, supplier_sku, brand, quantity, idn_sku, vat_rate")
     .in("id", itemIds);
-  if (fetchErr) throw fetchErr;
+  if (itemsErr) throw itemsErr;
   if (!items || items.length === 0) return;
 
-  const quoteIds = Array.from(new Set(items.map((i) => i.quote_id)));
-  const { data: quotes, error: quotesErr } = await supabase
-    .from("quotes")
-    .select("id, organization_id")
-    .in("id", quoteIds)
-    .is("deleted_at", null);
-  if (quotesErr) throw quotesErr;
+  // 2. Resolve invoice organization_id (needed for RLS + invoice_items row).
+  const { data: inv, error: invErr } = await untyped
+    .from("invoices")
+    .select("organization_id")
+    .eq("id", invoiceId)
+    .single();
+  if (invErr) throw invErr;
+  if (!inv) throw new Error("invoice not found");
 
-  const orgByQuote = new Map<string, string>(
-    (quotes ?? []).map((q) => [q.id, q.organization_id])
-  );
+  // 3. Compute next position within target invoice (MAX + 1).
+  const { data: posRow } = await untyped
+    .from("invoice_items")
+    .select("position")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const startPos =
+    (Array.isArray(posRow) && posRow.length > 0
+      ? (posRow[0] as { position: number }).position
+      : 0) + 1;
 
-  const iipRows = items
-    .map((item) => {
-      const orgId = orgByQuote.get(item.quote_id);
-      if (!orgId) return null; // skip items whose quote lacks org_id
-      return {
-        invoice_id: invoiceId,
-        quote_item_id: item.id,
-        organization_id: orgId,
-        purchase_price_original:
-          Number(item.purchase_price_original ?? item.base_price_vat ?? 0),
-        purchase_currency: item.purchase_currency ?? "USD",
-        base_price_vat: item.base_price_vat,
-        price_includes_vat: item.price_includes_vat ?? false,
-        version: 1,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row !== null);
+  // 4. Insert invoice_items — one row per assigned quote_item, with defaults
+  //    copied from quote_items. Position is sequential per insertion order.
+  //    version=1 matches Phase 5b semantics (immutable until frozen).
+  const iiRows = items.map((item, idx) => ({
+    invoice_id: invoiceId,
+    organization_id: (inv as { organization_id: string }).organization_id,
+    position: startPos + idx,
+    product_name: item.product_name ?? "",
+    supplier_sku: item.supplier_sku ?? null,
+    brand: item.brand ?? null,
+    quantity: item.quantity,
+    purchase_currency: "USD",
+    vat_rate:
+      (item as unknown as { vat_rate: number | null }).vat_rate ?? null,
+    version: 1,
+  }));
 
-  if (iipRows.length === 0) return;
+  const { data: createdItems, error: iiErr } = await untyped
+    .from("invoice_items")
+    .insert(iiRows)
+    .select("id, invoice_id");
+  if (iiErr) throw iiErr;
+  if (!createdItems || createdItems.length === 0) return;
 
-  // Upsert with ignoreDuplicates: re-assigning the same items to the same
-  // invoice is a no-op on the junction. Different (invoice, item) pairs
-  // accumulate — that's the point, alternatives build up as multi-supplier
-  // procurement progresses.
-  const { error: iipError } = await supabase
-    .from("invoice_item_prices")
-    .upsert(iipRows, {
-      onConflict: "invoice_id,quote_item_id,version",
+  // 5. Insert coverage rows (1:1 ratio=1) — pair each new invoice_item with
+  //    its source quote_item. Upsert with ON CONFLICT DO NOTHING to make
+  //    re-assignment idempotent (no duplicate coverage rows).
+  const coverageRows = (
+    createdItems as Array<{ id: string; invoice_id: string }>
+  ).map((created, idx) => ({
+    invoice_item_id: created.id,
+    quote_item_id: items[idx].id,
+    ratio: 1,
+  }));
+
+  const { error: covErr } = await untyped
+    .from("invoice_item_coverage")
+    .upsert(coverageRows, {
+      onConflict: "invoice_item_id,quote_item_id",
       ignoreDuplicates: true,
     });
-  if (iipError) throw iipError;
+  if (covErr) throw covErr;
+
+  // 6. Update composition pointer — every assigned quote_item now points at
+  //    this invoice for calc purposes. Non-destructive: coverage rows in
+  //    other invoices are retained; only the pointer moves.
+  const { error: ptrErr } = await supabase
+    .from("quote_items")
+    .update({ composition_selected_invoice_id: invoiceId })
+    .in("id", itemIds);
+  if (ptrErr) throw ptrErr;
 }
 
+/**
+ * Remove a quote_item from its currently-selected invoice. Deletes the
+ * invoice_items + invoice_item_coverage rows that cover this quote_item in
+ * its composition_selected_invoice_id, and clears the pointer.
+ *
+ * Does NOT touch coverage rows in other invoices (non-destructive to
+ * alternatives). Corresponds to the trash-icon "убрать из КП" action in
+ * procurement-handsontable.
+ */
 export async function unassignItemFromInvoice(itemId: string) {
   const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
 
+  // Find the selected invoice for this quote_item so we know which coverage
+  // rows to delete (the item may be covered in multiple invoices but we
+  // only remove from the currently-selected one).
+  const { data: qi, error: qiErr } = await supabase
+    .from("quote_items")
+    .select("composition_selected_invoice_id")
+    .eq("id", itemId)
+    .single();
+  if (qiErr) throw qiErr;
+
+  const selectedInvoiceId = (
+    qi as unknown as { composition_selected_invoice_id: string | null }
+  )?.composition_selected_invoice_id;
+
+  if (selectedInvoiceId) {
+    // Find invoice_items covering this quote_item in the selected invoice.
+    const { data: coverageRows } = await untyped
+      .from("invoice_item_coverage")
+      .select("invoice_item_id, invoice_items!inner(invoice_id)")
+      .eq("quote_item_id", itemId);
+
+    const iiIds = (
+      (coverageRows ?? []) as Array<{
+        invoice_item_id: string;
+        invoice_items: { invoice_id: string };
+      }>
+    )
+      .filter((r) => r.invoice_items?.invoice_id === selectedInvoiceId)
+      .map((r) => r.invoice_item_id);
+
+    if (iiIds.length > 0) {
+      // Deleting invoice_items cascades to invoice_item_coverage.
+      const { error: delErr } = await untyped
+        .from("invoice_items")
+        .delete()
+        .in("id", iiIds);
+      if (delErr) throw delErr;
+    }
+  }
+
+  // Clear composition pointer so the item reverts to "unselected".
   const { error } = await supabase
     .from("quote_items")
-    .update({ invoice_id: null })
+    .update({ composition_selected_invoice_id: null })
     .eq("id", itemId);
-
   if (error) throw error;
 }
 
@@ -597,14 +678,21 @@ export async function updateInvoice(
 
 export async function deleteInvoice(invoiceId: string) {
   const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
 
-  // Unassign items first
+  // Clear composition pointer for any quote_items that had this invoice
+  // selected — the delete below cascades to invoice_items → coverage, but
+  // quote_items.composition_selected_invoice_id is a plain FK without ON
+  // DELETE CASCADE so we must null it explicitly.
   await supabase
     .from("quote_items")
-    .update({ invoice_id: null })
-    .eq("invoice_id", invoiceId);
+    .update({ composition_selected_invoice_id: null })
+    .eq("composition_selected_invoice_id", invoiceId);
 
-  const { error } = await supabase
+  // invoice_items + invoice_item_coverage cascade from this DELETE via
+  // ON DELETE CASCADE (migrations 281/282).
+  const { error } = await untyped
     .from("invoices")
     .delete()
     .eq("id", invoiceId);
