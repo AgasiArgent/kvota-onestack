@@ -424,12 +424,12 @@ async def request_edit_approval(request, id: str) -> JSONResponse:
     if err:
         return err
 
-    # Invoice must be sent
-    from services.invoice_send_service import is_invoice_sent
+    # Procurement for the parent quote must be completed (locked) to need unlock approval
+    from services.invoice_send_service import is_quote_procurement_locked
 
-    if not is_invoice_sent(id):
+    if not is_quote_procurement_locked(id):
         return JSONResponse(
-            {"success": False, "error": {"code": "NOT_SENT", "message": "Invoice has not been sent yet — edit freely"}},
+            {"success": False, "error": {"code": "NOT_LOCKED", "message": "Procurement is still active — edit freely without approval"}},
             status_code=400,
         )
 

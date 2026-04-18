@@ -19183,12 +19183,12 @@ async def api_update_invoice(quote_id: str, session, request):
     if not invoice_id:
         return JSONResponse({"success": False, "error": "Invoice ID required"}, status_code=400)
 
-    # Edit-after-send guard: block edits on sent invoices unless user has override role
+    # Procurement-lock guard: block edits once the quote's procurement stage completes
     from services.invoice_send_service import check_edit_permission
     user_roles = user.get("roles", [])
     if not check_edit_permission(invoice_id, user_roles):
         return JSONResponse(
-            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            {"success": False, "error": {"code": "PROCUREMENT_LOCKED", "message": "Procurement for this quote has completed. Request unlock approval to edit."}},
             status_code=403,
         )
 
@@ -19652,12 +19652,12 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
     if not item_ids or not invoice_id:
         return JSONResponse({"success": False, "error": "item_ids and invoice_id required"}, status_code=400)
 
-    # Edit-after-send guard: block item assignment changes on sent invoices
+    # Procurement-lock guard: block item assignment changes once procurement completes
     from services.invoice_send_service import check_edit_permission
     user_roles = user.get("roles", [])
     if not check_edit_permission(invoice_id, user_roles):
         return JSONResponse(
-            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            {"success": False, "error": {"code": "PROCUREMENT_LOCKED", "message": "Procurement for this quote has completed. Request unlock approval to edit."}},
             status_code=403,
         )
 
@@ -19770,18 +19770,18 @@ async def api_bulk_update_items(quote_id: str, session, request):
         .in_("id", item_ids) \
         .execute()
 
-    # Edit-after-send guard: check if any items belong to sent invoices
+    # Procurement-lock guard: block if any affected invoice is procurement-locked
     from services.invoice_send_service import check_edit_permission
     user_roles = user.get("roles", [])
-    sent_invoice_ids = set()
+    affected_invoice_ids = set()
     for qi in (valid_items_result.data or []):
         inv_id = qi.get("invoice_id")
         if inv_id:
-            sent_invoice_ids.add(inv_id)
-    for inv_id in sent_invoice_ids:
+            affected_invoice_ids.add(inv_id)
+    for inv_id in affected_invoice_ids:
         if not check_edit_permission(inv_id, user_roles):
             return JSONResponse(
-                {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "Some items belong to a sent invoice. Request approval to edit."}},
+                {"success": False, "error": {"code": "PROCUREMENT_LOCKED", "message": "Some items belong to a procurement-locked quote. Request unlock approval to edit."}},
                 status_code=403,
             )
 
