@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Split, Trash2, Undo2, Weight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Mail, Merge, Package, Paperclip, Split, Trash2, Undo2, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
 import { SplitModal } from "./split-modal";
+import { MergeModal } from "./merge-modal";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
 import { downloadInvoiceXls } from "@/entities/invoice/mutations";
@@ -137,6 +138,7 @@ export function InvoiceCard({
     Array<{ id: string; product_name: string; quantity: number }>
   >([]);
   const [splitOpen, setSplitOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
 
   const procurementCompleted = quote.procurement_completed_at != null;
   const invoiceItems = invoiceItemsOverride ?? fetchedInvoiceItems;
@@ -525,6 +527,18 @@ export function InvoiceCard({
                 Разделить
               </Button>
             )}
+            {oneToOneCandidates.length >= 2 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setMergeOpen(true)}
+                title="Объединить позиции"
+              >
+                <Merge size={14} className="mr-1" />
+                Объединить
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -739,6 +753,17 @@ export function InvoiceCard({
       <SplitModal
         open={splitOpen}
         onClose={() => setSplitOpen(false)}
+        invoiceId={invoice.id}
+        candidates={oneToOneCandidates}
+        defaultCurrency={currency}
+      />
+
+      {/* Phase 5c Task 13: MergeModal — consolidate N 1:1-covered
+          quote_items into 1 merged invoice_item (N coverage rows, ratio=1
+          each). Local action; blocks chain-merge of already-merged items. */}
+      <MergeModal
+        open={mergeOpen}
+        onClose={() => setMergeOpen(false)}
         invoiceId={invoice.id}
         candidates={oneToOneCandidates}
         defaultCurrency={currency}

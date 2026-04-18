@@ -491,6 +491,196 @@ export async function splitInvoiceItem(
 }
 
 /**
+ * Phase 5c Task 13 — merge N ≥ 2 quote_items (each currently 1:1 covered in
+ * THIS invoice) into a single merged invoice_item with N coverage rows
+ * (all ratio=1). The merge is local to the given invoice — coverage in
+ * other invoices for the same quote_items is untouched.
+ *
+ * Validates chain-merge prevention: each source quote_item must have
+ * exactly one covering invoice_item in this invoice with ratio=1, and that
+ * covering invoice_item must cover only this one quote_item. If any fail
+ * the check, the operation refuses before mutating.
+ *
+ * Sequence (no Supabase transaction; fail-forward with hard errors):
+ *   1. Load coverage for sourceQuoteItemIds; verify all are 1:1 in this
+ *      invoice.
+ *   2. Read invoice metadata for organization_id + next position anchor.
+ *   3. DELETE the N source invoice_items — cascades to their coverage rows.
+ *   4. INSERT 1 merged invoice_item.
+ *   5. INSERT N coverage rows (merged_invoice_item_id, source_qi_id_i,
+ *      ratio=1).
+ */
+export interface MergeMergedInput {
+  product_name: string;
+  supplier_sku: string | null;
+  brand: string | null;
+  quantity: number;
+  purchase_price_original: number;
+  purchase_currency: string;
+  weight_in_kg: number | null;
+  customs_code: string | null;
+}
+
+export async function mergeInvoiceItems(
+  invoiceId: string,
+  sourceQuoteItemIds: string[],
+  merged: MergeMergedInput
+) {
+  if (sourceQuoteItemIds.length < 2) {
+    throw new Error("Merge requires at least 2 source quote_items");
+  }
+  if (!Number.isFinite(merged.quantity) || merged.quantity <= 0) {
+    throw new Error("Merged quantity must be > 0");
+  }
+
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+
+  // 1. Load all coverage rows for the selected quote_items. For each, the
+  //    one in this invoice must be 1:1 (ratio=1, not part of any split).
+  const { data: coverageRows, error: covErr } = await untyped
+    .from("invoice_item_coverage")
+    .select(
+      "invoice_item_id, quote_item_id, ratio, invoice_items!inner(id, invoice_id)"
+    )
+    .in("quote_item_id", sourceQuoteItemIds);
+  if (covErr) throw covErr;
+
+  type CovRow = {
+    invoice_item_id: string;
+    quote_item_id: string;
+    ratio: number;
+    invoice_items: { id: string; invoice_id: string };
+  };
+  const allRows = (coverageRows ?? []) as CovRow[];
+
+  // Group coverage rows by invoice_item_id to detect merges (invoice_item
+  // that covers multiple quote_items) — those are NOT eligible sources.
+  const rowsByIi = new Map<string, CovRow[]>();
+  for (const row of allRows) {
+    const list = rowsByIi.get(row.invoice_item_id) ?? [];
+    list.push(row);
+    rowsByIi.set(row.invoice_item_id, list);
+  }
+
+  const sourceInvoiceItemIds = new Set<string>();
+  for (const qiId of sourceQuoteItemIds) {
+    const rowsInThisInvoice = allRows.filter(
+      (r) =>
+        r.quote_item_id === qiId && r.invoice_items?.invoice_id === invoiceId
+    );
+    if (rowsInThisInvoice.length === 0) {
+      throw new Error(
+        "Выбранная позиция не покрыта в этом КП"
+      );
+    }
+    if (rowsInThisInvoice.length > 1) {
+      throw new Error(
+        "Нельзя объединить позицию, уже участвующую в разделении"
+      );
+    }
+    const only = rowsInThisInvoice[0];
+    if (Number(only.ratio) !== 1) {
+      throw new Error(
+        "Нельзя объединить позицию, уже участвующую в разделении/объединении"
+      );
+    }
+    // The covering invoice_item must cover ONLY this quote_item (no merge).
+    const allRowsForIi = allRows.filter(
+      (r) =>
+        r.invoice_item_id === only.invoice_item_id &&
+        r.invoice_items?.invoice_id === invoiceId
+    );
+    // We only selected sourceQuoteItemIds, so if some other qi_id is also
+    // covered in allRowsForIi, we need to check the database beyond our
+    // selected set. Re-query explicitly:
+    const { data: iiCoverageRows } = await untyped
+      .from("invoice_item_coverage")
+      .select("quote_item_id")
+      .eq("invoice_item_id", only.invoice_item_id);
+    const allQiForIi = (iiCoverageRows ?? []) as Array<{
+      quote_item_id: string;
+    }>;
+    if (allQiForIi.length > 1) {
+      throw new Error(
+        "Нельзя объединить позицию, уже участвующую в объединении"
+      );
+    }
+    void allRowsForIi;
+    sourceInvoiceItemIds.add(only.invoice_item_id);
+  }
+
+  if (sourceInvoiceItemIds.size < 2) {
+    throw new Error(
+      "Нужно выбрать минимум 2 разных позиции с 1:1 покрытием"
+    );
+  }
+
+  // 2. Invoice metadata — organization_id + next position anchor.
+  const { data: inv, error: invErr } = await untyped
+    .from("invoices")
+    .select("organization_id")
+    .eq("id", invoiceId)
+    .single();
+  if (invErr) throw invErr;
+  if (!inv) throw new Error("invoice not found");
+
+  const { data: posRow } = await untyped
+    .from("invoice_items")
+    .select("position")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const nextPos =
+    (Array.isArray(posRow) && posRow.length > 0
+      ? (posRow[0] as { position: number }).position
+      : 0) + 1;
+
+  // 3. DELETE N source invoice_items — cascades to coverage rows.
+  const { error: delErr } = await untyped
+    .from("invoice_items")
+    .delete()
+    .in("id", Array.from(sourceInvoiceItemIds));
+  if (delErr) throw delErr;
+
+  // 4. INSERT 1 merged invoice_item.
+  const { data: createdRow, error: insErr } = await untyped
+    .from("invoice_items")
+    .insert({
+      invoice_id: invoiceId,
+      organization_id: (inv as { organization_id: string }).organization_id,
+      position: nextPos,
+      product_name: merged.product_name,
+      supplier_sku: merged.supplier_sku,
+      brand: merged.brand,
+      quantity: merged.quantity,
+      purchase_price_original: merged.purchase_price_original,
+      purchase_currency: merged.purchase_currency,
+      weight_in_kg: merged.weight_in_kg,
+      customs_code: merged.customs_code,
+      version: 1,
+    })
+    .select("id")
+    .single();
+  if (insErr) throw insErr;
+  const mergedIiId = (createdRow as { id: string }).id;
+
+  // 5. INSERT N coverage rows pointing to the merged invoice_item, each
+  //    with ratio=1 (definition of merge: N:1 with ratio = 1 per row).
+  const covInsert = sourceQuoteItemIds.map((qiId) => ({
+    invoice_item_id: mergedIiId,
+    quote_item_id: qiId,
+    ratio: 1,
+  }));
+
+  const { error: covInsertErr } = await untyped
+    .from("invoice_item_coverage")
+    .insert(covInsert);
+  if (covInsertErr) throw covInsertErr;
+}
+
+/**
  * Remove a quote_item from its currently-selected invoice. Deletes the
  * invoice_items + invoice_item_coverage rows that cover this quote_item in
  * its composition_selected_invoice_id, and clears the pointer.
