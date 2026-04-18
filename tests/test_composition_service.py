@@ -1113,6 +1113,155 @@ class TestGetCompositionView:
         assert view["composition_complete"] is False
 
 
+class TestGetCompositionViewDivergentMarkups:
+    """Merged alternatives surface a divergent_markups flag when the
+    covered quote_items carry different sales-side `markup` values.
+
+    Phase 5c Task 14: UI uses this flag to show a warning icon so the sales
+    user knows ``get_composed_items`` will pick the first qi's markup per
+    design.md §7.1 option (a).
+    """
+
+    def test_split_summary_does_not_set_divergent_markups(self):
+        """Split alternative (1 qi → N ii) has no markup divergence to
+        report — only one qi is covered."""
+        items = [{
+            "id": "qi-1",
+            "product_name": "Fastener",
+            "quantity": 100,
+            "markup": 10,
+            "composition_selected_invoice_id": None,
+        }]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-bolt",
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-bolt",
+                    "invoice_id": "inv-split",
+                    "product_name": "Bolt",
+                    "quantity": 100,
+                    "purchase_price_original": 5.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-washer",
+                "ratio": 2,
+                "invoice_items": {
+                    "id": "ii-washer",
+                    "invoice_id": "inv-split",
+                    "product_name": "Washer",
+                    "quantity": 200,
+                    "purchase_price_original": 1.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+        ]
+        invoices = [{"id": "inv-split", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoices": _chainable(invoices),
+            "suppliers": _chainable(suppliers),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        view = get_composition_view("q-1", sb)
+
+        assert view["items"][0]["alternatives"][0]["divergent_markups"] is False
+
+    def test_merge_with_same_markups_sets_false(self):
+        """Merge where all covered quote_items share the same markup →
+        divergent_markups=False."""
+        items = [
+            {"id": "qi-bolt", "product_name": "Bolt", "quantity": 100,
+             "markup": 15, "composition_selected_invoice_id": None},
+            {"id": "qi-nut", "product_name": "Nut", "quantity": 100,
+             "markup": 15, "composition_selected_invoice_id": None},
+            {"id": "qi-washer", "product_name": "Washer", "quantity": 100,
+             "markup": 15, "composition_selected_invoice_id": None},
+        ]
+        merged_ii = {
+            "id": "ii-kit",
+            "invoice_id": "inv-merge",
+            "product_name": "Fastener Kit",
+            "quantity": 100,
+            "purchase_price_original": 12.0,
+            "purchase_currency": "EUR",
+        }
+        coverage_rows = [
+            {"quote_item_id": "qi-bolt", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+            {"quote_item_id": "qi-nut", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+            {"quote_item_id": "qi-washer", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+        ]
+        invoices = [{"id": "inv-merge", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoices": _chainable(invoices),
+            "suppliers": _chainable(suppliers),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        view = get_composition_view("q-1", sb)
+
+        for vi in view["items"]:
+            assert vi["alternatives"][0]["divergent_markups"] is False
+
+    def test_merge_with_divergent_markups_sets_true(self):
+        """Merge where covered quote_items have different markups →
+        divergent_markups=True on every alternative row (each covered
+        qi sees the same merged alternative)."""
+        items = [
+            {"id": "qi-bolt", "product_name": "Bolt", "quantity": 100,
+             "markup": 10, "composition_selected_invoice_id": None},
+            {"id": "qi-nut", "product_name": "Nut", "quantity": 100,
+             "markup": 25, "composition_selected_invoice_id": None},
+        ]
+        merged_ii = {
+            "id": "ii-kit",
+            "invoice_id": "inv-merge",
+            "product_name": "Fastener Kit",
+            "quantity": 100,
+            "purchase_price_original": 12.0,
+            "purchase_currency": "EUR",
+        }
+        coverage_rows = [
+            {"quote_item_id": "qi-bolt", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+            {"quote_item_id": "qi-nut", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+        ]
+        invoices = [{"id": "inv-merge", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoices": _chainable(invoices),
+            "suppliers": _chainable(suppliers),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        view = get_composition_view("q-1", sb)
+
+        for vi in view["items"]:
+            assert vi["alternatives"][0]["divergent_markups"] is True
+
+
 # ============================================================================
 # Locked files invariant
 # ============================================================================

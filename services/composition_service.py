@@ -361,6 +361,10 @@ def get_composition_view(
             version, frozen_at,
             coverage_summary: str ("" for 1:1, "→ ..." for split,
                 "← ... объединены" for merge)
+            divergent_markups: bool — True when this is a merged alternative
+                whose covered quote_items have different ``markup`` values
+                (UI warning: ``get_composed_items`` will use the first qi's
+                markup — see design.md §7.1).
     """
     items_resp = (
         supabase.table("quote_items")
@@ -468,9 +472,11 @@ def get_composition_view(
         # Coverage summary string
         # Merge case: this invoice_item covers >1 distinct quote_items
         coverage_summary = ""
+        divergent_markups = False
         first_ii_id = first_ii.get("id")
         if first_ii_id:
-            n_qi_for_this_ii = len(qi_count_by_ii.get(first_ii_id, set()))
+            covered_qi_ids = qi_count_by_ii.get(first_ii_id, set())
+            n_qi_for_this_ii = len(covered_qi_ids)
             if n_qi_for_this_ii > 1:
                 # Merge — list all covered quote_item names
                 other_names = [
@@ -484,6 +490,16 @@ def get_composition_view(
                     coverage_summary = "← " + ", ".join(display_names) + " объединены"
                 else:
                     coverage_summary = "← объединены"
+                # Divergent markups: the covered quote_items have different
+                # `markup` values. Matters because get_composed_items picks
+                # the first qi's markup (option a, design.md §7.1) — UI
+                # warns so the user can decide.
+                covered_markups = {
+                    (qi_by_id.get(qid) or {}).get("markup")
+                    for qid in covered_qi_ids
+                    if (qi_by_id.get(qid) or {}).get("markup") is not None
+                }
+                divergent_markups = len(covered_markups) > 1
             elif len(unique_ii) > 1:
                 # Split — multiple invoice_items cover this single qi
                 parts = []
@@ -508,6 +524,7 @@ def get_composition_view(
             "version": first_ii.get("version"),
             "frozen_at": first_ii.get("frozen_at"),
             "coverage_summary": coverage_summary,
+            "divergent_markups": divergent_markups,
         }
         alternatives_by_item[qi_id].append(alt)
 

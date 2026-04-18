@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -235,7 +235,7 @@ export function CompositionPicker({ quoteId }: CompositionPickerProps) {
   );
 }
 
-function CompositionItemRow({
+export function CompositionItemRow({
   item,
   disabled,
   onSelect,
@@ -264,18 +264,21 @@ function CompositionItemRow({
             Нет КП поставщиков
           </span>
         ) : alternatives.length === 1 ? (
-          <div className="flex items-center gap-2">
-            <AlternativeLabel alt={alternatives[0]} />
-            <span className="text-[10px] text-muted-foreground">
-              (единственное КП)
-            </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="flex items-center gap-2">
+              <AlternativeLabel alt={alternatives[0]} />
+              <span className="text-[10px] text-muted-foreground">
+                (единственное КП)
+              </span>
+            </div>
+            <AlternativeSubtext alt={alternatives[0]} />
           </div>
         ) : (
           <div className="space-y-1.5">
             {alternatives.map((alt) => (
               <label
                 key={alt.invoice_id}
-                className="flex items-center gap-2 cursor-pointer hover:bg-muted/40 rounded px-1 py-0.5 -mx-1"
+                className="flex items-start gap-2 cursor-pointer hover:bg-muted/40 rounded px-1 py-0.5 -mx-1"
               >
                 <input
                   type="radio"
@@ -284,9 +287,12 @@ function CompositionItemRow({
                   checked={selected === alt.invoice_id}
                   disabled={disabled}
                   onChange={() => onSelect(item.quote_item_id, alt.invoice_id)}
-                  className="h-3.5 w-3.5 cursor-pointer accent-accent disabled:cursor-not-allowed"
+                  className="h-3.5 w-3.5 mt-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
                 />
-                <AlternativeLabel alt={alt} />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <AlternativeLabel alt={alt} />
+                  <AlternativeSubtext alt={alt} />
+                </div>
               </label>
             ))}
           </div>
@@ -314,6 +320,26 @@ function AlternativeLabel({ alt }: { alt: CompositionAlternative }) {
           {alt.supplier_country}
         </Badge>
       )}
+      {alt.divergent_markups && (
+        <span
+          title="Покрываемые позиции имеют разные наценки — применится первая"
+          className="inline-flex items-center text-amber-500"
+          aria-label="Покрываемые позиции имеют разные наценки — применится первая"
+        >
+          <AlertTriangle size={12} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function AlternativeSubtext({ alt }: { alt: CompositionAlternative }) {
+  if (!alt.coverage_summary) {
+    return null;
+  }
+  return (
+    <span className="text-xs text-muted-foreground italic">
+      {alt.coverage_summary}
     </span>
   );
 }

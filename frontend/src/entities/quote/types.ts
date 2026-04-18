@@ -17,6 +17,18 @@ export interface CompositionAlternative {
   production_time_days: number | null;
   version: number | null;
   frozen_at: string | null;
+  /**
+   * Structural context for this alternative (Phase 5c Task 14).
+   * "" for 1:1, "→ name ×ratio + ..." for split, "← name, ... объединены" for merge.
+   */
+  coverage_summary: string;
+  /**
+   * Set when this is a merged alternative (← объединены) AND the covered
+   * quote_items carry different `markup` values. The calc engine uses the
+   * first qi's markup (design.md §7.1 option a) — the UI surfaces this as
+   * a warning so the sales user can decide.
+   */
+  divergent_markups: boolean;
 }
 
 /** One row in the CompositionPicker — a quote_item with its alternatives. */
