@@ -7,7 +7,7 @@ Tests for Phase 4a API endpoints:
 - POST /api/invoices/{id}/letter-draft/send — Commit send
 - DELETE /api/invoices/{id}/letter-draft/{draft_id} — Delete draft
 - GET /api/invoices/{id}/letter-drafts/history — Send history
-- POST /api/invoices/{id}/edit-request-approval — Edit approval request
+- POST /api/invoices/{id}/procurement-unlock-request — Procurement unlock approval request
 - Edit-after-send guard on existing mutating endpoints
 """
 
@@ -586,7 +586,7 @@ class TestSendLetterDraft:
 
 
 # ============================================================================
-# POST /api/invoices/{id}/edit-request-approval
+# POST /api/invoices/{id}/procurement-unlock-request
 # ============================================================================
 
 
@@ -626,21 +626,21 @@ class TestEditRequestApproval:
 
             with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=True), \
                  patch("services.approval_service.create_approvals_for_role", return_value=[mock_approval]) as mock_create:
-                from api.invoices import request_edit_approval
+                from api.invoices import request_procurement_unlock
 
                 request = _mock_request(
                     method="POST",
                     body={"reason": "Need to fix price"},
                     api_user=api_user,
                 )
-                response = await request_edit_approval(request, invoice_id)
+                response = await request_procurement_unlock(request, invoice_id)
 
         assert response.status_code == 201
         data = json.loads(response.body)
         assert data["data"]["approvals_created"] == 1
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args.kwargs
-        assert call_kwargs["approval_type"] == "edit_sent_invoice"
+        assert call_kwargs["approval_type"] == "edit_completed_procurement"
         assert call_kwargs["quote_id"] == quote_id
 
     @pytest.mark.asyncio
@@ -657,10 +657,10 @@ class TestEditRequestApproval:
             self._setup_mocks(sb, user_id, org_id, invoice_id, quote_id, sent=False)
 
             with patch("services.invoice_send_service.is_quote_procurement_locked", return_value=False):
-                from api.invoices import request_edit_approval
+                from api.invoices import request_procurement_unlock
 
                 request = _mock_request(method="POST", api_user=api_user)
-                response = await request_edit_approval(request, invoice_id)
+                response = await request_procurement_unlock(request, invoice_id)
 
         assert response.status_code == 400
         data = json.loads(response.body)
@@ -678,7 +678,7 @@ class TestEditAfterSendGuard:
     @pytest.mark.asyncio
     async def test_update_invoice_returns_403_when_sent(self):
         """The PATCH /api/procurement/{quote_id}/invoices/update endpoint
-        should return 403 EDIT_REQUIRES_APPROVAL when invoice is sent
+        should return 403 PROCUREMENT_LOCKED when invoice's quote has procurement_completed_at
         and user has no override role."""
         from services.invoice_send_service import check_edit_permission
 

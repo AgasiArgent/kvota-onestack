@@ -1,12 +1,11 @@
 """
-Composition API endpoints for Phase 5b (Tasks 6 + 7).
+Composition API endpoints for Phase 5b/5c.
 
 GET  /api/quotes/{quote_id}/composition
 POST /api/quotes/{quote_id}/composition
 POST /api/invoices/{invoice_id}/verify
-POST /api/invoices/{invoice_id}/edit-request
-POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
-POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
+POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user). Mirrors the
 plan_fact API pattern.
@@ -16,15 +15,12 @@ Access control:
     procurement_senior, head_of_procurement, admin, quote_controller,
     spec_controller, finance, top_manager (org-boundary enforced).
   Invoice verify — procurement, procurement_senior, head_of_procurement, admin.
-  Invoice edit-request — procurement, procurement_senior, head_of_procurement, admin.
-  Approve/reject invoice edit — head_of_procurement, admin only.
+  Approve/reject procurement-unlock — head_of_procurement, admin only.
 
-The invoice edit-request flow uses the existing kvota.approvals table
-with approval_type='invoice_edit' and a JSON diff stored in the
-``modifications`` column. It does NOT route through
-``approval_service.request_approval()`` which is hard-coded to the
-quote → top_manager approval workflow — Phase 5b invoice edits need a
-different target role and no quote status transition.
+Phase 5c: the invoice edit-request flow was renamed to procurement-unlock
+(approval_type='edit_completed_procurement'). Historical Phase 5b rows
+with approval_type='invoice_edit' are still processable by the approve/
+reject handlers for continuity with in-flight approvals.
 """
 
 import logging
@@ -469,13 +465,17 @@ async def verify_invoice(request, invoice_id: str) -> JSONResponse:
 
 
 # ============================================================================
-# Task 7 — POST /api/invoices/{invoice_id}/edit-request
+# Phase 5b internal — request_invoice_edit (no longer routed post-5c)
+#
+# Kept for import continuity (test_composition_api.py still exercises this
+# function directly). The HTTP entry point for procurement-unlock requests
+# lives in api/invoices.py::request_procurement_unlock as of Phase 5c.
 # ============================================================================
 
 async def request_invoice_edit(request, invoice_id: str) -> JSONResponse:
     """Request head_of_procurement approval to edit a verified invoice.
 
-    Path: POST /api/invoices/{invoice_id}/edit-request
+    Internal function — no longer routed. Kept for test continuity.
 
     Params (JSON body):
         proposed_changes: Dict[str, dict] (required) — Per-field diff
@@ -595,13 +595,13 @@ async def request_invoice_edit(request, invoice_id: str) -> JSONResponse:
 
 
 # ============================================================================
-# Task 7 — POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
 # ============================================================================
 
-async def approve_invoice_edit(request, invoice_id: str, approval_id: str) -> JSONResponse:
-    """Approve a pending invoice edit request and apply the diff.
+async def approve_procurement_unlock(request, invoice_id: str, approval_id: str) -> JSONResponse:
+    """Approve a pending procurement-unlock request and apply the diff.
 
-    Path: POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
+    Path: POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
 
     Returns:
         approval_id: str
@@ -625,7 +625,7 @@ async def approve_invoice_edit(request, invoice_id: str, approval_id: str) -> JS
     if err:
         return err
 
-    role_err = _check_roles(user_roles, VERIFY_APPROVAL_ROLES, message="Only head_of_procurement or admin may approve invoice edits")
+    role_err = _check_roles(user_roles, VERIFY_APPROVAL_ROLES, message="Only head_of_procurement or admin may approve procurement-unlock requests")
     if role_err:
         return role_err
 
@@ -634,7 +634,7 @@ async def approve_invoice_edit(request, invoice_id: str, approval_id: str) -> JS
     if org_err:
         return org_err
 
-    approval_row, err = _fetch_pending_invoice_edit_approval(approval_id, invoice_id)
+    approval_row, err = _fetch_pending_procurement_unlock_approval(approval_id, invoice_id)
     if err:
         return err
 
@@ -674,7 +674,7 @@ async def approve_invoice_edit(request, invoice_id: str, approval_id: str) -> JS
         )
 
     logger.info(
-        "Invoice-edit approval approved: approval_id=%s invoice_id=%s approver=%s fields=%d",
+        "Procurement-unlock approval approved: approval_id=%s invoice_id=%s approver=%s fields=%d",
         approval_id, invoice_id, user["id"], len(new_values),
     )
 
@@ -692,13 +692,13 @@ async def approve_invoice_edit(request, invoice_id: str, approval_id: str) -> JS
 
 
 # ============================================================================
-# Task 7 — POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 # ============================================================================
 
-async def reject_invoice_edit(request, invoice_id: str, approval_id: str) -> JSONResponse:
-    """Reject a pending invoice edit request.
+async def reject_procurement_unlock(request, invoice_id: str, approval_id: str) -> JSONResponse:
+    """Reject a pending procurement-unlock request.
 
-    Path: POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+    Path: POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 
     Params (JSON body, optional):
         decision_comment: str — Rejector's reason.
@@ -722,7 +722,7 @@ async def reject_invoice_edit(request, invoice_id: str, approval_id: str) -> JSO
     if err:
         return err
 
-    role_err = _check_roles(user_roles, VERIFY_APPROVAL_ROLES, message="Only head_of_procurement or admin may reject invoice edits")
+    role_err = _check_roles(user_roles, VERIFY_APPROVAL_ROLES, message="Only head_of_procurement or admin may reject procurement-unlock requests")
     if role_err:
         return role_err
 
@@ -730,7 +730,7 @@ async def reject_invoice_edit(request, invoice_id: str, approval_id: str) -> JSO
     if org_err:
         return org_err
 
-    approval_row, err = _fetch_pending_invoice_edit_approval(approval_id, invoice_id)
+    approval_row, err = _fetch_pending_procurement_unlock_approval(approval_id, invoice_id)
     if err:
         return err
 
@@ -765,7 +765,7 @@ async def reject_invoice_edit(request, invoice_id: str, approval_id: str) -> JSO
         )
 
     logger.info(
-        "Invoice-edit approval rejected: approval_id=%s invoice_id=%s rejector=%s",
+        "Procurement-unlock approval rejected: approval_id=%s invoice_id=%s rejector=%s",
         approval_id, invoice_id, user["id"],
     )
 
@@ -785,7 +785,13 @@ async def reject_invoice_edit(request, invoice_id: str, approval_id: str) -> JSO
 # Internal helper shared by approve/reject
 # ============================================================================
 
-def _fetch_pending_invoice_edit_approval(approval_id: str, invoice_id: str):
+# Approval types this endpoint can process. Includes the historical
+# Phase 5b literal so in-flight approvals created pre-Phase-5c continue
+# to flow through the same handler after the rename.
+_UNLOCK_APPROVAL_TYPES = {"edit_completed_procurement", "invoice_edit"}
+
+
+def _fetch_pending_procurement_unlock_approval(approval_id: str, invoice_id: str):
     """Load an approval row, verify it is pending and targets this invoice.
 
     Returns (approval_row_dict, error_response). On any mismatch returns
@@ -812,7 +818,7 @@ def _fetch_pending_invoice_edit_approval(approval_id: str, invoice_id: str):
         )
 
     row = result.data[0]
-    if row.get("approval_type") != "invoice_edit":
+    if row.get("approval_type") not in _UNLOCK_APPROVAL_TYPES:
         return None, JSONResponse(
             {"success": False, "error": {"code": "NOT_FOUND", "message": "Approval not found"}},
             status_code=404,

@@ -1,13 +1,14 @@
 """
-Tests for api/composition.py — Phase 5b (Tasks 6 + 7).
+Tests for api/composition.py — Phase 5b composition + Phase 5c
+procurement-unlock approve/reject handlers.
 
-Covers all 6 handlers:
+Covers:
 - GET  /api/quotes/{quote_id}/composition
 - POST /api/quotes/{quote_id}/composition
 - POST /api/invoices/{invoice_id}/verify
-- POST /api/invoices/{invoice_id}/edit-request
-- POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
-- POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+- request_invoice_edit (internal — no longer routed post-5c)
+- POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
+- POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 
 Test style mirrors tests/test_api_deals.py — MagicMock chainable query
 stubs + patch on api.composition.get_supabase + AsyncMock for request.json.
@@ -25,9 +26,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.composition import (  # noqa: E402
     apply_composition_endpoint,
-    approve_invoice_edit,
+    approve_procurement_unlock,
     get_composition,
-    reject_invoice_edit,
+    reject_procurement_unlock,
     request_invoice_edit,
     verify_invoice,
 )
@@ -328,7 +329,7 @@ class TestVerifyInvoice:
 
 
 # ============================================================================
-# POST /api/invoices/{invoice_id}/edit-request
+# request_invoice_edit (internal — no route post-5c, kept for continuity)
 # ============================================================================
 
 class TestRequestInvoiceEdit:
@@ -421,7 +422,7 @@ class TestRequestInvoiceEdit:
 
 
 # ============================================================================
-# POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
 # ============================================================================
 
 class TestApproveInvoiceEdit:
@@ -456,7 +457,7 @@ class TestApproveInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 200
         payload = json.loads(response.body)
@@ -482,7 +483,7 @@ class TestApproveInvoiceEdit:
             "user_roles": _chain(return_data=_role_rows(["procurement"])),  # NOT head_of_procurement
         })
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
         assert response.status_code == 403
 
     @pytest.mark.asyncio
@@ -509,13 +510,13 @@ class TestApproveInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 404
 
 
 # ============================================================================
-# POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 # ============================================================================
 
 class TestRejectInvoiceEdit:
@@ -546,7 +547,7 @@ class TestRejectInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await reject_invoice_edit(request, invoice_id, approval_id)
+            response = await reject_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 200
         payload = json.loads(response.body)

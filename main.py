@@ -48412,9 +48412,8 @@ from api.composition import (
     get_composition as api_get_composition,
     apply_composition_endpoint as api_apply_composition,
     verify_invoice as api_verify_invoice,
-    request_invoice_edit as api_request_invoice_edit,
-    approve_invoice_edit as api_approve_invoice_edit,
-    reject_invoice_edit as api_reject_invoice_edit,
+    approve_procurement_unlock as api_approve_procurement_unlock,
+    reject_procurement_unlock as api_reject_procurement_unlock,
 )
 
 @rt("/api/quotes/{quote_id}/composition", methods=["GET"])
@@ -48429,17 +48428,13 @@ async def post_quote_composition(request, quote_id: str):
 async def post_invoice_verify(request, invoice_id: str):
     return await api_verify_invoice(request, invoice_id)
 
-@rt("/api/invoices/{invoice_id}/edit-request", methods=["POST"])
-async def post_invoice_edit_request(request, invoice_id: str):
-    return await api_request_invoice_edit(request, invoice_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve", methods=["POST"])
+async def post_invoice_procurement_unlock_approve(request, invoice_id: str, approval_id: str):
+    return await api_approve_procurement_unlock(request, invoice_id, approval_id)
 
-@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/approve", methods=["POST"])
-async def post_invoice_edit_approve(request, invoice_id: str, approval_id: str):
-    return await api_approve_invoice_edit(request, invoice_id, approval_id)
-
-@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/reject", methods=["POST"])
-async def post_invoice_edit_reject(request, invoice_id: str, approval_id: str):
-    return await api_reject_invoice_edit(request, invoice_id, approval_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject", methods=["POST"])
+async def post_invoice_procurement_unlock_reject(request, invoice_id: str, approval_id: str):
+    return await api_reject_procurement_unlock(request, invoice_id, approval_id)
 
 
 # --- Admin User Management JSON API (for Next.js frontend) ---
@@ -48485,7 +48480,7 @@ from api.invoices import (
     send_letter_draft as api_send_letter_draft,
     delete_letter_draft as api_delete_letter_draft,
     get_send_history as api_get_send_history,
-    request_edit_approval as api_request_edit_approval,
+    request_procurement_unlock as api_request_procurement_unlock,
 )
 
 @rt("/api/invoices/{invoice_id}/download-xls", methods=["POST"])
@@ -48512,9 +48507,9 @@ async def delete_invoice_letter_draft(request, invoice_id: str, draft_id: str):
 async def get_invoice_send_history(request, invoice_id: str):
     return await api_get_send_history(request, invoice_id)
 
-@rt("/api/invoices/{invoice_id}/edit-request-approval", methods=["POST"])
-async def post_invoice_edit_request_approval(request, invoice_id: str):
-    return await api_request_edit_approval(request, invoice_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-request", methods=["POST"])
+async def post_invoice_procurement_unlock_request(request, invoice_id: str):
+    return await api_request_procurement_unlock(request, invoice_id)
 
 
 # --- Procurement Sub-Status JSON API (Phase 4c Kanban — for Next.js frontend) ---
