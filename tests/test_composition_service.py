@@ -1,13 +1,18 @@
 """
-Tests for Composition Service — Phase 5b.
+Tests for Composition Service — Phase 5c.
 
-Covers:
-- get_composed_items: overlay logic, legacy fallback, non-price field preservation,
-  query count bounds
-- validate_composition: happy path + rejection of non-existent iip rows
-- apply_composition: validation-first, atomic update pattern, optimistic concurrency
-- freeze_composition: stamps frozen_at, idempotency, quote scope
-- Locked files: ensures composition_service does not import from the calc engine
+Covers the invoice_items + invoice_item_coverage schema:
+- get_composed_items: 1:1, split, merge, no composition, uncovered, swap,
+  frozen rows, N+1 guard
+- get_composition_view: alternatives grouped by invoice, coverage summary
+  for 1:1 / split / merge
+- apply_composition: validation-first, merge case (N quote_items updated
+  for one invoice), concurrency check
+- validate_composition: coverage existence check
+- freeze_composition: walks coverage → invoice_items, merge dedup,
+  idempotency
+- Locked files: ensures composition_service does not import from the
+  calc engine
 """
 
 import os
@@ -34,7 +39,7 @@ from services.composition_service import (  # noqa: E402
 # ============================================================================
 
 def _chainable(return_value):
-    """Build a MagicMock that chains select/eq/in_/order/limit/single and
+    """Build a MagicMock that chains select/eq/in_/order/limit/single/is_ and
     terminates at execute() returning a result with .data=return_value."""
     q = MagicMock()
     q.select.return_value = q
@@ -43,6 +48,7 @@ def _chainable(return_value):
     q.order.return_value = q
     q.limit.return_value = q
     q.single.return_value = q
+    q.is_.return_value = q
     result = MagicMock()
     result.data = return_value
     result.error = None
@@ -50,225 +56,520 @@ def _chainable(return_value):
     return q
 
 
-def make_supabase(table_data: dict) -> MagicMock:
-    """Build a mock supabase client where each table returns the given data.
-
-    For read paths (select/eq/in_/execute), the mock ignores filters and
-    always returns the table's full data — tests pass only the relevant rows.
-    For write paths (update/insert), each .table() call returns the SAME
-    chainable mock so tests can inspect `.update.call_args_list` via
-    `sb.table.return_value.update.call_args_list`.
+def make_table_router(table_data):
+    """Return a side_effect function that routes .table(name) to chainable
+    mocks whose data comes from ``table_data`` (dict name -> rows OR callable
+    that accepts the name and returns rows).
     """
-    sb = MagicMock()
+    def _lookup(name):
+        if callable(table_data):
+            rows = table_data(name) or []
+        else:
+            rows = table_data.get(name, []) or []
+        return _chainable(rows)
 
-    def _get_table(name):
-        data = table_data.get(name, [])
-        return _chainable(data)
-
-    sb.table.side_effect = _get_table
-    return sb
-
-
-def make_write_supabase() -> MagicMock:
-    """Build a mock where every .table(X) returns the same chainable mock.
-
-    Use this when you want to spy on update/insert calls — all writes go
-    through the same mock so call_args_list accumulates across tables.
-    """
-    shared = _chainable([])
-    sb = MagicMock()
-    sb.table.return_value = shared
-    return sb
+    return _lookup
 
 
 # ============================================================================
 # get_composed_items
 # ============================================================================
 
-class TestGetComposedItems:
-    """Overlay logic for the calculation adapter path."""
+class TestGetComposedItems1to1:
+    """1:1 composition (legacy-equivalent)."""
 
-    def test_overlays_iip_price_when_pointer_set(self):
-        """When composition pointer is set, price fields come from iip row."""
+    def test_single_qi_single_ii_ratio1_emits_one_calc_item(self):
+        """1 quote_item → 1 invoice_item (ratio=1) → 1 calc item with
+        invoice_item's supplier-side fields and quote_item's customer flags."""
         quote_id = "q-1"
-        item_id = "qi-1"
-        invoice_id = "inv-1"
+        qi_id = "qi-1"
+        inv_id = "inv-1"
+        ii_id = "ii-1"
 
-        def table_data(name):
+        def rows(name):
             if name == "quote_items":
                 return [{
-                    "id": item_id,
+                    "id": qi_id,
                     "quote_id": quote_id,
-                    "invoice_id": invoice_id,
-                    "composition_selected_invoice_id": invoice_id,
-                    "purchase_price_original": 100.00,  # legacy price
-                    "purchase_currency": "USD",
-                    "base_price_vat": 120.00,
-                    "price_includes_vat": True,
-                    "quantity": 5,
-                    "customs_code": "8708",
+                    "composition_selected_invoice_id": inv_id,
+                    "product_name": "Bolt",
+                    "brand": "ACME",
+                    "quantity": 100,
+                    "is_unavailable": False,
+                    "import_banned": False,
+                    "markup": 15,
+                    "supplier_discount": 0,
+                    "vat_rate": 20,
                 }]
-            if name == "invoice_item_prices":
+            if name == "invoice_item_coverage":
                 return [{
-                    "id": "iip-1",
-                    "quote_item_id": item_id,
-                    "invoice_id": invoice_id,
-                    "purchase_price_original": 85.50,  # overlay price
-                    "purchase_currency": "EUR",
-                    "base_price_vat": 102.60,
-                    "price_includes_vat": False,
-                    "version": 1,
+                    "invoice_item_id": ii_id,
+                    "quote_item_id": qi_id,
+                    "ratio": 1,
+                    "invoice_items": {
+                        "id": ii_id,
+                        "invoice_id": inv_id,
+                        "product_name": "Bolt M8",
+                        "supplier_sku": "SUP-BOLT-001",
+                        "brand": "Bosch",
+                        "quantity": 100,
+                        "purchase_price_original": 50.00,
+                        "purchase_currency": "EUR",
+                        "base_price_vat": 60.00,
+                        "price_includes_vat": False,
+                        "weight_in_kg": 0.25,
+                        "customs_code": "7318",
+                        "supplier_country": "Germany",
+                    },
                 }]
             return []
 
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(table_data(name))
+        sb.table.side_effect = make_table_router(rows)
 
         result = get_composed_items(quote_id, sb)
 
         assert len(result) == 1
         row = result[0]
-        assert row["purchase_price_original"] == 85.50, "price not overlaid from iip"
-        assert row["purchase_currency"] == "EUR", "currency not overlaid from iip"
-        assert row["base_price_vat"] == 102.60, "base_price_vat not overlaid"
-        assert row["price_includes_vat"] is False, "vat flag not overlaid"
+        # Supplier-side fields from invoice_item
+        assert row["product_name"] == "Bolt M8"
+        assert row["supplier_sku"] == "SUP-BOLT-001"
+        assert row["quantity"] == 100
+        assert row["purchase_price_original"] == 50.00
+        assert row["purchase_currency"] == "EUR"
+        assert row["weight_in_kg"] == 0.25
+        assert row["customs_code"] == "7318"
+        assert row["supplier_country"] == "Germany"
+        # Customer-side fields from quote_item
+        assert row["is_unavailable"] is False
+        assert row["import_banned"] is False
+        assert row["markup"] == 15
+        assert row["supplier_discount"] == 0
+        assert row["vat_rate"] == 20
+        # Traceability
+        assert row["quote_item_id"] == qi_id
+        assert row["invoice_item_id"] == ii_id
+        assert row["invoice_id"] == inv_id
+        assert row["coverage_ratio"] == 1
 
-    def test_falls_back_to_legacy_when_pointer_null(self):
-        """When composition pointer is NULL, quote_items price is used as-is."""
+
+class TestGetComposedItemsSplit:
+    """Split composition: 1 quote_item → N invoice_items."""
+
+    def test_one_qi_split_into_two_ii_emits_two_calc_items(self):
+        """quote_item "fastener ×100" covered by invoice_items
+        "bolt ×100" (ratio=1) + "washer ×200" (ratio=2) → 2 calc items."""
+        quote_id = "q-1"
+        qi_id = "qi-1"
+        inv_id = "inv-1"
+
+        def rows(name):
+            if name == "quote_items":
+                return [{
+                    "id": qi_id,
+                    "quote_id": quote_id,
+                    "product_name": "Fastener",
+                    "composition_selected_invoice_id": inv_id,
+                    "quantity": 100,
+                    "markup": 10,
+                }]
+            if name == "invoice_item_coverage":
+                return [
+                    {
+                        "invoice_item_id": "ii-bolt",
+                        "quote_item_id": qi_id,
+                        "ratio": 1,
+                        "invoice_items": {
+                            "id": "ii-bolt",
+                            "invoice_id": inv_id,
+                            "product_name": "Bolt",
+                            "quantity": 100,
+                            "purchase_price_original": 5.0,
+                            "purchase_currency": "EUR",
+                        },
+                    },
+                    {
+                        "invoice_item_id": "ii-washer",
+                        "quote_item_id": qi_id,
+                        "ratio": 2,
+                        "invoice_items": {
+                            "id": "ii-washer",
+                            "invoice_id": inv_id,
+                            "product_name": "Washer",
+                            "quantity": 200,
+                            "purchase_price_original": 1.0,
+                            "purchase_currency": "EUR",
+                        },
+                    },
+                ]
+            return []
+
+        sb = MagicMock()
+        sb.table.side_effect = make_table_router(rows)
+
+        result = get_composed_items(quote_id, sb)
+
+        assert len(result) == 2
+        names = {r["product_name"] for r in result}
+        assert names == {"Bolt", "Washer"}
+        # Each calc item carries its own quantity (supplier-side)
+        quantities_by_name = {r["product_name"]: r["quantity"] for r in result}
+        assert quantities_by_name == {"Bolt": 100, "Washer": 200}
+        # Each emitted calc item inherits markup from parent qi
+        for r in result:
+            assert r["markup"] == 10
+
+
+class TestGetComposedItemsMerge:
+    """Merge composition: N quote_items → 1 invoice_item."""
+
+    def test_three_qi_merged_into_one_ii_emits_single_calc_item(self):
+        """3 quote_items (bolt, nut, washer) all point to invoice inv-1
+        whose single invoice_item "fastener kit" covers all three → calc
+        engine receives ONE item (merged appears once)."""
+        quote_id = "q-1"
+        inv_id = "inv-1"
+        ii_id = "ii-kit"
+
+        def rows(name):
+            if name == "quote_items":
+                return [
+                    {
+                        "id": "qi-bolt",
+                        "quote_id": quote_id,
+                        "product_name": "Bolt",
+                        "composition_selected_invoice_id": inv_id,
+                        "quantity": 100,
+                        "markup": 15,
+                    },
+                    {
+                        "id": "qi-nut",
+                        "quote_id": quote_id,
+                        "product_name": "Nut",
+                        "composition_selected_invoice_id": inv_id,
+                        "quantity": 100,
+                        "markup": 15,
+                    },
+                    {
+                        "id": "qi-washer",
+                        "quote_id": quote_id,
+                        "product_name": "Washer",
+                        "composition_selected_invoice_id": inv_id,
+                        "quantity": 100,
+                        "markup": 15,
+                    },
+                ]
+            if name == "invoice_item_coverage":
+                # 3 coverage rows all pointing to the SAME invoice_item
+                merged_ii = {
+                    "id": ii_id,
+                    "invoice_id": inv_id,
+                    "product_name": "Fastener Kit",
+                    "quantity": 100,
+                    "purchase_price_original": 12.0,
+                    "purchase_currency": "EUR",
+                }
+                return [
+                    {
+                        "invoice_item_id": ii_id,
+                        "quote_item_id": "qi-bolt",
+                        "ratio": 1,
+                        "invoice_items": merged_ii,
+                    },
+                    {
+                        "invoice_item_id": ii_id,
+                        "quote_item_id": "qi-nut",
+                        "ratio": 1,
+                        "invoice_items": merged_ii,
+                    },
+                    {
+                        "invoice_item_id": ii_id,
+                        "quote_item_id": "qi-washer",
+                        "ratio": 1,
+                        "invoice_items": merged_ii,
+                    },
+                ]
+            return []
+
+        sb = MagicMock()
+        sb.table.side_effect = make_table_router(rows)
+
+        result = get_composed_items(quote_id, sb)
+
+        # Merge: one calc item, not three
+        assert len(result) == 1
+        assert result[0]["product_name"] == "Fastener Kit"
+        assert result[0]["invoice_item_id"] == ii_id
+
+
+class TestGetComposedItemsNoComposition:
+    """No composition selected — legacy fallback for pre-Phase-5c data."""
+
+    def test_pointer_null_emits_legacy_shape_with_none_prices(self):
+        """quote_item with NULL composition_selected_invoice_id → calc
+        dict with None price fields (engine skips such items)."""
         quote_id = "q-1"
 
-        def table_data(name):
+        def rows(name):
             if name == "quote_items":
                 return [{
                     "id": "qi-1",
                     "quote_id": quote_id,
-                    "invoice_id": "inv-1",
-                    "composition_selected_invoice_id": None,  # legacy path
-                    "purchase_price_original": 100.00,
-                    "purchase_currency": "USD",
-                    "base_price_vat": 120.00,
-                    "price_includes_vat": True,
+                    "composition_selected_invoice_id": None,
+                    "product_name": "Uncomposed",
                     "quantity": 5,
+                    "markup": 10,
                 }]
             return []
 
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(table_data(name))
+        sb.table.side_effect = make_table_router(rows)
 
         result = get_composed_items(quote_id, sb)
 
         assert len(result) == 1
-        assert result[0]["purchase_price_original"] == 100.00
-        assert result[0]["purchase_currency"] == "USD"
+        row = result[0]
+        assert row["purchase_price_original"] is None
+        assert row["purchase_currency"] is None
+        assert row["weight_in_kg"] is None
+        # Customer-side still preserved
+        assert row["product_name"] == "Uncomposed"
+        assert row["markup"] == 10
 
-    def test_preserves_non_price_fields(self):
-        """Overlay must only touch the 4 price fields, not customs/weight/etc."""
+    def test_no_pointers_skips_coverage_query(self):
+        """When NO quote_item has a pointer, the coverage query is never
+        issued — only a single quote_items read."""
+        calls = []
+
+        def rows(name):
+            calls.append(name)
+            if name == "quote_items":
+                return [
+                    {"id": "qi-1", "composition_selected_invoice_id": None, "quantity": 1},
+                    {"id": "qi-2", "composition_selected_invoice_id": None, "quantity": 1},
+                ]
+            return []
+
+        sb = MagicMock()
+        sb.table.side_effect = make_table_router(rows)
+
+        get_composed_items("q-1", sb)
+
+        assert calls == ["quote_items"]
+
+
+class TestGetComposedItemsUncovered:
+    """Pointer set but no coverage in the pointed invoice → skip."""
+
+    def test_uncovered_quote_item_is_skipped(self):
+        """qi-1 points to inv-missing but has no coverage row there — skip."""
         quote_id = "q-1"
 
-        def table_data(name):
+        def rows(name):
+            if name == "quote_items":
+                return [
+                    {
+                        "id": "qi-1",
+                        "quote_id": quote_id,
+                        "composition_selected_invoice_id": "inv-missing",
+                        "product_name": "Uncovered",
+                        "quantity": 1,
+                    },
+                    {
+                        "id": "qi-2",
+                        "quote_id": quote_id,
+                        "composition_selected_invoice_id": "inv-ok",
+                        "product_name": "Covered",
+                        "quantity": 1,
+                    },
+                ]
+            if name == "invoice_item_coverage":
+                return [{
+                    "invoice_item_id": "ii-ok",
+                    "quote_item_id": "qi-2",
+                    "ratio": 1,
+                    "invoice_items": {
+                        "id": "ii-ok",
+                        "invoice_id": "inv-ok",
+                        "product_name": "Covered",
+                        "quantity": 1,
+                        "purchase_price_original": 10.0,
+                        "purchase_currency": "USD",
+                    },
+                }]
+            return []
+
+        sb = MagicMock()
+        sb.table.side_effect = make_table_router(rows)
+
+        result = get_composed_items(quote_id, sb)
+
+        # Only qi-2 appears in output
+        assert len(result) == 1
+        assert result[0]["quote_item_id"] == "qi-2"
+
+
+class TestGetComposedItemsSupplierSwap:
+    """Multi-supplier swap: changing composition pointer swaps coverage."""
+
+    def test_swapping_invoice_changes_output_shape(self):
+        """Same qi has different structure per invoice:
+         - invoice A = 1:1 (1 calc item)
+         - invoice B = split into 2 (2 calc items).
+        Switching the pointer must switch the output shape."""
+        quote_id = "q-1"
+        qi_id = "qi-1"
+
+        coverage_rows = [
+            # Invoice A: 1:1
+            {
+                "invoice_item_id": "ii-a",
+                "quote_item_id": qi_id,
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-a",
+                    "invoice_id": "inv-a",
+                    "product_name": "Bolt",
+                    "quantity": 100,
+                    "purchase_price_original": 10.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+            # Invoice B: split into 2
+            {
+                "invoice_item_id": "ii-b1",
+                "quote_item_id": qi_id,
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-b1",
+                    "invoice_id": "inv-b",
+                    "product_name": "Bolt",
+                    "quantity": 100,
+                    "purchase_price_original": 8.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+            {
+                "invoice_item_id": "ii-b2",
+                "quote_item_id": qi_id,
+                "ratio": 2,
+                "invoice_items": {
+                    "id": "ii-b2",
+                    "invoice_id": "inv-b",
+                    "product_name": "Washer",
+                    "quantity": 200,
+                    "purchase_price_original": 1.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+        ]
+
+        def make_rows(pointer):
+            def _rows(name):
+                if name == "quote_items":
+                    return [{
+                        "id": qi_id,
+                        "quote_id": quote_id,
+                        "composition_selected_invoice_id": pointer,
+                        "product_name": "Bolt",
+                        "quantity": 100,
+                    }]
+                if name == "invoice_item_coverage":
+                    return coverage_rows
+                return []
+            return _rows
+
+        sb_a = MagicMock()
+        sb_a.table.side_effect = make_table_router(make_rows("inv-a"))
+        result_a = get_composed_items(quote_id, sb_a)
+        assert len(result_a) == 1
+
+        sb_b = MagicMock()
+        sb_b.table.side_effect = make_table_router(make_rows("inv-b"))
+        result_b = get_composed_items(quote_id, sb_b)
+        assert len(result_b) == 2
+
+
+class TestGetComposedItemsFrozenRows:
+    """Frozen invoice_items remain visible to the calc pipeline."""
+
+    def test_frozen_invoice_items_are_returned(self):
+        """frozen_at NOT NULL does NOT hide the row — frozen means
+        "committed history", calc must still see it for regen/preview."""
+        quote_id = "q-1"
+
+        def rows(name):
             if name == "quote_items":
                 return [{
                     "id": "qi-1",
                     "quote_id": quote_id,
                     "composition_selected_invoice_id": "inv-1",
-                    "purchase_price_original": 100.00,
-                    "purchase_currency": "USD",
-                    "base_price_vat": 120.00,
-                    "price_includes_vat": True,
-                    "quantity": 5,
-                    "customs_code": "8708913509",
-                    "weight_in_kg": 25.5,
-                    "supplier_country": "China",
-                    "is_unavailable": False,
-                    "import_banned": False,
+                    "product_name": "Bolt",
+                    "quantity": 100,
                 }]
-            if name == "invoice_item_prices":
+            if name == "invoice_item_coverage":
                 return [{
-                    "id": "iip-1",
+                    "invoice_item_id": "ii-frozen",
                     "quote_item_id": "qi-1",
-                    "invoice_id": "inv-1",
-                    "purchase_price_original": 50.00,
-                    "purchase_currency": "EUR",
-                    "base_price_vat": 60.00,
-                    "price_includes_vat": False,
-                    "version": 1,
+                    "ratio": 1,
+                    "invoice_items": {
+                        "id": "ii-frozen",
+                        "invoice_id": "inv-1",
+                        "product_name": "Bolt",
+                        "quantity": 100,
+                        "purchase_price_original": 5.0,
+                        "purchase_currency": "EUR",
+                        "frozen_at": "2026-04-15T10:00:00+00:00",
+                        "frozen_by": "user-1",
+                    },
                 }]
             return []
 
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(table_data(name))
+        sb.table.side_effect = make_table_router(rows)
 
-        row = get_composed_items(quote_id, sb)[0]
+        result = get_composed_items(quote_id, sb)
 
-        assert row["customs_code"] == "8708913509"
-        assert row["weight_in_kg"] == 25.5
-        assert row["supplier_country"] == "China"
-        assert row["quantity"] == 5
-        assert row["is_unavailable"] is False
-        assert row["import_banned"] is False
+        assert len(result) == 1
+        assert result[0]["product_name"] == "Bolt"
 
-    def test_executes_bounded_queries_no_n_plus_1(self):
-        """Must issue at most 2 .table() reads regardless of item count."""
+
+class TestGetComposedItemsQueryCount:
+    """N+1 guard — queries must not scale with item count."""
+
+    @pytest.mark.parametrize("n", [10, 50, 200])
+    def test_at_most_two_table_reads_regardless_of_item_count(self, n):
+        """For any number of items, only 2 .table() reads: quote_items +
+        invoice_item_coverage. The engine-side invoice/supplier lookup is
+        only in the view, not the calc path."""
         quote_id = "q-1"
         items = [
             {
                 "id": f"qi-{i}",
                 "quote_id": quote_id,
                 "composition_selected_invoice_id": f"inv-{i % 3}",
-                "purchase_price_original": 100.0,
-                "purchase_currency": "USD",
-                "base_price_vat": 120.0,
-                "price_includes_vat": True,
+                "product_name": f"Item {i}",
                 "quantity": 1,
             }
-            for i in range(50)
+            for i in range(n)
         ]
 
-        def table_data(name):
+        def rows(name):
             if name == "quote_items":
                 return items
-            if name == "invoice_item_prices":
+            if name == "invoice_item_coverage":
                 return []
             return []
 
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(table_data(name))
+        sb.table.side_effect = make_table_router(rows)
 
         get_composed_items(quote_id, sb)
 
-        # Exactly 2 reads: quote_items + invoice_item_prices
         table_calls = [c.args[0] for c in sb.table.call_args_list]
         assert table_calls.count("quote_items") == 1
-        assert table_calls.count("invoice_item_prices") == 1
+        assert table_calls.count("invoice_item_coverage") == 1
         assert len(table_calls) == 2
-
-    def test_handles_missing_iip_row_as_legacy_fallback(self):
-        """If composition pointer is set but no iip row exists, fall back cleanly."""
-        quote_id = "q-1"
-
-        def table_data(name):
-            if name == "quote_items":
-                return [{
-                    "id": "qi-1",
-                    "quote_id": quote_id,
-                    "composition_selected_invoice_id": "inv-orphan",
-                    "purchase_price_original": 100.00,
-                    "purchase_currency": "USD",
-                    "base_price_vat": 120.00,
-                    "price_includes_vat": True,
-                    "quantity": 5,
-                }]
-            if name == "invoice_item_prices":
-                return []  # No matching iip row
-            return []
-
-        sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(table_data(name))
-
-        row = get_composed_items(quote_id, sb)[0]
-        # Legacy price preserved — no crash
-        assert row["purchase_price_original"] == 100.00
-        assert row["purchase_currency"] == "USD"
 
 
 # ============================================================================
@@ -278,42 +579,51 @@ class TestGetComposedItems:
 class TestValidateComposition:
 
     def test_happy_path_returns_valid(self):
-        """All selections have matching iip rows → valid."""
-        iip_rows = [
-            {"quote_item_id": "qi-1", "invoice_id": "inv-a"},
-            {"quote_item_id": "qi-2", "invoice_id": "inv-b"},
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-a",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-a", "invoice_id": "inv-a"},
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_item_id": "ii-b",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-b", "invoice_id": "inv-b"},
+            },
         ]
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(iip_rows)
+        sb.table.side_effect = make_table_router({"invoice_item_coverage": coverage_rows})
 
-        selection = {"qi-1": "inv-a", "qi-2": "inv-b"}
-        result = validate_composition("q-1", selection, sb)
-
+        result = validate_composition("q-1", {"qi-1": "inv-a", "qi-2": "inv-b"}, sb)
         assert result.valid is True
         assert result.errors == []
 
-    def test_rejects_non_existent_iip_pair(self):
-        """Selection with no matching iip row → invalid with error."""
-        iip_rows = [
-            {"quote_item_id": "qi-1", "invoice_id": "inv-a"},
+    def test_rejects_pair_with_no_coverage_row(self):
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-a",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-a", "invoice_id": "inv-a"},
+            },
         ]
         sb = MagicMock()
-        sb.table.side_effect = lambda name: _chainable(iip_rows)
+        sb.table.side_effect = make_table_router({"invoice_item_coverage": coverage_rows})
 
-        selection = {"qi-1": "inv-a", "qi-2": "inv-nonexistent"}
-        result = validate_composition("q-1", selection, sb)
-
+        result = validate_composition(
+            "q-1", {"qi-1": "inv-a", "qi-2": "inv-nonexistent"}, sb
+        )
         assert result.valid is False
         assert len(result.errors) == 1
         assert result.errors[0]["quote_item_id"] == "qi-2"
         assert result.errors[0]["invoice_id"] == "inv-nonexistent"
 
     def test_empty_selection_is_valid(self):
-        """Empty selection map is trivially valid."""
         sb = MagicMock()
         result = validate_composition("q-1", {}, sb)
         assert result.valid is True
-        assert result.errors == []
 
 
 # ============================================================================
@@ -322,18 +632,22 @@ class TestValidateComposition:
 
 class TestApplyComposition:
 
-    def test_updates_composition_pointer_on_happy_path(self):
-        """Valid selection → calls .update() on quote_items with the pointer."""
-        iip_rows = [{"quote_item_id": "qi-1", "invoice_id": "inv-a"}]
-        quote_row = [{"updated_at": "2026-04-10T12:00:00+00:00"}]
+    def test_updates_pointer_on_happy_path(self):
+        coverage_rows = [{
+            "quote_item_id": "qi-1",
+            "invoice_item_id": "ii-a",
+            "ratio": 1,
+            "invoice_items": {"id": "ii-a", "invoice_id": "inv-a"},
+        }]
+        quote_rows = [{"updated_at": "2026-04-10T12:00:00+00:00"}]
 
-        query_by_table = {
-            "invoice_item_prices": _chainable(iip_rows),
+        tables = {
+            "invoice_item_coverage": _chainable(coverage_rows),
             "quote_items": _chainable([]),
-            "quotes": _chainable(quote_row),
+            "quotes": _chainable(quote_rows),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         apply_composition(
             quote_id="q-1",
@@ -343,27 +657,20 @@ class TestApplyComposition:
             quote_updated_at="2026-04-10T12:00:00+00:00",
         )
 
-        # quote_items.update called with {composition_selected_invoice_id: "inv-a"}
-        qi_update_calls = query_by_table["quote_items"].update.call_args_list
+        qi_update_calls = tables["quote_items"].update.call_args_list
         assert len(qi_update_calls) == 1
         assert qi_update_calls[0].args[0] == {"composition_selected_invoice_id": "inv-a"}
+        assert len(tables["quotes"].update.call_args_list) == 1
 
-        # quotes.update called with updated_at bump
-        quotes_update_calls = query_by_table["quotes"].update.call_args_list
-        assert len(quotes_update_calls) == 1
-        assert "updated_at" in quotes_update_calls[0].args[0]
-
-    def test_raises_validation_error_on_invalid_selection(self):
-        """Invalid selection → ValidationError, no writes."""
-        iip_rows = []  # No iip rows at all
-
-        query_by_table = {
-            "invoice_item_prices": _chainable(iip_rows),
+    def test_raises_validation_error_when_coverage_missing(self):
+        """ValidationError when (qi, inv) pair has no coverage row."""
+        tables = {
+            "invoice_item_coverage": _chainable([]),
             "quote_items": _chainable([]),
             "quotes": _chainable([{"updated_at": "2026-04-10T12:00:00+00:00"}]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         with pytest.raises(ValidationError) as exc_info:
             apply_composition(
@@ -375,21 +682,25 @@ class TestApplyComposition:
             )
 
         assert len(exc_info.value.errors) == 1
-        # No writes to quote_items on failure
-        assert query_by_table["quote_items"].update.call_count == 0
+        assert tables["quote_items"].update.call_count == 0
 
     def test_raises_concurrency_error_on_stale_updated_at(self):
-        """Stale updated_at → ConcurrencyError, no writes."""
-        iip_rows = [{"quote_item_id": "qi-1", "invoice_id": "inv-a"}]
-        quote_row = [{"updated_at": "2026-04-10T13:00:00+00:00"}]  # newer
+        """ConcurrencyError when quote_updated_at mismatches."""
+        coverage_rows = [{
+            "quote_item_id": "qi-1",
+            "invoice_item_id": "ii-a",
+            "ratio": 1,
+            "invoice_items": {"id": "ii-a", "invoice_id": "inv-a"},
+        }]
+        quote_rows = [{"updated_at": "2026-04-10T13:00:00+00:00"}]  # newer
 
-        query_by_table = {
-            "invoice_item_prices": _chainable(iip_rows),
+        tables = {
+            "invoice_item_coverage": _chainable(coverage_rows),
             "quote_items": _chainable([]),
-            "quotes": _chainable(quote_row),
+            "quotes": _chainable(quote_rows),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         with pytest.raises(ConcurrencyError):
             apply_composition(
@@ -397,33 +708,62 @@ class TestApplyComposition:
                 selection_map={"qi-1": "inv-a"},
                 supabase=sb,
                 user_id="user-1",
-                quote_updated_at="2026-04-10T12:00:00+00:00",  # stale
+                quote_updated_at="2026-04-10T12:00:00+00:00",
             )
 
-        assert query_by_table["quote_items"].update.call_count == 0
+        assert tables["quote_items"].update.call_count == 0
 
-    def test_skips_concurrency_check_when_no_updated_at_provided(self):
-        """If caller passes quote_updated_at=None, skip concurrency check."""
-        iip_rows = [{"quote_item_id": "qi-1", "invoice_id": "inv-a"}]
+    def test_merge_case_updates_all_covered_quote_items(self):
+        """Picker submits N entries with the same invoice_id for a merged
+        invoice → apply_composition updates composition_selected_invoice_id
+        on every covered quote_item in one pass."""
+        inv_id = "inv-1"
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-bolt",
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-kit", "invoice_id": inv_id},
+            },
+            {
+                "quote_item_id": "qi-nut",
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-kit", "invoice_id": inv_id},
+            },
+            {
+                "quote_item_id": "qi-washer",
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": {"id": "ii-kit", "invoice_id": inv_id},
+            },
+        ]
 
-        query_by_table = {
-            "invoice_item_prices": _chainable(iip_rows),
+        tables = {
+            "invoice_item_coverage": _chainable(coverage_rows),
             "quote_items": _chainable([]),
             "quotes": _chainable([]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
-        # Should not raise
         apply_composition(
             quote_id="q-1",
-            selection_map={"qi-1": "inv-a"},
+            selection_map={
+                "qi-bolt": inv_id,
+                "qi-nut": inv_id,
+                "qi-washer": inv_id,
+            },
             supabase=sb,
             user_id="user-1",
             quote_updated_at=None,
         )
 
-        assert query_by_table["quote_items"].update.call_count == 1
+        # Three separate UPDATE calls, each setting the pointer to inv_id
+        qi_update_calls = tables["quote_items"].update.call_args_list
+        assert len(qi_update_calls) == 3
+        for call_ in qi_update_calls:
+            assert call_.args[0] == {"composition_selected_invoice_id": inv_id}
 
 
 # ============================================================================
@@ -432,181 +772,342 @@ class TestApplyComposition:
 
 class TestFreezeComposition:
 
-    def test_stamps_frozen_at_on_active_iip_rows(self):
-        """Unfrozen iip rows pointed to by quote_items get frozen."""
+    def test_freezes_invoice_items_in_active_coverage(self):
+        """Only invoice_items whose invoice matches the qi pointer get
+        frozen_at stamped."""
         items = [
             {"id": "qi-1", "composition_selected_invoice_id": "inv-a"},
             {"id": "qi-2", "composition_selected_invoice_id": "inv-b"},
         ]
-        iip_rows = [
-            {"id": "iip-1", "quote_item_id": "qi-1", "invoice_id": "inv-a", "frozen_at": None},
-            {"id": "iip-2", "quote_item_id": "qi-2", "invoice_id": "inv-b", "frozen_at": None},
-            {"id": "iip-3", "quote_item_id": "qi-1", "invoice_id": "inv-other", "frozen_at": None},  # not active
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-a",
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-a",
+                    "invoice_id": "inv-a",
+                    "frozen_at": None,
+                },
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_item_id": "ii-b",
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-b",
+                    "invoice_id": "inv-b",
+                    "frozen_at": None,
+                },
+            },
+            # Coverage for qi-1 in a different invoice — not active, skip
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-other",
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-other",
+                    "invoice_id": "inv-other",
+                    "frozen_at": None,
+                },
+            },
         ]
 
-        query_by_table = {
+        tables = {
             "quote_items": _chainable(items),
-            "invoice_item_prices": _chainable(iip_rows),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoice_items": _chainable([]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         count = freeze_composition("q-1", "user-1", sb)
 
-        # Only the 2 active rows should be frozen
+        # 2 active invoice_items frozen (ii-a and ii-b), ii-other skipped
         assert count == 2
-        iip_update_calls = query_by_table["invoice_item_prices"].update.call_args_list
-        assert len(iip_update_calls) == 2
-        for call_ in iip_update_calls:
+        ii_update_calls = tables["invoice_items"].update.call_args_list
+        assert len(ii_update_calls) == 2
+        for call_ in ii_update_calls:
             payload = call_.args[0]
             assert "frozen_at" in payload
             assert payload["frozen_by"] == "user-1"
 
-    def test_is_idempotent_skipping_already_frozen_rows(self):
-        """Re-running freeze on already-frozen rows is a no-op."""
+    def test_idempotent_skipping_already_frozen(self):
+        items = [{"id": "qi-1", "composition_selected_invoice_id": "inv-a"}]
+        coverage_rows = [{
+            "quote_item_id": "qi-1",
+            "invoice_item_id": "ii-a",
+            "ratio": 1,
+            "invoice_items": {
+                "id": "ii-a",
+                "invoice_id": "inv-a",
+                "frozen_at": "2026-04-10T12:00:00+00:00",
+            },
+        }]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoice_items": _chainable([]),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        count = freeze_composition("q-1", "user-1", sb)
+        assert count == 0
+        assert tables["invoice_items"].update.call_count == 0
+
+    def test_merge_freezes_invoice_item_once(self):
+        """A merged invoice_item is reached from multiple qi — freeze once."""
         items = [
             {"id": "qi-1", "composition_selected_invoice_id": "inv-a"},
+            {"id": "qi-2", "composition_selected_invoice_id": "inv-a"},
+            {"id": "qi-3", "composition_selected_invoice_id": "inv-a"},
         ]
-        iip_rows = [
+        merged_ii = {
+            "id": "ii-kit",
+            "invoice_id": "inv-a",
+            "frozen_at": None,
+        }
+        coverage_rows = [
             {
-                "id": "iip-1",
                 "quote_item_id": "qi-1",
-                "invoice_id": "inv-a",
-                "frozen_at": "2026-04-10T12:00:00+00:00",  # already frozen
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": merged_ii,
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": merged_ii,
+            },
+            {
+                "quote_item_id": "qi-3",
+                "invoice_item_id": "ii-kit",
+                "ratio": 1,
+                "invoice_items": merged_ii,
             },
         ]
 
-        query_by_table = {
+        tables = {
             "quote_items": _chainable(items),
-            "invoice_item_prices": _chainable(iip_rows),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoice_items": _chainable([]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         count = freeze_composition("q-1", "user-1", sb)
-
-        assert count == 0
-        assert query_by_table["invoice_item_prices"].update.call_count == 0
+        assert count == 1
+        assert tables["invoice_items"].update.call_count == 1
 
     def test_returns_zero_when_no_composition_set(self):
-        """Quote with no composition pointers → freeze is a no-op."""
-        items = [
-            {"id": "qi-1", "composition_selected_invoice_id": None},
-        ]
-
-        query_by_table = {
+        items = [{"id": "qi-1", "composition_selected_invoice_id": None}]
+        tables = {
             "quote_items": _chainable(items),
-            "invoice_item_prices": _chainable([]),
+            "invoice_item_coverage": _chainable([]),
+            "invoice_items": _chainable([]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         count = freeze_composition("q-1", "user-1", sb)
         assert count == 0
 
 
 # ============================================================================
-# get_composition_view (API shape)
+# get_composition_view
 # ============================================================================
 
 class TestGetCompositionView:
 
-    def test_returns_items_with_alternatives_grouped(self):
-        """GET view groups alternatives per item and reports selection state."""
-        items = [
-            {
-                "id": "qi-1",
-                "brand": "B1",
-                "idn_sku": "SKU-1",
-                "name": "Item 1",
-                "quantity": 5,
-                "composition_selected_invoice_id": "inv-a",
-            },
-        ]
-        iip_rows = [
-            {
-                "id": "iip-1",
-                "quote_item_id": "qi-1",
+    def test_alternatives_grouped_by_invoice_1to1(self):
+        """1:1 alternative has empty coverage_summary."""
+        items = [{
+            "id": "qi-1",
+            "brand": "ACME",
+            "idn_sku": "SKU-1",
+            "product_name": "Bolt",
+            "quantity": 100,
+            "composition_selected_invoice_id": "inv-a",
+        }]
+        coverage_rows = [{
+            "quote_item_id": "qi-1",
+            "invoice_item_id": "ii-a",
+            "ratio": 1,
+            "invoice_items": {
+                "id": "ii-a",
                 "invoice_id": "inv-a",
-                "purchase_price_original": 50.00,
-                "purchase_currency": "USD",
-                "base_price_vat": 60.00,
-                "price_includes_vat": False,
-                "production_time_days": 30,
-                "version": 1,
-                "frozen_at": None,
-            },
-            {
-                "id": "iip-2",
-                "quote_item_id": "qi-1",
-                "invoice_id": "inv-b",
-                "purchase_price_original": 55.00,
+                "product_name": "Bolt M8",
+                "purchase_price_original": 10.0,
                 "purchase_currency": "EUR",
-                "base_price_vat": 66.00,
-                "price_includes_vat": True,
-                "production_time_days": 45,
-                "version": 1,
-                "frozen_at": None,
             },
-        ]
-        invoices = [
-            {"id": "inv-a", "supplier_id": "sup-1"},
-            {"id": "inv-b", "supplier_id": "sup-2"},
-        ]
-        suppliers = [
-            {"id": "sup-1", "name": "Supplier A", "country": "China"},
-            {"id": "sup-2", "name": "Supplier B", "country": "Germany"},
-        ]
+        }]
+        invoices = [{"id": "inv-a", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
 
-        query_by_table = {
+        tables = {
             "quote_items": _chainable(items),
-            "invoice_item_prices": _chainable(iip_rows),
+            "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable(invoices),
             "suppliers": _chainable(suppliers),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
-        view = get_composition_view("q-1", sb, user_id="user-1")
+        view = get_composition_view("q-1", sb)
 
         assert view["quote_id"] == "q-1"
         assert len(view["items"]) == 1
         item = view["items"][0]
-        assert item["quote_item_id"] == "qi-1"
-        assert item["selected_invoice_id"] == "inv-a"
-        assert len(item["alternatives"]) == 2
-        # Alternatives should include supplier names
-        alt_suppliers = {alt["supplier_name"] for alt in item["alternatives"]}
-        assert alt_suppliers == {"Supplier A", "Supplier B"}
-        assert view["composition_complete"] is True
+        assert len(item["alternatives"]) == 1
+        alt = item["alternatives"][0]
+        assert alt["invoice_id"] == "inv-a"
+        assert alt["supplier_name"] == "Supplier A"
+        assert alt["coverage_summary"] == ""  # 1:1 → empty
+
+    def test_split_alternative_shows_coverage_summary(self):
+        """Split: one invoice has 2 invoice_items for 1 quote_item →
+        coverage_summary contains both names with ratios."""
+        items = [{
+            "id": "qi-1",
+            "product_name": "Fastener",
+            "quantity": 100,
+            "composition_selected_invoice_id": None,
+        }]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-bolt",
+                "ratio": 1,
+                "invoice_items": {
+                    "id": "ii-bolt",
+                    "invoice_id": "inv-split",
+                    "product_name": "Bolt",
+                    "quantity": 100,
+                    "purchase_price_original": 5.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+            {
+                "quote_item_id": "qi-1",
+                "invoice_item_id": "ii-washer",
+                "ratio": 2,
+                "invoice_items": {
+                    "id": "ii-washer",
+                    "invoice_id": "inv-split",
+                    "product_name": "Washer",
+                    "quantity": 200,
+                    "purchase_price_original": 1.0,
+                    "purchase_currency": "EUR",
+                },
+            },
+        ]
+        invoices = [{"id": "inv-split", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoices": _chainable(invoices),
+            "suppliers": _chainable(suppliers),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        view = get_composition_view("q-1", sb)
+
+        assert len(view["items"]) == 1
+        alts = view["items"][0]["alternatives"]
+        # Only ONE alternative per invoice, even for a split
+        assert len(alts) == 1
+        alt = alts[0]
+        assert alt["invoice_id"] == "inv-split"
+        summary = alt["coverage_summary"]
+        assert summary.startswith("→ ")
+        assert "Bolt" in summary and "Washer" in summary
+        assert "×1" in summary and "×2" in summary
+
+    def test_merge_alternative_shows_coverage_summary(self):
+        """Merge: same invoice_item covers 3 qi → alternative appears
+        on each qi with coverage_summary listing the merged sibling names."""
+        items = [
+            {"id": "qi-bolt", "product_name": "Bolt", "quantity": 100,
+             "composition_selected_invoice_id": None},
+            {"id": "qi-nut", "product_name": "Nut", "quantity": 100,
+             "composition_selected_invoice_id": None},
+            {"id": "qi-washer", "product_name": "Washer", "quantity": 100,
+             "composition_selected_invoice_id": None},
+        ]
+        merged_ii = {
+            "id": "ii-kit",
+            "invoice_id": "inv-merge",
+            "product_name": "Fastener Kit",
+            "quantity": 100,
+            "purchase_price_original": 12.0,
+            "purchase_currency": "EUR",
+        }
+        coverage_rows = [
+            {"quote_item_id": "qi-bolt", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+            {"quote_item_id": "qi-nut", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+            {"quote_item_id": "qi-washer", "invoice_item_id": "ii-kit",
+             "ratio": 1, "invoice_items": merged_ii},
+        ]
+        invoices = [{"id": "inv-merge", "supplier_id": "sup-1"}]
+        suppliers = [{"id": "sup-1", "name": "Supplier A", "country": "Germany"}]
+
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+            "invoices": _chainable(invoices),
+            "suppliers": _chainable(suppliers),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        view = get_composition_view("q-1", sb)
+
+        assert len(view["items"]) == 3
+        # Each qi has exactly ONE alternative (merge case — one invoice)
+        for vi in view["items"]:
+            assert len(vi["alternatives"]) == 1
+            summary = vi["alternatives"][0]["coverage_summary"]
+            assert summary.startswith("← ")
+            # Should mention all three covered product_names
+            assert "Bolt" in summary
+            assert "Nut" in summary
+            assert "Washer" in summary
 
     def test_composition_complete_false_when_any_item_unselected(self):
-        """If any item has no selection, composition_complete is False."""
         items = [
-            {"id": "qi-1", "name": "I1", "quantity": 1, "composition_selected_invoice_id": "inv-a"},
-            {"id": "qi-2", "name": "I2", "quantity": 1, "composition_selected_invoice_id": None},
+            {"id": "qi-1", "product_name": "I1", "quantity": 1,
+             "composition_selected_invoice_id": "inv-a"},
+            {"id": "qi-2", "product_name": "I2", "quantity": 1,
+             "composition_selected_invoice_id": None},
         ]
-        iip_rows = [
-            {
-                "id": "iip-1",
-                "quote_item_id": "qi-1",
+        coverage_rows = [{
+            "quote_item_id": "qi-1",
+            "invoice_item_id": "ii-a",
+            "ratio": 1,
+            "invoice_items": {
+                "id": "ii-a",
                 "invoice_id": "inv-a",
-                "purchase_price_original": 50.00,
+                "product_name": "I1",
+                "purchase_price_original": 10.0,
                 "purchase_currency": "USD",
-                "base_price_vat": 60.00,
-                "price_includes_vat": False,
-                "version": 1,
-            }
-        ]
-
-        query_by_table = {
+            },
+        }]
+        tables = {
             "quote_items": _chainable(items),
-            "invoice_item_prices": _chainable(iip_rows),
+            "invoice_item_coverage": _chainable(coverage_rows),
             "invoices": _chainable([{"id": "inv-a", "supplier_id": "sup-1"}]),
             "suppliers": _chainable([{"id": "sup-1", "name": "A", "country": "US"}]),
         }
         sb = MagicMock()
-        sb.table.side_effect = lambda name: query_by_table[name]
+        sb.table.side_effect = lambda name: tables[name]
 
         view = get_composition_view("q-1", sb)
         assert view["composition_complete"] is False

@@ -1,61 +1,68 @@
 """
-Composition Service — Phase 5b.
+Composition Service — Phase 5c.
 
-Adapter between the multi-supplier composition layer (kvota.invoice_item_prices
-junction) and the existing calculation pipeline (build_calculation_inputs in
-main.py). Produces item dicts in the exact shape the current quote_items SELECT
-returns, so build_calculation_inputs() sees no difference.
+Adapter between the multi-supplier composition layer (the
+``kvota.invoice_items`` + ``kvota.invoice_item_coverage`` tables introduced
+in migrations 281/282) and the existing calculation pipeline
+(build_calculation_inputs in main.py).
+
+Replaces Phase 5b's ``invoice_item_prices`` junction with per-invoice
+positions (``invoice_items``) and an M:N coverage table carrying a
+``ratio`` coefficient. This enables local split (1 quote_item → N
+invoice_items) and merge (N quote_items → 1 invoice_item) without
+mutating the customer's quote_items.
+
+Produces item dicts in the exact shape ``build_calculation_inputs()``
+expects, so the locked calculation engine sees no difference.
 
 Does NOT import from calculation_engine.py, calculation_models.py, or
 calculation_mapper.py — those files are locked.
 
-Public API:
+Public API (signature-preserved from Phase 5b):
     get_composed_items(quote_id, supabase) -> list[dict]
-        Adapter — replaces the 3 quote_items reads in main.py (Task 5).
+        Adapter — feeds ``build_calculation_inputs()`` at 3 call sites in
+        main.py.
     get_composition_view(quote_id, supabase, user_id=None) -> dict
-        For the GET /api/quotes/{id}/composition endpoint (Task 6).
-    apply_composition(quote_id, selection_map, supabase, user_id, quote_updated_at)
-        For the POST /api/quotes/{id}/composition endpoint (Task 6).
+        For the GET /api/quotes/{id}/composition endpoint. Alternatives
+        are grouped per invoice (not per invoice_item). Each alternative
+        includes a ``coverage_summary`` field describing split/merge.
+    apply_composition(quote_id, selection_map, supabase, user_id,
+                      quote_updated_at)
+        For the POST /api/quotes/{id}/composition endpoint. Validates
+        coverage existence for every selection. Merge case: setting the
+        same invoice for all covered quote_items in one atomic update.
     validate_composition(quote_id, selection_map, supabase) -> ValidationResult
-        Pure validator used internally by apply_composition and exposed for
-        pre-flight checks from the API layer.
+        Pure validator — checks coverage rows exist for every pair.
     freeze_composition(quote_id, user_id, supabase) -> int
-        Stamps frozen_at/frozen_by on all active iip rows (Task 8/13).
+        Stamps frozen_at/frozen_by on invoice_items reached via active
+        compositions. Walks quote_items → selected invoice →
+        invoice_item_coverage → invoice_items.
 
-Data model reference (see design.md § "Data Model"):
-    kvota.invoice_item_prices(id, invoice_id, quote_item_id, organization_id,
+Data model reference (see design.md §1.1):
+    kvota.invoice_items(id, invoice_id, organization_id, position,
+        product_name, supplier_sku, brand, quantity,
         purchase_price_original, purchase_currency, base_price_vat,
-        price_includes_vat, production_time_days, minimum_order_quantity,
-        supplier_notes, version, frozen_at, frozen_by, created_at, updated_at,
-        created_by)
-        UNIQUE (invoice_id, quote_item_id, version)
+        price_includes_vat, vat_rate, weight_in_kg, customs_code,
+        supplier_country, production_time_days, minimum_order_quantity,
+        dimension_*_mm, license_*_cost, supplier_notes,
+        version, frozen_at, frozen_by, created_at, updated_at, created_by)
+
+    kvota.invoice_item_coverage(invoice_item_id, quote_item_id, ratio)
+        PK (invoice_item_id, quote_item_id)
+        ratio = invoice_item_units per quote_item_unit.
 
     kvota.quote_items.composition_selected_invoice_id UUID NULL
         FK -> kvota.invoices(id) ON DELETE SET NULL
-        NULL = use legacy quote_items price fields (pre-Phase-5b path).
+        NULL = no composition chosen yet (legacy fallback path).
 """
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
-
-
-# ============================================================================
-# Constants
-# ============================================================================
-
-# Price fields overlaid from invoice_item_prices onto quote_items when a
-# composition pointer is set. Every other field on quote_items passes through
-# unchanged — the engine consumes them identically to today.
-_OVERLAY_FIELDS: tuple[str, ...] = (
-    "purchase_price_original",
-    "purchase_currency",
-    "base_price_vat",
-    "price_includes_vat",
-)
 
 
 # ============================================================================
@@ -74,7 +81,7 @@ class ConcurrencyError(Exception):
 
 class ValidationError(Exception):
     """Raised when a composition selection references an (item, invoice) pair
-    that has no matching invoice_item_prices row.
+    that has no covering invoice_item.
 
     Handled as HTTP 400 COMPOSITION_INVALID_SELECTION at the API layer. The
     error list is exposed via the ``errors`` attribute so the API can return
@@ -96,7 +103,7 @@ class ValidationResult:
     """Result of validate_composition — a value object for the API layer.
 
     Attributes:
-        valid: True iff every selection has a matching iip row.
+        valid: True iff every selection has a covering invoice_item.
         errors: List of ``{"quote_item_id": ..., "invoice_id": ..., "reason": ...}``
             dicts. Empty when valid is True.
     """
@@ -106,36 +113,142 @@ class ValidationResult:
 
 
 # ============================================================================
-# Adapter — get_composed_items (replaces 3 quote_items reads in main.py)
+# Internal helpers
+# ============================================================================
+
+def _legacy_shape(qi: dict) -> dict:
+    """Emit a calc-ready dict for a quote_item with no composition pointer.
+
+    Used for pre-Phase-5c data and items left uncomposed. The engine tolerates
+    None pricing fields — such items are skipped by build_calculation_inputs
+    when purchase_price_original is falsy or is_unavailable is set.
+    """
+    return {
+        # Identity (customer-side — no supplier invoice chosen yet)
+        "product_name": qi.get("product_name"),
+        "supplier_sku": qi.get("supplier_sku"),
+        "brand": qi.get("brand"),
+        "quantity": qi.get("quantity"),
+
+        # Pricing — None because no invoice selected
+        "purchase_price_original": None,
+        "purchase_currency": None,
+        "base_price_vat": None,
+        "price_includes_vat": False,
+
+        # Supplier-specific attrs — None for uncomposed items
+        "weight_in_kg": None,
+        "customs_code": None,
+        "supplier_country": None,
+        "license_ds_cost": None,
+        "license_ss_cost": None,
+        "license_sgr_cost": None,
+
+        # Customer-side flags / markups (preserved verbatim)
+        "is_unavailable": qi.get("is_unavailable", False),
+        "import_banned": qi.get("import_banned", False),
+        "markup": qi.get("markup"),
+        "supplier_discount": qi.get("supplier_discount"),
+        "vat_rate": qi.get("vat_rate"),
+    }
+
+
+def _build_calc_item(qi: dict, ii: dict, ratio) -> dict:
+    """Merge quote_item (customer-side) + invoice_item (supplier-side) into calc dict.
+
+    Supplier-side fields come from the invoice_item (identity, pricing,
+    supplier-specific attrs). Customer-side fields come from the quote_item
+    (markup/discount/flags/vat_rate). The ``ratio`` is carried on the
+    coverage row but does NOT scale invoice_item.quantity at the calc
+    layer — invoice_item.quantity is already the supplier's final per-line
+    quantity (validated by the application layer against
+    quote_item.quantity * ratio).
+    """
+    return {
+        # Identity & pricing — from invoice_item (supplier-side)
+        "product_name": ii.get("product_name"),
+        "supplier_sku": ii.get("supplier_sku"),
+        "brand": ii.get("brand") or qi.get("brand"),
+        "quantity": ii.get("quantity"),
+        "purchase_price_original": ii.get("purchase_price_original"),
+        "purchase_currency": ii.get("purchase_currency"),
+        "base_price_vat": ii.get("base_price_vat"),
+        "price_includes_vat": ii.get("price_includes_vat", False),
+
+        # Supplier-specific attrs — from invoice_item
+        "weight_in_kg": ii.get("weight_in_kg"),
+        "customs_code": ii.get("customs_code"),
+        "supplier_country": ii.get("supplier_country"),
+        "production_time_days": ii.get("production_time_days"),
+        "minimum_order_quantity": ii.get("minimum_order_quantity"),
+        "license_ds_cost": ii.get("license_ds_cost"),
+        "license_ss_cost": ii.get("license_ss_cost"),
+        "license_sgr_cost": ii.get("license_sgr_cost"),
+
+        # Customer-side flags + sales markups — from quote_item
+        "is_unavailable": qi.get("is_unavailable", False),
+        "import_banned": qi.get("import_banned", False),
+        "markup": qi.get("markup"),
+        "supplier_discount": qi.get("supplier_discount"),
+        "vat_rate": qi.get("vat_rate"),
+
+        # Traceability — useful for UI highlighting and audit
+        "quote_item_id": qi.get("id"),
+        "invoice_item_id": ii.get("id"),
+        "invoice_id": ii.get("invoice_id"),
+        "coverage_ratio": ratio,
+    }
+
+
+def _load_coverage_with_items(
+    item_ids: list[str], supabase
+) -> list[dict]:
+    """Fetch coverage rows plus their invoice_items in one query.
+
+    Returns the raw coverage rows, each with an ``invoice_items`` nested dict
+    from the PostgREST embedded join. Filters to only rows whose
+    ``quote_item_id`` is in the given list.
+    """
+    if not item_ids:
+        return []
+    resp = (
+        supabase.table("invoice_item_coverage")
+        .select("invoice_item_id, quote_item_id, ratio, invoice_items!inner(*)")
+        .in_("quote_item_id", item_ids)
+        .execute()
+    )
+    return resp.data or []
+
+
+# ============================================================================
+# Adapter — get_composed_items (feeds build_calculation_inputs)
 # ============================================================================
 
 def get_composed_items(quote_id: str, supabase) -> list[dict]:
-    """Return quote_items with price fields overlaid from the active composition.
+    """Return calc-ready items derived from the active composition.
 
-    This function is the adapter that replaces the three ``quote_items``
-    reads in main.py (at lines ~13303, 14188, 14846 — verified at Task 5
-    start via ``grep -n "build_calculation_inputs("``). It produces a
-    ``list[dict]`` in the exact shape a plain
-    ``supabase.table("quote_items").select("*").eq("quote_id", quote_id).execute().data``
-    call would return, so ``build_calculation_inputs()`` sees no difference.
+    Walks quote_items → composition_selected_invoice_id → coverage →
+    invoice_items and emits one calc dict per applicable invoice_item.
 
     For each quote_item:
-      - If ``composition_selected_invoice_id`` IS NOT NULL and a matching
-        invoice_item_prices row exists, the four price fields are overlaid
-        from the iip row (the latest non-frozen version wins when multiple
-        versions exist for the same (item, invoice) pair).
-      - Otherwise, the quote_items row is returned unchanged — legacy path
-        for pre-Phase-5b data and orphaned composition pointers.
+      - ``composition_selected_invoice_id`` NULL → emit a legacy-shape dict
+        with None pricing fields. The engine skips such items when no price
+        is present.
+      - Pointer set → emit one calc dict per covering invoice_item in the
+        selected invoice:
+          * 1:1 (1 coverage row, ratio=1) → one result
+          * Split (N coverage rows for this qi in the selected invoice) →
+            N results (one per invoice_item)
+          * Merge (1 invoice_item covers N quote_items) → the invoice_item
+            is emitted ONCE across all N quote_items; subsequent iterations
+            see it in the ``emitted_ii`` dedup set and skip it.
+      - Pointer set but no coverage row in that invoice → qi is skipped
+        (uncovered — this supplier doesn't provide this quote_item).
 
-    Non-price fields (``customs_code``, ``weight_in_kg``, ``quantity``,
-    ``supplier_country``, ``is_unavailable``, ``import_banned``, license cost
-    fields, etc.) are always preserved from quote_items.
-
-    Query count: at most 2 SQL reads, regardless of item count. No N+1.
+    Query count: at most 2 SQL reads (a third lookup is only added for
+    view metadata in get_composition_view, not here).
         1. SELECT * FROM quote_items WHERE quote_id = :quote_id
-        2. SELECT * FROM invoice_item_prices
-             WHERE quote_item_id IN (:items_with_pointer)
-           (skipped when no item has a composition pointer)
+        2. SELECT coverage + invoice_items!inner(*) WHERE quote_item_id IN (...)
 
     Args:
         quote_id: UUID of the quote to compose.
@@ -144,61 +257,69 @@ def get_composed_items(quote_id: str, supabase) -> list[dict]:
     Returns:
         List of item dicts ready to feed into ``build_calculation_inputs()``.
     """
-    items_resp = supabase.table("quote_items").select("*").eq(
-        "quote_id", quote_id
-    ).execute()
-    items: list[dict] = items_resp.data or []
+    items_resp = (
+        supabase.table("quote_items")
+        .select("*")
+        .eq("quote_id", quote_id)
+        .execute()
+    )
+    qi_rows: list[dict] = items_resp.data or []
 
-    # Collect quote_item_ids that have a composition pointer. If none, skip
-    # the second query entirely — the legacy path is identical to today.
-    pointed_item_ids = [
-        item["id"]
-        for item in items
-        if item.get("composition_selected_invoice_id")
-    ]
-    if not pointed_item_ids:
-        return items
+    selected_invoice_ids = {
+        qi.get("composition_selected_invoice_id")
+        for qi in qi_rows
+        if qi.get("composition_selected_invoice_id")
+    }
+    if not selected_invoice_ids:
+        # Legacy fallback: no composition selected anywhere → emit each qi
+        # with None pricing. Single query total.
+        return [_legacy_shape(qi) for qi in qi_rows]
 
-    iip_resp = supabase.table("invoice_item_prices").select("*").in_(
-        "quote_item_id", pointed_item_ids
-    ).execute()
-    iip_rows: list[dict] = iip_resp.data or []
+    coverage_rows = _load_coverage_with_items(
+        [qi["id"] for qi in qi_rows], supabase
+    )
 
-    # Build lookup: (quote_item_id, invoice_id) -> iip row.
-    # When multiple versions exist for the same pair, prefer the highest
-    # version number (latest snapshot).
-    iip_lookup: dict[tuple[str, str], dict] = {}
-    for row in iip_rows:
-        key = (row["quote_item_id"], row["invoice_id"])
-        existing = iip_lookup.get(key)
-        if existing is None or row.get("version", 1) > existing.get("version", 1):
-            iip_lookup[key] = row
+    # Group coverage by quote_item_id, filtered to rows whose invoice_item
+    # belongs to the invoice THIS quote_item has selected.
+    by_qi: dict[str, list[dict]] = defaultdict(list)
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        if not ii:
+            continue
+        by_qi[cov["quote_item_id"]].append(cov)
 
-    # Overlay prices onto quote_items, preserving all non-price fields.
-    composed: list[dict] = []
-    for item in items:
-        pointer = item.get("composition_selected_invoice_id")
-        if pointer:
-            iip = iip_lookup.get((item["id"], pointer))
-            if iip is not None:
-                overlaid = {**item}
-                for field_name in _OVERLAY_FIELDS:
-                    if field_name in iip:
-                        overlaid[field_name] = iip[field_name]
-                composed.append(overlaid)
-                continue
-            # Pointer set but no matching iip row — graceful fallback with
-            # a warning. This can happen if an iip row was hard-deleted
-            # without clearing the pointer.
+    # Emit results: for each quote_item, one result per covering
+    # invoice_item in its selected invoice. Merge dedup via emitted_ii set.
+    emitted_ii: set[str] = set()
+    results: list[dict] = []
+    for qi in qi_rows:
+        selected = qi.get("composition_selected_invoice_id")
+        if not selected:
+            results.append(_legacy_shape(qi))
+            continue
+        coverings = [
+            cov for cov in by_qi.get(qi["id"], [])
+            if (cov.get("invoice_items") or {}).get("invoice_id") == selected
+        ]
+        if not coverings:
+            # Pointer set but no coverage row in that invoice — this supplier
+            # doesn't actually cover this quote_item. Skip (do not emit).
             logger.warning(
-                "Composition pointer references missing iip row: "
-                "quote_item_id=%s invoice_id=%s — falling back to legacy values",
-                item.get("id"),
-                pointer,
+                "Composition pointer references invoice %s with no coverage "
+                "for quote_item %s — skipping",
+                selected,
+                qi.get("id"),
             )
-        composed.append(item)
+            continue
+        for cov in coverings:
+            ii = cov["invoice_items"]
+            if ii["id"] in emitted_ii:
+                # Merge case: invoice_item already emitted for an earlier qi
+                continue
+            emitted_ii.add(ii["id"])
+            results.append(_build_calc_item(qi, ii, cov.get("ratio", 1)))
 
-    return composed
+    return results
 
 
 # ============================================================================
@@ -210,11 +331,12 @@ def get_composition_view(
     supabase,
     user_id: Optional[str] = None,
 ) -> dict:
-    """Return composition state with all supplier alternatives for the picker.
+    """Return composition state with supplier alternatives for the picker.
 
     Produces the shape the GET /api/quotes/{id}/composition endpoint returns.
-    Groups every (iip row, invoice, supplier) triple as an alternative under
-    its parent quote_item.
+    Alternatives are grouped per invoice (not per invoice_item) — each
+    alternative represents one supplier offering one concrete structure
+    (1:1, split, or merge) for this quote_item.
 
     Args:
         quote_id: Quote UUID.
@@ -231,10 +353,21 @@ def get_composition_view(
             }
             composition_complete: bool — True iff every item has a non-null
                 selected_invoice_id and the quote has at least one item.
+
+        Each alternative in ``alternatives`` has:
+            invoice_id, supplier_id, supplier_name, supplier_country,
+            purchase_price_original, purchase_currency, base_price_vat,
+            price_includes_vat, production_time_days,
+            version, frozen_at,
+            coverage_summary: str ("" for 1:1, "→ ..." for split,
+                "← ... объединены" for merge)
     """
-    items_resp = supabase.table("quote_items").select("*").eq(
-        "quote_id", quote_id
-    ).execute()
+    items_resp = (
+        supabase.table("quote_items")
+        .select("*")
+        .eq("quote_id", quote_id)
+        .execute()
+    )
     items: list[dict] = items_resp.data or []
     if not items:
         return {
@@ -244,25 +377,28 @@ def get_composition_view(
         }
 
     item_ids = [item["id"] for item in items]
-    iip_resp = supabase.table("invoice_item_prices").select("*").in_(
-        "quote_item_id", item_ids
-    ).execute()
-    iip_rows: list[dict] = iip_resp.data or []
+    qi_by_id = {qi["id"]: qi for qi in items}
 
-    # Fetch invoices referenced by those iip rows in one query.
+    # Query 2: coverage + invoice_items for any qi of this quote
+    coverage_rows = _load_coverage_with_items(item_ids, supabase)
+
+    # Resolve invoices and suppliers for display metadata
     invoice_ids: list[str] = sorted({
-        row["invoice_id"] for row in iip_rows if row.get("invoice_id")
+        (cov.get("invoice_items") or {}).get("invoice_id")
+        for cov in coverage_rows
+        if (cov.get("invoice_items") or {}).get("invoice_id")
     })
     invoices_by_id: dict[str, dict] = {}
     if invoice_ids:
-        inv_resp = supabase.table("invoices").select("*").in_(
-            "id", invoice_ids
-        ).execute()
+        inv_resp = (
+            supabase.table("invoices")
+            .select("*")
+            .in_("id", invoice_ids)
+            .execute()
+        )
         for inv in inv_resp.data or []:
             invoices_by_id[inv["id"]] = inv
 
-    # Fetch suppliers referenced by those invoices in one query. Collected
-    # via explicit loop so Pyright can narrow the type away from Optional.
     supplier_id_set: set[str] = set()
     for inv_id in invoice_ids:
         sid = (invoices_by_id.get(inv_id) or {}).get("supplier_id")
@@ -271,34 +407,111 @@ def get_composition_view(
     supplier_ids: list[str] = sorted(supplier_id_set)
     suppliers_by_id: dict[str, dict] = {}
     if supplier_ids:
-        sup_resp = supabase.table("suppliers").select("*").in_(
-            "id", supplier_ids
-        ).execute()
+        sup_resp = (
+            supabase.table("suppliers")
+            .select("*")
+            .in_("id", supplier_ids)
+            .execute()
+        )
         for sup in sup_resp.data or []:
             suppliers_by_id[sup["id"]] = sup
 
-    # Group alternatives by parent quote_item.
-    alternatives_by_item: dict[str, list[dict]] = {}
-    for row in iip_rows:
-        qi_id = row["quote_item_id"]
-        inv_id = row["invoice_id"]
+    # For merge summary: count distinct quote_items each invoice_item covers
+    # (globally within this quote — restricted by the quote-scoped qi set).
+    qi_count_by_ii: dict[str, set[str]] = defaultdict(set)
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        if ii.get("id"):
+            qi_count_by_ii[ii["id"]].add(cov["quote_item_id"])
+
+    # Lookup: for a given invoice_item, list of covered quote_item names
+    # (used to render the merge label like "← bolt, nut, washer объединены")
+    covered_qi_names_by_ii: dict[str, list[str]] = {}
+    for ii_id, qi_ids in qi_count_by_ii.items():
+        names = []
+        for qid in qi_ids:
+            qrow = qi_by_id.get(qid) or {}
+            nm = qrow.get("product_name")
+            if nm:
+                names.append(nm)
+        covered_qi_names_by_ii[ii_id] = names
+
+    # Group per (quote_item_id, invoice_id) — each group is one alternative
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        inv_id = ii.get("invoice_id")
+        if not inv_id:
+            continue
+        groups[(cov["quote_item_id"], inv_id)].append(cov)
+
+    # Build alternatives per quote_item
+    alternatives_by_item: dict[str, list[dict]] = defaultdict(list)
+    for (qi_id, inv_id), cov_list in groups.items():
         inv = invoices_by_id.get(inv_id) or {}
         sup = suppliers_by_id.get(inv.get("supplier_id") or "") or {}
-        alternatives_by_item.setdefault(qi_id, []).append({
+
+        # Aggregate per-invoice display numbers by summing across the
+        # invoice_items covering this qi (split case sums the price across
+        # split parts; 1:1 just forwards the single price).
+        unique_ii: dict[str, dict] = {}
+        for cov in cov_list:
+            ii = cov.get("invoice_items") or {}
+            if ii.get("id"):
+                unique_ii[ii["id"]] = ii
+
+        # Representative invoice_item for singular display fields
+        # (currency, frozen_at, version). Split alternatives keep these
+        # from the first invoice_item — the UI expands details on click.
+        first_ii = next(iter(unique_ii.values()), {})
+
+        # Coverage summary string
+        # Merge case: this invoice_item covers >1 distinct quote_items
+        coverage_summary = ""
+        first_ii_id = first_ii.get("id")
+        if first_ii_id:
+            n_qi_for_this_ii = len(qi_count_by_ii.get(first_ii_id, set()))
+            if n_qi_for_this_ii > 1:
+                # Merge — list all covered quote_item names
+                other_names = [
+                    nm for nm in covered_qi_names_by_ii.get(first_ii_id, [])
+                    if nm and nm != (qi_by_id.get(qi_id) or {}).get("product_name")
+                ]
+                # Include self first, then siblings, for a readable label
+                self_name = (qi_by_id.get(qi_id) or {}).get("product_name")
+                display_names = [n for n in [self_name, *other_names] if n]
+                if display_names:
+                    coverage_summary = "← " + ", ".join(display_names) + " объединены"
+                else:
+                    coverage_summary = "← объединены"
+            elif len(unique_ii) > 1:
+                # Split — multiple invoice_items cover this single qi
+                parts = []
+                for cov in cov_list:
+                    ii = cov.get("invoice_items") or {}
+                    nm = ii.get("product_name") or "?"
+                    ratio = cov.get("ratio", 1)
+                    parts.append(f"{nm} ×{ratio}")
+                coverage_summary = "→ " + " + ".join(parts)
+            # else: 1:1 → empty string
+
+        alt = {
             "invoice_id": inv_id,
             "supplier_id": inv.get("supplier_id"),
             "supplier_name": sup.get("name"),
             "supplier_country": sup.get("country"),
-            "purchase_price_original": row.get("purchase_price_original"),
-            "purchase_currency": row.get("purchase_currency"),
-            "base_price_vat": row.get("base_price_vat"),
-            "price_includes_vat": row.get("price_includes_vat"),
-            "production_time_days": row.get("production_time_days"),
-            "version": row.get("version"),
-            "frozen_at": row.get("frozen_at"),
-        })
+            "purchase_price_original": first_ii.get("purchase_price_original"),
+            "purchase_currency": first_ii.get("purchase_currency"),
+            "base_price_vat": first_ii.get("base_price_vat"),
+            "price_includes_vat": first_ii.get("price_includes_vat"),
+            "production_time_days": first_ii.get("production_time_days"),
+            "version": first_ii.get("version"),
+            "frozen_at": first_ii.get("frozen_at"),
+            "coverage_summary": coverage_summary,
+        }
+        alternatives_by_item[qi_id].append(alt)
 
-    # Assemble view items with selection state.
+    # Assemble view items with selection state
     view_items: list[dict] = []
     all_have_selection = True
     for item in items:
@@ -309,7 +522,7 @@ def get_composition_view(
             "quote_item_id": item["id"],
             "brand": item.get("brand"),
             "sku": item.get("idn_sku") or item.get("supplier_sku"),
-            "name": item.get("name"),
+            "name": item.get("product_name") or item.get("name"),
             "quantity": item.get("quantity"),
             "selected_invoice_id": selected,
             "alternatives": alternatives_by_item.get(item["id"], []),
@@ -331,10 +544,13 @@ def validate_composition(
     selection_map: dict[str, str],
     supabase,
 ) -> ValidationResult:
-    """Verify every selected (quote_item_id, invoice_id) pair has an iip row.
+    """Verify every selected (quote_item_id, invoice_id) has a covering invoice_item.
 
     Pure function — does not mutate anything, does not check the quote's
     updated_at. Safe to call from preflight endpoints.
+
+    A selection is valid when at least one invoice_item in the target invoice
+    has a coverage row linking it to the quote_item.
 
     Args:
         quote_id: Quote UUID (currently unused — kept in the signature for
@@ -351,22 +567,23 @@ def validate_composition(
         return ValidationResult(valid=True, errors=[])
 
     item_ids = list(selection_map.keys())
-    iip_resp = supabase.table("invoice_item_prices").select(
-        "quote_item_id,invoice_id"
-    ).in_("quote_item_id", item_ids).execute()
-    iip_rows: list[dict] = iip_resp.data or []
+    coverage_rows = _load_coverage_with_items(item_ids, supabase)
 
-    existing_pairs: set[tuple[str, str]] = {
-        (row["quote_item_id"], row["invoice_id"]) for row in iip_rows
-    }
+    # Build (quote_item_id, invoice_id) set of covered pairs
+    covered_pairs: set[tuple[str, str]] = set()
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        inv_id = ii.get("invoice_id")
+        if inv_id:
+            covered_pairs.add((cov["quote_item_id"], inv_id))
 
     errors: list[dict] = []
     for qi_id, inv_id in selection_map.items():
-        if (qi_id, inv_id) not in existing_pairs:
+        if (qi_id, inv_id) not in covered_pairs:
             errors.append({
                 "quote_item_id": qi_id,
                 "invoice_id": inv_id,
-                "reason": "no matching invoice_item_prices row",
+                "reason": "no matching invoice_item_coverage row",
             })
 
     return ValidationResult(valid=not errors, errors=errors)
@@ -387,20 +604,21 @@ def apply_composition(
 
     Sequence:
       1. Validate via validate_composition — raises ValidationError if any
-         selection has no matching iip row. No writes on failure.
+         selection has no covering invoice_item. No writes on failure.
       2. (Optional) Optimistic concurrency check — if quote_updated_at is
          provided, compare against the current value in the DB and raise
          ConcurrencyError on mismatch. Skipped when None (e.g. for scripted
          backfills).
       3. UPDATE quote_items.composition_selected_invoice_id = :invoice_id
-         for each entry in selection_map.
+         for each entry in selection_map. Merge case is handled naturally:
+         UI submits N entries with the same invoice_id when that invoice's
+         one invoice_item covers N quote_items; each qi row gets updated.
       4. Bump quotes.updated_at to force downstream cache invalidation.
 
     Note: steps 3 and 4 are NOT wrapped in a DB transaction here because the
     Supabase REST API does not expose transactions to the Python client. If
     strict atomicity is required in the future, move to a Postgres RPC or
-    use supabase-py's ``rpc()`` wrapper. For MVP, the window between the
-    first UPDATE and the updated_at bump is a few milliseconds.
+    use supabase-py's ``rpc()`` wrapper.
 
     Args:
         quote_id: Quote UUID.
@@ -412,7 +630,7 @@ def apply_composition(
             it loaded the quote. Pass None to skip the concurrency check.
 
     Raises:
-        ValidationError: selection references non-existent iip pair(s).
+        ValidationError: selection references non-existent coverage pair(s).
         ConcurrencyError: quote_updated_at does not match the current value.
     """
     # 1. Validate
@@ -422,9 +640,13 @@ def apply_composition(
 
     # 2. Optimistic concurrency check (opt-in)
     if quote_updated_at is not None:
-        quote_resp = supabase.table("quotes").select("updated_at").eq(
-            "id", quote_id
-        ).execute()
+        quote_resp = (
+            supabase.table("quotes")
+            .select("updated_at")
+            .eq("id", quote_id)
+            .is_("deleted_at", None)
+            .execute()
+        )
         rows: list[dict] = quote_resp.data or []
         if not rows:
             raise ConcurrencyError(f"quote {quote_id} not found")
@@ -464,14 +686,15 @@ def freeze_composition(
     user_id: str,
     supabase,
 ) -> int:
-    """Stamp frozen_at/frozen_by on all iip rows currently selected for this quote.
+    """Stamp frozen_at/frozen_by on all invoice_items currently in active compositions.
 
     Idempotent: already-frozen rows are skipped, so re-running is a no-op.
-    Only rows that are (a) pointed to by ``quote_items.composition_selected_invoice_id``
-    AND (b) currently unfrozen are touched.
+    An invoice_item is "active" for this quote iff there is some quote_item
+    whose composition_selected_invoice_id matches the invoice_item's
+    invoice_id AND a coverage row links them.
 
-    Called from the KP send flow (see Task 13) — when procurement sends a KP
-    to the supplier, the composition at that moment becomes immutable history.
+    Called from the KP send flow — when procurement sends a KP to the
+    supplier, the composition at that moment becomes immutable history.
 
     Args:
         quote_id: Quote UUID.
@@ -479,12 +702,15 @@ def freeze_composition(
         supabase: Supabase client instance.
 
     Returns:
-        Number of iip rows frozen by this call. 0 when there is nothing to
-        freeze (no composition set, or every row is already frozen).
+        Number of invoice_items rows frozen by this call. 0 when there is
+        nothing to freeze (no composition set, or every row is already frozen).
     """
-    items_resp = supabase.table("quote_items").select(
-        "id,composition_selected_invoice_id"
-    ).eq("quote_id", quote_id).execute()
+    items_resp = (
+        supabase.table("quote_items")
+        .select("id,composition_selected_invoice_id")
+        .eq("quote_id", quote_id)
+        .execute()
+    )
     items: list[dict] = items_resp.data or []
 
     active_pairs: list[tuple[str, str]] = [
@@ -496,26 +722,38 @@ def freeze_composition(
         return 0
 
     item_ids = [pair[0] for pair in active_pairs]
-    iip_resp = supabase.table("invoice_item_prices").select("*").in_(
-        "quote_item_id", item_ids
-    ).execute()
-    iip_rows: list[dict] = iip_resp.data or []
+    coverage_rows = _load_coverage_with_items(item_ids, supabase)
 
     active_pairs_set: set[tuple[str, str]] = set(active_pairs)
-    to_freeze = [
-        row
-        for row in iip_rows
-        if (row["quote_item_id"], row["invoice_id"]) in active_pairs_set
-        and row.get("frozen_at") is None
-    ]
+
+    # Determine which invoice_items to freeze:
+    #   - its invoice_id == the qi's selected invoice (via active_pairs)
+    #   - currently unfrozen
+    to_freeze: dict[str, dict] = {}
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        ii_id = ii.get("id")
+        inv_id = ii.get("invoice_id")
+        if not ii_id or not inv_id:
+            continue
+        if (cov["quote_item_id"], inv_id) not in active_pairs_set:
+            continue
+        if ii.get("frozen_at") is not None:
+            continue
+        # Dedup: one invoice_item may be reached via multiple qi (merge) —
+        # freeze it only once.
+        to_freeze.setdefault(ii_id, ii)
+
+    if not to_freeze:
+        return 0
 
     now_iso = datetime.now(timezone.utc).isoformat()
     frozen_count = 0
-    for row in to_freeze:
-        supabase.table("invoice_item_prices").update({
+    for ii_id in to_freeze:
+        supabase.table("invoice_items").update({
             "frozen_at": now_iso,
             "frozen_by": user_id,
-        }).eq("id", row["id"]).execute()
+        }).eq("id", ii_id).execute()
         frozen_count += 1
 
     if frozen_count:
