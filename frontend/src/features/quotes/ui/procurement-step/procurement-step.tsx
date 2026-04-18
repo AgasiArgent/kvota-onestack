@@ -11,7 +11,7 @@ import type {
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
 import { ProcurementActionBar } from "./procurement-action-bar";
-import { UnassignedItems } from "./unassigned-items";
+import { QuotePositionsList } from "./quote-positions-list";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
 
@@ -138,7 +138,7 @@ export function ProcurementStep({
       />
 
       <div className="p-6 space-y-4">
-        <UnassignedItems
+        <QuotePositionsList
           key={invoices.length}
           items={items}
           invoices={invoices}
