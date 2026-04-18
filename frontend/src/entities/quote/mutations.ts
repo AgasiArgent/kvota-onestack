@@ -331,6 +331,166 @@ export async function assignItemsToInvoice(
 }
 
 /**
+ * Phase 5c Task 12 — split an invoice_item that's currently 1:1 covered by a
+ * single quote_item into N ≥ 2 invoice_items, each with its own ratio. The
+ * operation is local to one invoice: coverage in other invoices for the same
+ * quote_item is untouched.
+ *
+ * Sequence (no DB transaction in Supabase REST client, so we fail-forward
+ * with explicit rollback on error — the DELETE of the source invoice_item
+ * cascades to its coverage row via ON DELETE CASCADE; INSERTing children
+ * afterward keeps the window small):
+ *
+ *   1. Find the source invoice_item via coverage where invoice_id matches
+ *      and quote_item_id = sourceQuoteItemId. There must be exactly one
+ *      (1:1 coverage precondition); otherwise refuse the split.
+ *   2. Compute source quote_item.quantity for ratio → quantity math.
+ *   3. Read invoice metadata (organization_id, purchase_currency) for the
+ *      new child rows.
+ *   4. DELETE source invoice_item — cascades to its coverage row.
+ *   5. INSERT N child invoice_items with computed quantities.
+ *   6. INSERT N coverage rows (child_ii, sourceQuoteItemId, ratio).
+ *
+ * If step 5 or 6 fails, the caller sees an error — the source invoice_item
+ * is already gone. Manual recovery via admin UI or DB edit; we log the
+ * failure loudly via `throw`.
+ */
+export interface SplitChildInput {
+  product_name: string;
+  supplier_sku: string | null;
+  brand: string | null;
+  quantity_ratio: number;
+  purchase_price_original: number;
+  purchase_currency: string;
+  weight_in_kg: number | null;
+  customs_code: string | null;
+}
+
+export async function splitInvoiceItem(
+  invoiceId: string,
+  sourceQuoteItemId: string,
+  children: SplitChildInput[]
+) {
+  if (children.length < 2) {
+    throw new Error("Split requires at least 2 children");
+  }
+  for (const c of children) {
+    if (!Number.isFinite(c.quantity_ratio) || c.quantity_ratio <= 0) {
+      throw new Error("Each child must have quantity_ratio > 0");
+    }
+  }
+
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+
+  // 1. Find source invoice_item — the one covering sourceQuoteItemId in
+  //    the target invoice.
+  const { data: coverageRows, error: covErr } = await untyped
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, ratio, invoice_items!inner(id, invoice_id)")
+    .eq("quote_item_id", sourceQuoteItemId);
+  if (covErr) throw covErr;
+
+  const sourceCoverage = (
+    (coverageRows ?? []) as Array<{
+      invoice_item_id: string;
+      ratio: number;
+      invoice_items: { id: string; invoice_id: string };
+    }>
+  ).filter((r) => r.invoice_items?.invoice_id === invoiceId);
+
+  if (sourceCoverage.length === 0) {
+    throw new Error("Исходная позиция не покрыта в этом КП");
+  }
+  if (sourceCoverage.length > 1) {
+    throw new Error(
+      "Нельзя разделить позицию, уже участвующую в разделении"
+    );
+  }
+  const sourceInvoiceItemId = sourceCoverage[0].invoice_item_id;
+
+  // 2. Source quote_item.quantity for ratio math.
+  const { data: sourceQi, error: qiErr } = await supabase
+    .from("quote_items")
+    .select("quantity")
+    .eq("id", sourceQuoteItemId)
+    .single();
+  if (qiErr) throw qiErr;
+  const sourceQuantity = Number(
+    (sourceQi as unknown as { quantity: number }).quantity
+  );
+  if (!Number.isFinite(sourceQuantity) || sourceQuantity <= 0) {
+    throw new Error("Некорректное количество исходной позиции");
+  }
+
+  // 3. Invoice metadata — organization_id + next position anchor.
+  const { data: inv, error: invErr } = await untyped
+    .from("invoices")
+    .select("organization_id")
+    .eq("id", invoiceId)
+    .single();
+  if (invErr) throw invErr;
+  if (!inv) throw new Error("invoice not found");
+
+  const { data: posRow } = await untyped
+    .from("invoice_items")
+    .select("position")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: false })
+    .limit(1);
+  const startPos =
+    (Array.isArray(posRow) && posRow.length > 0
+      ? (posRow[0] as { position: number }).position
+      : 0) + 1;
+
+  // 4. DELETE source invoice_item — cascades to coverage row via
+  //    ON DELETE CASCADE (migration 282).
+  const { error: delErr } = await untyped
+    .from("invoice_items")
+    .delete()
+    .eq("id", sourceInvoiceItemId);
+  if (delErr) throw delErr;
+
+  // 5. INSERT N child invoice_items.
+  const iiRows = children.map((c, idx) => ({
+    invoice_id: invoiceId,
+    organization_id: (inv as { organization_id: string }).organization_id,
+    position: startPos + idx,
+    product_name: c.product_name,
+    supplier_sku: c.supplier_sku,
+    brand: c.brand,
+    quantity: sourceQuantity * c.quantity_ratio,
+    purchase_price_original: c.purchase_price_original,
+    purchase_currency: c.purchase_currency,
+    weight_in_kg: c.weight_in_kg,
+    customs_code: c.customs_code,
+    version: 1,
+  }));
+
+  const { data: created, error: iiErr } = await untyped
+    .from("invoice_items")
+    .insert(iiRows)
+    .select("id");
+  if (iiErr) throw iiErr;
+  if (!created || created.length !== children.length) {
+    throw new Error("Не удалось создать новые позиции");
+  }
+
+  // 6. INSERT N coverage rows, all pointing to sourceQuoteItemId.
+  const covInsert = (created as Array<{ id: string }>).map((row, idx) => ({
+    invoice_item_id: row.id,
+    quote_item_id: sourceQuoteItemId,
+    ratio: children[idx].quantity_ratio,
+  }));
+
+  const { error: covInsertErr } = await untyped
+    .from("invoice_item_coverage")
+    .insert(covInsert);
+  if (covInsertErr) throw covInsertErr;
+}
+
+/**
  * Remove a quote_item from its currently-selected invoice. Deletes the
  * invoice_items + invoice_item_coverage rows that cover this quote_item in
  * its composition_selected_invoice_id, and clears the pointer.

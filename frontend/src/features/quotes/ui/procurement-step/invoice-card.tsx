@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Trash2, Undo2, Weight } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Mail, Package, Paperclip, Split, Trash2, Undo2, Weight } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { ProcurementItemsEditor } from "./procurement-items-editor";
 import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
+import { SplitModal } from "./split-modal";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
 import { downloadInvoiceXls } from "@/entities/invoice/mutations";
@@ -127,6 +128,15 @@ export function InvoiceCard({
   const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
     invoiceItemsOverride === undefined
   );
+  // 1:1-covered quote_items in THIS invoice — candidates for Split/Merge.
+  // A quote_item is 1:1-covered when it has exactly one invoice_item in this
+  // invoice covering it AND that invoice_item covers only this quote_item
+  // AND the ratio is 1. Items already part of a split/merge are excluded
+  // from both modals to prevent chain-structural changes.
+  const [oneToOneCandidates, setOneToOneCandidates] = useState<
+    Array<{ id: string; product_name: string; quantity: number }>
+  >([]);
+  const [splitOpen, setSplitOpen] = useState(false);
 
   const procurementCompleted = quote.procurement_completed_at != null;
   const invoiceItems = invoiceItemsOverride ?? fetchedInvoiceItems;
@@ -183,7 +193,7 @@ export function InvoiceCard({
         const { data: cov } = await untyped
           .from("invoice_item_coverage")
           .select(
-            "invoice_item_id, quote_item_id, ratio, quote_items!inner(product_name)"
+            "invoice_item_id, quote_item_id, ratio, quote_items!inner(id, product_name, quantity)"
           )
           .in(
             "invoice_item_id",
@@ -192,20 +202,26 @@ export function InvoiceCard({
 
         const coverageByIi = new Map<
           string,
-          Array<{ quote_item_id: string; ratio: number; product_name: string }>
+          Array<{
+            quote_item_id: string;
+            ratio: number;
+            product_name: string;
+            quantity: number;
+          }>
         >();
         const iiByQi = new Map<string, string[]>();
         for (const row of (cov ?? []) as Array<{
           invoice_item_id: string;
           quote_item_id: string;
           ratio: number;
-          quote_items: { product_name: string };
+          quote_items: { id: string; product_name: string; quantity: number };
         }>) {
           const list = coverageByIi.get(row.invoice_item_id) ?? [];
           list.push({
             quote_item_id: row.quote_item_id,
             ratio: row.ratio,
             product_name: row.quote_items?.product_name ?? "",
+            quantity: Number(row.quote_items?.quantity ?? 0),
           });
           coverageByIi.set(row.invoice_item_id, list);
 
@@ -215,6 +231,14 @@ export function InvoiceCard({
         }
 
         const summary: Record<string, string> = {};
+        // 1:1 candidates: exactly one invoice_item covering only one
+        // quote_item at ratio=1 (no split sibling, no merge partner).
+        const candidates: Array<{
+          id: string;
+          product_name: string;
+          quantity: number;
+        }> = [];
+        const seenQi = new Set<string>();
         for (const ii of rows) {
           const covers = coverageByIi.get(ii.id) ?? [];
           if (covers.length > 1) {
@@ -239,11 +263,24 @@ export function InvoiceCard({
                 })
                 .filter(Boolean);
               summary[ii.id] = "\u2192 " + parts.join(" + ");
+            } else if (
+              Number(covers[0].ratio) === 1 &&
+              !seenQi.has(sourceQi)
+            ) {
+              // 1:1: candidate for both Split (source) and Merge (sibling)
+              candidates.push({
+                id: sourceQi,
+                product_name: covers[0].product_name,
+                quantity: covers[0].quantity,
+              });
+              seenQi.add(sourceQi);
             }
-            // else 1:1 — no label
           }
         }
-        if (!cancelled) setFetchedCoverage(summary);
+        if (!cancelled) {
+          setFetchedCoverage(summary);
+          setOneToOneCandidates(candidates);
+        }
       } finally {
         if (!cancelled) setInvoiceItemsLoading(false);
       }
@@ -471,16 +508,34 @@ export function InvoiceCard({
             {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
           </Button>
         ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mr-2 text-muted-foreground hover:text-destructive"
-            onClick={handleUnassignAll}
-            disabled={unassigning}
-            title="Вернуть все позиции в нераспределённые"
-          >
-            {unassigning ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
-          </Button>
+          <div className="mr-2 flex items-center gap-0.5">
+            {/* Phase 5c Task 12/13: Split + Merge structural actions.
+                Gated on `!isLocked` (outer else branch); Split needs ≥1 1:1
+                candidate, Merge needs ≥2. Quote_items already in a split
+                or merge are excluded from oneToOneCandidates. */}
+            {oneToOneCandidates.length >= 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setSplitOpen(true)}
+                title="Разделить позицию"
+              >
+                <Split size={14} className="mr-1" />
+                Разделить
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={handleUnassignAll}
+              disabled={unassigning}
+              title="Вернуть все позиции в нераспределённые"
+            >
+              {unassigning ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -676,6 +731,17 @@ export function InvoiceCard({
         incoterms={supplierIncoterms}
         pickupCountry={pickupCountryRu}
         initialLanguage={language}
+      />
+
+      {/* Phase 5c Task 12: SplitModal — decompose 1 quote_item into N
+          invoice_items within THIS invoice. Local action; coverage in other
+          invoices for the same quote_item is untouched. */}
+      <SplitModal
+        open={splitOpen}
+        onClose={() => setSplitOpen(false)}
+        invoiceId={invoice.id}
+        candidates={oneToOneCandidates}
+        defaultCurrency={currency}
       />
     </Card>
   );
