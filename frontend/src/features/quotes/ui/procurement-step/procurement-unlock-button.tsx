@@ -6,11 +6,20 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { requestEditApproval } from "@/entities/invoice/mutations";
 
-interface EditApprovalButtonProps {
+interface ProcurementUnlockButtonProps {
   invoiceId: string;
 }
 
-export function EditApprovalButton({ invoiceId }: EditApprovalButtonProps) {
+/**
+ * Phase 5c rename: was EditApprovalButton — gated on invoices.sent_at.
+ * Now renders under the new procurement-lock gate
+ * (quotes.procurement_completed_at), which is computed by the parent
+ * invoice-card. This component is display-only; the parent decides when to
+ * render it.
+ */
+export function ProcurementUnlockButton({
+  invoiceId,
+}: ProcurementUnlockButtonProps) {
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
 

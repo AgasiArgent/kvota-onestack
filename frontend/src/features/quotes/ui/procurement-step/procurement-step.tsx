@@ -150,13 +150,13 @@ export function ProcurementStep({
             key={invoice.id}
             invoice={invoice}
             items={invoiceItemsMap.get(invoice.id) ?? []}
+            quote={quote}
             defaultExpanded={invoices.length === 1}
-            procurementCompleted={quote.procurement_completed_at != null}
             userRoles={userRoles}
           />
         ))}
 
-        {invoices.length === 0 && items.every((i) => i.invoice_id != null) && (
+        {invoices.length === 0 && items.length === 0 && (
           <div className="text-center py-12 text-muted-foreground">
             Нет КП поставщиков
           </div>

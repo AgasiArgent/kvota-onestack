@@ -10,11 +10,12 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
 import { SendHistoryPanel } from "./send-history-panel";
-import { EditApprovalButton } from "./edit-approval-button";
+import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import { deleteInvoice, fetchCargoPlaces } from "@/entities/quote/mutations";
 import { downloadInvoiceXls } from "@/entities/invoice/mutations";
+import { createClient } from "@/shared/lib/supabase/client";
 import { findCountryByCode } from "@/shared/ui/geo";
 
 type InvoiceExtras = {
@@ -37,19 +38,74 @@ const INVOICE_STATUS_LABELS: Record<string, string> = {
   completed: "Завершён",
 };
 
+/**
+ * Phase 5c: supplier-side positions. Sourced from kvota.invoice_items,
+ * not quote_items. Each row represents one line in the supplier's КП and
+ * may diverge from the customer's original quote_item via split/merge.
+ */
+export interface InvoiceItemRow {
+  id: string;
+  invoice_id: string;
+  position: number;
+  product_name: string;
+  supplier_sku: string | null;
+  brand: string | null;
+  quantity: number;
+  purchase_price_original: number | null;
+  purchase_currency: string;
+}
+
+/**
+ * Minimal quote stub used for edit-gate computation. Parent may pass a full
+ * QuoteDetailRow — any superset with these fields works. `items` stays as
+ * QuoteItemRow[] because several sibling editors (ProcurementItemsEditor,
+ * LetterDraftComposer, XLS export) still read customer-side fields from it.
+ */
+export interface InvoiceCardQuoteStub {
+  procurement_completed_at: string | null;
+}
+
 interface InvoiceCardProps {
   invoice: QuoteInvoiceRow;
+  /**
+   * Customer-side quote_items of the quote this invoice belongs to.
+   * Used by downstream editors that still render customer fields.
+   */
   items: QuoteItemRow[];
+  /**
+   * Quote metadata needed for the edit-gate. Replaces the Phase 4a
+   * `procurementCompleted: boolean` prop — now derived from the quote
+   * itself so sibling code (unlock-request) can read the same source.
+   */
+  quote: InvoiceCardQuoteStub;
+  /**
+   * Optional pre-fetched invoice_items for this invoice. When omitted,
+   * the card fetches them on mount. Tests and storybook pass in fixtures.
+   */
+  invoiceItems?: InvoiceItemRow[];
+  /**
+   * Optional pre-computed coverage summary per invoice_item. Format:
+   *   - split:  "→ болт ×1 + шайба ×2"
+   *   - merge:  "← болт, гайка, шайба объединены"
+   *   - 1:1:    absent from map (no label rendered)
+   */
+  coverageSummaryByItem?: Record<string, string>;
   defaultExpanded?: boolean;
-  procurementCompleted: boolean;
   userRoles?: string[];
 }
+
+const numberFmtInline = new Intl.NumberFormat("ru-RU", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export function InvoiceCard({
   invoice,
   items,
+  quote,
+  invoiceItems: invoiceItemsOverride,
+  coverageSummaryByItem: coverageOverride,
   defaultExpanded = false,
-  procurementCompleted,
   userRoles = [],
 }: InvoiceCardProps) {
   const router = useRouter();
@@ -64,10 +120,23 @@ export function InvoiceCard({
   >([]);
   const [weightKg, setWeightKg] = useState(invoice.total_weight_kg?.toString() ?? "");
   const [volumeM3, setVolumeM3] = useState(invoice.total_volume_m3?.toString() ?? "");
-  const isEmpty = items.length === 0;
-  const isSent = invoice.sent_at != null;
+  const [fetchedInvoiceItems, setFetchedInvoiceItems] = useState<
+    InvoiceItemRow[]
+  >([]);
+  const [fetchedCoverage, setFetchedCoverage] = useState<Record<string, string>>({});
+  const [invoiceItemsLoading, setInvoiceItemsLoading] = useState(
+    invoiceItemsOverride === undefined
+  );
+
+  const procurementCompleted = quote.procurement_completed_at != null;
+  const invoiceItems = invoiceItemsOverride ?? fetchedInvoiceItems;
+  const coverageSummaryByItem = coverageOverride ?? fetchedCoverage;
+  const isEmpty = invoiceItems.length === 0;
+  // Phase 5c: edit-gate decoupled from sent_at. Locking is procurement-stage
+  // completion; a sent-but-not-completed invoice is still editable.
+  const isLocked = procurementCompleted;
   const canSend =
-    items.length > 0 &&
+    invoiceItems.length > 0 &&
     (userRoles.includes("admin") ||
       userRoles.includes("procurement") ||
       userRoles.includes("head_of_procurement") ||
@@ -76,6 +145,114 @@ export function InvoiceCard({
   useEffect(() => {
     fetchCargoPlaces(invoice.id).then(setCargoPlaces);
   }, [invoice.id]);
+
+  useEffect(() => {
+    if (invoiceItemsOverride !== undefined) return;
+    // database.types.ts does not include invoice_items / invoice_item_coverage
+    // yet (migrations 281-282 add them). Cast through `from` to bypass the
+    // missing types.
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = supabase as unknown as { from: (t: string) => any };
+
+    let cancelled = false;
+    async function load() {
+      setInvoiceItemsLoading(true);
+      try {
+        const { data: ii } = await untyped
+          .from("invoice_items")
+          .select(
+            "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency"
+          )
+          .eq("invoice_id", invoice.id)
+          .order("position", { ascending: true });
+        if (cancelled) return;
+        const rows = (ii ?? []) as InvoiceItemRow[];
+        setFetchedInvoiceItems(rows);
+
+        if (rows.length === 0) {
+          setFetchedCoverage({});
+          return;
+        }
+
+        // Coverage summary: for each invoice_item, fetch its coverage rows
+        // (and sibling coverage for merge detection). Labels:
+        //   split  = 1 quote_item → N invoice_items → "→ A ×1 + B ×2"
+        //   merge  = N quote_items → 1 invoice_item → "← A, B, C объединены"
+        //   1:1    = no entry in map
+        const { data: cov } = await untyped
+          .from("invoice_item_coverage")
+          .select(
+            "invoice_item_id, quote_item_id, ratio, quote_items!inner(product_name)"
+          )
+          .in(
+            "invoice_item_id",
+            rows.map((r) => r.id)
+          );
+
+        const coverageByIi = new Map<
+          string,
+          Array<{ quote_item_id: string; ratio: number; product_name: string }>
+        >();
+        const iiByQi = new Map<string, string[]>();
+        for (const row of (cov ?? []) as Array<{
+          invoice_item_id: string;
+          quote_item_id: string;
+          ratio: number;
+          quote_items: { product_name: string };
+        }>) {
+          const list = coverageByIi.get(row.invoice_item_id) ?? [];
+          list.push({
+            quote_item_id: row.quote_item_id,
+            ratio: row.ratio,
+            product_name: row.quote_items?.product_name ?? "",
+          });
+          coverageByIi.set(row.invoice_item_id, list);
+
+          const iis = iiByQi.get(row.quote_item_id) ?? [];
+          iis.push(row.invoice_item_id);
+          iiByQi.set(row.quote_item_id, iis);
+        }
+
+        const summary: Record<string, string> = {};
+        for (const ii of rows) {
+          const covers = coverageByIi.get(ii.id) ?? [];
+          if (covers.length > 1) {
+            // Merge: 1 invoice_item covers ≥2 quote_items
+            summary[ii.id] =
+              "\u2190 " +
+              covers.map((c) => c.product_name).join(", ") +
+              " объединены";
+            continue;
+          }
+          if (covers.length === 1) {
+            const sourceQi = covers[0].quote_item_id;
+            const siblings = iiByQi.get(sourceQi) ?? [];
+            if (siblings.length >= 2) {
+              // Split: 1 quote_item covered by ≥2 invoice_items
+              const parts = siblings
+                .map((sid) => {
+                  const sii = rows.find((r) => r.id === sid);
+                  const scov = coverageByIi.get(sid) ?? [];
+                  const rat = scov.find((c) => c.quote_item_id === sourceQi)?.ratio ?? 1;
+                  return sii ? `${sii.product_name} ×${rat}` : "";
+                })
+                .filter(Boolean);
+              summary[ii.id] = "\u2192 " + parts.join(" + ");
+            }
+            // else 1:1 — no label
+          }
+        }
+        if (!cancelled) setFetchedCoverage(summary);
+      } finally {
+        if (!cancelled) setInvoiceItemsLoading(false);
+      }
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice.id, invoiceItemsOverride]);
 
   const supplierName =
     (invoice.supplier as { name: string } | null)?.name ?? "\u2014";
@@ -94,7 +271,10 @@ export function InvoiceCard({
           ? `${pickupCountryRu} (${pickupCountryCode})`
           : null);
   const supplierIncoterms = invoice.supplier_incoterms ?? null;
-  const totalAmount = items.reduce((sum, item) => {
+  // Phase 5c: totals come from invoice_items (supplier's own positions),
+  // not quote_items. Merged invoice_items are counted once (that's the
+  // point — a single row in the supplier КП).
+  const totalAmount = invoiceItems.reduce((sum, item) => {
     const price = item.purchase_price_original ?? 0;
     return sum + price * item.quantity;
   }, 0);
@@ -143,14 +323,33 @@ export function InvoiceCard({
   async function handleUnassignAll() {
     setUnassigning(true);
     try {
-      // Set invoice_id to null for all items in this invoice
-      const supabase = (await import("@/shared/lib/supabase/client")).createClient();
-      const { error } = await supabase
+      // Phase 5c: remove invoice_items + coverage (cascade) and clear any
+      // composition pointers on quote_items that pointed here. Does not
+      // touch alternative coverage in other invoices (non-destructive).
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const untyped = supabase as unknown as { from: (t: string) => any };
+
+      if (invoiceItems.length > 0) {
+        const { error: delErr } = await untyped
+          .from("invoice_items")
+          .delete()
+          .in(
+            "id",
+            invoiceItems.map((ii) => ii.id)
+          );
+        if (delErr) throw delErr;
+      }
+
+      const { error: ptrErr } = await supabase
         .from("quote_items")
-        .update({ invoice_id: null })
-        .in("id", items.map((i) => i.id));
-      if (error) throw error;
-      toast.success(`${items.length} поз. возвращены в нераспределённые`);
+        .update({ composition_selected_invoice_id: null })
+        .eq("composition_selected_invoice_id", invoice.id);
+      if (ptrErr) throw ptrErr;
+
+      toast.success(
+        `${invoiceItems.length} поз. возвращены в нераспределённые`
+      );
       router.refresh();
     } catch {
       toast.error("Не удалось убрать позиции из КП");
@@ -172,8 +371,11 @@ export function InvoiceCard({
     }
   }
 
+  const sentAt = invoice.sent_at;
+  const hasSentAt = sentAt != null;
+
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden" data-invoice-id={invoice.id}>
       <div className="flex items-center">
         <button
           type="button"
@@ -227,7 +429,7 @@ export function InvoiceCard({
           )}
 
           <Badge variant="secondary" className="ml-auto shrink-0">
-            {items.length} поз.
+            {invoiceItems.length} поз.
           </Badge>
 
           <span className="text-sm font-mono tabular-nums shrink-0">
@@ -240,9 +442,11 @@ export function InvoiceCard({
             </Badge>
           )}
 
-          {isSent && (
+          {hasSentAt && (
+            // Phase 5c: purely informational — NOT a lock indicator.
+            // The edit-gate is driven by quote.procurement_completed_at.
             <Badge variant="default" className="shrink-0 text-xs bg-green-600">
-              Отправлено {new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(new Date(invoice.sent_at!))}
+              Отправлено {new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit" }).format(new Date(sentAt!))}
             </Badge>
           )}
 
@@ -251,9 +455,9 @@ export function InvoiceCard({
           )}
         </button>
 
-        {isSent ? (
+        {isLocked ? (
           <div className="mr-2">
-            <EditApprovalButton invoiceId={invoice.id} />
+            <ProcurementUnlockButton invoiceId={invoice.id} />
           </div>
         ) : isEmpty ? (
           <Button
@@ -412,7 +616,47 @@ export function InvoiceCard({
 
           <SendHistoryPanel invoiceId={invoice.id} />
 
+          {/* Phase 5c: invoice_items list — supplier-side positions with
+              coverage summary per row (split/merge indicators). */}
           <div className="overflow-x-auto">
+            {invoiceItemsLoading ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Загрузка...
+              </div>
+            ) : invoiceItems.length === 0 ? null : (
+              <div className="border-b border-border bg-muted/20">
+                <ul className="divide-y divide-border">
+                  {invoiceItems.map((ii) => {
+                    const coverage = coverageSummaryByItem[ii.id];
+                    return (
+                      <li key={ii.id} className="px-4 py-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="font-medium truncate">
+                            {ii.product_name}
+                          </span>
+                          {ii.supplier_sku && (
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {ii.supplier_sku}
+                            </span>
+                          )}
+                          <span className="ml-auto tabular-nums text-muted-foreground">
+                            {ii.quantity} ×{" "}
+                            {ii.purchase_price_original != null
+                              ? `${numberFmtInline.format(ii.purchase_price_original)} ${ii.purchase_currency}`
+                              : "\u2014"}
+                          </span>
+                        </div>
+                        {coverage && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {coverage}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
             <ProcurementItemsEditor items={items} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
           </div>
         </div>
