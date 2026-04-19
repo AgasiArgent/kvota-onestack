@@ -19,13 +19,24 @@ interface QuoteInput {
   workflow_status: string | null;
 }
 
-interface ItemInput {
+/**
+ * Phase 5d Task 13 — supplier-side item shape used by control-step verification.
+ *
+ * Post-migration 284, these fields live on `invoice_items` (with coverage
+ * linking them back to quote_items). The parent (`control-step.tsx`)
+ * assembles this shape by reading invoice_items filtered to each quote_item's
+ * `composition_selected_invoice_id` and exposing only the fields needed here.
+ */
+export interface ControlCheckItem {
   supplier_country: string | null;
   price_includes_vat: boolean | null;
   purchase_price_original: number | null;
   quantity: number;
   invoice_id: string | null;
 }
+
+// Retained for legacy internal usage in tests that stub the hook.
+type ItemInput = ControlCheckItem;
 
 interface CalcVariablesInput {
   markup: number | null;

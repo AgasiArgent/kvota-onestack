@@ -16,8 +16,11 @@ import { describe, it, expect } from "vitest";
  * Task 12 case (a): verify the prop contract; no refactor in this task.
  */
 
-import { CalculationResults } from "../calculation-results";
-import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
+import {
+  CalculationResults,
+  type CalculationResultsItem,
+} from "../calculation-results";
+import type { QuoteDetailRow } from "@/entities/quote/queries";
 
 function makeQuote(
   overrides: Record<string, unknown> = {}
@@ -33,7 +36,9 @@ function makeQuote(
   } as unknown as QuoteDetailRow;
 }
 
-function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
+function makeItem(
+  overrides: Partial<CalculationResultsItem> = {}
+): CalculationResultsItem {
   return {
     id: "qi-1",
     product_name: "Товар",
@@ -41,7 +46,7 @@ function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
     quantity: 10,
     base_price_vat: 100,
     ...overrides,
-  } as unknown as QuoteItemRow;
+  };
 }
 
 describe("CalculationResults — summary cards source from quote extended fields", () => {

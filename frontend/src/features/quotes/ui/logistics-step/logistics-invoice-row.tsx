@@ -4,9 +4,12 @@ import { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
+import type { QuoteInvoiceRow } from "@/entities/quote/queries";
 import { fetchCargoPlaces } from "@/entities/quote/mutations";
-import { ProductsSubtable } from "./products-subtable";
+import {
+  ProductsSubtable,
+  type LogisticsProductRow,
+} from "./products-subtable";
 import { RouteSegments } from "./route-segments";
 import { AdditionalExpenses } from "./additional-expenses";
 
@@ -44,7 +47,7 @@ export function computeTotalWeight(
 
 interface LogisticsInvoiceRowProps {
   invoice: QuoteInvoiceRow;
-  items: QuoteItemRow[];
+  items: LogisticsProductRow[];
   deliveryCity: string | null;
   defaultExpanded?: boolean;
 }
@@ -84,8 +87,7 @@ export function LogisticsInvoiceRow({
   // the legacy quote_items column is dropped in migration 284.
   const weightItems: LogisticsWeightItem[] = items.map((item) => ({
     quantity: item.quantity,
-    weight_in_kg:
-      (item as unknown as { weight_in_kg: number | null }).weight_in_kg ?? null,
+    weight_in_kg: item.weight_in_kg ?? null,
   }));
   const totalWeight = computeTotalWeight(weightItems, cargoPlaces);
 

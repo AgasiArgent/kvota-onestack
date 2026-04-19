@@ -21,18 +21,24 @@ const CustomsHandsontable = dynamic(
 interface CustomsItemsEditorProps {
   items: QuoteItemRow[];
   invoiceCountryMap: Map<string, string>;
+  supplierByQuoteItemId: Map<
+    string,
+    { supplier_country: string | null; invoice_id: string | null }
+  >;
   userRoles: string[];
 }
 
 export function CustomsItemsEditor({
   items,
   invoiceCountryMap,
+  supplierByQuoteItemId,
   userRoles,
 }: CustomsItemsEditorProps) {
   return (
     <CustomsHandsontable
       items={items}
       invoiceCountryMap={invoiceCountryMap}
+      supplierByQuoteItemId={supplierByQuoteItemId}
       userRoles={userRoles}
     />
   );

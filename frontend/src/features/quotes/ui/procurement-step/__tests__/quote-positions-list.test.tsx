@@ -50,7 +50,6 @@ function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
     brand: "ABB",
     product_code: "SKU-1",
     quantity: 100,
-    invoice_id: null,
     composition_selected_invoice_id: null,
     is_unavailable: false,
     position: 1,
@@ -81,12 +80,15 @@ function makeInvoice(overrides: Partial<QuoteInvoiceRow> = {}): QuoteInvoiceRow 
 
 describe("QuotePositionsList — rendering", () => {
   it("renders ALL quote_items regardless of coverage status (does not filter by invoice_id)", () => {
+    // Phase 5d: invoice_id is no longer on quote_items — the field moved
+    // to invoice_items with an invoice_item_coverage join. The test now
+    // only asserts that all three quote_items render regardless of
+    // coverage, which is what the component contract guarantees.
     const items = [
-      makeItem({ id: "qi-1", product_name: "Болт", invoice_id: null }),
+      makeItem({ id: "qi-1", product_name: "Болт" }),
       makeItem({
         id: "qi-2",
         product_name: "Гайка",
-        invoice_id: "inv-A", // already assigned via legacy pointer
       }),
       makeItem({
         id: "qi-3",
@@ -173,9 +175,9 @@ describe("QuotePositionsList — rendering", () => {
 
   it("renders one <tr> per quote_item (never filters hidden/covered items)", () => {
     const items = [
-      makeItem({ id: "qi-1", invoice_id: "inv-A" }),
-      makeItem({ id: "qi-2", invoice_id: "inv-A" }),
-      makeItem({ id: "qi-3", invoice_id: null }),
+      makeItem({ id: "qi-1" }),
+      makeItem({ id: "qi-2" }),
+      makeItem({ id: "qi-3" }),
     ];
 
     const html = renderToString(
@@ -194,10 +196,7 @@ describe("QuotePositionsList — rendering", () => {
 
 describe("QuotePositionsList — does NOT auto-hide when everything is covered", () => {
   it("still renders when every item is covered (non-destructive — always visible)", () => {
-    const items = [
-      makeItem({ id: "qi-1", invoice_id: "inv-A" }),
-      makeItem({ id: "qi-2", invoice_id: "inv-A" }),
-    ];
+    const items = [makeItem({ id: "qi-1" }), makeItem({ id: "qi-2" })];
     const invoices = [makeInvoice({ id: "inv-A" })];
 
     const html = renderToString(

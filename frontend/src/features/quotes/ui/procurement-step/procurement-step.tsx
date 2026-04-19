@@ -96,6 +96,17 @@ export function ProcurementStep({
   // dropped `quote_items.purchase_price_original` column.
   const [priceReadyByQuoteItemId, setPriceReadyByQuoteItemId] =
     useState<PriceReadyMap>({});
+  // Phase 5d: quote_items.invoice_id was dropped in migration 284. Map
+  // quote_item → invoice_id via invoice_item_coverage, selecting the row
+  // in each quote_item's composition_selected_invoice_id (or the first
+  // covering invoice when no selection has been made).
+  const [invoiceIdByQuoteItemId, setInvoiceIdByQuoteItemId] = useState<
+    Record<string, string | null>
+  >({});
+  // Phase 5d: quote_items.min_order_quantity was dropped in migration 284.
+  // Project the MOQ from the covering invoice_item (selected invoice wins).
+  const [minOrderQuantityByQuoteItemId, setMinOrderQuantityByQuoteItemId] =
+    useState<Record<string, number | null>>({});
 
   // Load suppliers and buyer companies for the invoice creation modal
   useEffect(() => {
@@ -134,7 +145,7 @@ export function ProcurementStep({
       const { data } = await untyped
         .from("invoice_item_coverage")
         .select(
-          "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original)"
+          "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original, minimum_order_quantity)"
         )
         .in("quote_item_id", qiIds);
       if (cancelled) return;
@@ -147,20 +158,35 @@ export function ProcurementStep({
         );
       }
       const ready: PriceReadyMap = {};
+      const invoiceIdMap: Record<string, string | null> = {};
+      const moqMap: Record<string, number | null> = {};
       for (const row of (data ?? []) as Array<{
         quote_item_id: string;
-        invoice_items: { invoice_id: string; purchase_price_original: number | null };
+        invoice_items: {
+          invoice_id: string;
+          purchase_price_original: number | null;
+          minimum_order_quantity: number | null;
+        };
       }>) {
         const selected = selectedByQi.get(row.quote_item_id);
-        if (
-          selected &&
-          row.invoice_items?.invoice_id === selected &&
-          row.invoice_items?.purchase_price_original != null
-        ) {
+        const isSelectedRow =
+          !!selected && row.invoice_items?.invoice_id === selected;
+        if (isSelectedRow && row.invoice_items?.purchase_price_original != null) {
           ready[row.quote_item_id] = true;
+        }
+        // Pin invoice_id + MOQ from the selected row when it exists, else
+        // take the first covering row.
+        const take = isSelectedRow || !selected;
+        if (take && invoiceIdMap[row.quote_item_id] === undefined) {
+          invoiceIdMap[row.quote_item_id] =
+            row.invoice_items?.invoice_id ?? null;
+          moqMap[row.quote_item_id] =
+            row.invoice_items?.minimum_order_quantity ?? null;
         }
       }
       setPriceReadyByQuoteItemId(ready);
+      setInvoiceIdByQuoteItemId(invoiceIdMap);
+      setMinOrderQuantityByQuoteItemId(moqMap);
     })();
     return () => {
       cancelled = true;
@@ -170,14 +196,15 @@ export function ProcurementStep({
   const invoiceItemsMap = useMemo(() => {
     const map = new Map<string, QuoteItemRow[]>();
     for (const item of items) {
-      if (item.invoice_id != null) {
-        const existing = map.get(item.invoice_id) ?? [];
+      const invId = invoiceIdByQuoteItemId[item.id] ?? null;
+      if (invId != null) {
+        const existing = map.get(invId) ?? [];
         existing.push(item);
-        map.set(item.invoice_id, existing);
+        map.set(invId, existing);
       }
     }
     return map;
-  }, [items]);
+  }, [items, invoiceIdByQuoteItemId]);
 
   function handleCreateInvoice() {
     setPreselectedItemIds([]);
@@ -193,7 +220,7 @@ export function ProcurementStep({
     const guard = validateCompleteProcurementGuard(
       items.map((i) => ({
         id: i.id,
-        invoice_id: i.invoice_id ?? null,
+        invoice_id: invoiceIdByQuoteItemId[i.id] ?? null,
         is_unavailable: i.is_unavailable === true,
       })),
       priceReadyByQuoteItemId
@@ -232,6 +259,8 @@ export function ProcurementStep({
       <ProcurementActionBar
         items={items}
         priceReadyByQuoteItemId={priceReadyByQuoteItemId}
+        invoiceIdByQuoteItemId={invoiceIdByQuoteItemId}
+        minOrderQuantityByQuoteItemId={minOrderQuantityByQuoteItemId}
         onCreateInvoice={handleCreateInvoice}
         onCompleteProcurement={handleCompleteProcurement}
         completing={completing}

@@ -102,12 +102,22 @@ interface RowData {
 
 function itemToRow(
   item: QuoteItemRow,
-  invoiceCountryMap: Map<string, string>
+  invoiceCountryMap: Map<string, string>,
+  supplierByQi: Map<
+    string,
+    { supplier_country: string | null; invoice_id: string | null }
+  >
 ): RowData {
   const extras = ext<ItemExtras>(item);
+  // Phase 5d: supplier_country + invoice_id now live on invoice_items.
+  // supplierByQi projects them per quote_item using invoice_item_coverage
+  // filtered by composition_selected_invoice_id.
+  const supplier = supplierByQi.get(item.id) ?? null;
   const country =
-    item.supplier_country ??
-    (item.invoice_id ? invoiceCountryMap.get(item.invoice_id) ?? "" : "");
+    supplier?.supplier_country ??
+    (supplier?.invoice_id
+      ? invoiceCountryMap.get(supplier.invoice_id) ?? ""
+      : "");
 
   return {
     id: item.id,
@@ -246,12 +256,17 @@ const COLUMNS: Handsontable.ColumnSettings[] = [
 interface CustomsHandsontableProps {
   items: QuoteItemRow[];
   invoiceCountryMap: Map<string, string>;
+  supplierByQuoteItemId: Map<
+    string,
+    { supplier_country: string | null; invoice_id: string | null }
+  >;
   userRoles: string[];
 }
 
 export function CustomsHandsontable({
   items,
   invoiceCountryMap,
+  supplierByQuoteItemId,
   userRoles,
 }: CustomsHandsontableProps) {
   const router = useRouter();
@@ -261,8 +276,11 @@ export function CustomsHandsontable({
   const rowIdsRef = useRef<string[]>(items.map((i) => i.id));
 
   const initialData = useMemo(
-    () => items.map((item) => itemToRow(item, invoiceCountryMap)),
-    [items, invoiceCountryMap]
+    () =>
+      items.map((item) =>
+        itemToRow(item, invoiceCountryMap, supplierByQuoteItemId)
+      ),
+    [items, invoiceCountryMap, supplierByQuoteItemId]
   );
 
   if (rowIdsRef.current.length !== initialData.length) {

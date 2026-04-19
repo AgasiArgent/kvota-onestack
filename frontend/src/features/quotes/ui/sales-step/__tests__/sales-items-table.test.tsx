@@ -15,23 +15,19 @@ import { describe, it, expect } from "vitest";
  * this spec guards the current prop contract.
  */
 
-import { SalesItemsTable } from "../sales-items-table";
-import type { QuoteItemRow } from "@/entities/quote/queries";
+import { SalesItemsTable, type SalesItemRow } from "../sales-items-table";
 
-function makeItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
+function makeItem(overrides: Partial<SalesItemRow> = {}): SalesItemRow {
   return {
     id: "qi-1",
-    quote_id: "q-1",
     product_name: "Болт М8",
     brand: "ABB",
     product_code: "SKU-1",
     quantity: 10,
     unit: "шт",
     base_price_vat: 100,
-    is_unavailable: false,
-    position: 1,
     ...overrides,
-  } as unknown as QuoteItemRow;
+  };
 }
 
 describe("SalesItemsTable — reads base_price_vat from props", () => {

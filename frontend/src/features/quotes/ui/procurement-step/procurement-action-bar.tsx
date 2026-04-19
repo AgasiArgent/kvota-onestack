@@ -65,6 +65,18 @@ interface ProcurementActionBarProps {
    * supplies this; the bar derives "ready" from it.
    */
   priceReadyByQuoteItemId?: PriceReadyMap;
+  /**
+   * Map: quote_item_id → invoice_id it is covered by (null if not
+   * covered yet). Post-migration 284, quote_items.invoice_id is dropped,
+   * so the parent projects the coverage via invoice_item_coverage.
+   */
+  invoiceIdByQuoteItemId?: Record<string, string | null>;
+  /**
+   * Map: quote_item_id → minimum_order_quantity from the covering
+   * invoice_item (null when unpriced). Replaces the dropped
+   * quote_items.min_order_quantity column.
+   */
+  minOrderQuantityByQuoteItemId?: Record<string, number | null>;
   onCreateInvoice: () => void;
   onCompleteProcurement: () => void;
   completing?: boolean;
@@ -74,6 +86,8 @@ interface ProcurementActionBarProps {
 export function ProcurementActionBar({
   items,
   priceReadyByQuoteItemId = {},
+  invoiceIdByQuoteItemId = {},
+  minOrderQuantityByQuoteItemId = {},
   onCreateInvoice,
   onCompleteProcurement,
   completing = false,
@@ -81,17 +95,19 @@ export function ProcurementActionBar({
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
   const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
-  const assignedInvoiceCount = items.filter((i) => i.invoice_id != null).length;
+  const assignedInvoiceCount = items.filter(
+    (i) => invoiceIdByQuoteItemId[i.id] != null
+  ).length;
   const readyCount = countPriceReady(items, priceReadyByQuoteItemId);
   const moqViolationCount = useMemo(
     () =>
       items.filter((i) =>
         isMoqViolation({
           quantity: i.quantity,
-          min_order_quantity: i.min_order_quantity,
+          min_order_quantity: minOrderQuantityByQuoteItemId[i.id] ?? null,
         })
       ).length,
-    [items]
+    [items, minOrderQuantityByQuoteItemId]
   );
   const incomplete = totalItems > 0 && readyCount < totalItems;
   const subStage = getSubStage(items, priceReadyByQuoteItemId);
