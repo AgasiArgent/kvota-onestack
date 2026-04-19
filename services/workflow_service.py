@@ -1169,6 +1169,7 @@ from .database import get_supabase
 from datetime import datetime, timezone
 from collections import Counter, defaultdict
 import services.route_logistics_assignment_service as route_logistics_service
+from services import composition_service
 import logging
 
 logger = logging.getLogger(__name__)
@@ -2671,88 +2672,24 @@ def get_quote_procurement_status(quote_id: str) -> Dict:
 # Handles checking if all procurement is complete and auto-transitioning
 
 
-def check_all_procurement_complete(quote_id: str) -> Dict:
-    """
-    Check if all procurement items for a quote are complete.
+def check_all_procurement_complete(quote_id: str, supabase) -> bool:
+    """Return True iff all procurement items for a quote are covered and priced.
 
-    This function checks:
-    1. ALL quote_items have procurement_status = 'completed'
-    2. ALL items that are NOT marked as unavailable have purchase_price_original > 0
+    Thin delegation wrapper around the canonical readiness helper
+    ``composition_service.is_procurement_complete``. A quote is
+    procurement-complete iff every non-N/A ``quote_items`` row has at least one
+    covering ``invoice_items`` row in its selected invoice
+    (``composition_selected_invoice_id``) where that invoice_item has a
+    non-null ``purchase_price_original`` — the Phase 5c invariant.
 
     Args:
-        quote_id: UUID of the quote
+        quote_id: UUID of the quote to check.
+        supabase: Supabase client instance (schema-scoped to kvota).
 
     Returns:
-        Dict with:
-        - is_complete: bool - True if all items are complete and valid
-        - total_items: int - Total number of items
-        - completed_items: int - Number of completed items
-        - pending_items: int - Number of pending items
-        - items_without_price: int - Items missing price (not unavailable)
-        - validation_error: str - Specific error message if validation fails
-
-    Example:
-        >>> status = check_all_procurement_complete(quote_id)
-        >>> if status["is_complete"]:
-        ...     print("All procurement complete!")
+        True when every required quote_item is covered and priced, else False.
     """
-    supabase = get_supabase()
-
-    try:
-        # Get all items for this quote with price and availability info
-        items_response = supabase.table("quote_items") \
-            .select("id, procurement_status, purchase_price_original, is_unavailable, product_name") \
-            .eq("quote_id", quote_id) \
-            .execute()
-
-        items = items_response.data or []
-
-        # Unavailable items are excluded from completion checks —
-        # they don't need procurement processing
-        active_items = [i for i in items if not i.get("is_unavailable", False)]
-        total_items = len(active_items)
-        completed_items = sum(1 for i in active_items if i.get("procurement_status") == "completed")
-        pending_items = total_items - completed_items
-
-        # Check that all active items have a price > 0
-        items_without_price = []
-        for item in active_items:
-            price = item.get("purchase_price_original")
-            has_valid_price = price is not None and float(price) > 0
-
-            if not has_valid_price:
-                items_without_price.append(item.get("product_name", item.get("id")))
-
-        # Determine if complete
-        all_completed = completed_items == total_items and total_items > 0
-        all_priced = len(items_without_price) == 0
-
-        validation_error = None
-        if not all_completed:
-            validation_error = f"{pending_items} из {total_items} позиций ещё не обработаны"
-        elif not all_priced:
-            validation_error = f"{len(items_without_price)} поз. без цены и не отмечены как недоступные: {', '.join(items_without_price[:3])}"
-            if len(items_without_price) > 3:
-                validation_error += f" и ещё {len(items_without_price) - 3}"
-
-        return {
-            "is_complete": all_completed and all_priced,
-            "total_items": total_items,
-            "completed_items": completed_items,
-            "pending_items": pending_items,
-            "items_without_price": len(items_without_price),
-            "validation_error": validation_error
-        }
-
-    except Exception as e:
-        return {
-            "is_complete": False,
-            "total_items": 0,
-            "completed_items": 0,
-            "pending_items": 0,
-            "items_without_price": 0,
-            "error": str(e)
-        }
+    return composition_service.is_procurement_complete(quote_id, supabase)
 
 
 def complete_procurement(
@@ -2838,20 +2775,12 @@ def complete_procurement(
             from_status=current_status
         )
 
-    # Check if ALL procurement items are complete and valid
-    completion_status = check_all_procurement_complete(quote_id)
-
-    if not completion_status["is_complete"]:
-        # Use detailed validation error if available
-        error_msg = completion_status.get("validation_error")
-        if not error_msg:
-            pending = completion_status["pending_items"]
-            total = completion_status["total_items"]
-            error_msg = f"Not all procurement items are complete. {pending} of {total} items still pending."
-
+    # Check if ALL procurement items are covered and priced (Phase 5d:
+    # readiness is a bool derived from invoice_items + invoice_item_coverage).
+    if not check_all_procurement_complete(quote_id, supabase):
         return TransitionResult(
             success=False,
-            error_message=error_msg,
+            error_message="Not all procurement items are complete.",
             quote_id=quote_id,
             from_status=current_status
         )
