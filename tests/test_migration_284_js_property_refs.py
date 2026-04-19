@@ -294,12 +294,8 @@ def _enclosing_body_range(source: str, pos: int) -> tuple[int, int]:
         # Only interpret ``:`` as return-type if followed by a typename.
         m = re.match(r"\s*(?::\s*[^{=;]+)?\s*(?:\{|=>\s*\{?)", after)
         if m:
-            body_start_rel = m.end()
-            body_start_abs = param_close + 1 + body_start_rel - 1
-            # Walk back to the ``{`` or the start of the arrow body.
-            # Simpler: find ``{`` after param_close; if present, scope
-            # is that block. If ``=>`` without ``{``, scope is until the
-            # statement terminator.
+            # Find ``{`` after param_close; if present, scope is that block.
+            # If ``=>`` without ``{``, scope is until the statement terminator.
             brace_idx = source.find("{", param_close + 1, param_close + 1 + len(after))
             if brace_idx >= 0:
                 close = _balanced_body_end(source, brace_idx, "{")
@@ -732,7 +728,7 @@ def _scan_file(path: Path) -> list[LegacyPropertyRef]:
             seen.add(key)
 
             # Snippet: the raw source line (before comment-stripping).
-            snippet = lines[line_no - 1] if line_no - 1 < len(lines) else line
+            snippet = lines[line_no - 1] if line_no - 1 < len(lines) else ""
             refs.append(
                 LegacyPropertyRef(
                     path=rel_path,
