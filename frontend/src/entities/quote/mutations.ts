@@ -234,6 +234,14 @@ export async function updateQuoteItem(
  * database.types.ts (migrations 281-282 added them). We bypass the missing
  * types via an `any`-cast on `from` — same pattern used in queries.ts for
  * stage_deadlines while the types generator catches up.
+ *
+ * Non-atomic: Supabase REST has no transaction support, so steps 4 (INSERT
+ * invoice_items), 5 (INSERT invoice_item_coverage) and 6 (UPDATE quote_items
+ * pointer) are separate network calls. If INSERT fails mid-way, re-run
+ * assignment — the pre-check in step 3a skips already-covered quote_items
+ * and the upsert in step 5 is duplicate-safe via ON CONFLICT DO NOTHING.
+ * Orphan invoice_items from a partially-failed run remain in the invoice but
+ * have no coverage row; the UI treats them as manual additions.
  */
 export async function assignItemsToInvoice(
   itemIds: string[],
@@ -277,52 +285,85 @@ export async function assignItemsToInvoice(
       ? (posRow[0] as { position: number }).position
       : 0) + 1;
 
-  // 4. Insert invoice_items — one row per assigned quote_item, with defaults
-  //    copied from quote_items. Position is sequential per insertion order.
-  //    version=1 matches Phase 5b semantics (immutable until frozen).
-  const iiRows = items.map((item, idx) => ({
-    invoice_id: invoiceId,
-    organization_id: (inv as { organization_id: string }).organization_id,
-    position: startPos + idx,
-    product_name: item.product_name ?? "",
-    supplier_sku: item.supplier_sku ?? null,
-    brand: item.brand ?? null,
-    quantity: item.quantity,
-    purchase_currency: "USD",
-    vat_rate:
-      (item as unknown as { vat_rate: number | null }).vat_rate ?? null,
-    version: 1,
-  }));
-
-  const { data: createdItems, error: iiErr } = await untyped
-    .from("invoice_items")
-    .insert(iiRows)
-    .select("id, invoice_id");
-  if (iiErr) throw iiErr;
-  if (!createdItems || createdItems.length === 0) return;
-
-  // 5. Insert coverage rows (1:1 ratio=1) — pair each new invoice_item with
-  //    its source quote_item. Upsert with ON CONFLICT DO NOTHING to make
-  //    re-assignment idempotent (no duplicate coverage rows).
-  const coverageRows = (
-    createdItems as Array<{ id: string; invoice_id: string }>
-  ).map((created, idx) => ({
-    invoice_item_id: created.id,
-    quote_item_id: items[idx].id,
-    ratio: 1,
-  }));
-
-  const { error: covErr } = await untyped
+  // 3a. Pre-check coverage: skip quote_items that already have a coverage
+  //     row in THIS invoice. Prevents creating ghost invoice_items on
+  //     re-run of a partially-succeeded assignment. Without this step, the
+  //     INSERT at step 4 would create a fresh invoice_item while the old
+  //     coverage row still points at the prior invoice_item, leaving two
+  //     supplier positions for the same quote_item.
+  const { data: existingCov, error: existCovErr } = await untyped
     .from("invoice_item_coverage")
-    .upsert(coverageRows, {
-      onConflict: "invoice_item_id,quote_item_id",
-      ignoreDuplicates: true,
-    });
-  if (covErr) throw covErr;
+    .select("quote_item_id, invoice_items!inner(invoice_id)")
+    .in("quote_item_id", itemIds);
+  if (existCovErr) throw existCovErr;
+
+  const alreadyCoveredQiIds = new Set<string>(
+    (
+      (existingCov ?? []) as Array<{
+        quote_item_id: string;
+        invoice_items: { invoice_id: string };
+      }>
+    )
+      .filter((r) => r.invoice_items?.invoice_id === invoiceId)
+      .map((r) => r.quote_item_id)
+  );
+
+  const itemsToInsert = items.filter(
+    (item) => !alreadyCoveredQiIds.has(item.id)
+  );
+
+  if (itemsToInsert.length > 0) {
+    // 4. Insert invoice_items — one row per newly-assigned quote_item, with
+    //    defaults copied from quote_items. Position is sequential per
+    //    insertion order. version=1 matches Phase 5b semantics (immutable
+    //    until frozen).
+    const iiRows = itemsToInsert.map((item, idx) => ({
+      invoice_id: invoiceId,
+      organization_id: (inv as { organization_id: string }).organization_id,
+      position: startPos + idx,
+      product_name: item.product_name ?? "",
+      supplier_sku: item.supplier_sku ?? null,
+      brand: item.brand ?? null,
+      quantity: item.quantity,
+      purchase_currency: "USD",
+      vat_rate:
+        (item as unknown as { vat_rate: number | null }).vat_rate ?? null,
+      version: 1,
+    }));
+
+    const { data: createdItems, error: iiErr } = await untyped
+      .from("invoice_items")
+      .insert(iiRows)
+      .select("id, invoice_id");
+    if (iiErr) throw iiErr;
+
+    if (createdItems && createdItems.length > 0) {
+      // 5. Insert coverage rows (1:1 ratio=1) — pair each new invoice_item with
+      //    its source quote_item. Upsert with ON CONFLICT DO NOTHING to make
+      //    re-assignment idempotent (no duplicate coverage rows).
+      const coverageRows = (
+        createdItems as Array<{ id: string; invoice_id: string }>
+      ).map((created, idx) => ({
+        invoice_item_id: created.id,
+        quote_item_id: itemsToInsert[idx].id,
+        ratio: 1,
+      }));
+
+      const { error: covErr } = await untyped
+        .from("invoice_item_coverage")
+        .upsert(coverageRows, {
+          onConflict: "invoice_item_id,quote_item_id",
+          ignoreDuplicates: true,
+        });
+      if (covErr) throw covErr;
+    }
+  }
 
   // 6. Update composition pointer — every assigned quote_item now points at
   //    this invoice for calc purposes. Non-destructive: coverage rows in
-  //    other invoices are retained; only the pointer moves.
+  //    other invoices are retained; only the pointer moves. Includes the
+  //    already-covered quote_items — re-pointing them is the whole purpose
+  //    of idempotent re-assignment.
   const { error: ptrErr } = await supabase
     .from("quote_items")
     .update({ composition_selected_invoice_id: invoiceId })
@@ -555,25 +596,18 @@ export async function mergeInvoiceItems(
   };
   const allRows = (coverageRows ?? []) as CovRow[];
 
-  // Group coverage rows by invoice_item_id to detect merges (invoice_item
-  // that covers multiple quote_items) — those are NOT eligible sources.
-  const rowsByIi = new Map<string, CovRow[]>();
-  for (const row of allRows) {
-    const list = rowsByIi.get(row.invoice_item_id) ?? [];
-    list.push(row);
-    rowsByIi.set(row.invoice_item_id, list);
-  }
-
-  const sourceInvoiceItemIds = new Set<string>();
+  // First pass: determine candidate covering invoice_item ids (the one per
+  // source qi that lives in THIS invoice with ratio=1). Collect them so we
+  // can batch-fetch all their coverage rows in a single query — avoiding the
+  // per-qi N+1 issue of calling the DB once per source.
+  const candidateIiByQi = new Map<string, string>();
   for (const qiId of sourceQuoteItemIds) {
     const rowsInThisInvoice = allRows.filter(
       (r) =>
         r.quote_item_id === qiId && r.invoice_items?.invoice_id === invoiceId
     );
     if (rowsInThisInvoice.length === 0) {
-      throw new Error(
-        "Выбранная позиция не покрыта в этом КП"
-      );
+      throw new Error("Выбранная позиция не покрыта в этом КП");
     }
     if (rowsInThisInvoice.length > 1) {
       throw new Error(
@@ -586,29 +620,43 @@ export async function mergeInvoiceItems(
         "Нельзя объединить позицию, уже участвующую в разделении/объединении"
       );
     }
-    // The covering invoice_item must cover ONLY this quote_item (no merge).
-    const allRowsForIi = allRows.filter(
-      (r) =>
-        r.invoice_item_id === only.invoice_item_id &&
-        r.invoice_items?.invoice_id === invoiceId
+    candidateIiByQi.set(qiId, only.invoice_item_id);
+  }
+
+  // Batch-fetch: for each candidate invoice_item, read ALL coverage rows at
+  // once via WHERE invoice_item_id IN (...). One query regardless of how
+  // many quote_items are being merged.
+  const candidateIiIds = Array.from(new Set(candidateIiByQi.values()));
+  const { data: allCoverageForCandidates, error: batchCovErr } = await untyped
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, quote_item_id")
+    .in("invoice_item_id", candidateIiIds);
+  if (batchCovErr) throw batchCovErr;
+
+  // Group returned rows by invoice_item_id so we can do O(1) lookups below.
+  const coverageByIi = new Map<string, number>();
+  for (const row of (allCoverageForCandidates ?? []) as Array<{
+    invoice_item_id: string;
+    quote_item_id: string;
+  }>) {
+    coverageByIi.set(
+      row.invoice_item_id,
+      (coverageByIi.get(row.invoice_item_id) ?? 0) + 1
     );
-    // We only selected sourceQuoteItemIds, so if some other qi_id is also
-    // covered in allRowsForIi, we need to check the database beyond our
-    // selected set. Re-query explicitly:
-    const { data: iiCoverageRows } = await untyped
-      .from("invoice_item_coverage")
-      .select("quote_item_id")
-      .eq("invoice_item_id", only.invoice_item_id);
-    const allQiForIi = (iiCoverageRows ?? []) as Array<{
-      quote_item_id: string;
-    }>;
-    if (allQiForIi.length > 1) {
+  }
+
+  // Second pass: validate that each candidate invoice_item covers ONLY its
+  // source quote_item (not already a merge). This uses in-memory counts
+  // computed from the single batch query above.
+  const sourceInvoiceItemIds = new Set<string>();
+  for (const [, iiId] of candidateIiByQi) {
+    const count = coverageByIi.get(iiId) ?? 0;
+    if (count > 1) {
       throw new Error(
         "Нельзя объединить позицию, уже участвующую в объединении"
       );
     }
-    void allRowsForIi;
-    sourceInvoiceItemIds.add(only.invoice_item_id);
+    sourceInvoiceItemIds.add(iiId);
   }
 
   if (sourceInvoiceItemIds.size < 2) {

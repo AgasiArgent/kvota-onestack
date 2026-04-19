@@ -168,6 +168,17 @@ function makeFakeSupabase(): FakeSupabase {
       }
       if (table === "invoice_item_coverage") {
         return {
+          // Phase 5c ghost-items pre-check: returns existing coverage rows for
+          // the given quote_item ids. Default: no existing coverage.
+          select: (_cols: string) => ({
+            in: async (_col: string, _ids: string[]) => ({
+              data: [] as Array<{
+                quote_item_id: string;
+                invoice_items: { invoice_id: string };
+              }>,
+              error: null,
+            }),
+          }),
           upsert: async (
             rows: InsertedCoverage[],
             opts?: { onConflict?: string; ignoreDuplicates?: boolean }
