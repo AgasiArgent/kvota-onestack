@@ -72,7 +72,15 @@ WITH backfill_src AS (
         -- to quote_items for pre-Phase-5b data where iip may not have them.
         COALESCE(iip.production_time_days, qi.production_time_days)
                                     AS production_time_days,
-        COALESCE(iip.minimum_order_quantity, CAST(qi.min_order_quantity AS INTEGER))
+        -- invoice_items.minimum_order_quantity is INTEGER but quote_items.
+        -- min_order_quantity is NUMERIC — use ROUND()::INTEGER so a fractional
+        -- source value (e.g. 4.6) rounds to 5 rather than truncating to 4.
+        -- NOTE: VPS dev 2026-04-18 was applied with CAST (truncation). If any
+        -- qi.min_order_quantity had a fractional part at the time, re-backfill
+        -- those specific rows by re-running the INSERT block here — the
+        -- ON CONFLICT DO NOTHING at the outer INSERT won't overwrite existing
+        -- invoice_items rows, so a DELETE + re-run is required for correction.
+        COALESCE(iip.minimum_order_quantity, ROUND(qi.min_order_quantity)::INTEGER)
                                     AS minimum_order_quantity,
         qi.dimension_height_mm      AS dimension_height_mm,
         qi.dimension_width_mm       AS dimension_width_mm,

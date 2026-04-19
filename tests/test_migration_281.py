@@ -21,11 +21,25 @@ Source of truth: .kiro/specs/phase-5c-invoice-items/design.md §1.1 + §5.1
 """
 
 import os
+import re
 
 import pytest
 
 
 pytestmark = pytest.mark.integration
+
+
+def _normalise_check_def(s: str) -> str:
+    """Strip whitespace + ::type casts from a pg_get_constraintdef output so
+    the CHECK comparison is robust to Postgres' internal normalisation.
+
+    Postgres rewrites ``CHECK (quantity > 0)`` to
+    ``CHECK ((quantity > (0)::numeric))`` — same semantics, different text.
+    Dropping spaces and ``::<type>`` tokens collapses both forms to
+    ``CHECK((quantity>(0)))`` which plainly contains the substring
+    ``quantity>(0)``. Mirrors the helper in test_migration_282.py.
+    """
+    return re.sub(r"::\w+", "", s).replace(" ", "")
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +268,10 @@ def test_invoice_items_quantity_check_positive(db_conn):
     )
     defs = [row[0] for row in cur.fetchall()]
     cur.close()
-    assert any("quantity" in d and "> (0" in d.replace(" ", "") or "quantity > 0" in d.replace("(", "").replace(")", "") for d in defs), (
+    # Match against the normalised form to avoid and/or precedence traps —
+    # "CHECK ((quantity > (0)::numeric))" normalises to "CHECK((quantity>(0)))"
+    # which plainly contains the substring "quantity>(0)".
+    assert any("quantity>(0)" in _normalise_check_def(d) for d in defs), (
         f"CHECK (quantity > 0) not found. Got: {defs}"
     )
 

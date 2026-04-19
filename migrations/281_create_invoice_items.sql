@@ -22,6 +22,10 @@ CREATE TABLE IF NOT EXISTS kvota.invoice_items (
     -- here so RLS predicates don't need a JOIN — same tradeoff as iip).
     invoice_id      UUID NOT NULL REFERENCES kvota.invoices(id)      ON DELETE CASCADE,
     organization_id UUID NOT NULL REFERENCES kvota.organizations(id),
+    -- TODO: ON DELETE NO ACTION — implicit per SQL default; project convention
+    -- is explicit. Not altered retroactively (migration 281 already applied on
+    -- VPS dev; the FK semantics match the intended "organizations should not
+    -- be deletable while invoice_items reference them" policy either way).
     position        INT  NOT NULL,
 
     -- Identity (supplier's version of the product; may differ from quote_items)
