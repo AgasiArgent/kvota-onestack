@@ -191,18 +191,22 @@ class TestGetKanban:
                 "currency": "USD",
             },
         ]
-        invoice_item_prices_rows = [
-            # item-1 is Siemens → this invoice line belongs to (q1, Siemens): 100 × 2 = 200
+        # invoice_items rows — Phase 5d: kanban aggregate now reads invoice_items
+        # directly. Brand and quantity live on invoice_items, not quote_items.
+        invoice_items_rows = [
+            # (q1 via inv-1, Siemens): 100 × 2 = 200
             {
                 "invoice_id": "inv-1",
-                "quote_item_id": "item-1",
+                "brand": "Siemens",
+                "quantity": 2,
                 "purchase_price_original": 100.0,
                 "purchase_currency": "USD",
             },
-            # item-2 is ABB → this invoice line belongs to (q1, ABB): 50 × 5 = 250
+            # (q1 via inv-1, ABB): 50 × 5 = 250
             {
                 "invoice_id": "inv-1",
-                "quote_item_id": "item-2",
+                "brand": "ABB",
+                "quantity": 5,
                 "purchase_price_original": 50.0,
                 "purchase_currency": "USD",
             },
@@ -233,8 +237,8 @@ class TestGetKanban:
                 tbl.select.return_value.in_.return_value.execute.return_value.data = quote_items_rows
             elif name == "invoices":
                 tbl.select.return_value.in_.return_value.execute.return_value.data = invoices_rows
-            elif name == "invoice_item_prices":
-                tbl.select.return_value.in_.return_value.execute.return_value.data = invoice_item_prices_rows
+            elif name == "invoice_items":
+                tbl.select.return_value.in_.return_value.execute.return_value.data = invoice_items_rows
             elif name == "user_profiles":
                 tbl.select.return_value.in_.return_value.execute.return_value.data = user_profiles_rows
             return tbl
@@ -245,6 +249,12 @@ class TestGetKanban:
         req = _make_request(query={"status": "pending_procurement"})
         resp = _run(get_kanban(req))
         assert resp.status_code == 200
+
+        # Phase 5d Group 3 Task 9: kanban reads invoice_items, NOT legacy
+        # invoice_item_prices. Pattern B — direct per-invoice read.
+        table_names_queried = [c.args[0] for c in sb.table.call_args_list]
+        assert "invoice_items" in table_names_queried
+        assert "invoice_item_prices" not in table_names_queried
 
         import json
 

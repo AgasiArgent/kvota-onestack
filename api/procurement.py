@@ -192,26 +192,20 @@ async def get_kanban(request) -> JSONResponse:
             brand = row.get("brand") or ""
             history_by_key.setdefault((qid, brand), []).append(row)
 
-    # Batch-fetch items: group by (quote_id, brand) for МОЗ + invoice_sums scoping.
+    # Batch-fetch items: group by (quote_id, brand) for МОЗ resolution only.
+    # Invoice totals are derived from invoice_items directly (Phase 5d).
     items_by_key: dict[tuple[str, str], list[dict]] = {}
-    item_qty_by_id: dict[str, float] = {}
-    item_key_by_id: dict[str, tuple[str, str]] = {}  # item_id -> (quote_id, brand)
     if quote_ids:
         items_result = (
             sb.table("quote_items")
-            .select("id, quote_id, brand, quantity, assigned_procurement_user")
+            .select("quote_id, brand, assigned_procurement_user")
             .in_("quote_id", quote_ids)
             .execute()
         )
         for it in _rows(items_result):
             qid = str(it.get("quote_id"))
             brand = it.get("brand") or ""
-            key = (qid, brand)
-            items_by_key.setdefault(key, []).append(it)
-            item_id = it.get("id")
-            if item_id:
-                item_qty_by_id[str(item_id)] = float(it.get("quantity") or 0)
-                item_key_by_id[str(item_id)] = key
+            items_by_key.setdefault((qid, brand), []).append(it)
 
     # Batch-fetch supplier invoices for these quotes.
     invoice_meta_by_id: dict[str, dict] = {}  # inv_id -> {invoice_number, currency, quote_id}
@@ -230,34 +224,38 @@ async def get_kanban(request) -> JSONResponse:
                 "quote_id": str(inv.get("quote_id") or ""),
             }
 
-    # Batch-fetch invoice_item_prices. Per (invoice, item) line: price × item qty.
-    # Accumulate per (quote_id, brand, invoice_id) because each line's brand is
-    # derived from the item's brand.
+    # Batch-fetch invoice_items (Phase 5d Pattern B). Each row is a supplier's
+    # own line with its own brand, quantity, and price — no indirection through
+    # quote_items. Accumulate per (quote_id, brand, invoice_id); quote_id is
+    # derived from the invoice, brand and per-row totals live on the row itself.
     sums_by_card_inv: dict[tuple[str, str, str], float] = {}
     currency_fallback_by_inv: dict[str, str] = {}
     invoice_ids = list(invoice_meta_by_id.keys())
     if invoice_ids:
-        prices_result = (
-            sb.table("invoice_item_prices")
-            .select("invoice_id, quote_item_id, purchase_price_original, purchase_currency")
+        invoice_items_result = (
+            sb.table("invoice_items")
+            .select("invoice_id, brand, quantity, purchase_price_original, purchase_currency")
             .in_("invoice_id", invoice_ids)
             .execute()
         )
-        for p in _rows(prices_result):
-            inv_id = str(p.get("invoice_id"))
-            item_id = str(p.get("quote_item_id"))
-            qty = item_qty_by_id.get(item_id, 0.0)
+        for ii in _rows(invoice_items_result):
+            inv_id = str(ii.get("invoice_id"))
+            meta = invoice_meta_by_id.get(inv_id) or {}
+            qid = meta.get("quote_id") or ""
+            if not qid:
+                continue
+            brand = ii.get("brand") or ""
             try:
-                price = float(p.get("purchase_price_original") or 0)
+                price = float(ii.get("purchase_price_original") or 0)
             except (TypeError, ValueError):
                 price = 0.0
-            key = item_key_by_id.get(item_id)
-            if not key:
-                continue
-            qid, brand = key
+            try:
+                qty = float(ii.get("quantity") or 0)
+            except (TypeError, ValueError):
+                qty = 0.0
             card_inv_key = (qid, brand, inv_id)
             sums_by_card_inv[card_inv_key] = sums_by_card_inv.get(card_inv_key, 0.0) + price * qty
-            cur = p.get("purchase_currency")
+            cur = ii.get("purchase_currency")
             if cur and inv_id not in currency_fallback_by_inv:
                 currency_fallback_by_inv[inv_id] = str(cur)
 
