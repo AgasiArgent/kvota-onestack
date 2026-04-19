@@ -323,6 +323,84 @@ def get_composed_items(quote_id: str, supabase) -> list[dict]:
 
 
 # ============================================================================
+# Procurement readiness check — canonical helper for workflow gates
+# ============================================================================
+
+def is_procurement_complete(quote_id: str, supabase) -> bool:
+    """Return True iff every non-N/A quote_item is covered + priced.
+
+    The canonical readiness check that replaces per-surface
+    ``quote_items.purchase_price_original`` scans. Consumers:
+    ``workflow_service.check_all_procurement_complete``, procurement-step's
+    "can we complete?" button guard.
+
+    A quote is procurement-complete iff **every** non-N/A quote_item row
+    (``is_unavailable=False``) has at least one covering ``invoice_items``
+    row in the quote_item's currently-selected invoice
+    (``composition_selected_invoice_id``) where that invoice_item has
+    ``purchase_price_original IS NOT NULL``.
+
+    Returns False for an empty quote (no items at all, or every item is N/A):
+    there is nothing to be complete about.
+
+    Query count: 2 reads (quote_items + invoice_item_coverage) regardless of
+    item count.
+
+    Args:
+        quote_id: UUID of the quote to check.
+        supabase: Supabase client instance (schema-scoped to kvota).
+
+    Returns:
+        True when every required quote_item is covered and priced, else False.
+    """
+    qi_rows: list[dict] = (
+        supabase.table("quote_items")
+        .select("id, is_unavailable, composition_selected_invoice_id")
+        .eq("quote_id", quote_id)
+        .execute()
+        .data
+        or []
+    )
+
+    required_qi = [qi for qi in qi_rows if not qi.get("is_unavailable")]
+    if not required_qi:
+        # Empty quote (or everything N/A) can't be "complete"
+        return False
+
+    qi_ids = [qi["id"] for qi in required_qi]
+    coverage_rows: list[dict] = (
+        supabase.table("invoice_item_coverage")
+        .select(
+            "quote_item_id, "
+            "invoice_items!inner(invoice_id, purchase_price_original)"
+        )
+        .in_("quote_item_id", qi_ids)
+        .execute()
+        .data
+        or []
+    )
+
+    selected_inv_by_qi = {
+        qi["id"]: qi.get("composition_selected_invoice_id") for qi in required_qi
+    }
+
+    priced_qi_ids: set[str] = set()
+    for cov in coverage_rows:
+        ii = cov.get("invoice_items") or {}
+        qi_id = cov.get("quote_item_id")
+        selected = selected_inv_by_qi.get(qi_id)
+        if selected is None:
+            continue
+        if ii.get("invoice_id") != selected:
+            continue
+        if ii.get("purchase_price_original") is None:
+            continue
+        priced_qi_ids.add(qi_id)
+
+    return len(priced_qi_ids) == len(required_qi)
+
+
+# ============================================================================
 # GET composition view — for the picker UI
 # ============================================================================
 

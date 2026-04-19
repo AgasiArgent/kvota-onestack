@@ -30,6 +30,7 @@ from services.composition_service import (  # noqa: E402
     freeze_composition,
     get_composed_items,
     get_composition_view,
+    is_procurement_complete,
     validate_composition,
 )
 
@@ -1272,6 +1273,212 @@ class TestGetCompositionViewDivergentMarkups:
 
         for vi in view["items"]:
             assert vi["alternatives"][0]["divergent_markups"] is True
+
+
+# ============================================================================
+# is_procurement_complete
+# ============================================================================
+
+class TestIsProcurementComplete:
+    """Canonical procurement-readiness helper.
+
+    Returns True iff every non-N/A quote_item in the quote has at least one
+    covering invoice_item in the composition_selected_invoice_id invoice,
+    where that invoice_item has purchase_price_original IS NOT NULL.
+    """
+
+    def test_all_items_priced_returns_true(self):
+        """2 quote_items, both covered in their selected invoice with non-null
+        purchase_price_original → True."""
+        quote_id = "q-1"
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 20.0,
+                },
+            },
+        ]
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete(quote_id, sb) is True
+
+    def test_one_item_uncovered_returns_false(self):
+        """2 quote_items, one has zero coverage rows → False."""
+        quote_id = "q-1"
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            # Only qi-1 has coverage; qi-2 has none
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+        ]
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete(quote_id, sb) is False
+
+    def test_covered_but_null_price_returns_false(self):
+        """2 quote_items both covered, but one invoice_item has
+        purchase_price_original IS NULL → False."""
+        quote_id = "q-1"
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": None,
+                },
+            },
+        ]
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete(quote_id, sb) is False
+
+    def test_na_item_is_excluded(self):
+        """2 quote_items: one is_unavailable=True (N/A, excluded), one
+        priced. The N/A row has no coverage. → True (only the non-N/A row
+        must be covered)."""
+        quote_id = "q-1"
+        items = [
+            {
+                "id": "qi-na",
+                "is_unavailable": True,
+                "composition_selected_invoice_id": None,
+            },
+            {
+                "id": "qi-priced",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-priced",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+        ]
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete(quote_id, sb) is True
+
+    def test_empty_quote_returns_false(self):
+        """Zero quote_items → False (empty quote cannot be complete)."""
+        tables = {
+            "quote_items": _chainable([]),
+            "invoice_item_coverage": _chainable([]),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete("q-1", sb) is False
+
+    def test_ignores_coverage_in_other_invoices(self):
+        """1 quote_item with composition_selected_invoice_id=A.
+        Coverage row exists but links to invoice_item in invoice B.
+        → False because coverage must be in the selected invoice."""
+        quote_id = "q-1"
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            # Coverage row points to an invoice_item in inv-b, not inv-a
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-b",
+                    "purchase_price_original": 10.0,
+                },
+            },
+        ]
+        tables = {
+            "quote_items": _chainable(items),
+            "invoice_item_coverage": _chainable(coverage_rows),
+        }
+        sb = MagicMock()
+        sb.table.side_effect = lambda name: tables[name]
+
+        assert is_procurement_complete(quote_id, sb) is False
 
 
 # ============================================================================
