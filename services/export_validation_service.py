@@ -231,13 +231,15 @@ QUOTE_INPUT_MAPPING = {
 
 PRODUCT_INPUT_COLUMNS = {
     # Column letter -> (API field, display name)
+    # Phase 5d: weight_in_kg and base_price_vat are sourced from invoice_items
+    # (not legacy quote_items columns). See design.md §2.1.6.
     "B": ("brand", "Бренд"),
     "C": ("sku", "Артикул"),
     "D": ("name", "Название товара"),
     "E": ("quantity", "Количество"),
-    "G": ("weight_in_kg", "Вес, кг"),
+    "G": ("weight_in_kg", "Вес, кг"),  # invoice_items.weight_in_kg
     "J": ("currency_of_base_price", "Валюта закупки"),
-    "K": ("base_price_vat", "Цена закупки (с VAT)"),
+    "K": ("base_price_vat", "Цена закупки (с VAT)"),  # invoice_items.base_price_vat
     "L": ("supplier_country", "Страна закупки"),
     "O": ("supplier_discount", "Скидка поставщика (%)"),
     "Q": ("exchange_rate", "Курс к валюте КП"),
@@ -1306,9 +1308,11 @@ def create_validation_excel(data) -> bytes:
             "sku": item.get("product_code", item.get("sku", "")),
             "name": item.get("product_name", ""),
             "quantity": item.get("quantity", 1),
-            "weight_in_kg": item.get("weight_kg", 0),
+            # Phase 5d: sourced from invoice_items.weight_in_kg (was quote_items.weight_kg legacy alias)
+            "weight_in_kg": item.get("weight_in_kg", 0),
             "currency_of_base_price": purchase_currency,
-            "base_price_vat": item.get("purchase_price_original", item.get("base_price_vat", 0)),
+            # Phase 5d: sourced from invoice_items.base_price_vat (was legacy fallback chain on quote_items)
+            "base_price_vat": item.get("base_price_vat", 0),
             "supplier_country": item.get("supplier_country", ""),
             "supplier_discount": variables.get("supplier_discount", 0),
             # Exchange rate: from purchase currency to quote currency (4 decimal places, CBR)
