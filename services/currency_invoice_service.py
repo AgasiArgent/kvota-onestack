@@ -167,9 +167,15 @@ def _build_item_snapshot(
     prior_markup_percent: Decimal | None,
     sort_order: int,
 ) -> dict:
-    """Create an invoice item snapshot dict from a source item.
+    """Create an invoice item snapshot dict from a composed item.
 
-    Maps source field names to invoice item field names:
+    Pattern A (Phase 5d §2.1.5): ``item`` is expected to originate from
+    ``composition_service.get_composed_items`` — i.e. supplier-side fields
+    (``purchase_price_original``, ``purchase_currency``, ``brand``, ...) are
+    already sourced from the selected ``invoice_items`` row, not from
+    raw ``quote_items``.
+
+    Maps composed field names to invoice item field names:
       brand -> manufacturer
       purchase_price_original -> base_price
     """
@@ -206,7 +212,16 @@ def generate_currency_invoices(
     contracts: list[dict] | None = None,
     bank_accounts: list[dict] | None = None,
 ) -> list[dict]:
-    """Generate currency invoice dicts from deal items (pure logic, no DB).
+    """Generate currency invoice dicts from composed deal items (pure logic, no DB).
+
+    Pattern A (Phase 5d §2.1.5): ``items`` MUST come from
+    ``composition_service.get_composed_items(quote_id, supabase)`` — the
+    composed, calc-ready shape where supplier-side fields (including
+    ``purchase_price_original`` and ``purchase_currency``) are sourced from
+    the selected ``invoice_items`` row, not raw ``quote_items``. Callers
+    (``services.deal_data_service.fetch_items_with_buyer_companies``)
+    enrich this composed list with ``buyer_company_id`` resolved via the
+    item's ``invoice_id``.
 
     Business rules:
       - EU buyer_company -> 2 segments: EURTR + TRRU
@@ -218,7 +233,11 @@ def generate_currency_invoices(
     Args:
         deal_id: UUID of the deal.
         quote_idn: Quote IDN for invoice numbering.
-        items: List of quote item dicts with buyer_company_id, purchase_price_original, etc.
+        items: List of composed item dicts (from ``get_composed_items``)
+            enriched with ``buyer_company_id``. Each item carries
+            ``purchase_price_original``, ``purchase_currency``, ``quantity``,
+            ``brand``, ``product_name``, etc. sourced from the selected
+            invoice_items row.
         buyer_companies: Dict mapping buyer_company_id to company info (must have 'region').
         seller_company: Seller company dict with 'id', 'name', 'entity_type'.
         organization_id: Organization UUID.

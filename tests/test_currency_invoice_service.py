@@ -331,3 +331,179 @@ class TestGenerateCurrencyInvoices:
         assert "invoice_number" in eurtr
         assert "items" in eurtr
         assert len(eurtr["items"]) > 0
+
+
+# ============================================================================
+# PHASE 5D — PATTERN A TESTS
+# ============================================================================
+#
+# The currency_invoice_service consumes items that must originate from
+# composition_service.get_composed_items (Pattern A, design.md §2.1.5).
+# The caller path is deal_data_service.fetch_items_with_buyer_companies,
+# which MUST source items from get_composed_items (not raw quote_items).
+# ============================================================================
+
+
+class TestFetchItemsWithBuyerCompaniesConsumesComposedItems:
+    """Pattern A (design.md §2.1.5): the caller path that feeds
+    currency_invoice_service MUST source items from
+    composition_service.get_composed_items, not from a raw quote_items read.
+    """
+
+    def test_fetch_items_with_buyer_companies_delegates_to_get_composed_items(self):
+        """fetch_items_with_buyer_companies must call composition_service.get_composed_items.
+
+        If it still reads raw quote_items (with legacy purchase_price_original),
+        this test fails — proving the refactor is required.
+        """
+        from unittest.mock import MagicMock, patch
+
+        composed_items = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_id": "inv-1",
+                "product_name": "Composed Product",
+                "supplier_sku": "CS-1",
+                "brand": "ACME",
+                "quantity": 10,
+                "purchase_price_original": 123.45,
+                "purchase_currency": "EUR",
+            },
+        ]
+
+        # Mock supabase to return one invoice tied to buyer company bc-1.
+        # If the legacy code path runs, it will hit supabase.table("quote_items"),
+        # and our assertion will fail because we're only stubbing invoices.
+        invoices_response = MagicMock()
+        invoices_response.data = [
+            {
+                "id": "inv-1",
+                "buyer_company_id": "bc-1",
+                "buyer_companies": {
+                    "id": "bc-1",
+                    "name": "Buyer Co",
+                    "country": "DE",
+                    "region": "EU",
+                },
+            },
+        ]
+
+        quote_items_response = MagicMock()
+        quote_items_response.data = []  # intentionally empty — exposes legacy path
+
+        fake_supabase = MagicMock()
+
+        def table_router(name):
+            tbl = MagicMock()
+            if name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value = invoices_response
+            elif name == "quote_items":
+                tbl.select.return_value.eq.return_value.execute.return_value = quote_items_response
+            else:
+                tbl.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            return tbl
+
+        fake_supabase.table.side_effect = table_router
+
+        with patch(
+            "services.deal_data_service.get_composed_items",
+            return_value=composed_items,
+        ) as mock_get_composed:
+            from services.deal_data_service import fetch_items_with_buyer_companies
+
+            items, bc_lookup = fetch_items_with_buyer_companies(fake_supabase, "quote-abc")
+
+        mock_get_composed.assert_called_once_with("quote-abc", fake_supabase)
+        # Composed items must be returned (not empty raw quote_items)
+        assert len(items) == 1
+        assert items[0]["product_name"] == "Composed Product"
+        assert items[0]["purchase_price_original"] == 123.45
+        # Buyer company lookup must be populated via invoice_id
+        assert "bc-1" in bc_lookup
+        assert items[0].get("buyer_company_id") == "bc-1"
+
+    def test_fetch_items_does_not_read_quote_items_legacy_columns(self):
+        """No supabase.table('quote_items').select(...) call must happen inside
+        fetch_items_with_buyer_companies. Legacy columns
+        (purchase_price_original, purchase_currency) must come from
+        invoice_items via get_composed_items, not from quote_items.
+        """
+        from unittest.mock import MagicMock, patch
+
+        composed_items = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_id": "inv-1",
+                "product_name": "Composed Product",
+                "supplier_sku": "CS-1",
+                "brand": "ACME",
+                "quantity": 5,
+                "purchase_price_original": 10.0,
+                "purchase_currency": "USD",
+            },
+        ]
+
+        invoices_response = MagicMock()
+        invoices_response.data = [
+            {
+                "id": "inv-1",
+                "buyer_company_id": "bc-1",
+                "buyer_companies": {
+                    "id": "bc-1",
+                    "name": "Buyer Co",
+                    "country": "TR",
+                    "region": "TR",
+                },
+            },
+        ]
+
+        fake_supabase = MagicMock()
+        tables_accessed: list[str] = []
+
+        def table_router(name):
+            tables_accessed.append(name)
+            tbl = MagicMock()
+            if name == "invoices":
+                tbl.select.return_value.eq.return_value.execute.return_value = invoices_response
+            else:
+                tbl.select.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
+            return tbl
+
+        fake_supabase.table.side_effect = table_router
+
+        with patch(
+            "services.deal_data_service.get_composed_items",
+            return_value=composed_items,
+        ):
+            from services.deal_data_service import fetch_items_with_buyer_companies
+
+            fetch_items_with_buyer_companies(fake_supabase, "quote-abc")
+
+        # quote_items must NOT be queried directly — composition_service owns that read
+        assert "quote_items" not in tables_accessed, (
+            f"fetch_items_with_buyer_companies must not query quote_items directly; "
+            f"it accessed: {tables_accessed}"
+        )
+
+
+class TestCurrencyInvoiceServiceDocumentsPatternA:
+    """The service's docstring must document Pattern A — items are expected
+    to come from composition_service.get_composed_items, not raw quote_items.
+    """
+
+    def test_generate_currency_invoices_docstring_mentions_composed_items(self):
+        """Docstring must reference composition_service or composed items to
+        communicate the Pattern A contract to callers.
+        """
+        import services.currency_invoice_service as svc
+
+        doc = svc.generate_currency_invoices.__doc__ or ""
+        assert (
+            "composition_service" in doc
+            or "composed" in doc.lower()
+            or "get_composed_items" in doc
+        ), (
+            "generate_currency_invoices docstring must document that items come "
+            "from composition_service.get_composed_items (Pattern A, design.md §2.1.5). "
+            f"Current docstring:\n{doc}"
+        )
