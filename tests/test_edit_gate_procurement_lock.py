@@ -24,8 +24,9 @@ def _mock_supabase_invoice_quote(
     quote_row: dict | None,
 ) -> tuple[MagicMock, dict]:
     """Build a mock supabase client that answers 2 queries:
-    - invoices.select("quote_id") → invoice_row
-    - quotes.select("procurement_completed_at") → quote_row
+    - invoices.select("quote_id").eq().single().execute() → invoice_row
+    - quotes.select("procurement_completed_at").eq().is_("deleted_at", None).single().execute()
+      → quote_row (Phase 5c: soft-delete filter is part of the chain)
 
     Returns (mock, call_count_tracker).
     """
@@ -39,14 +40,25 @@ def _mock_supabase_invoice_quote(
 
     def table_router(table_name: str):
         table_mock = MagicMock()
-        chain = table_mock.select.return_value.eq.return_value.single.return_value
         if table_name == "invoices":
+            # invoices chain: .select().eq().single().execute()
+            chain = table_mock.select.return_value.eq.return_value.single.return_value
+
             def count_invoices():
                 call_count["invoices"] += 1
                 return make_single_executor(invoice_row)
 
             chain.execute.side_effect = count_invoices
         elif table_name == "quotes":
+            # quotes chain: .select().eq().is_().single().execute()
+            # (Phase 5c adds .is_("deleted_at", None) for soft-delete safety)
+            chain = (
+                table_mock.select.return_value
+                .eq.return_value
+                .is_.return_value
+                .single.return_value
+            )
+
             def count_quotes():
                 call_count["quotes"] += 1
                 return make_single_executor(quote_row)

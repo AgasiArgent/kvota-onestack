@@ -20,15 +20,27 @@ from services.invoice_send_service import (  # noqa: E402
 
 
 def _mock_supabase_unlocked_quote() -> MagicMock:
-    """Mock: invoice has sent_at set; parent quote has procurement_completed_at IS NULL."""
+    """Mock: invoice has sent_at set; parent quote has procurement_completed_at IS NULL.
+
+    Phase 5c chain shapes:
+    - invoices: .select().eq().single().execute()
+    - quotes:   .select().eq().is_().single().execute()
+      (`.is_("deleted_at", None)` is a soft-delete safety filter.)
+    """
     mock_sb = MagicMock()
 
     def table_router(table_name: str):
         table_mock = MagicMock()
-        chain = table_mock.select.return_value.eq.return_value.single.return_value
         if table_name == "invoices":
+            chain = table_mock.select.return_value.eq.return_value.single.return_value
             chain.execute.return_value.data = {"quote_id": "quote-001"}
         elif table_name == "quotes":
+            chain = (
+                table_mock.select.return_value
+                .eq.return_value
+                .is_.return_value
+                .single.return_value
+            )
             chain.execute.return_value.data = {"procurement_completed_at": None}
         return table_mock
 

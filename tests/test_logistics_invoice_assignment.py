@@ -71,8 +71,16 @@ def _mock_supabase_for_assignment(
     """
     Build a MagicMock Supabase client for assign_logistics_to_invoices tests.
 
-    Returns (mock_client, mock_get_supabase) where mock_get_supabase is the
-    patcher return value.
+    Chain shapes used by the implementation:
+    - quotes (fetch):  .select().eq().is_("deleted_at", None).single().execute()
+    - quotes (update): .update().eq().execute()
+    - invoices (fetch): .select().eq().execute()
+    - invoices (update): .update().in_().execute()  (batch) or .update().eq().execute()
+
+    Quote-fetch uses the Phase 5c soft-delete filter (.is_("deleted_at", None))
+    so the chain has four steps (select→eq→is_→single) before .execute.
+
+    Returns the mock client directly.
     """
     mock_client = MagicMock()
 
@@ -83,11 +91,10 @@ def _mock_supabase_for_assignment(
         chain = MagicMock()
 
         if table_name == "quotes":
-            # Could be select (fetch quote) or update (set assigned_logistics_user)
-            # select().eq().single().execute() for fetch
-            # update().eq().execute() for update
+            # First quotes call is the fetch (select+is_ chain).
+            # Subsequent are updates (update().eq().execute()).
             if quote_data is not None and call_counter["count"] <= 1:
-                chain.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+                chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
                     data=quote_data
                 )
             else:
@@ -97,14 +104,18 @@ def _mock_supabase_for_assignment(
             return chain
 
         elif table_name == "invoices":
-            # Could be select (fetch invoices) or update (set per-invoice user)
-            # We need to handle both: first call is select, subsequent are updates
+            # Could be select (fetch invoices) or update (set per-invoice user).
+            # First invoices access = select; subsequent = update (batch .in_ or .eq).
             if invoices_data is not None and not hasattr(table_side_effect, "_invoices_fetched"):
                 table_side_effect._invoices_fetched = True
                 chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=invoices_data
                 )
             else:
+                # Implementation uses batch-update with .in_() per distinct user_id
+                chain.update.return_value.in_.return_value.execute.return_value = MagicMock(
+                    data=[{"id": "updated"}]
+                )
                 chain.update.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=[{"id": "updated"}]
                 )
@@ -422,10 +433,11 @@ class TestAssignLogisticsToInvoices:
         def table_side_effect(table_name):
             chain = MagicMock()
             if table_name == "quotes":
-                # First call is select, subsequent are update
+                # First call is select (Phase 5c chain: .select().eq().is_().single()),
+                # subsequent are updates.
                 if not hasattr(table_side_effect, "_quotes_select_done"):
                     table_side_effect._quotes_select_done = True
-                    chain.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+                    chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
                         data={
                             "id": QUOTE_ID,
                             "organization_id": ORG_ID,
@@ -442,6 +454,8 @@ class TestAssignLogisticsToInvoices:
                 return chain
 
             elif table_name == "invoices":
+                # First invoices call is .select().eq().execute(); subsequent are
+                # batch updates using .update().in_("id", [...]).execute().
                 if not hasattr(table_side_effect, "_invoices_select_done"):
                     table_side_effect._invoices_select_done = True
                     chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
@@ -454,6 +468,7 @@ class TestAssignLogisticsToInvoices:
                     def capture_invoice_update(data):
                         update_calls.append(("invoices", data))
                         inner = MagicMock()
+                        inner.in_.return_value.execute.return_value = MagicMock(data=[{"id": "ok"}])
                         inner.eq.return_value.execute.return_value = MagicMock(data=[{"id": "ok"}])
                         return inner
                     chain.update.side_effect = capture_invoice_update
