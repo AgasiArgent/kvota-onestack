@@ -53,8 +53,8 @@ vi.mock("@/shared/lib/supabase/client", () => ({
 }));
 
 vi.mock("@/entities/quote/mutations", () => ({
-  updateQuoteItem: async () => ({}),
-  unassignItemFromInvoice: async () => ({}),
+  updateInvoiceItem: async () => ({}),
+  unassignInvoiceItem: async () => ({}),
 }));
 
 import { PROCUREMENT_COLUMN_KEYS } from "../procurement-handsontable";

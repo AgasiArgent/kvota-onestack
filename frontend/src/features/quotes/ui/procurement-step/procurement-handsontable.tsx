@@ -6,7 +6,7 @@ import { HotTable } from "@handsontable/react";
 import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
 import { toast } from "sonner";
-import { updateQuoteItem, unassignItemFromInvoice } from "@/entities/quote/mutations";
+import { updateInvoiceItem, unassignInvoiceItem } from "@/entities/quote/mutations";
 import { isMoqViolation } from "./moq-warning";
 
 import "handsontable/styles/handsontable.css";
@@ -188,7 +188,7 @@ export function ProcurementHandsontable({
         const rowId = rowIdsRef.current[row];
         if (!rowId || pendingOps.current.has(`unassign-${rowId}`)) return;
         pendingOps.current.add(`unassign-${rowId}`);
-        unassignItemFromInvoice(rowId)
+        unassignInvoiceItem(rowId)
           .then(() => { toast.success("Позиция убрана из КП"); router.refresh(); })
           .catch(() => toast.error("Не удалось убрать позицию"))
           .finally(() => pendingOps.current.delete(`unassign-${rowId}`));
@@ -303,7 +303,7 @@ export function ProcurementHandsontable({
         if (pendingOps.current.has(lockKey)) continue;
         pendingOps.current.add(lockKey);
 
-        updateQuoteItem(rowId, updates)
+        updateInvoiceItem(rowId, updates)
           .then(() => router.refresh())
           .catch(() => toast.error("Не удалось сохранить"))
           .finally(() => pendingOps.current.delete(lockKey));

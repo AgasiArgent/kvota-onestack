@@ -221,6 +221,39 @@ export async function updateQuoteItem(
 }
 
 /**
+ * Phase 5d Group 5 Appendix — supplier-side row update, writes to
+ * kvota.invoice_items. Post Task 14, procurement-handsontable rows carry
+ * invoice_items.id as rowId; this mutation targets that row directly.
+ *
+ * Mirrors `updateQuoteItem`'s shape but different table. Callers must not
+ * pass customer-side fields (product_code, manufacturer_product_name,
+ * name_en, is_unavailable, supplier_sku_note) — those remain on quote_items
+ * and are not editable through the procurement editor.
+ *
+ * Bypasses the missing database.types.ts entry for invoice_items via the
+ * same `any`-cast pattern used in assignItemsToInvoice / splitInvoiceItem /
+ * mergeInvoiceItems above.
+ */
+export async function updateInvoiceItem(
+  invoiceItemId: string,
+  updates: Record<string, unknown>
+) {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+
+  const { data, error } = await untyped
+    .from("invoice_items")
+    .update(updates)
+    .eq("id", invoiceItemId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+/**
  * Phase 5c assignment: non-destructive, writes to invoice_items +
  * invoice_item_coverage (the new schema). Each assignment creates one
  * invoice_item row per quote_item (seeded from quote_items defaults) plus a
@@ -729,65 +762,100 @@ export async function mergeInvoiceItems(
 }
 
 /**
- * Remove a quote_item from its currently-selected invoice. Deletes the
- * invoice_items + invoice_item_coverage rows that cover this quote_item in
- * its composition_selected_invoice_id, and clears the pointer.
+ * Phase 5d Group 5 Appendix — remove one supplier-side position from its KP.
+ *
+ * Input is an invoice_items.id (post-Task-14 rowId on procurement-handsontable).
+ * Deletes the invoice_item row (cascades invoice_item_coverage via
+ * ON DELETE CASCADE from migration 282), then resets
+ * quote_items.composition_selected_invoice_id for any quote_item whose last
+ * coverage in that invoice just disappeared.
+ *
+ * Sequence:
+ *   1. Read coverage for this invoice_item to discover the covered
+ *      quote_items + the containing invoice.
+ *   2. DELETE invoice_item (cascades coverage rows).
+ *   3. For each previously-covered quote_item, re-check coverage in the
+ *      same invoice. If none remains, clear composition_selected_invoice_id
+ *      for that quote_item (only when it currently equals this invoice).
+ *
+ * Split/merge safety: when a quote_item was covered by multiple invoice_items
+ * in the same invoice (split), removing one leaves the pointer alone. When
+ * an invoice_item covers multiple quote_items (merge), each is checked
+ * individually.
  *
  * Does NOT touch coverage rows in other invoices (non-destructive to
  * alternatives). Corresponds to the trash-icon "убрать из КП" action in
  * procurement-handsontable.
  */
-export async function unassignItemFromInvoice(itemId: string) {
+export async function unassignInvoiceItem(invoiceItemId: string) {
   const supabase = createClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const untyped = supabase as unknown as { from: (t: string) => any };
 
-  // Find the selected invoice for this quote_item so we know which coverage
-  // rows to delete (the item may be covered in multiple invoices but we
-  // only remove from the currently-selected one).
-  const { data: qi, error: qiErr } = await supabase
-    .from("quote_items")
-    .select("composition_selected_invoice_id")
-    .eq("id", itemId)
-    .single();
-  if (qiErr) throw qiErr;
+  // 1. Fetch coverage rows for this invoice_item to determine which
+  //    quote_items we may need to reset the composition pointer for, and
+  //    which invoice to check remaining coverage in.
+  const { data: coverageRows, error: covErr } = await untyped
+    .from("invoice_item_coverage")
+    .select("invoice_item_id, quote_item_id, invoice_items!inner(invoice_id)")
+    .eq("invoice_item_id", invoiceItemId);
+  if (covErr) throw covErr;
 
-  const selectedInvoiceId = (
-    qi as unknown as { composition_selected_invoice_id: string | null }
-  )?.composition_selected_invoice_id;
+  type CovRow = {
+    invoice_item_id: string;
+    quote_item_id: string;
+    invoice_items: { invoice_id: string };
+  };
+  const coveredRows = (coverageRows ?? []) as CovRow[];
+  const coveredQiIds = Array.from(
+    new Set(coveredRows.map((r) => r.quote_item_id))
+  );
+  const invoiceId = coveredRows[0]?.invoice_items?.invoice_id ?? null;
 
-  if (selectedInvoiceId) {
-    // Find invoice_items covering this quote_item in the selected invoice.
-    const { data: coverageRows } = await untyped
-      .from("invoice_item_coverage")
-      .select("invoice_item_id, invoice_items!inner(invoice_id)")
-      .eq("quote_item_id", itemId);
+  // 2. DELETE invoice_item — cascades to coverage rows via ON DELETE CASCADE.
+  const { error: delErr } = await untyped
+    .from("invoice_items")
+    .delete()
+    .eq("id", invoiceItemId);
+  if (delErr) throw delErr;
 
-    const iiIds = (
-      (coverageRows ?? []) as Array<{
-        invoice_item_id: string;
+  if (coveredQiIds.length === 0 || !invoiceId) {
+    // Orphan invoice_item with no coverage (e.g. manual addition) or we
+    // could not determine the invoice — nothing else to reset.
+    return;
+  }
+
+  // 3. For each previously-covered quote_item, re-check remaining coverage
+  //    in the same invoice. Clear the composition pointer for those with no
+  //    coverage left there.
+  const { data: remainingCov, error: remErr } = await untyped
+    .from("invoice_item_coverage")
+    .select("quote_item_id, invoice_items!inner(invoice_id)")
+    .in("quote_item_id", coveredQiIds);
+  if (remErr) throw remErr;
+
+  const qiStillCoveredInInvoice = new Set<string>(
+    (
+      (remainingCov ?? []) as Array<{
+        quote_item_id: string;
         invoice_items: { invoice_id: string };
       }>
     )
-      .filter((r) => r.invoice_items?.invoice_id === selectedInvoiceId)
-      .map((r) => r.invoice_item_id);
+      .filter((r) => r.invoice_items?.invoice_id === invoiceId)
+      .map((r) => r.quote_item_id)
+  );
 
-    if (iiIds.length > 0) {
-      // Deleting invoice_items cascades to invoice_item_coverage.
-      const { error: delErr } = await untyped
-        .from("invoice_items")
-        .delete()
-        .in("id", iiIds);
-      if (delErr) throw delErr;
-    }
+  const qiIdsToClear = coveredQiIds.filter(
+    (qiId) => !qiStillCoveredInInvoice.has(qiId)
+  );
+
+  if (qiIdsToClear.length > 0) {
+    const { error: ptrErr } = await supabase
+      .from("quote_items")
+      .update({ composition_selected_invoice_id: null })
+      .in("id", qiIdsToClear);
+    if (ptrErr) throw ptrErr;
   }
-
-  // Clear composition pointer so the item reverts to "unselected".
-  const { error } = await supabase
-    .from("quote_items")
-    .update({ composition_selected_invoice_id: null })
-    .eq("id", itemId);
-  if (error) throw error;
 }
 
 // ---------------------------------------------------------------------------
