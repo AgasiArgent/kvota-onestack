@@ -9,16 +9,46 @@ import { isMoqViolation } from "./moq-warning";
 
 type ProcurementSubStage = "assignment" | "pricing" | "ready";
 
-function getSubStage(items: QuoteItemRow[]): ProcurementSubStage {
+/**
+ * Phase 5d Task 14: readiness is derived from a `priceReadyByQuoteItemId`
+ * map supplied by the caller — true iff at least one invoice_item covers
+ * the quote_item in the selected invoice with non-null
+ * `purchase_price_original`. The legacy `quote_items.purchase_price_original`
+ * column is dropped in migration 284 and cannot be read directly.
+ *
+ * Items marked `is_unavailable` (customer-side N/A) are excluded from both
+ * the assignment and pricing checks.
+ */
+export type PriceReadyMap = Record<string, boolean>;
+
+export interface ProcurementReadinessItem {
+  id: string;
+  assigned_procurement_user: string | null;
+  is_unavailable: boolean | null;
+}
+
+export function getSubStage(
+  items: ProcurementReadinessItem[],
+  priceReadyByQuoteItemId: PriceReadyMap
+): ProcurementSubStage {
   if (items.length === 0) return "assignment";
   const allAssigned = items.every(
     (i) => i.assigned_procurement_user != null || i.is_unavailable === true
   );
   if (!allAssigned) return "assignment";
   const allPriced = items.every(
-    (i) => i.purchase_price_original != null || i.is_unavailable === true
+    (i) => priceReadyByQuoteItemId[i.id] === true || i.is_unavailable === true
   );
   return allPriced ? "ready" : "pricing";
+}
+
+export function countPriceReady(
+  items: ProcurementReadinessItem[],
+  priceReadyByQuoteItemId: PriceReadyMap
+): number {
+  return items.filter(
+    (i) => priceReadyByQuoteItemId[i.id] === true || i.is_unavailable === true
+  ).length;
 }
 
 const SUB_STAGE_CONFIG: Record<ProcurementSubStage, { label: string; icon: typeof UserCheck; style: string }> = {
@@ -29,6 +59,12 @@ const SUB_STAGE_CONFIG: Record<ProcurementSubStage, { label: string; icon: typeo
 
 interface ProcurementActionBarProps {
   items: QuoteItemRow[];
+  /**
+   * Map: quote_item_id → has at least one covering invoice_item in the
+   * selected invoice with non-null `purchase_price_original`. Caller
+   * supplies this; the bar derives "ready" from it.
+   */
+  priceReadyByQuoteItemId?: PriceReadyMap;
   onCreateInvoice: () => void;
   onCompleteProcurement: () => void;
   completing?: boolean;
@@ -37,6 +73,7 @@ interface ProcurementActionBarProps {
 
 export function ProcurementActionBar({
   items,
+  priceReadyByQuoteItemId = {},
   onCreateInvoice,
   onCompleteProcurement,
   completing = false,
@@ -45,9 +82,7 @@ export function ProcurementActionBar({
   const totalItems = items.length;
   const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
   const assignedInvoiceCount = items.filter((i) => i.invoice_id != null).length;
-  const readyCount = items.filter(
-    (i) => i.purchase_price_original != null || i.is_unavailable === true
-  ).length;
+  const readyCount = countPriceReady(items, priceReadyByQuoteItemId);
   const moqViolationCount = useMemo(
     () =>
       items.filter((i) =>
@@ -59,7 +94,7 @@ export function ProcurementActionBar({
     [items]
   );
   const incomplete = totalItems > 0 && readyCount < totalItems;
-  const subStage = getSubStage(items);
+  const subStage = getSubStage(items, priceReadyByQuoteItemId);
   const stageConfig = SUB_STAGE_CONFIG[subStage];
   const StageIcon = stageConfig.icon;
 

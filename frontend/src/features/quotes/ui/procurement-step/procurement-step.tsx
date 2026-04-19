@@ -15,6 +15,50 @@ import { QuotePositionsList } from "./quote-positions-list";
 import { InvoiceCard } from "./invoice-card";
 import { InvoiceCreateModal } from "./invoice-create-modal";
 
+/**
+ * Phase 5d Task 14 — "can complete procurement" guard.
+ *
+ * Legacy check read `items.purchase_price_original` off quote_items (dropped
+ * in migration 284). The new guard delegates to a caller-supplied map of
+ * coverage readiness: `priceReadyByQuoteItemId[qi.id] === true` iff at
+ * least one covering invoice_item in the selected invoice has a non-null
+ * `purchase_price_original`. Items marked `is_unavailable` are exempt.
+ */
+export type PriceReadyMap = Record<string, boolean>;
+
+export interface CompleteGuardItem {
+  id: string;
+  invoice_id: string | null;
+  is_unavailable: boolean;
+}
+
+export type CompleteGuardResult =
+  | { ok: true }
+  | { ok: false; reason: "no-price" | "unassigned"; count: number };
+
+export function validateCompleteProcurementGuard(
+  items: CompleteGuardItem[],
+  priceReadyByQuoteItemId: PriceReadyMap
+): CompleteGuardResult {
+  const noPriceCount = items.filter(
+    (i) =>
+      i.is_unavailable !== true &&
+      priceReadyByQuoteItemId[i.id] !== true
+  ).length;
+  if (noPriceCount > 0) {
+    return { ok: false, reason: "no-price", count: noPriceCount };
+  }
+
+  const unassignedCount = items.filter(
+    (i) => !i.invoice_id && i.is_unavailable !== true
+  ).length;
+  if (unassignedCount > 0) {
+    return { ok: false, reason: "unassigned", count: unassignedCount };
+  }
+
+  return { ok: true };
+}
+
 interface Supplier {
   id: string;
   name: string;
@@ -46,6 +90,12 @@ export function ProcurementStep({
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [buyerCompanies, setBuyerCompanies] = useState<BuyerCompany[]>([]);
   const [completing, setCompleting] = useState(false);
+  // Phase 5d: coverage-derived readiness. Map: quote_item_id → has at least
+  // one covering invoice_item in its selected invoice with non-null
+  // purchase_price_original. Post-migration 284 this replaces reading the
+  // dropped `quote_items.purchase_price_original` column.
+  const [priceReadyByQuoteItemId, setPriceReadyByQuoteItemId] =
+    useState<PriceReadyMap>({});
 
   // Load suppliers and buyer companies for the invoice creation modal
   useEffect(() => {
@@ -65,6 +115,57 @@ export function ProcurementStep({
       .order("name")
       .then(({ data }) => setBuyerCompanies(data ?? []));
   }, [quote.organization_id]);
+
+  // Phase 5d: derive priceReady from invoice_item_coverage → invoice_items.
+  // `database.types.ts` does not include invoice_items / invoice_item_coverage
+  // until post-migration-284 regen — cast through `from` to bypass typing.
+  useEffect(() => {
+    if (items.length === 0) {
+      setPriceReadyByQuoteItemId({});
+      return;
+    }
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = supabase as unknown as { from: (t: string) => any };
+
+    let cancelled = false;
+    void (async () => {
+      const qiIds = items.map((i) => i.id);
+      const { data } = await untyped
+        .from("invoice_item_coverage")
+        .select(
+          "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original)"
+        )
+        .in("quote_item_id", qiIds);
+      if (cancelled) return;
+      const selectedByQi = new Map<string, string | null>();
+      for (const qi of items) {
+        selectedByQi.set(
+          qi.id,
+          (qi as unknown as { composition_selected_invoice_id: string | null })
+            .composition_selected_invoice_id ?? null
+        );
+      }
+      const ready: PriceReadyMap = {};
+      for (const row of (data ?? []) as Array<{
+        quote_item_id: string;
+        invoice_items: { invoice_id: string; purchase_price_original: number | null };
+      }>) {
+        const selected = selectedByQi.get(row.quote_item_id);
+        if (
+          selected &&
+          row.invoice_items?.invoice_id === selected &&
+          row.invoice_items?.purchase_price_original != null
+        ) {
+          ready[row.quote_item_id] = true;
+        }
+      }
+      setPriceReadyByQuoteItemId(ready);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   const invoiceItemsMap = useMemo(() => {
     const map = new Map<string, QuoteItemRow[]>();
@@ -89,25 +190,24 @@ export function ProcurementStep({
   }
 
   async function handleCompleteProcurement() {
-    // Guard: every item must either have a purchase price or be marked Н/Д
-    const noPriceCount = items.filter(
-      (i) => i.purchase_price_original == null && i.is_unavailable !== true
-    ).length;
-    if (noPriceCount > 0) {
-      toast.error(
-        `Нельзя завершить: ${noPriceCount} поз. без цены. Заполните цену или отметьте Н/Д.`
-      );
-      return;
-    }
-
-    // Guard: every item must be assigned to an invoice
-    const unassignedCount = items.filter(
-      (i) => !i.invoice_id && i.is_unavailable !== true
-    ).length;
-    if (unassignedCount > 0) {
-      toast.error(
-        `Нельзя завершить: ${unassignedCount} поз. не распределены по КП поставщиков.`
-      );
+    const guard = validateCompleteProcurementGuard(
+      items.map((i) => ({
+        id: i.id,
+        invoice_id: i.invoice_id ?? null,
+        is_unavailable: i.is_unavailable === true,
+      })),
+      priceReadyByQuoteItemId
+    );
+    if (!guard.ok) {
+      if (guard.reason === "no-price") {
+        toast.error(
+          `Нельзя завершить: ${guard.count} поз. без цены. Заполните цену или отметьте Н/Д.`
+        );
+      } else {
+        toast.error(
+          `Нельзя завершить: ${guard.count} поз. не распределены по КП поставщиков.`
+        );
+      }
       return;
     }
 
@@ -131,6 +231,7 @@ export function ProcurementStep({
     <div className="flex-1 min-w-0">
       <ProcurementActionBar
         items={items}
+        priceReadyByQuoteItemId={priceReadyByQuoteItemId}
         onCreateInvoice={handleCreateInvoice}
         onCompleteProcurement={handleCompleteProcurement}
         completing={completing}

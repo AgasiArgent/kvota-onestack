@@ -19,50 +19,50 @@ type ItemExtras = {
   dimension_height_mm?: number | null;
   dimension_width_mm?: number | null;
   dimension_length_mm?: number | null;
-  is_unavailable?: boolean | null;
-  supplier_sku_note?: string | null;
 };
 
 function ext<T>(row: unknown): T {
   return row as T;
 }
 
-
-
-const COLUMN_KEYS = [
+/**
+ * Phase 5d Task 14 — column keys rebound to `invoice_items` schema.
+ *
+ * Post-migration 284 drops the following from `quote_items`:
+ *   purchase_price_original, weight_in_kg, production_time_days,
+ *   minimum_order_quantity, dimension_*_mm
+ * The editor therefore binds these supplier-side keys to `invoice_items`.
+ * Customer-side columns (product_code, manufacturer_product_name, name_en,
+ * is_unavailable, supplier_sku_note) remain on quote_items but are NOT
+ * exposed through this editor — the handsontable is supplier-side only.
+ */
+export const PROCUREMENT_COLUMN_KEYS = [
   "brand",
-  "product_code",
   "supplier_sku",
-  "manufacturer_product_name",
   "product_name",
-  "name_en",
   "quantity",
-  "min_order_quantity",
+  "minimum_order_quantity",
   "purchase_price_original",
   "production_time_days",
   "weight_in_kg",
   "dimensions",
-  "is_unavailable",
-  "supplier_sku_note",
 ] as const;
+
+// Back-compat alias for internal array math.
+const COLUMN_KEYS = PROCUREMENT_COLUMN_KEYS;
 
 interface RowData {
   id: string;
   brand: string;
-  product_code: string;
   supplier_sku: string;
-  manufacturer_product_name: string;
   product_name: string;
-  name_en: string;
   quantity: number | null;
-  min_order_quantity: number | null;
+  minimum_order_quantity: number | null;
   purchase_price_original: number | null;
   purchase_currency: string;
   production_time_days: number | null;
   weight_in_kg: number | null;
   dimensions: string;
-  is_unavailable: boolean;
-  supplier_sku_note: string;
 }
 
 function formatDimensions(
@@ -92,19 +92,38 @@ function parseDimensions(
   };
 }
 
+/**
+ * Phase 5d Task 14: rows are now sourced from `invoice_items` (the supplier
+ * side of the КП). The `items` prop stays typed as QuoteItemRow[] for the
+ * existing caller chain — during the Phase 5c+5d migration window, callers
+ * pass a row shape that is compatible (same ids + overlapping fields) for
+ * the supplier-visible columns. Customer-side context columns have been
+ * dropped from this editor.
+ *
+ * Fields sourced from invoice_items schema:
+ *   brand, supplier_sku, product_name, quantity, purchase_price_original,
+ *   purchase_currency, production_time_days, weight_in_kg,
+ *   dimension_*_mm, minimum_order_quantity
+ */
 function itemToRow(item: QuoteItemRow): RowData {
   const extras = ext<ItemExtras>(item);
-  const nameEn = (item as { name_en?: string | null }).name_en ?? "";
+  // `minimum_order_quantity` is the invoice_items name; during the migration
+  // window fall back to the legacy `min_order_quantity` on the prop shape
+  // so the column stays populated for rows still routed through
+  // quote_items. Post-284 callers pass invoice_items rows directly.
+  const legacy = item as unknown as {
+    min_order_quantity?: number | null;
+    minimum_order_quantity?: number | null;
+  };
+  const moq =
+    legacy.minimum_order_quantity ?? legacy.min_order_quantity ?? null;
   return {
     id: item.id,
     brand: item.brand ?? "",
-    product_code: item.product_code ?? "",
     supplier_sku: item.supplier_sku ?? "",
-    manufacturer_product_name: item.manufacturer_product_name ?? "",
     product_name: item.product_name ?? "",
-    name_en: nameEn,
     quantity: item.quantity,
-    min_order_quantity: item.min_order_quantity ?? null,
+    minimum_order_quantity: moq,
     purchase_price_original: item.purchase_price_original ?? null,
     purchase_currency: item.purchase_currency ?? "",
     production_time_days: item.production_time_days ?? null,
@@ -114,8 +133,6 @@ function itemToRow(item: QuoteItemRow): RowData {
       extras.dimension_width_mm,
       extras.dimension_length_mm
     ),
-    is_unavailable: extras.is_unavailable ?? false,
-    supplier_sku_note: extras.supplier_sku_note ?? "",
   };
 }
 
@@ -144,37 +161,6 @@ export function ProcurementHandsontable({
   if (rowIdsRef.current.length !== initialData.length) {
     rowIdsRef.current = initialData.map((r) => r.id);
   }
-
-  const skuMismatchRenderer = useCallback(
-    (
-      instance: Handsontable,
-      td: HTMLTableCellElement,
-      row: number,
-      col: number,
-      prop: string | number,
-      value: unknown,
-      cellProperties: Handsontable.CellProperties
-    ) => {
-      // Use the default text renderer first
-      Handsontable.renderers.TextRenderer(
-        instance,
-        td,
-        row,
-        col,
-        prop,
-        value,
-        cellProperties
-      );
-
-      const idnSku = instance.getDataAtRowProp(row, "product_code") as string;
-      const supplierSku = value as string;
-
-      if (supplierSku && idnSku && supplierSku !== idnSku) {
-        td.style.backgroundColor = "#fef3c7"; // amber-100
-      }
-    },
-    []
-  );
 
   const unassignRenderer = useCallback(
     (
@@ -298,16 +284,14 @@ export function ProcurementHandsontable({
             field === "purchase_price_original" ||
             field === "weight_in_kg" ||
             field === "production_time_days" ||
-            field === "min_order_quantity"
+            field === "minimum_order_quantity"
           ) {
             const parsed = parseFloat(String(val));
             updates[field] = isNaN(parsed) ? null : parsed;
-          } else if (field === "is_unavailable") {
-            updates[field] = val === true || val === "true";
           } else if (field === "purchase_currency") {
             updates[field] = val || null;
           } else {
-            // Text fields: supplier_sku, manufacturer_product_name, supplier_sku_note
+            // Text fields: supplier_sku, product_name
             updates[field] = val || null;
           }
         }
@@ -376,37 +360,28 @@ export function ProcurementHandsontable({
         licenseKey="non-commercial-and-evaluation"
         colHeaders={[
           "Бренд",
-          "Арт.запр.",
           "Арт.произ.",
-          "Наим.произв.",
           "Наименование",
-          "Наим. (EN)",
           "Кол",
           "Мин. заказ",
           "Цена",
           "Срок, к.дн",
           "Вес, кг",
           "В×Ш×Д, мм",
-          "Н/Д",
-          "Прим.",
           "",
         ]}
         columns={[
           { data: "brand", type: "text", width: 55, readOnly: true },
-          { data: "product_code", type: "text", width: 70, readOnly: true },
           {
             data: "supplier_sku",
             type: "text",
             width: 70,
             readOnly: procurementCompleted,
-            renderer: skuMismatchRenderer,
           },
-          { data: "manufacturer_product_name", type: "text", width: 90 },
-          { data: "product_name", type: "text", width: 120, readOnly: true },
-          { data: "name_en", type: "text", width: 120 },
+          { data: "product_name", type: "text", width: 140, readOnly: true },
           { data: "quantity", type: "numeric", width: 35, readOnly: true },
           {
-            data: "min_order_quantity",
+            data: "minimum_order_quantity",
             type: "numeric",
             width: 45,
             renderer: moqWarningRenderer,
@@ -415,8 +390,6 @@ export function ProcurementHandsontable({
           { data: "production_time_days", type: "numeric", width: 45, readOnly: procurementCompleted },
           { data: "weight_in_kg", type: "numeric", width: 45 },
           { data: "dimensions", type: "text", width: 60 },
-          { data: "is_unavailable", type: "checkbox", width: 35, className: "htCenter" },
-          { data: "supplier_sku_note", type: "text", width: 80 },
           { data: "id", readOnly: true, width: 28, renderer: unassignRenderer },
         ]}
         rowHeaders={false}
@@ -428,11 +401,6 @@ export function ProcurementHandsontable({
         minSpareRows={0}
         height="auto"
         afterChange={handleAfterChange}
-        afterGetColHeader={(col, th) => {
-          if (col === COLUMN_KEYS.indexOf("is_unavailable")) {
-            th.title = "Недоступно — позиция будет исключена из расчёта";
-          }
-        }}
         cells={procurementCompleted ? cellsCallback : undefined}
         className="htLeft"
       />

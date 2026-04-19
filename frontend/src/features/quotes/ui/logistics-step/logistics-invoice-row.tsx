@@ -15,6 +15,33 @@ const numberFmt = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 2,
 });
 
+/**
+ * Phase 5d Task 14: per-invoice logistics weight is aggregated from
+ * `invoice_items.weight_in_kg` (the supplier-side per-position weight).
+ * Legacy `quote_items.weight_in_kg` is dropped in migration 284.
+ */
+export interface LogisticsWeightItem {
+  quantity: number;
+  weight_in_kg: number | null;
+}
+
+export interface CargoPlace {
+  weight_kg: number;
+}
+
+export function computeTotalWeight(
+  invoiceItems: LogisticsWeightItem[],
+  cargoPlaces: CargoPlace[]
+): number {
+  if (cargoPlaces.length > 0) {
+    return cargoPlaces.reduce((sum, cp) => sum + cp.weight_kg, 0);
+  }
+  return invoiceItems.reduce(
+    (sum, item) => sum + (item.weight_in_kg ?? 0) * item.quantity,
+    0
+  );
+}
+
 interface LogisticsInvoiceRowProps {
   invoice: QuoteInvoiceRow;
   items: QuoteItemRow[];
@@ -52,9 +79,15 @@ export function LogisticsInvoiceRow({
     0
   );
 
-  const totalWeight = hasCargoPlaces
-    ? cargoWeight
-    : items.reduce((sum, item) => sum + (item.weight_in_kg ?? 0) * item.quantity, 0);
+  // Phase 5d: `items` carries invoice_items-shaped rows (per-invoice
+  // supplier positions). `weight_in_kg` is sourced from invoice_items;
+  // the legacy quote_items column is dropped in migration 284.
+  const weightItems: LogisticsWeightItem[] = items.map((item) => ({
+    quantity: item.quantity,
+    weight_in_kg:
+      (item as unknown as { weight_in_kg: number | null }).weight_in_kg ?? null,
+  }));
+  const totalWeight = computeTotalWeight(weightItems, cargoPlaces);
 
   const logisticsCost =
     (invoice.logistics_supplier_to_hub ?? 0) +
