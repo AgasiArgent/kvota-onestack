@@ -6,8 +6,10 @@ Tests the invoice-first procurement workflow API endpoints:
 - PATCH /api/procurement/{quote_id}/invoices/update - Update invoice
 - DELETE /api/procurement/{quote_id}/invoices/{invoice_id} - Delete invoice
 - POST /api/procurement/{quote_id}/items/assign - Assign items to invoice
-- PATCH /api/procurement/{quote_id}/items/bulk - Bulk update item prices
 - POST /api/procurement/{quote_id}/complete - Complete procurement
+
+Note: PATCH /api/procurement/{quote_id}/items/bulk (api_bulk_update_items)
+was removed in Phase 5d Task 10a (Q1). See test_items_bulk_endpoint_removed.
 
 Security tests verify:
 - org_id validation on all endpoints
@@ -148,11 +150,24 @@ class TestProcurementAPIEndpointsExist:
             content = f.read()
             assert '/api/procurement/{quote_id}/items/assign' in content
 
-    def test_items_bulk_endpoint_exists(self):
-        """Verify PATCH /api/procurement/{quote_id}/items/bulk endpoint is defined."""
+    def test_items_bulk_endpoint_removed(self):
+        """Phase 5d Group 3 Task 10a (Q1): api_bulk_update_items removed.
+
+        Rationale: The endpoint wrote to legacy quote_items columns
+        (purchase_price_original, production_time_days, price_includes_vat,
+        weight_in_kg, volume_m3, supplier_sku) that migration 284 drops.
+        No Next.js caller exists on this path — Next.js procurement-handsontable
+        uses updateQuoteItem (direct Supabase write per row). The only caller
+        was the dormant FastHTML JS inside /procurement/{quote_id} workspace
+        (classified DORMANT per main-py-classification.md §2.5). Removal is
+        cleaner than Pattern B refactor of dead code.
+        """
         with open("main.py", "r") as f:
             content = f.read()
-            assert '/api/procurement/{quote_id}/items/bulk' in content
+            assert '@rt("/api/procurement/{quote_id}/items/bulk"' not in content, \
+                "api_bulk_update_items endpoint should be removed (Phase 5d Q1)"
+            assert 'async def api_bulk_update_items' not in content, \
+                "api_bulk_update_items function should be removed (Phase 5d Q1)"
 
     def test_complete_endpoint_exists(self):
         """Verify POST /api/procurement/{quote_id}/complete endpoint is defined."""
@@ -289,13 +304,13 @@ class TestRoleBasedAccess:
         with open("main.py", "r") as f:
             content = f.read()
 
-            # All invoice endpoints should check roles
+            # All invoice endpoints should check roles.
+            # api_bulk_update_items removed in Phase 5d Task 10a (Q1).
             endpoints = [
                 'api_create_invoice',
                 'api_update_invoice',
                 'api_delete_invoice',
                 'api_assign_items_to_invoice',
-                'api_bulk_update_items',
                 'api_complete_procurement'
             ]
 
