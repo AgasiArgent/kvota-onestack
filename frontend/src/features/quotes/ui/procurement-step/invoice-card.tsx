@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ProcurementItemsEditor } from "./procurement-items-editor";
+import type { ProcurementEditorItem } from "./procurement-handsontable";
 import { SendHistoryPanel } from "./send-history-panel";
 import { ProcurementUnlockButton } from "./procurement-unlock-button";
 import { LetterDraftComposer } from "./letter-draft-composer";
@@ -44,24 +45,21 @@ const INVOICE_STATUS_LABELS: Record<string, string> = {
  * Phase 5c: supplier-side positions. Sourced from kvota.invoice_items,
  * not quote_items. Each row represents one line in the supplier's КП and
  * may diverge from the customer's original quote_item via split/merge.
+ *
+ * Phase 5d Group 5 Appendix: aliased to `ProcurementEditorItem` — the same
+ * shape is forwarded unchanged to procurement-handsontable, which binds
+ * its COLUMN_KEYS to these invoice_items fields. Single source of truth
+ * (procurement-handsontable) prevents drift between invoice-card's fetch
+ * shape and the editor's expected row shape.
  */
-export interface InvoiceItemRow {
-  id: string;
-  invoice_id: string;
-  position: number;
-  product_name: string;
-  supplier_sku: string | null;
-  brand: string | null;
-  quantity: number;
-  purchase_price_original: number | null;
-  purchase_currency: string;
-}
+export type InvoiceItemRow = ProcurementEditorItem;
 
 /**
  * Minimal quote stub used for edit-gate computation. Parent may pass a full
  * QuoteDetailRow — any superset with these fields works. `items` stays as
- * QuoteItemRow[] because several sibling editors (ProcurementItemsEditor,
- * LetterDraftComposer, XLS export) still read customer-side fields from it.
+ * QuoteItemRow[] because sibling editors (LetterDraftComposer, XLS export)
+ * still read customer-side fields from it. ProcurementItemsEditor, however,
+ * receives the supplier-side `invoiceItems` (post Phase 5d Group 5 Appendix).
  */
 export interface InvoiceCardQuoteStub {
   procurement_completed_at: string | null;
@@ -174,7 +172,7 @@ export function InvoiceCard({
         const { data: ii } = await untyped
           .from("invoice_items")
           .select(
-            "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency"
+            "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency, minimum_order_quantity, production_time_days, weight_in_kg, dimension_height_mm, dimension_width_mm, dimension_length_mm"
           )
           .eq("invoice_id", invoice.id)
           .order("position", { ascending: true });
@@ -726,7 +724,7 @@ export function InvoiceCard({
                 </ul>
               </div>
             )}
-            <ProcurementItemsEditor items={items} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
+            <ProcurementItemsEditor items={invoiceItems} invoiceId={invoice.id} procurementCompleted={procurementCompleted} />
           </div>
         </div>
       )}

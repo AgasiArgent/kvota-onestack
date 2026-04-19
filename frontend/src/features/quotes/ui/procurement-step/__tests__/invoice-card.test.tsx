@@ -43,6 +43,7 @@ vi.mock("@/shared/lib/supabase/client", () => ({
 }));
 
 import { InvoiceCard } from "../invoice-card";
+import type { InvoiceItemRow } from "../invoice-card";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 
 interface InvoiceCardQuoteStub {
@@ -84,6 +85,32 @@ function makeQuoteItem(overrides: Partial<QuoteItemRow> = {}): QuoteItemRow {
     position: 1,
     ...overrides,
   } as QuoteItemRow;
+}
+
+// Phase 5d Group 5 Appendix: invoice_items row factory — mirrors the
+// kvota.invoice_items schema that procurement-handsontable COLUMN_KEYS bind
+// to. Tests may override any field via `overrides`.
+function makeInvoiceItem(
+  overrides: Partial<InvoiceItemRow> = {}
+): InvoiceItemRow {
+  return {
+    id: "ii-1",
+    invoice_id: "inv-A",
+    position: 1,
+    product_name: "Test",
+    supplier_sku: null,
+    brand: null,
+    quantity: 1,
+    purchase_price_original: null,
+    purchase_currency: "USD",
+    minimum_order_quantity: null,
+    production_time_days: null,
+    weight_in_kg: null,
+    dimension_height_mm: null,
+    dimension_width_mm: null,
+    dimension_length_mm: null,
+    ...overrides,
+  };
 }
 
 describe("InvoiceCard — data-invoice-id attribute for scroll-to-card", () => {
@@ -206,17 +233,14 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
       makeQuoteItem({ id: "qi-1", product_name: "Customer sees: Болт" }),
     ];
     const invoiceItems = [
-      {
+      makeInvoiceItem({
         id: "ii-1",
-        invoice_id: "inv-A",
-        position: 1,
         product_name: "Supplier sees: Bolt M8",
         supplier_sku: "SUP-SKU-1",
         brand: "ABB",
         quantity: 100,
         purchase_price_original: 12.5,
-        purchase_currency: "USD",
-      },
+      }),
     ];
 
     const html = renderToString(
@@ -238,17 +262,12 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
     const invoice = makeInvoice();
     const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
     const invoiceItems = [
-      {
+      makeInvoiceItem({
         id: "ii-1",
-        invoice_id: "inv-A",
-        position: 1,
         product_name: "Болт",
-        supplier_sku: null,
-        brand: null,
         quantity: 100,
         purchase_price_original: 10,
-        purchase_currency: "USD",
-      },
+      }),
     ];
     const coverageSummaryByItem = {
       "ii-1": "← болт, гайка, шайба объединены",
@@ -272,28 +291,20 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
     const invoice = makeInvoice();
     const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
     const invoiceItems = [
-      {
+      makeInvoiceItem({
         id: "ii-bolt",
-        invoice_id: "inv-A",
         position: 1,
         product_name: "болт",
-        supplier_sku: null,
-        brand: null,
         quantity: 100,
         purchase_price_original: 5,
-        purchase_currency: "USD",
-      },
-      {
+      }),
+      makeInvoiceItem({
         id: "ii-washer",
-        invoice_id: "inv-A",
         position: 2,
         product_name: "шайба",
-        supplier_sku: null,
-        brand: null,
         quantity: 200,
         purchase_price_original: 1,
-        purchase_currency: "USD",
-      },
+      }),
     ];
     const coverageSummaryByItem = {
       "ii-bolt": "→ болт ×1 + шайба ×2",
@@ -318,17 +329,12 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
     const invoice = makeInvoice();
     const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
     const invoiceItems = [
-      {
+      makeInvoiceItem({
         id: "ii-1",
-        invoice_id: "inv-A",
-        position: 1,
         product_name: "болт",
-        supplier_sku: null,
-        brand: null,
         quantity: 100,
         purchase_price_original: 5,
-        purchase_currency: "USD",
-      },
+      }),
     ];
     // No entry for ii-1 in coverageSummaryByItem → 1:1, no label
     const coverageSummaryByItem = {};
@@ -347,5 +353,121 @@ describe("InvoiceCard — items source is invoice_items (not legacy FK filter)",
     expect(html).not.toContain("→");
     expect(html).not.toContain("←");
     expect(html).not.toContain("объединены");
+  });
+});
+
+/**
+ * Phase 5d Group 5 Appendix — caller-chain fix. Task 14 rebound the
+ * handsontable's COLUMN_KEYS to `invoice_items` fields
+ * (minimum_order_quantity, purchase_price_original, etc). The invoice-card
+ * must now pass its `invoiceItems` (supplier-side) down to
+ * ProcurementItemsEditor — not the `items` (customer-side QuoteItemRow[])
+ * that was being passed before.
+ *
+ * We spy on ProcurementItemsEditor by mocking it and inspect the `items`
+ * prop it receives. Its shape must match kvota.invoice_items.
+ */
+describe("InvoiceCard — passes invoice_items to ProcurementItemsEditor (caller-chain fix)", () => {
+  it("passes supplier-side invoice_items rows (not customer-side QuoteItemRow[]) to the editor", async () => {
+    const capturedEditorProps: Record<string, unknown>[] = [];
+    vi.resetModules();
+
+    vi.doMock("../procurement-items-editor", () => ({
+      ProcurementItemsEditor: (props: Record<string, unknown>) => {
+        capturedEditorProps.push(props);
+        return null;
+      },
+    }));
+
+    // Re-apply mocks that the full file sets up once at module-top.
+    vi.doMock("next/navigation", () => ({
+      useRouter: () => ({
+        refresh: () => {},
+        push: () => {},
+        replace: () => {},
+        back: () => {},
+        forward: () => {},
+        prefetch: () => {},
+      }),
+    }));
+    vi.doMock("@/shared/lib/supabase/client", () => ({
+      createClient: () => ({
+        from: () => ({
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                select: async () => ({ data: [], error: null }),
+              }),
+            }),
+            in: async () => ({ data: [], error: null }),
+          }),
+        }),
+      }),
+    }));
+
+    const mod = await import("../invoice-card");
+    const { InvoiceCard: IsolatedInvoiceCard } = mod;
+
+    const invoice = makeInvoice();
+    const quote: InvoiceCardQuoteStub = { procurement_completed_at: null };
+
+    // Supplier-side invoice_items — must be forwarded to the editor.
+    const invoiceItems = [
+      {
+        id: "ii-1",
+        invoice_id: "inv-A",
+        position: 1,
+        product_name: "Bolt (supplier)",
+        supplier_sku: "SUP-SKU-1",
+        brand: "ABB",
+        quantity: 100,
+        purchase_price_original: 12.5,
+        purchase_currency: "USD",
+        minimum_order_quantity: 50,
+        production_time_days: 14,
+        weight_in_kg: 0.1,
+        dimension_height_mm: 10,
+        dimension_width_mm: 20,
+        dimension_length_mm: 30,
+      },
+    ];
+
+    // Customer-side QuoteItemRow[] — legacy prop; must NOT be what the
+    // editor receives.
+    const quoteItems = [
+      makeQuoteItem({ id: "qi-1", product_name: "Customer view: Болт" }),
+    ];
+
+    renderToString(
+      <IsolatedInvoiceCard
+        invoice={invoice}
+        items={quoteItems}
+        quote={quote}
+        invoiceItems={invoiceItems}
+        coverageSummaryByItem={{}}
+        defaultExpanded
+      />
+    );
+
+    expect(capturedEditorProps.length).toBeGreaterThan(0);
+    const editorItems = capturedEditorProps[0].items as Array<{
+      id: string;
+      product_name: string;
+      minimum_order_quantity?: number | null;
+    }>;
+
+    // Editor must receive invoice_items rows (by id/name), not quote_items.
+    expect(editorItems).toHaveLength(1);
+    expect(editorItems[0].id).toBe("ii-1");
+    expect(editorItems[0].product_name).toBe("Bolt (supplier)");
+    // Key that handsontable COLUMN_KEYS rely on post-284.
+    expect(editorItems[0].minimum_order_quantity).toBe(50);
+
+    // And it must NOT pass the customer-side QuoteItemRow[] (qi-1).
+    expect(editorItems.find((r) => r.id === "qi-1")).toBeUndefined();
+
+    vi.doUnmock("../procurement-items-editor");
+    vi.doUnmock("next/navigation");
+    vi.doUnmock("@/shared/lib/supabase/client");
   });
 });

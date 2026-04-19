@@ -7,7 +7,6 @@ import { registerAllModules } from "handsontable/registry";
 import Handsontable from "handsontable";
 import { toast } from "sonner";
 import { updateQuoteItem, unassignItemFromInvoice } from "@/entities/quote/mutations";
-import type { QuoteItemRow } from "@/entities/quote/queries";
 import { isMoqViolation } from "./moq-warning";
 
 import "handsontable/styles/handsontable.css";
@@ -15,14 +14,30 @@ import "handsontable/styles/ht-theme-main.css";
 
 registerAllModules();
 
-type ItemExtras = {
-  dimension_height_mm?: number | null;
-  dimension_width_mm?: number | null;
-  dimension_length_mm?: number | null;
-};
-
-function ext<T>(row: unknown): T {
-  return row as T;
+/**
+ * Phase 5d Group 5 Appendix — supplier-side row shape bound by the editor.
+ *
+ * Mirrors the `kvota.invoice_items` columns the handsontable COLUMN_KEYS
+ * read. Declared locally (and re-exported via `procurement-items-editor`)
+ * so callers can type their rows without reaching into the handsontable
+ * internals.
+ */
+export interface ProcurementEditorItem {
+  id: string;
+  invoice_id: string;
+  position: number;
+  product_name: string;
+  supplier_sku: string | null;
+  brand: string | null;
+  quantity: number;
+  purchase_price_original: number | null;
+  purchase_currency: string;
+  minimum_order_quantity: number | null;
+  production_time_days: number | null;
+  weight_in_kg: number | null;
+  dimension_height_mm: number | null;
+  dimension_width_mm: number | null;
+  dimension_length_mm: number | null;
 }
 
 /**
@@ -93,51 +108,37 @@ function parseDimensions(
 }
 
 /**
- * Phase 5d Task 14: rows are now sourced from `invoice_items` (the supplier
- * side of the КП). The `items` prop stays typed as QuoteItemRow[] for the
- * existing caller chain — during the Phase 5c+5d migration window, callers
- * pass a row shape that is compatible (same ids + overlapping fields) for
- * the supplier-visible columns. Customer-side context columns have been
- * dropped from this editor.
+ * Phase 5d Group 5 Appendix: rows are sourced from `invoice_items` (the
+ * supplier side of the КП). The `items` prop is typed to the supplier-side
+ * row shape so callers cannot accidentally pass customer-side quote_items.
  *
- * Fields sourced from invoice_items schema:
+ * Fields read from the row map 1:1 onto `invoice_items` columns:
  *   brand, supplier_sku, product_name, quantity, purchase_price_original,
  *   purchase_currency, production_time_days, weight_in_kg,
  *   dimension_*_mm, minimum_order_quantity
  */
-function itemToRow(item: QuoteItemRow): RowData {
-  const extras = ext<ItemExtras>(item);
-  // `minimum_order_quantity` is the invoice_items name; during the migration
-  // window fall back to the legacy `min_order_quantity` on the prop shape
-  // so the column stays populated for rows still routed through
-  // quote_items. Post-284 callers pass invoice_items rows directly.
-  const legacy = item as unknown as {
-    min_order_quantity?: number | null;
-    minimum_order_quantity?: number | null;
-  };
-  const moq =
-    legacy.minimum_order_quantity ?? legacy.min_order_quantity ?? null;
+function itemToRow(item: ProcurementEditorItem): RowData {
   return {
     id: item.id,
     brand: item.brand ?? "",
     supplier_sku: item.supplier_sku ?? "",
     product_name: item.product_name ?? "",
     quantity: item.quantity,
-    minimum_order_quantity: moq,
+    minimum_order_quantity: item.minimum_order_quantity ?? null,
     purchase_price_original: item.purchase_price_original ?? null,
     purchase_currency: item.purchase_currency ?? "",
     production_time_days: item.production_time_days ?? null,
     weight_in_kg: item.weight_in_kg ?? null,
     dimensions: formatDimensions(
-      extras.dimension_height_mm,
-      extras.dimension_width_mm,
-      extras.dimension_length_mm
+      item.dimension_height_mm,
+      item.dimension_width_mm,
+      item.dimension_length_mm
     ),
   };
 }
 
 interface ProcurementHandsontableProps {
-  items: QuoteItemRow[];
+  items: ProcurementEditorItem[];
   invoiceId: string;
   procurementCompleted: boolean;
 }

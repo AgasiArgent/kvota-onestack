@@ -1,7 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { QuoteItemRow } from "@/entities/quote/queries";
+import type { ProcurementEditorItem } from "./procurement-handsontable";
+
+export type { ProcurementEditorItem } from "./procurement-handsontable";
 
 const ProcurementHandsontable = dynamic(
   () =>
@@ -19,7 +21,7 @@ const ProcurementHandsontable = dynamic(
 );
 
 interface ProcurementItemsEditorProps {
-  items: QuoteItemRow[];
+  items: ProcurementEditorItem[];
   invoiceId: string;
   procurementCompleted: boolean;
 }
