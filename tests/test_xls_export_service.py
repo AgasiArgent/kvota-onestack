@@ -3,6 +3,10 @@ Tests for XLS Export Service
 
 Tests invoice XLS generation with mock Supabase data.
 Verifies: valid XLSX output, RU/EN headers, EN name fallback, empty items.
+
+Phase 5d (Task 3): reads from kvota.invoice_items (not quote_items) + the
+invoice_item_coverage JOIN. Split invoice_items appear as independent rows;
+merged invoice_items get a "Покрывает" column listing the source quote_items.
 """
 
 from io import BytesIO
@@ -27,42 +31,66 @@ MOCK_INVOICE = {
     },
 }
 
+# Each row represents an invoice_items row with its embedded coverage list.
+# The PostgREST embedded query populates invoice_item_coverage[].quote_items
+# with the requested columns (product_name, quantity, idn_sku,
+# manufacturer_product_name, name_en) from each linked quote_item.
 MOCK_ITEMS = [
     {
         "id": "item-001",
         "brand": "SKF",
-        "idn_sku": "SKF-6205",
         "supplier_sku": "6205-2RS1",
-        "manufacturer_product_name": "SKF Group",
         "product_name": "Подшипник шариковый",
-        "name_en": "Ball Bearing",
         "quantity": 100,
-        "min_order_quantity": 50,
+        "minimum_order_quantity": 50,
         "purchase_price_original": 12.50,
         "production_time_days": 30,
-        "weight_kg": 0.15,
+        "weight_in_kg": 0.15,
         "dimension_height_mm": 52,
         "dimension_width_mm": 52,
         "dimension_length_mm": 15,
-        "procurement_notes": "Срочная поставка",
+        "supplier_notes": "Срочная поставка",
+        "invoice_item_coverage": [
+            {
+                "quote_item_id": "qi-001",
+                "ratio": 1,
+                "quote_items": {
+                    "product_name": "Подшипник шариковый",
+                    "quantity": 100,
+                    "idn_sku": "SKF-6205",
+                    "manufacturer_product_name": "SKF Group",
+                    "name_en": "Ball Bearing",
+                },
+            }
+        ],
     },
     {
         "id": "item-002",
         "brand": "FAG",
-        "idn_sku": "FAG-22220",
         "supplier_sku": None,
-        "manufacturer_product_name": None,
         "product_name": "Подшипник роликовый",
-        "name_en": None,
         "quantity": 20,
-        "min_order_quantity": None,
+        "minimum_order_quantity": None,
         "purchase_price_original": 85.00,
         "production_time_days": 45,
-        "weight_kg": 3.2,
+        "weight_in_kg": 3.2,
         "dimension_height_mm": None,
         "dimension_width_mm": None,
         "dimension_length_mm": None,
-        "procurement_notes": None,
+        "supplier_notes": None,
+        "invoice_item_coverage": [
+            {
+                "quote_item_id": "qi-002",
+                "ratio": 1,
+                "quote_items": {
+                    "product_name": "Подшипник роликовый",
+                    "quantity": 20,
+                    "idn_sku": "FAG-22220",
+                    "manufacturer_product_name": None,
+                    "name_en": None,
+                },
+            }
+        ],
     },
 ]
 
@@ -83,7 +111,7 @@ def _build_mock_supabase(invoice_data=None, items_data=None):
             mock_eq.execute.return_value = execute_result
             mock_select.eq.return_value = mock_eq
             mock_table.select.return_value = mock_select
-        elif table_name == "quote_items":
+        elif table_name == "invoice_items":
             execute_result = MagicMock()
             execute_result.data = items_data if items_data is not None else []
             mock_order.execute.return_value = execute_result
@@ -112,6 +140,7 @@ RU_HEADERS = [
     "Вес (кг)",
     "Размеры (В×Ш×Д мм)",
     "Примечание",
+    "Покрывает",
 ]
 
 EN_HEADERS = [
@@ -127,6 +156,7 @@ EN_HEADERS = [
     "Weight (kg)",
     "Dimensions (HxWxL mm)",
     "Notes",
+    "Covers",
 ]
 
 
@@ -205,56 +235,86 @@ class TestGenerateInvoiceXls:
             {
                 "id": "item-a",
                 "brand": "SKF",
-                "idn_sku": "SKF-A",
                 "supplier_sku": "A-1",
-                "manufacturer_product_name": "SKF",
                 "product_name": "Подшипник A",
-                "name_en": "Bearing A",
                 "quantity": 10,
-                "min_order_quantity": 5,
+                "minimum_order_quantity": 5,
                 "purchase_price_original": 1.0,
                 "production_time_days": 10,
-                "weight_kg": 0.1,
+                "weight_in_kg": 0.1,
                 "dimension_height_mm": None,
                 "dimension_width_mm": None,
                 "dimension_length_mm": None,
-                "procurement_notes": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-a",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Подшипник A",
+                            "quantity": 10,
+                            "idn_sku": "SKF-A",
+                            "manufacturer_product_name": "SKF",
+                            "name_en": "Bearing A",
+                        },
+                    }
+                ],
             },
             {
                 "id": "item-b",
                 "brand": "FAG",
-                "idn_sku": "FAG-B",
                 "supplier_sku": "B-1",
-                "manufacturer_product_name": "FAG",
                 "product_name": "Подшипник B",
-                "name_en": None,
                 "quantity": 20,
-                "min_order_quantity": None,
+                "minimum_order_quantity": None,
                 "purchase_price_original": 2.0,
                 "production_time_days": 20,
-                "weight_kg": 0.2,
+                "weight_in_kg": 0.2,
                 "dimension_height_mm": None,
                 "dimension_width_mm": None,
                 "dimension_length_mm": None,
-                "procurement_notes": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-b",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Подшипник B",
+                            "quantity": 20,
+                            "idn_sku": "FAG-B",
+                            "manufacturer_product_name": "FAG",
+                            "name_en": None,
+                        },
+                    }
+                ],
             },
             {
                 "id": "item-c",
                 "brand": "NSK",
-                "idn_sku": "NSK-C",
                 "supplier_sku": "C-1",
-                "manufacturer_product_name": "NSK",
                 "product_name": "Подшипник C",
-                "name_en": "Bearing C",
                 "quantity": 30,
-                "min_order_quantity": None,
+                "minimum_order_quantity": None,
                 "purchase_price_original": 3.0,
                 "production_time_days": 30,
-                "weight_kg": 0.3,
+                "weight_in_kg": 0.3,
                 "dimension_height_mm": None,
                 "dimension_width_mm": None,
                 "dimension_length_mm": None,
-                "procurement_notes": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-c",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Подшипник C",
+                            "quantity": 30,
+                            "idn_sku": "NSK-C",
+                            "manufacturer_product_name": "NSK",
+                            "name_en": "Bearing C",
+                        },
+                    }
+                ],
             },
         ]
         mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, mixed_items)
@@ -368,3 +428,203 @@ class TestGenerateInvoiceXls:
             assert cell.font.bold is True, f"Column {col_idx} header should be bold"
             assert cell.fill.start_color.rgb is not None, f"Column {col_idx} should have fill"
             assert cell.fill.fill_type == "solid", f"Column {col_idx} should have solid fill"
+
+
+# --- Phase 5d: invoice_items + coverage "Покрывает" column ---
+
+
+class TestXlsExportPhase5d:
+    """Phase 5d Task 3: XLS reads from invoice_items (not quote_items) +
+    uses invoice_item_coverage for the new "Покрывает" column."""
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_rows_come_from_invoice_items_not_quote_items(self, mock_get_sb):
+        """Service queries kvota.invoice_items table, not kvota.quote_items."""
+        mock_sb = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)
+        mock_get_sb.return_value = mock_sb
+
+        from services.xls_export_service import generate_invoice_xls
+
+        generate_invoice_xls("inv-001", language="ru")
+
+        # Verify the service called .table("invoice_items")
+        called_tables = [call.args[0] for call in mock_sb.table.call_args_list]
+        assert "invoice_items" in called_tables, (
+            f"Service must read from 'invoice_items' table (got: {called_tables})"
+        )
+        assert "quote_items" not in called_tables, (
+            f"Service must NOT read from 'quote_items' table (got: {called_tables})"
+        )
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_split_invoice_items_render_as_independent_rows(self, mock_get_sb):
+        """1 quote_item covered by 2 invoice_items (split) -> XLS has 2 rows,
+        each with its own weight/price/quantity."""
+        # Split: one qi "qi-split-src" is covered by two independent invoice_items
+        # with different weights and prices.
+        split_items = [
+            {
+                "id": "ii-split-a",
+                "brand": "SKF",
+                "supplier_sku": "A-SKU",
+                "product_name": "Split Part A",
+                "quantity": 100,
+                "minimum_order_quantity": None,
+                "purchase_price_original": 5.00,
+                "production_time_days": 10,
+                "weight_in_kg": 0.5,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-split-src",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Original Product",
+                            "quantity": 100,
+                            "idn_sku": "IDN-SPLIT",
+                            "manufacturer_product_name": "Orig Mfr",
+                            "name_en": None,
+                        },
+                    }
+                ],
+            },
+            {
+                "id": "ii-split-b",
+                "brand": "FAG",
+                "supplier_sku": "B-SKU",
+                "product_name": "Split Part B",
+                "quantity": 200,
+                "minimum_order_quantity": None,
+                "purchase_price_original": 7.50,
+                "production_time_days": 14,
+                "weight_in_kg": 1.2,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-split-src",
+                        "ratio": 2,
+                        "quote_items": {
+                            "product_name": "Original Product",
+                            "quantity": 100,
+                            "idn_sku": "IDN-SPLIT",
+                            "manufacturer_product_name": "Orig Mfr",
+                            "name_en": None,
+                        },
+                    }
+                ],
+            },
+        ]
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, split_items)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        # Header + 2 split rows
+        assert ws.max_row == 3
+
+        name_col = RU_HEADERS.index("Наименование") + 1
+        weight_col = RU_HEADERS.index("Вес (кг)") + 1
+        price_col = RU_HEADERS.index("Цена") + 1
+
+        # Row 2: first split -> Part A
+        assert ws.cell(row=2, column=name_col).value == "Split Part A"
+        assert ws.cell(row=2, column=weight_col).value == 0.5
+        assert ws.cell(row=2, column=price_col).value == 5.00
+
+        # Row 3: second split -> Part B (independent weights/prices)
+        assert ws.cell(row=3, column=name_col).value == "Split Part B"
+        assert ws.cell(row=3, column=weight_col).value == 1.2
+        assert ws.cell(row=3, column=price_col).value == 7.50
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_merged_invoice_items_list_coverage_in_pokryvaet_column(self, mock_get_sb):
+        """1 invoice_item covers 2 quote_items (merge) -> XLS has 1 row
+        with 'Покрывает' column filled with comma-joined product_names."""
+        merged_items = [
+            {
+                "id": "ii-merged",
+                "brand": "NSK",
+                "supplier_sku": "MERGE-SKU",
+                "product_name": "Combined Part",
+                "quantity": 50,
+                "minimum_order_quantity": None,
+                "purchase_price_original": 30.00,
+                "production_time_days": 20,
+                "weight_in_kg": 2.0,
+                "dimension_height_mm": None,
+                "dimension_width_mm": None,
+                "dimension_length_mm": None,
+                "supplier_notes": None,
+                "invoice_item_coverage": [
+                    {
+                        "quote_item_id": "qi-a",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Подшипник A",
+                            "quantity": 25,
+                            "idn_sku": "IDN-A",
+                            "manufacturer_product_name": "NSK",
+                            "name_en": None,
+                        },
+                    },
+                    {
+                        "quote_item_id": "qi-b",
+                        "ratio": 1,
+                        "quote_items": {
+                            "product_name": "Подшипник B",
+                            "quantity": 25,
+                            "idn_sku": "IDN-B",
+                            "manufacturer_product_name": "NSK",
+                            "name_en": None,
+                        },
+                    },
+                ],
+            }
+        ]
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, merged_items)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        # Header + 1 merged row (not 2)
+        assert ws.max_row == 2
+
+        pokryvaet_col = RU_HEADERS.index("Покрывает") + 1
+        covers_value = ws.cell(row=2, column=pokryvaet_col).value
+
+        # Must list both source quote_items' product names, joined by ", "
+        assert covers_value is not None, "Покрывает column must be populated for merged rows"
+        assert "Подшипник A" in covers_value
+        assert "Подшипник B" in covers_value
+        # Order-preserving join
+        assert covers_value == "Подшипник A, Подшипник B"
+
+    @patch("services.xls_export_service.get_supabase")
+    def test_one_to_one_rows_have_empty_pokryvaet(self, mock_get_sb):
+        """Standard 1:1 case (single coverage row) -> 'Покрывает' is NULL/empty."""
+        mock_get_sb.return_value = _build_mock_supabase(MOCK_INVOICE, MOCK_ITEMS)
+
+        from services.xls_export_service import generate_invoice_xls
+
+        result = generate_invoice_xls("inv-001", language="ru")
+        wb = load_workbook(BytesIO(result))
+        ws = wb.active
+
+        pokryvaet_col = RU_HEADERS.index("Покрывает") + 1
+
+        # Both MOCK_ITEMS are 1:1 (single coverage entry each)
+        # "Покрывает" should be empty/None for both rows
+        assert ws.cell(row=2, column=pokryvaet_col).value in (None, "")
+        assert ws.cell(row=3, column=pokryvaet_col).value in (None, "")
