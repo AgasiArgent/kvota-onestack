@@ -361,8 +361,14 @@ class TestGetComposedItemsNoComposition:
 class TestGetComposedItemsUncovered:
     """Pointer set but no coverage in the pointed invoice → skip."""
 
-    def test_uncovered_quote_item_is_skipped(self):
-        """qi-1 points to inv-missing but has no coverage row there — skip."""
+    def test_uncovered_quote_item_is_skipped(self, caplog):
+        """qi-1 points to inv-missing but has no coverage row there — skip.
+
+        The skip must also emit a warning log line so uncovered compositions
+        don't silently disappear from calc output.
+        """
+        import logging
+
         quote_id = "q-1"
 
         def rows(name):
@@ -402,11 +408,17 @@ class TestGetComposedItemsUncovered:
         sb = MagicMock()
         sb.table.side_effect = make_table_router(rows)
 
-        result = get_composed_items(quote_id, sb)
+        with caplog.at_level(logging.WARNING, logger="services.composition_service"):
+            result = get_composed_items(quote_id, sb)
 
         # Only qi-2 appears in output
         assert len(result) == 1
         assert result[0]["quote_item_id"] == "qi-2"
+        # Warning logged for qi-1 skip
+        assert any(
+            "no coverage" in rec.message.lower() and "qi-1" in rec.message
+            for rec in caplog.records
+        ), f"Expected warning about uncovered qi-1, got: {[r.message for r in caplog.records]}"
 
 
 class TestGetComposedItemsSupplierSwap:

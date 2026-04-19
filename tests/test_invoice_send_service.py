@@ -24,6 +24,7 @@ from services.invoice_send_service import (
     get_active_draft,
     get_send_history,
     check_edit_permission,
+    is_quote_procurement_locked,
 )
 
 
@@ -286,3 +287,90 @@ class TestCheckEditPermission:
         assert check_edit_permission("inv-001", ["procurement", "admin"]) is True
         assert check_edit_permission("inv-001", ["sales", "head_of_procurement"]) is True
         assert check_edit_permission("inv-001", ["sales", "procurement"]) is False
+
+
+class TestIsQuoteProcurementLocked:
+    """Tests for is_quote_procurement_locked (Phase 5c: soft-delete aware)."""
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_locked_when_procurement_completed(self, mock_get_sb):
+        """Quote with non-null procurement_completed_at → locked."""
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        # invoices lookup returns quote_id
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        # quotes lookup returns procurement_completed_at set
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {
+            "procurement_completed_at": "2026-04-11T10:00:00+00:00"
+        }
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is True
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_locked_excludes_soft_deleted_quote(self, mock_get_sb):
+        """Soft-deleted quote (deleted_at IS NOT NULL) must NOT trigger the lock.
+
+        Even if procurement_completed_at is set, a soft-deleted quote is
+        effectively gone — the edit-gate should fail open so the invoice row
+        remains editable by legacy flows that have not yet filtered on it.
+        The ``.is_("deleted_at", "null")`` filter in the PostgREST query makes
+        the quotes lookup return no data for soft-deleted quotes, which the
+        fail-open branch treats as "not locked".
+        """
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-deleted"}
+        # Soft-deleted quote: PostgREST .is_("deleted_at", "null") filter
+        # excludes it, so data is empty.
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = None
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is False
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_unlocked_when_procurement_completed_at_null(self, mock_get_sb):
+        """Active quote without procurement_completed_at → not locked."""
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {"procurement_completed_at": None}
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is False

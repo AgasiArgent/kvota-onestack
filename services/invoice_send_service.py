@@ -219,11 +219,12 @@ def is_quote_procurement_locked(invoice_id: str) -> bool:
         sb.table("quotes")
         .select("procurement_completed_at")
         .eq("id", quote_id)
+        .is_("deleted_at", "null")  # Exclude soft-deleted quotes from lock.
         .single()
         .execute()
     )
     if not q.data:
-        return False  # Fail-open: missing quote doesn't trigger lock.
+        return False  # Fail-open: missing/soft-deleted quote doesn't trigger lock.
 
     return q.data.get("procurement_completed_at") is not None
 
