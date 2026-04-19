@@ -326,7 +326,7 @@ class TestIsQuoteProcurementLocked:
         Even if procurement_completed_at is set, a soft-deleted quote is
         effectively gone — the edit-gate should fail open so the invoice row
         remains editable by legacy flows that have not yet filtered on it.
-        The ``.is_("deleted_at", "null")`` filter in the PostgREST query makes
+        The ``.is_("deleted_at", None)`` filter in the PostgREST query makes
         the quotes lookup return no data for soft-deleted quotes, which the
         fail-open branch treats as "not locked".
         """
@@ -335,7 +335,7 @@ class TestIsQuoteProcurementLocked:
 
         inv_chain = MagicMock()
         inv_chain.execute.return_value.data = {"quote_id": "q-deleted"}
-        # Soft-deleted quote: PostgREST .is_("deleted_at", "null") filter
+        # Soft-deleted quote: PostgREST .is_("deleted_at", None) filter
         # excludes it, so data is empty.
         q_chain = MagicMock()
         q_chain.execute.return_value.data = None
@@ -374,3 +374,41 @@ class TestIsQuoteProcurementLocked:
         mock_sb.table.side_effect = table_side_effect
 
         assert is_quote_procurement_locked("inv-001") is False
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_soft_delete_filter_uses_none_not_string_literal(self, mock_get_sb):
+        """The `.is_("deleted_at", ...)` filter must pass Python ``None``.
+
+        Regression guard for the services-layer soft-delete audit
+        (``tests/test_services_soft_delete_audit.py``) which scans for the
+        canonical ``.is_("deleted_at", None)`` form. The string literal
+        ``"null"`` also works at the PostgREST level but is not recognised
+        by the audit regex — a read with the string form silently bypasses
+        the guardrail and shows up as a violation on every CI run.
+        """
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {"procurement_completed_at": None}
+
+        # Capture the .is_() call args from the quotes query chain.
+        quotes_is_mock = MagicMock()
+        quotes_is_mock.single.return_value = q_chain
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_ = quotes_is_mock
+                quotes_is_mock.return_value = quotes_is_mock
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        is_quote_procurement_locked("inv-001")
+
+        quotes_is_mock.assert_called_once_with("deleted_at", None)

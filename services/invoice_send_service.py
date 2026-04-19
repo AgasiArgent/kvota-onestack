@@ -219,7 +219,7 @@ def is_quote_procurement_locked(invoice_id: str) -> bool:
         sb.table("quotes")
         .select("procurement_completed_at")
         .eq("id", quote_id)
-        .is_("deleted_at", "null")  # Exclude soft-deleted quotes from lock.
+        .is_("deleted_at", None)  # Exclude soft-deleted quotes from lock.
         .single()
         .execute()
     )
