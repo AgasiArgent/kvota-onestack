@@ -3,19 +3,85 @@ Quote Version Service
 
 Creates immutable quote snapshots for audit trail.
 Stores calculation variables, products, exchange rates, and results at point in time.
+
+Phase 5d (Pattern A): the products snapshot is sourced from
+``composition_service.get_composed_items(quote_id, supabase)`` at snapshot
+creation time, NOT from legacy ``quote_items`` columns passed by callers.
+This makes the snapshot layer the single source of truth for "what the
+composition looked like at this instant" and removes the risk of a caller
+accidentally passing raw quote_items rows.
+
+See: .kiro/specs/phase-5d-legacy-refactor/design.md §1.1, §2.1.7
+     .kiro/specs/phase-5d-legacy-refactor/requirements.md REQ-1.6
 """
 
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List, Optional
 from services.database import get_supabase
+from services import composition_service
 
+
+# ============================================================================
+# Internal helpers
+# ============================================================================
+
+def _build_products_snapshot(composed_items: List[Dict]) -> List[Dict]:
+    """Serialize composed items into the products snapshot shape.
+
+    Composed items come from ``composition_service.get_composed_items`` and
+    carry identity + supplier-side pricing + traceability fields. The snapshot
+    preserves the composed shape verbatim, normalising numeric fields to float
+    so they are JSON-serializable inside the ``input_variables`` JSONB column.
+    """
+    products: List[Dict] = []
+    for item in composed_items:
+        products.append({
+            # Identity — from invoice_item (supplier-side) via composition
+            "product_name": item.get("product_name"),
+            "supplier_sku": item.get("supplier_sku"),
+            "brand": item.get("brand"),
+            "quantity": item.get("quantity"),
+
+            # Pricing — from invoice_item
+            "purchase_price_original": (
+                float(item["purchase_price_original"])
+                if item.get("purchase_price_original") is not None
+                else None
+            ),
+            "purchase_currency": item.get("purchase_currency"),
+            "base_price_vat": (
+                float(item["base_price_vat"])
+                if item.get("base_price_vat") is not None
+                else None
+            ),
+
+            # Supplier-side attrs — from invoice_item
+            "weight_in_kg": (
+                float(item["weight_in_kg"])
+                if item.get("weight_in_kg") is not None
+                else None
+            ),
+            "customs_code": item.get("customs_code"),
+            "supplier_country": item.get("supplier_country"),
+
+            # Traceability — carries split/merge structure forward for audit
+            "quote_item_id": item.get("quote_item_id"),
+            "invoice_item_id": item.get("invoice_item_id"),
+            "invoice_id": item.get("invoice_id"),
+            "coverage_ratio": item.get("coverage_ratio"),
+        })
+    return products
+
+
+# ============================================================================
+# Public API
+# ============================================================================
 
 def create_quote_version(
     quote_id: str,
     user_id: str,
     variables: Dict[str, Any],
-    items: List[Dict],
     results: List[Dict],
     totals: Dict[str, Any],
     change_reason: str = "Calculation",
@@ -24,11 +90,16 @@ def create_quote_version(
     """
     Create immutable snapshot of quote state.
 
+    The products snapshot is sourced from
+    ``composition_service.get_composed_items(quote_id, supabase)`` at snapshot
+    creation time — callers do NOT pass items in. This guarantees the snapshot
+    captures the authoritative composed shape at this instant, independent of
+    whatever the caller happened to fetch earlier.
+
     Args:
         quote_id: Quote UUID
         user_id: User UUID creating the version
         variables: Calculation variables used
-        items: List of quote items with product info
         results: List of calculation results (phase_results JSONB)
         totals: Quote totals (total_usd, total_no_vat, total_with_vat, etc.)
         change_reason: Reason for creating version
@@ -57,19 +128,9 @@ def create_quote_version(
         for k, v in variables.items()
     }
 
-    # Build products snapshot for input_variables JSONB
-    products_snapshot = []
-    for item in items:
-        products_snapshot.append({
-            "id": item.get("id"),
-            "product_name": item.get("product_name"),
-            "product_code": item.get("product_code"),
-            "quantity": item.get("quantity"),
-            "base_price_vat": float(item.get("base_price_vat", 0)),
-            "weight_in_kg": float(item.get("weight_in_kg", 0)) if item.get("weight_in_kg") else None,
-            "customs_code": item.get("customs_code"),
-            "supplier_country": item.get("supplier_country"),
-        })
+    # Source items from composition_service at snapshot time (Phase 5d Pattern A)
+    composed_items = composition_service.get_composed_items(quote_id, supabase)
+    products_snapshot = _build_products_snapshot(composed_items)
 
     # Combine all data into input_variables JSONB (actual DB column)
     input_variables = {
@@ -140,6 +201,7 @@ def list_quote_versions(quote_id: str, org_id: str) -> List[Dict]:
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote.data:
@@ -190,6 +252,7 @@ def get_quote_version(quote_id: str, version_number: int, org_id: str) -> Option
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote.data:
@@ -246,6 +309,7 @@ def get_current_quote_version(quote_id: str, org_id: str) -> Optional[Dict]:
         .select("id, current_version_id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote.data:
@@ -305,6 +369,7 @@ def can_update_version(quote_id: str, org_id: str) -> tuple[bool, str]:
         .select("id, workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote.data:
@@ -326,7 +391,6 @@ def update_quote_version(
     org_id: str,
     user_id: str,
     variables: Dict[str, Any],
-    items: List[Dict],
     results: List[Dict],
     totals: Dict[str, Any],
     change_reason: str = "Updated"
@@ -334,13 +398,16 @@ def update_quote_version(
     """
     Update existing version (if КП not sent to client).
 
+    Like ``create_quote_version``, the products snapshot is sourced from
+    ``composition_service.get_composed_items(quote_id, supabase)`` at call
+    time. Callers do NOT pass items in.
+
     Args:
         version_id: Version UUID to update
         quote_id: Quote UUID
         org_id: Organization UUID (for security)
         user_id: User UUID making the update
         variables: Calculation variables used
-        items: List of quote items with product info
         results: List of calculation results
         totals: Quote totals
         change_reason: Reason for update
@@ -364,19 +431,9 @@ def update_quote_version(
         for k, v in variables.items()
     }
 
-    # Build products snapshot
-    products_snapshot = []
-    for item in items:
-        products_snapshot.append({
-            "id": item.get("id"),
-            "product_name": item.get("product_name"),
-            "product_code": item.get("product_code"),
-            "quantity": item.get("quantity"),
-            "base_price_vat": float(item.get("base_price_vat", 0)),
-            "weight_in_kg": float(item.get("weight_in_kg", 0)) if item.get("weight_in_kg") else None,
-            "customs_code": item.get("customs_code"),
-            "supplier_country": item.get("supplier_country"),
-        })
+    # Source items from composition_service at snapshot time (Phase 5d Pattern A)
+    composed_items = composition_service.get_composed_items(quote_id, supabase)
+    products_snapshot = _build_products_snapshot(composed_items)
 
     # Build input_variables JSONB
     input_variables = {

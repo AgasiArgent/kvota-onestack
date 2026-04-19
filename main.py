@@ -7742,7 +7742,7 @@ def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
     # Sales tasks
     if 'sales' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_sales_review").execute()
+            .eq("organization_id", org_id).eq("workflow_status", "pending_sales_review").is_("deleted_at", None).execute()
         total += result.count or 0
 
     return total
@@ -8050,6 +8050,7 @@ def _lookup_deal_for_quote(quote_id: str, org_id: str):
             .select("id") \
             .eq("quote_id", quote_id) \
             .limit(1) \
+            .is_("deleted_at", None) \
             .execute()
         if not spec_result.data:
             return None
@@ -8064,7 +8065,7 @@ def _lookup_deal_for_quote(quote_id: str, org_id: str):
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
             "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
-        ).eq("specification_id", spec_id).eq("organization_id", org_id).limit(1).execute()
+        ).eq("specification_id", spec_id).eq("organization_id", org_id).limit(1).is_("deleted_at", None).execute()
 
         if deal_result.data:
             return deal_result.data[0]
@@ -8704,6 +8705,7 @@ def post(session,
                 .like("idn_quote", f"{month_prefix}%") \
                 .order("idn_quote", desc=True) \
                 .limit(1) \
+                .is_("deleted_at", None) \
                 .execute()
 
             if existing_result.data and existing_result.data[0].get("idn_quote"):
@@ -9114,6 +9116,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         .select("*, customers(name, inn, email)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not result.data:
@@ -9413,6 +9416,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 .select("created_at") \
                 .eq("quote_id", quote_id) \
                 .limit(1) \
+                .is_("deleted_at", None) \
                 .execute()
             if spec_result.data:
                 spec_created_at = spec_result.data[0].get("created_at")
@@ -11012,6 +11016,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11171,6 +11176,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11253,6 +11259,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11367,6 +11374,7 @@ def post(session, quote_id: str, justification: str = ""):
         .select("workflow_status, needs_justification, idn_quote, total_amount, currency, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11552,6 +11560,7 @@ def get(session, quote_id: str):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12016,6 +12025,7 @@ async def patch_quote_item(quote_id: str, item_id: str, session, request):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12065,6 +12075,7 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         .select("id, organization_id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12134,6 +12145,7 @@ async def inline_update_quote(quote_id: str, session, request):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12203,6 +12215,7 @@ def cancel_quote(quote_id: str, session):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12241,6 +12254,7 @@ def get(quote_id: str, session):
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not result.data:
@@ -13339,6 +13353,7 @@ def post(
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -13476,6 +13491,7 @@ def get(quote_id: str, session):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -14028,6 +14044,7 @@ def post(
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -14491,11 +14508,12 @@ def post(
 
             if not existing_versions:
                 # First version - always create (no dialog shown)
+                # Phase 5d: items sourced from composition_service inside the
+                # snapshot function — not passed as kwarg.
                 version = create_quote_version(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -14513,7 +14531,6 @@ def post(
                         org_id=user["org_id"],
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text
@@ -14525,7 +14542,6 @@ def post(
                         quote_id=quote_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text,
@@ -14539,7 +14555,6 @@ def post(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -14716,6 +14731,7 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15112,12 +15128,13 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
             current_version = get_current_quote_version(quote_id, org_id) if existing_versions else None
             reason_text = change_reason if change_reason else "Calculation saved"
 
+            # Phase 5d: items sourced from composition_service inside the
+            # snapshot function — not passed as kwarg.
             if not existing_versions:
                 create_quote_version(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -15132,7 +15149,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                         org_id=org_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text
@@ -15142,7 +15158,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                         quote_id=quote_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text,
@@ -15153,7 +15168,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -15241,6 +15255,7 @@ async def api_cancel_quote(session, request: Request, quote_id: str):
         .select("id, workflow_status, idn_quote, customer_id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15441,6 +15456,7 @@ def get(quote_id: str, session):
         .select("id, idn_quote, customer_id, status, workflow_status, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15727,7 +15743,7 @@ def _render_currency_invoices_section(quote_id: str, supabase):
     """
     # Check if a deal exists for this quote
     try:
-        deal_resp = supabase.table("deals").select("id").eq("quote_id", quote_id).execute()
+        deal_resp = supabase.table("deals").select("id").eq("quote_id", quote_id).is_("deleted_at", None).execute()
         deals = deal_resp.data or []
     except Exception as e:
         print(f"Error checking deals for quote {quote_id}: {e}")
@@ -15820,6 +15836,7 @@ def get(quote_id: str, session):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15971,6 +15988,7 @@ def get(quote_id: str, version_num: int, session):
     quote_result = supabase.table("quotes") \
         .select("idn_quote, currency") \
         .eq("id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data[0] if quote_result.data else {}
@@ -17605,6 +17623,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data
@@ -19055,6 +19074,7 @@ async def api_create_invoice(quote_id: str, session, request):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19324,6 +19344,7 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19372,6 +19393,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19588,6 +19610,7 @@ async def api_reopen_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19669,6 +19692,7 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19754,6 +19778,7 @@ async def api_bulk_update_items(quote_id: str, session, request):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -20178,6 +20203,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -20342,6 +20368,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -20423,6 +20450,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data
@@ -20531,6 +20559,7 @@ def get(session, quote_id: str):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21162,6 +21191,7 @@ async def post(session, quote_id: str, request):
         .select("id, workflow_status, logistics_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21268,6 +21298,7 @@ async def post(session, quote_id: str, request):
                     .select("partial_recalc") \
                     .eq("id", quote_id) \
                     .single() \
+                    .is_("deleted_at", None) \
                     .execute()
 
                 partial_recalc = partial_check.data.get("partial_recalc") if partial_check.data else None
@@ -21319,6 +21350,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21480,6 +21512,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -22066,6 +22099,7 @@ def get(session, quote_id: str, error: str = ""):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23008,6 +23042,7 @@ async def post(session, quote_id: str, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23172,6 +23207,7 @@ async def api_customs_items_bulk_update(quote_id: str, session, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23261,6 +23297,7 @@ async def patch(session, quote_id: str, item_id: str, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23339,6 +23376,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23500,6 +23538,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23768,6 +23807,7 @@ def get_cost_analysis(session, quote_id: str):
     quote_result = supabase.table("quotes") \
         .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status, total_amount, customers(name)") \
         .eq("id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -24459,6 +24499,7 @@ def get(session, quote_id: str, preset: str = None):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -25696,6 +25737,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -25894,6 +25936,7 @@ def post(session, quote_id: str, comment: str = "", department: str = "sales"):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26005,6 +26048,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26163,6 +26207,7 @@ def post(session, quote_id: str, comment: str = ""):
         .select("workflow_status, idn_quote, total_amount, currency, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26262,6 +26307,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26422,6 +26468,7 @@ def post(session, quote_id: str, comment: str = ""):
         .select("workflow_status, idn_quote") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26933,6 +26980,7 @@ def get(session, quote_id: str):
         .select("*, customers(id, name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26958,6 +27006,7 @@ def get(session, quote_id: str):
     existing_spec = supabase.table("specifications") \
         .select("id") \
         .eq("quote_id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if existing_spec.data:
@@ -27255,6 +27304,7 @@ def post(session, quote_id: str, action: str = "create",
         .select("id, organization_id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -27264,6 +27314,7 @@ def post(session, quote_id: str, action: str = "create",
     existing_spec = supabase.table("specifications") \
         .select("id") \
         .eq("quote_id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if existing_spec.data:
@@ -27417,6 +27468,7 @@ def get(session, spec_id: str):
             .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn))") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .execute()
     except Exception as e:
         # Log detailed error to Sentry
@@ -27474,6 +27526,7 @@ def get(session, spec_id: str):
         existing_deal = supabase.table("deals") \
             .select("id, deal_number") \
             .eq("specification_id", spec_id) \
+            .is_("deleted_at", None) \
             .execute()
         has_deal = bool(existing_deal and existing_deal.data)
 
@@ -27934,6 +27987,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
         .select("id, status, quote_id, contract_id, specification_currency, sign_date") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not spec_result.data:
@@ -27980,6 +28034,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
             existing_deal = supabase.table("deals") \
                 .select("id, deal_number") \
                 .eq("specification_id", spec_id) \
+                .is_("deleted_at", None) \
                 .execute()
 
             if not existing_deal.data:
@@ -27988,6 +28043,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                 quote_result = supabase.table("quotes") \
                     .select("id, total_amount, customers(id, name)") \
                     .eq("id", quote_id_val) \
+                    .is_("deleted_at", None) \
                     .execute()
 
                 total_amount = (quote_result.data[0].get("total_amount") or 0) if quote_result.data else 0
@@ -28009,6 +28065,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                     count_result = supabase.table("deals") \
                         .select("id", count="exact") \
                         .eq("organization_id", org_id) \
+                        .is_("deleted_at", None) \
                         .execute()
                     seq_num = (count_result.count or 0) + 1
                     deal_number = f"DEAL-{year}-{seq_num:04d}"
@@ -28048,7 +28105,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
 
                         ci_quote_resp = supabase.table("quotes").select(
                             "idn_quote, seller_companies!seller_company_id(id, name)"
-                        ).eq("id", quote_id_val).single().execute()
+                        ).eq("id", quote_id_val).single().is_("deleted_at", None).execute()
                         ci_quote_data = ci_quote_resp.data or {}
                         sc = (ci_quote_data.get("seller_companies") or {})
                         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -28420,6 +28477,7 @@ async def post(session, spec_id: str, request):
         .select("id, status, specification_number, quote_id") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not spec_result.data:
@@ -28556,6 +28614,7 @@ def post(session, spec_id: str):
             .select("id, quote_id, organization_id, status, signed_scan_url, specification_number, sign_date, specification_currency, exchange_rate_to_ruble") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if not spec_result.data:
@@ -28612,6 +28671,7 @@ def post(session, spec_id: str):
         existing_deal = supabase.table("deals") \
             .select("id, deal_number") \
             .eq("specification_id", spec_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if existing_deal.data:
@@ -28629,6 +28689,7 @@ def post(session, spec_id: str):
         quote_result = supabase.table("quotes") \
             .select("id, total_amount, customers(id, name)") \
             .eq("id", quote_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if not quote_result.data:
@@ -28658,6 +28719,7 @@ def post(session, spec_id: str):
             count_result = supabase.table("deals") \
                 .select("id", count="exact") \
                 .eq("organization_id", org_id) \
+                .is_("deleted_at", None) \
                 .execute()
 
             seq_num = (count_result.count or 0) + 1
@@ -28717,7 +28779,7 @@ def post(session, spec_id: str):
             # Get seller_company and quote IDN
             ci_quote_resp = supabase.table("quotes").select(
                 "idn_quote, seller_companies!seller_company_id(id, name)"
-            ).eq("id", quote_id).single().execute()
+            ).eq("id", quote_id).single().is_("deleted_at", None).execute()
             ci_quote_data = ci_quote_resp.data or {}
             sc = (ci_quote_data.get("seller_companies") or {})
             ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -29013,6 +29075,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
             count_result = supabase.table("deals").select("id", count="exact") \
                 .eq("organization_id", org_id) \
                 .eq("status", status) \
+                .is_("deleted_at", None) \
                 .execute()
             stats[status] = count_result.count or 0
 
@@ -29022,6 +29085,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         active_result = supabase.table("deals").select("total_amount") \
             .eq("organization_id", org_id) \
             .eq("status", "active") \
+            .is_("deleted_at", None) \
             .execute()
         if active_result.data:
             stats["active_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in active_result.data)
@@ -29030,6 +29094,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         completed_result = supabase.table("deals").select("total_amount") \
             .eq("organization_id", org_id) \
             .eq("status", "completed") \
+            .is_("deleted_at", None) \
             .execute()
         if completed_result.data:
             stats["completed_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in completed_result.data)
@@ -29051,7 +29116,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         if target_status:
             query = query.eq("status", target_status)
 
-        deals_result = query.order("signed_at", desc=True).limit(100).execute()
+        deals_result = query.order("signed_at", desc=True).limit(100).is_("deleted_at", None).execute()
         deals = deals_result.data or []
     except Exception as e:
         print(f"Error getting deals: {e}")
@@ -30663,7 +30728,7 @@ def get(session, deal_id: str, tab: str = "main", generated: str = "", payment_r
     try:
         deal_result = supabase.table("deals").select(
             "id, specifications!deals_specification_id_fkey(quote_id)"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
 
         deal = deal_result.data
         if not deal:
@@ -30931,7 +30996,7 @@ def get(session, deal_id: str, source: str = "", stage_id: str = ""):
     supabase = get_supabase()
 
     # Verify deal belongs to user's organization
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -30998,7 +31063,7 @@ async def post(session, request, deal_id: str, mode: str = "plan", item_id: str 
 
     # Verify deal belongs to user's organization
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -31140,7 +31205,7 @@ def delete(session, deal_id: str, item_id: str):
     user = session["user"]
     org_id = user["org_id"]
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -31509,7 +31574,7 @@ def get(session, deal_id: str, item_id: str):
     try:
         deal_result = supabase.table("deals").select(
             "id, deal_number, organization_id"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
 
         deal = deal_result.data
         if not deal or str(deal.get("organization_id")) != str(org_id):
@@ -31798,7 +31863,7 @@ def post(session, deal_id: str, item_id: str,
         # First verify the deal belongs to user's org
         deal_result = supabase.table("deals").select(
             "id, deal_number, organization_id"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
 
         if not deal_result.data:
             return page_layout("Ошибка",
@@ -45138,7 +45203,7 @@ def _finance_fetch_deal_data(deal_id, org_id, user_roles):
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
             "quotes!deals_quote_id_fkey(id, idn_quote, currency, customers(name))"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
     except Exception as e:
         print(f"Error fetching deal {deal_id}: {e}")
         return None, [], []
@@ -45887,7 +45952,7 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
     supabase = get_supabase()
 
     # Verify deal belongs to org
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return RedirectResponse("/deals", status_code=303)
 
@@ -46004,7 +46069,7 @@ def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "tran
 
     # Verify deal belongs to user's org
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Сделка не найдена", style="color: #ef4444;")
 
@@ -46219,7 +46284,7 @@ def post(session, deal_id: str):
     # Verify deal belongs to org
     deal_check = supabase.table("deals").select(
         "id, quote_id, organization_id"
-    ).eq("id", deal_id).eq("organization_id", org_id).execute()
+    ).eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return RedirectResponse("/deals", status_code=303)
 
@@ -46243,7 +46308,7 @@ def post(session, deal_id: str):
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
             "idn_quote, seller_companies!seller_company_id(id, name)"
-        ).eq("id", quote_id).single().execute()
+        ).eq("id", quote_id).single().is_("deleted_at", None).execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -47129,7 +47194,7 @@ def get(session):
         deals_resp = supabase.table("deals").select(
             "id, deal_number, quote_id, "
             "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
-        ).eq("organization_id", org_id).execute()
+        ).eq("organization_id", org_id).is_("deleted_at", None).execute()
         all_deals = deals_resp.data or []
     except Exception as e:
         print(f"Error fetching deals for currency invoices registry: {e}")
@@ -47363,7 +47428,7 @@ def get(session, ci_id: str):
     try:
         deal_resp = supabase.table("deals").select(
             "deal_number, specification_id, specifications!specification_id(quote_id)"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
         deal_data = deal_resp.data or {}
         deal_number = deal_data.get("deal_number", "")
         specs = deal_data.get("specifications") or {}
@@ -48110,7 +48175,7 @@ def post(session, ci_id: str):
     try:
         deal_resp = supabase.table("deals").select(
             "id, specification_id, specifications!specification_id(quote_id)"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
         deal_data = deal_resp.data or {}
         specs = deal_data.get("specifications") or {}
         quote_id = specs.get("quote_id", "")
@@ -48143,7 +48208,7 @@ def post(session, ci_id: str):
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
             "idn_quote, seller_companies!seller_company_id(id, name)"
-        ).eq("id", quote_id).single().execute()
+        ).eq("id", quote_id).single().is_("deleted_at", None).execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -48799,6 +48864,7 @@ def get(quote_id: str, session):
         .select("id, idn_quote, customer_id, status, workflow_status, customers!customer_id(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -48870,6 +48936,7 @@ def post(session, quote_id: str, body: str = "", mentions_json: str = ""):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
