@@ -1587,6 +1587,67 @@ def get_customer_contracts(customer_id: str) -> List[Dict[str, Any]]:
         return []
 
 
+def _aggregate_quote_totals_from_composition(
+    supabase, quote_ids: List[str], want_profit: bool = True
+) -> Dict[str, Dict[str, float]]:
+    """Aggregate per-quote totals from invoice_items via chosen composition.
+
+    Phase 5d Pattern C (design.md §2.1 rows 2.1.3-2.1.4, §2.3.1): each
+    quote_item contributes only the invoice_items covering it in the
+    invoice referenced by ``composition_selected_invoice_id``. Alternate
+    suppliers in the same quote are excluded. Split invoice_items
+    contribute independently; merged rows appear once.
+
+    Args:
+        supabase: Supabase client.
+        quote_ids: Quotes to aggregate. Empty list returns empty dict.
+        want_profit: Whether to compute profit (requires purchase price).
+            Pure-sum callers (statistics) can skip the field.
+
+    Returns:
+        ``{quote_id: {"sum": float, "profit": float}}``. Quotes with no
+        composed items map to zeroes (caller applies its own default).
+    """
+    totals: Dict[str, Dict[str, float]] = {}
+    if not quote_ids:
+        return totals
+
+    rows = supabase.table("quotes").select(
+        "id,"
+        "quote_items!inner("
+        "id,composition_selected_invoice_id,"
+        "coverage:invoice_item_coverage!quote_item_id("
+        "invoice_items!inner(invoice_id,quantity,"
+        "purchase_price_original,base_price_vat)"
+        ")"
+        ")"
+    ).in_("id", quote_ids).is_("deleted_at", None).execute()
+
+    for quote_row in (rows.data or []):
+        qid = quote_row.get("id")
+        if not qid:
+            continue
+        sum_ = 0.0
+        profit = 0.0
+        for qi in (quote_row.get("quote_items") or []):
+            selected = qi.get("composition_selected_invoice_id")
+            if not selected:
+                continue
+            for cov in (qi.get("coverage") or []):
+                ii = cov.get("invoice_items") or {}
+                if ii.get("invoice_id") != selected:
+                    continue
+                quantity = ii.get("quantity") or 0
+                sale_price = ii.get("base_price_vat") or 0
+                sum_ += quantity * sale_price
+                if want_profit:
+                    purchase_price = ii.get("purchase_price_original") or 0
+                    profit += quantity * (sale_price - purchase_price)
+        totals[qid] = {"sum": sum_, "profit": profit}
+
+    return totals
+
+
 def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
     """
     Get all quotes (КП) for a customer with calculated sums and profit.
@@ -1615,28 +1676,12 @@ def get_customer_quotes(customer_id: str) -> List[Dict[str, Any]]:
         quotes = quotes_result.data
         quote_ids = [q["id"] for q in quotes]
 
-        # Get quote items for all quotes
-        items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, base_price_vat, purchase_price_original"
-        ).in_("quote_id", quote_ids).execute()
-
-        # Calculate sums and profits per quote
-        quote_totals = {}
-        if items_result.data:
-            for item in items_result.data:
-                quote_id = item["quote_id"]
-                if quote_id not in quote_totals:
-                    quote_totals[quote_id] = {"sum": 0, "profit": 0}
-
-                quantity = item.get("quantity", 0) or 0
-                sale_price = item.get("base_price_vat", 0) or 0
-                purchase_price = item.get("purchase_price_original", 0) or 0
-
-                item_total = quantity * sale_price
-                item_profit = quantity * (sale_price - purchase_price)
-
-                quote_totals[quote_id]["sum"] += item_total
-                quote_totals[quote_id]["profit"] += item_profit
+        # Phase 5d Pattern C — aggregate from invoice_items via the
+        # chosen composition. Alternate suppliers in the same quote are
+        # excluded by the composition_selected_invoice_id filter.
+        quote_totals = _aggregate_quote_totals_from_composition(
+            supabase, quote_ids, want_profit=True
+        )
 
         # Add totals to quotes
         for quote in quotes:
@@ -1692,28 +1737,11 @@ def get_customer_specifications(customer_id: str) -> List[Dict[str, Any]]:
         specifications = specs_result.data
         spec_quote_ids = [s["quote_id"] for s in specifications if s.get("quote_id")]
 
-        # Get quote items to calculate sums
-        items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, base_price_vat, purchase_price_original"
-        ).in_("quote_id", spec_quote_ids).execute()
-
-        # Calculate sums and profits per quote
-        quote_totals = {}
-        if items_result.data:
-            for item in items_result.data:
-                quote_id = item["quote_id"]
-                if quote_id not in quote_totals:
-                    quote_totals[quote_id] = {"sum": 0, "profit": 0}
-
-                quantity = item.get("quantity", 0) or 0
-                sale_price = item.get("base_price_vat", 0) or 0
-                purchase_price = item.get("purchase_price_original", 0) or 0
-
-                item_total = quantity * sale_price
-                item_profit = quantity * (sale_price - purchase_price)
-
-                quote_totals[quote_id]["sum"] += item_total
-                quote_totals[quote_id]["profit"] += item_profit
+        # Phase 5d Pattern C — aggregate from invoice_items via chosen
+        # composition (see _aggregate_quote_totals_from_composition).
+        quote_totals = _aggregate_quote_totals_from_composition(
+            supabase, spec_quote_ids, want_profit=True
+        )
 
         # Add totals to specifications
         for spec in specifications:
@@ -1765,17 +1793,13 @@ def get_customer_statistics(customer_id: str) -> Dict[str, Any]:
         quote_ids = [q["id"] for q in quotes_result.data]
         quotes_count = len(quote_ids)
 
-        # Get all quote items to calculate quotes sum
-        items_result = supabase.table("quote_items").select(
-            "quote_id, quantity, base_price_vat"
-        ).in_("quote_id", quote_ids).execute()
-
-        quotes_sum = 0
-        if items_result.data:
-            for item in items_result.data:
-                quantity = item.get("quantity", 0) or 0
-                sale_price = item.get("base_price_vat", 0) or 0
-                quotes_sum += quantity * sale_price
+        # Phase 5d Pattern C — aggregate from invoice_items via chosen
+        # composition. Statistics only need the sale-price sum, so we
+        # skip the profit computation.
+        quote_totals = _aggregate_quote_totals_from_composition(
+            supabase, quote_ids, want_profit=False
+        )
+        quotes_sum = sum(t["sum"] for t in quote_totals.values())
 
         # Get specifications count
         specs_result = supabase.table("specifications").select("id, quote_id")\
@@ -1789,15 +1813,10 @@ def get_customer_statistics(customer_id: str) -> Dict[str, Any]:
         if specs_result.data:
             spec_quote_ids = [s["quote_id"] for s in specs_result.data if s.get("quote_id")]
             if spec_quote_ids:
-                spec_items_result = supabase.table("quote_items").select(
-                    "quote_id, quantity, base_price_vat"
-                ).in_("quote_id", spec_quote_ids).execute()
-
-                if spec_items_result.data:
-                    for item in spec_items_result.data:
-                        quantity = item.get("quantity", 0) or 0
-                        sale_price = item.get("base_price_vat", 0) or 0
-                        specifications_sum += quantity * sale_price
+                spec_totals = _aggregate_quote_totals_from_composition(
+                    supabase, spec_quote_ids, want_profit=False
+                )
+                specifications_sum = sum(t["sum"] for t in spec_totals.values())
 
         return {
             "quotes_count": quotes_count,
