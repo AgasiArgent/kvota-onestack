@@ -66,7 +66,7 @@ from services.approval_service import request_approval, count_pending_approvals,
 # a single helper that overlays prices from invoice_item_prices when a
 # composition pointer is set on the item. Falls back to legacy quote_items
 # values when no composition exists, so pre-Phase-5b quotes compute identically.
-from services.composition_service import get_composed_items
+from services.composition_service import get_composed_items, is_procurement_complete
 
 # Import deal service (Feature #86)
 from services.deal_service import count_deals_by_status, get_deals_by_status
@@ -19430,48 +19430,14 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             "error": "Укажите страну отгрузки для инвойса перед завершением. Без страны отгрузки невозможно назначить логиста."
         }, status_code=400)
 
-    # Get items in this invoice
-    items_result = supabase.table("quote_items") \
-        .select("id, product_name, purchase_price_original, production_time_days, is_unavailable") \
-        .eq("invoice_id", invoice_id) \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    items = items_result.data or []
-
-    if not items:
-        return JSONResponse({"success": False, "error": "Invoice has no items"}, status_code=400)
-
-    # Validate: all items must have (price > 0 AND production_time > 0) OR be marked unavailable
-    items_without_price = []
-    items_without_time = []
-    for item in items:
-        is_unavailable = item.get("is_unavailable", False)
-        if is_unavailable:
-            continue  # Unavailable items are OK
-
-        item_name = item.get("product_name") or item.get("id", "?")
-        has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
-        has_time = item.get("production_time_days") and int(item.get("production_time_days", 0)) > 0
-
-        if not has_price:
-            items_without_price.append(item_name)
-        if not has_time:
-            items_without_time.append(item_name)
-
-    if items_without_price or items_without_time:
-        error_parts = []
-        if items_without_price:
-            names = ", ".join(items_without_price[:5])
-            suffix = f" и ещё {len(items_without_price) - 5}" if len(items_without_price) > 5 else ""
-            error_parts.append(f"Без цены ({len(items_without_price)}): {names}{suffix}")
-        if items_without_time:
-            names = ", ".join(items_without_time[:5])
-            suffix = f" и ещё {len(items_without_time) - 5}" if len(items_without_time) > 5 else ""
-            error_parts.append(f"Без срока производства ({len(items_without_time)}): {names}{suffix}")
+    # Phase 5d Task 10b (Q2): readiness via canonical helper.
+    # Quote is procurement-complete iff every non-N/A quote_item is covered
+    # by an invoice_item (in its selected invoice) with a non-null price.
+    # See composition_service.is_procurement_complete for the full contract.
+    if not is_procurement_complete(quote_id, supabase):
         return JSONResponse({
             "success": False,
-            "error": "Не все позиции заполнены. " + ". ".join(error_parts) + "."
+            "error": "Не все позиции заполнены. Проверьте, что для каждой позиции выбран инвойс с ценой и сроком производства."
         }, status_code=400)
 
     try:

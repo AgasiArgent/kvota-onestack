@@ -524,6 +524,74 @@ class TestCompleteProcurement:
 
 
 # ============================================================================
+# PHASE 5D TASK 10B (Q2) — api_complete_invoice uses Pattern D
+# ============================================================================
+
+class TestCompleteInvoicePattern5d:
+    """Phase 5d Group 3 Task 10b: api_complete_invoice readiness check
+    must use composition_service.is_procurement_complete (Pattern D),
+    not raw quote_items.purchase_price_original / production_time_days scan.
+    """
+
+    def _func_body(self):
+        with open("main.py", "r") as f:
+            content = f.read()
+        start = content.find('async def api_complete_invoice')
+        if start == -1:
+            pytest.skip("api_complete_invoice function not found")
+        # function body ends at the next top-level @rt decorator
+        end_marker = content.find('\n@rt(', start + 1)
+        return content[start:end_marker if end_marker != -1 else start + 6000]
+
+    def test_no_legacy_readiness_columns(self):
+        """Pattern D: readiness check no longer reads legacy pricing columns."""
+        func_body = self._func_body()
+
+        # Neither column is read via a .select() on quote_items for readiness.
+        # (They may still legitimately appear in comments; the guard is the
+        # presence of the composition helper below.)
+        assert 'purchase_price_original' not in func_body, (
+            "Pattern D: api_complete_invoice must not scan "
+            "quote_items.purchase_price_original — use "
+            "composition_service.is_procurement_complete instead."
+        )
+        assert 'production_time_days' not in func_body, (
+            "Pattern D: api_complete_invoice must not scan "
+            "quote_items.production_time_days — use "
+            "composition_service.is_procurement_complete instead."
+        )
+
+    def test_uses_composition_service_is_procurement_complete(self):
+        """Pattern D helper is called for the readiness gate."""
+        func_body = self._func_body()
+        assert 'is_procurement_complete' in func_body, (
+            "api_complete_invoice must delegate readiness to "
+            "composition_service.is_procurement_complete (Pattern D)."
+        )
+
+    def test_response_shape_preserved(self):
+        """Success path still returns the pending_logistics transition result."""
+        func_body = self._func_body()
+
+        # Completion still stamps procurement_completed_at/by
+        assert 'procurement_completed_at' in func_body, (
+            "Response shape: procurement_completed_at must still be set"
+        )
+        assert 'procurement_completed_by' in func_body, (
+            "Response shape: procurement_completed_by must still be set"
+        )
+        # Still writes pending_logistics workflow status on the invoice
+        assert '"pending_logistics"' in func_body or \
+               "'pending_logistics'" in func_body, (
+            "Response shape: invoice still transitions to pending_logistics"
+        )
+        # 400 error body still surfaces "success: False"
+        assert '"success": False' in func_body, (
+            "Response shape: error responses still use success=False envelope"
+        )
+
+
+# ============================================================================
 # INVOICES HELPER FUNCTION TESTS
 # ============================================================================
 
