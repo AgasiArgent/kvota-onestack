@@ -181,33 +181,61 @@ def get_send_history(invoice_id: str) -> list[dict]:
 # Status Checks
 # ============================================================================
 
-def is_invoice_sent(invoice_id: str) -> bool:
-    """Check if invoices.sent_at is not null (uses denormalized column).
+def is_quote_procurement_locked(invoice_id: str) -> bool:
+    """Return True iff the invoice's parent quote has procurement_completed_at set.
+
+    The procurement lock replaces the Phase 4a ``sent_at`` gate. In OneStack,
+    ``invoices.sent_at`` marks "request for pricing sent to supplier" — the
+    middle of the procurement workflow, not a commit point. The real edit
+    boundary is when procurement completes and the quote transitions out of
+    ``pending_procurement`` (``quotes.procurement_completed_at`` is stamped).
+
+    Fail-open semantics: if the invoice or its parent quote cannot be
+    resolved, the gate does NOT engage. Missing rows are a data-integrity
+    concern handled elsewhere — the edit-gate should not double-report them.
 
     Args:
         invoice_id: UUID of the invoice.
 
     Returns:
-        True if sent_at has a value, False otherwise.
+        True if the parent quote is procurement-locked, False otherwise.
     """
     sb = get_supabase()
-    result = (
+    inv = (
         sb.table("invoices")
-        .select("sent_at")
+        .select("quote_id")
         .eq("id", invoice_id)
+        .single()
         .execute()
     )
-    if not result.data:
+    if not inv.data:
+        return False  # Fail-open: missing invoice doesn't trigger lock.
+
+    quote_id = inv.data.get("quote_id")
+    if not quote_id:
         return False
-    return result.data[0].get("sent_at") is not None
+
+    q = (
+        sb.table("quotes")
+        .select("procurement_completed_at")
+        .eq("id", quote_id)
+        .is_("deleted_at", None)  # Exclude soft-deleted quotes from lock.
+        .single()
+        .execute()
+    )
+    if not q.data:
+        return False  # Fail-open: missing/soft-deleted quote doesn't trigger lock.
+
+    return q.data.get("procurement_completed_at") is not None
 
 
 def check_edit_permission(invoice_id: str, user_roles: list[str]) -> bool:
     """Check if the user can edit an invoice.
 
-    Returns True if:
-    - Invoice is unsent (anyone with access can edit), OR
-    - Invoice is sent AND user has admin or head_of_procurement role.
+    Phase 5c semantics: the gate fires when the parent quote's procurement
+    stage has completed. Regular roles can edit freely during procurement
+    (including after the "request for pricing" send). Once procurement is
+    locked, only override roles (admin, head_of_procurement) can edit.
 
     Args:
         invoice_id: UUID of the invoice.
@@ -216,8 +244,8 @@ def check_edit_permission(invoice_id: str, user_roles: list[str]) -> bool:
     Returns:
         True if edit is permitted.
     """
-    if not is_invoice_sent(invoice_id):
-        return True
+    if not is_quote_procurement_locked(invoice_id):
+        return True  # Procurement still active: anyone in roles can edit.
 
-    # Sent invoice — only override roles can edit
+    # Procurement locked — only override roles can edit.
     return bool(set(user_roles) & _EDIT_OVERRIDE_ROLES)

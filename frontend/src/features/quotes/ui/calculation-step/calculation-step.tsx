@@ -1,12 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Toaster } from "sonner";
 import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
 import { CalculationForm } from "./calculation-form";
-import { CalculationResults } from "./calculation-results";
+import {
+  CalculationResults,
+  type CalculationResultsItem,
+} from "./calculation-results";
 import { CalculationActionBar } from "./calculation-action-bar";
 import { CompositionPicker } from "./composition-picker";
+import { createClient } from "@/shared/lib/supabase/client";
 
 interface CalculationStepProps {
   quote: QuoteDetailRow;
@@ -23,6 +27,83 @@ export function CalculationStep({
   const [formValues, setFormValues] = useState<Record<string, string>>(() =>
     buildInitialValues(quote, savedVariables)
   );
+  // Phase 5d: base_price_vat lives on invoice_items, not quote_items. Load
+  // it from the per-quote-item selected invoice and project onto the narrow
+  // CalculationResultsItem shape for the results table.
+  const [resultsItems, setResultsItems] = useState<CalculationResultsItem[]>(
+    () => items.map(toPlaceholderResultItem)
+  );
+
+  useEffect(() => {
+    // database.types.ts does not yet include invoice_items / coverage
+    // (added by migrations 281-282). Cast through `from` to bypass the
+    // missing types until the next regeneration.
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = supabase as unknown as { from: (t: string) => any };
+
+    let cancelled = false;
+
+    async function load() {
+      const qiIds = items.map((it) => it.id);
+      if (qiIds.length === 0) {
+        if (!cancelled) setResultsItems([]);
+        return;
+      }
+
+      const { data: cov, error } = await untyped
+        .from("invoice_item_coverage")
+        .select(
+          "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
+        )
+        .in("quote_item_id", qiIds);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load invoice_items coverage:", error);
+        setResultsItems(items.map(toPlaceholderResultItem));
+        return;
+      }
+
+      // For each quote_item, find the row whose invoice matches
+      // composition_selected_invoice_id (null-case: first coverage row wins,
+      // so the renderer still shows a value even when selection is implicit).
+      const priceByQi = new Map<string, number | null>();
+      for (const row of (cov ?? []) as Array<{
+        quote_item_id: string;
+        invoice_items: { invoice_id: string; base_price_vat: number | null };
+      }>) {
+        const qi = items.find((it) => it.id === row.quote_item_id);
+        if (!qi) continue;
+        const selected = qi.composition_selected_invoice_id ?? null;
+        if (selected != null && row.invoice_items.invoice_id !== selected)
+          continue;
+        if (!priceByQi.has(row.quote_item_id)) {
+          priceByQi.set(
+            row.quote_item_id,
+            row.invoice_items.base_price_vat ?? null
+          );
+        }
+      }
+
+      setResultsItems(
+        items.map((it) => ({
+          id: it.id,
+          product_name: it.product_name,
+          brand: it.brand,
+          quantity: it.quantity ?? null,
+          base_price_vat: priceByQi.get(it.id) ?? null,
+        }))
+      );
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   const handleFieldChange = useCallback(
     (key: string, value: string) => {
@@ -53,11 +134,23 @@ export function CalculationStep({
         {/* Phase 5b — Multi-supplier composition picker (renders nothing
             when there is no multi-supplier choice to make). */}
         <CompositionPicker quoteId={quote.id} />
-        <CalculationResults quote={quote} items={items} />
+        <CalculationResults quote={quote} items={resultsItems} />
       </div>
       <Toaster position="top-right" richColors />
     </div>
   );
+}
+
+function toPlaceholderResultItem(item: QuoteItemRow): CalculationResultsItem {
+  // Initial render before invoice_items coverage is loaded. base_price_vat is
+  // null until the async fetch completes; the renderer already handles null.
+  return {
+    id: item.id,
+    product_name: item.product_name,
+    brand: item.brand,
+    quantity: item.quantity ?? null,
+    base_price_vat: null,
+  };
 }
 
 function buildInitialValues(

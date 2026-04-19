@@ -84,7 +84,7 @@ export function EditVerifiedRequestModal({
       } = await supabase.auth.getSession();
 
       const res = await fetch(
-        `/api/invoices/${invoice.id}/edit-request`,
+        `/api/invoices/${invoice.id}/procurement-unlock-request`,
         {
           method: "POST",
           headers: {

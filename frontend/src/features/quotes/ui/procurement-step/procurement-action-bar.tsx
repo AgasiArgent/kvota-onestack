@@ -9,16 +9,46 @@ import { isMoqViolation } from "./moq-warning";
 
 type ProcurementSubStage = "assignment" | "pricing" | "ready";
 
-function getSubStage(items: QuoteItemRow[]): ProcurementSubStage {
+/**
+ * Phase 5d Task 14: readiness is derived from a `priceReadyByQuoteItemId`
+ * map supplied by the caller — true iff at least one invoice_item covers
+ * the quote_item in the selected invoice with non-null
+ * `purchase_price_original`. The legacy `quote_items.purchase_price_original`
+ * column is dropped in migration 284 and cannot be read directly.
+ *
+ * Items marked `is_unavailable` (customer-side N/A) are excluded from both
+ * the assignment and pricing checks.
+ */
+export type PriceReadyMap = Record<string, boolean>;
+
+export interface ProcurementReadinessItem {
+  id: string;
+  assigned_procurement_user: string | null;
+  is_unavailable: boolean | null;
+}
+
+export function getSubStage(
+  items: ProcurementReadinessItem[],
+  priceReadyByQuoteItemId: PriceReadyMap
+): ProcurementSubStage {
   if (items.length === 0) return "assignment";
   const allAssigned = items.every(
     (i) => i.assigned_procurement_user != null || i.is_unavailable === true
   );
   if (!allAssigned) return "assignment";
   const allPriced = items.every(
-    (i) => i.purchase_price_original != null || i.is_unavailable === true
+    (i) => priceReadyByQuoteItemId[i.id] === true || i.is_unavailable === true
   );
   return allPriced ? "ready" : "pricing";
+}
+
+export function countPriceReady(
+  items: ProcurementReadinessItem[],
+  priceReadyByQuoteItemId: PriceReadyMap
+): number {
+  return items.filter(
+    (i) => priceReadyByQuoteItemId[i.id] === true || i.is_unavailable === true
+  ).length;
 }
 
 const SUB_STAGE_CONFIG: Record<ProcurementSubStage, { label: string; icon: typeof UserCheck; style: string }> = {
@@ -29,6 +59,24 @@ const SUB_STAGE_CONFIG: Record<ProcurementSubStage, { label: string; icon: typeo
 
 interface ProcurementActionBarProps {
   items: QuoteItemRow[];
+  /**
+   * Map: quote_item_id → has at least one covering invoice_item in the
+   * selected invoice with non-null `purchase_price_original`. Caller
+   * supplies this; the bar derives "ready" from it.
+   */
+  priceReadyByQuoteItemId?: PriceReadyMap;
+  /**
+   * Map: quote_item_id → invoice_id it is covered by (null if not
+   * covered yet). Post-migration 284, quote_items.invoice_id is dropped,
+   * so the parent projects the coverage via invoice_item_coverage.
+   */
+  invoiceIdByQuoteItemId?: Record<string, string | null>;
+  /**
+   * Map: quote_item_id → minimum_order_quantity from the covering
+   * invoice_item (null when unpriced). Replaces the dropped
+   * quote_items.min_order_quantity column.
+   */
+  minOrderQuantityByQuoteItemId?: Record<string, number | null>;
   onCreateInvoice: () => void;
   onCompleteProcurement: () => void;
   completing?: boolean;
@@ -37,6 +85,9 @@ interface ProcurementActionBarProps {
 
 export function ProcurementActionBar({
   items,
+  priceReadyByQuoteItemId = {},
+  invoiceIdByQuoteItemId = {},
+  minOrderQuantityByQuoteItemId = {},
   onCreateInvoice,
   onCompleteProcurement,
   completing = false,
@@ -44,22 +95,22 @@ export function ProcurementActionBar({
 }: ProcurementActionBarProps) {
   const totalItems = items.length;
   const assignedUserCount = items.filter((i) => i.assigned_procurement_user != null).length;
-  const assignedInvoiceCount = items.filter((i) => i.invoice_id != null).length;
-  const readyCount = items.filter(
-    (i) => i.purchase_price_original != null || i.is_unavailable === true
+  const assignedInvoiceCount = items.filter(
+    (i) => invoiceIdByQuoteItemId[i.id] != null
   ).length;
+  const readyCount = countPriceReady(items, priceReadyByQuoteItemId);
   const moqViolationCount = useMemo(
     () =>
       items.filter((i) =>
         isMoqViolation({
           quantity: i.quantity,
-          min_order_quantity: i.min_order_quantity,
+          min_order_quantity: minOrderQuantityByQuoteItemId[i.id] ?? null,
         })
       ).length,
-    [items]
+    [items, minOrderQuantityByQuoteItemId]
   );
   const incomplete = totalItems > 0 && readyCount < totalItems;
-  const subStage = getSubStage(items);
+  const subStage = getSubStage(items, priceReadyByQuoteItemId);
   const stageConfig = SUB_STAGE_CONFIG[subStage];
   const StageIcon = stageConfig.icon;
 

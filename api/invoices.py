@@ -1,13 +1,14 @@
 """
 Invoice Send Flow API endpoints for Next.js frontend and AI agents.
 
-POST   /api/invoices/{id}/download-xls           — Generate XLS + commit as sent
-GET    /api/invoices/{id}/letter-draft            — Fetch active (unsent) draft
-POST   /api/invoices/{id}/letter-draft            — Create/update active draft
-POST   /api/invoices/{id}/letter-draft/send       — Mark draft as sent (commit)
-DELETE /api/invoices/{id}/letter-draft/{draft_id}  — Delete unsent draft
-GET    /api/invoices/{id}/letter-drafts/history   — Fetch all sent drafts
-POST   /api/invoices/{id}/edit-request-approval   — Request edit approval for sent invoice
+POST   /api/invoices/{id}/download-xls               — Generate XLS + commit as sent
+GET    /api/invoices/{id}/letter-draft                — Fetch active (unsent) draft
+POST   /api/invoices/{id}/letter-draft                — Create/update active draft
+POST   /api/invoices/{id}/letter-draft/send           — Mark draft as sent (commit)
+DELETE /api/invoices/{id}/letter-draft/{draft_id}      — Delete unsent draft
+GET    /api/invoices/{id}/letter-drafts/history       — Fetch all sent drafts
+POST   /api/invoices/{id}/procurement-unlock-request  — Request unlock approval
+                                                         for a procurement-locked quote
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user).
 Roles: procurement, admin, head_of_procurement
@@ -400,20 +401,21 @@ async def get_send_history(request, id: str) -> JSONResponse:
 
 
 # ============================================================================
-# POST /api/invoices/{id}/edit-request-approval
+# POST /api/invoices/{id}/procurement-unlock-request
 # ============================================================================
 
 
-async def request_edit_approval(request, id: str) -> JSONResponse:
-    """Request approval to edit a sent invoice.
+async def request_procurement_unlock(request, id: str) -> JSONResponse:
+    """Request approval to edit an invoice whose parent quote is procurement-locked.
 
-    Path: POST /api/invoices/{id}/edit-request-approval
+    Path: POST /api/invoices/{id}/procurement-unlock-request
     Params:
-        reason: str (optional) — User's reason for edit request
+        reason: str (optional) — User's reason for the unlock request.
     Returns:
         List of created approval objects.
     Side Effects:
-        - Creates approval requests for head_of_procurement and admin users.
+        - Creates approval requests for head_of_procurement and admin users
+          with approval_type='edit_completed_procurement'.
     Roles: procurement, admin, head_of_procurement
     """
     user, err = _get_procurement_user(request)
@@ -424,12 +426,12 @@ async def request_edit_approval(request, id: str) -> JSONResponse:
     if err:
         return err
 
-    # Invoice must be sent
-    from services.invoice_send_service import is_invoice_sent
+    # Procurement for the parent quote must be completed (locked) to need unlock approval
+    from services.invoice_send_service import is_quote_procurement_locked
 
-    if not is_invoice_sent(id):
+    if not is_quote_procurement_locked(id):
         return JSONResponse(
-            {"success": False, "error": {"code": "NOT_SENT", "message": "Invoice has not been sent yet — edit freely"}},
+            {"success": False, "error": {"code": "NOT_LOCKED", "message": "Procurement is still active — edit freely without approval"}},
             status_code=400,
         )
 
@@ -444,7 +446,7 @@ async def request_edit_approval(request, id: str) -> JSONResponse:
     from services.approval_service import create_approvals_for_role
 
     quote_id = invoice.get("quote_id")
-    reason = f"Edit sent invoice {id}"
+    reason = f"Unlock procurement-completed invoice {id}"
     if user_reason:
         reason = f"{reason}: {user_reason}"
 
@@ -454,7 +456,7 @@ async def request_edit_approval(request, id: str) -> JSONResponse:
         requested_by=user["id"],
         reason=reason,
         role_codes=["head_of_procurement", "admin"],
-        approval_type="edit_sent_invoice",
+        approval_type="edit_completed_procurement",
     )
 
     return JSONResponse(

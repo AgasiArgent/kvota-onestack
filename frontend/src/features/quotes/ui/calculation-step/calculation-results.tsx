@@ -10,7 +10,24 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Info } from "lucide-react";
-import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
+import type { QuoteDetailRow } from "@/entities/quote/queries";
+
+/**
+ * Phase 5d Task 12 — narrow composed-item shape for the calc-results table.
+ *
+ * Migration 284 moves `base_price_vat` from `quote_items` to `invoice_items`.
+ * The calc engine writes the per-unit VAT-inclusive price into the selected
+ * invoice's invoice_items rows, and the parent page composes a flat list
+ * (via composition_service.get_composed_items) for this renderer. Only the
+ * fields actually rendered in the table are in this shape.
+ */
+export interface CalculationResultsItem {
+  id: string;
+  product_name: string;
+  brand: string | null;
+  quantity: number | null;
+  base_price_vat: number | null;
+}
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "\u20AC",
@@ -40,7 +57,7 @@ function ext<T>(row: unknown): T {
 
 interface CalculationResultsProps {
   quote: QuoteDetailRow;
-  items: QuoteItemRow[];
+  items: CalculationResultsItem[];
 }
 
 export function CalculationResults({ quote, items }: CalculationResultsProps) {

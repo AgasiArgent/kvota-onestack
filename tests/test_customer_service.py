@@ -60,6 +60,10 @@ from services.customer_service import (
     get_customer_for_document,
     get_customer_for_idn,
     get_signatory_for_specification,
+    # Aggregation functions (Phase 5d target)
+    get_customer_quotes,
+    get_customer_specifications,
+    get_customer_statistics,
     # Internal functions for parsing
     _parse_customer,
     _parse_contact,
@@ -716,6 +720,306 @@ class TestEdgeCases:
 
         assert customer is not None
         assert customer.name == "ООО Ромашка"
+
+
+# =============================================================================
+# PHASE 5D — CUSTOMER AGGREGATION VIA invoice_item_coverage
+# =============================================================================
+#
+# Pattern C (design.md §2.1 rows 2.1.3-2.1.4, §2.3.1 JOIN example):
+# Customer-level price aggregates source from `invoice_items` filtered by
+# each quote_item's `composition_selected_invoice_id`, joined through
+# `invoice_item_coverage`. Multi-supplier quotes aggregate ONLY the chosen
+# composition — prices from non-selected invoices never contribute.
+
+def _phase5d_chainable(return_value):
+    """Minimal chainable mock for PostgREST-style queries.
+
+    Mirrors the helper used in test_composition_service.py — every
+    select/eq/in_/order/is_ call returns self, execute() returns a
+    result with .data = return_value.
+    """
+    q = MagicMock()
+    q.select.return_value = q
+    q.eq.return_value = q
+    q.in_.return_value = q
+    q.order.return_value = q
+    q.is_.return_value = q
+    q.limit.return_value = q
+    q.single.return_value = q
+    result = MagicMock()
+    result.data = return_value
+    result.error = None
+    q.execute.return_value = result
+    return q
+
+
+def _phase5d_table_router(table_data):
+    """Route supabase.table(name) to chainable mocks per-table.
+
+    `table_data` is a dict mapping table name → list of rows to return.
+    Missing tables return an empty list.
+    """
+    def _lookup(name):
+        rows = table_data.get(name, []) or []
+        return _phase5d_chainable(rows)
+
+    return _lookup
+
+
+class TestCustomerAggregationPhase5d:
+    """Pattern C — customer aggregates via invoice_item_coverage.
+
+    Each quote_item's price/quantity contribution is read from whichever
+    invoice_item covers it in the *chosen* composition
+    (`quote_items.composition_selected_invoice_id`). Values from other
+    invoices in the same quote are ignored.
+    """
+
+    @patch('services.customer_service._get_supabase')
+    def test_customer_with_one_quote_aggregates_from_invoice_items(
+        self, mock_get_supabase
+    ):
+        """1 customer → 1 quote → 2 quote_items, each covered 1:1 by an
+        invoice_item in the composition_selected invoice. Aggregate totals
+        must match summed invoice_items values (sale*qty; profit = (sale-purchase)*qty).
+        """
+        customer_id = "cust-1"
+        quote_id = "q-1"
+        invoice_id = "inv-a"
+        quote_rows = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "idn_quote": "Q-2026-001",
+                "workflow_status": "draft",
+                "created_at": "2026-01-01T00:00:00Z",
+                "currency": "RUB",
+            },
+        ]
+        # Aggregation walks quotes → quote_items (inner-joined) → coverage
+        # → invoice_items. In the new query shape, a single Supabase call
+        # from "quotes" returns the nested shape below.
+        quote_join_rows = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "quote_items": [
+                    {
+                        "id": "qi-1",
+                        "composition_selected_invoice_id": invoice_id,
+                        "coverage": [
+                            {
+                                "invoice_items": {
+                                    "invoice_id": invoice_id,
+                                    "quantity": 10,
+                                    "purchase_price_original": 4.0,
+                                    "base_price_vat": 5.0,
+                                },
+                            },
+                        ],
+                    },
+                    {
+                        "id": "qi-2",
+                        "composition_selected_invoice_id": invoice_id,
+                        "coverage": [
+                            {
+                                "invoice_items": {
+                                    "invoice_id": invoice_id,
+                                    "quantity": 3,
+                                    "purchase_price_original": 7.0,
+                                    "base_price_vat": 10.0,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+        mock_client.table.side_effect = _phase5d_table_router({
+            "quotes": quote_rows,
+        })
+
+        # get_customer_quotes: flat-quotes fetch + nested coverage fetch.
+        # We route both "quotes" calls through the same router — the first
+        # returns the flat list (.select("*")) and the second returns the
+        # same list; the aggregate call is mocked via a separate router
+        # branch. To keep the mock simple, we override the second table()
+        # call with the nested shape.
+        call_count = {"n": 0}
+        flat_quotes = _phase5d_chainable(quote_rows)
+        nested_quotes = _phase5d_chainable(quote_join_rows)
+
+        def _table(name):
+            if name == "quotes":
+                call_count["n"] += 1
+                return flat_quotes if call_count["n"] == 1 else nested_quotes
+            return _phase5d_chainable([])
+
+        mock_client.table.side_effect = _table
+
+        quotes = get_customer_quotes(customer_id)
+
+        assert len(quotes) == 1
+        q = quotes[0]
+        # Sum = 10*5 + 3*10 = 50 + 30 = 80
+        # Profit = 10*(5-4) + 3*(10-7) = 10 + 9 = 19
+        assert q["total_sum"] == 80
+        assert q["total_profit"] == 19
+
+    @patch('services.customer_service._get_supabase')
+    def test_multi_supplier_quote_aggregates_from_chosen_composition_only(
+        self, mock_get_supabase
+    ):
+        """Single quote with two invoices (A, B). The quote_item's
+        composition_selected_invoice_id points at A. Coverage returns rows
+        from BOTH invoices (the JOIN doesn't pre-filter); the aggregate
+        must include only the invoice_item in A, ignoring B.
+        """
+        customer_id = "cust-1"
+        quote_id = "q-1"
+        flat_quotes = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "idn_quote": "Q-2026-002",
+                "workflow_status": "draft",
+                "created_at": "2026-01-01T00:00:00Z",
+                "currency": "RUB",
+            },
+        ]
+        # qi-1's chosen composition is invoice A. Coverage joins pull rows
+        # from BOTH invoices; aggregate code must filter to A.
+        nested_quotes = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "quote_items": [
+                    {
+                        "id": "qi-1",
+                        "composition_selected_invoice_id": "inv-a",
+                        "coverage": [
+                            {
+                                "invoice_items": {
+                                    "invoice_id": "inv-a",
+                                    "quantity": 5,
+                                    "purchase_price_original": 2.0,
+                                    "base_price_vat": 3.0,
+                                },
+                            },
+                            {
+                                # Alternate supplier — must be ignored
+                                "invoice_items": {
+                                    "invoice_id": "inv-b",
+                                    "quantity": 5,
+                                    "purchase_price_original": 100.0,
+                                    "base_price_vat": 200.0,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+
+        call_count = {"n": 0}
+        flat_chain = _phase5d_chainable(flat_quotes)
+        nested_chain = _phase5d_chainable(nested_quotes)
+
+        def _table(name):
+            if name == "quotes":
+                call_count["n"] += 1
+                return flat_chain if call_count["n"] == 1 else nested_chain
+            return _phase5d_chainable([])
+
+        mock_client.table.side_effect = _table
+
+        quotes = get_customer_quotes(customer_id)
+
+        assert len(quotes) == 1
+        q = quotes[0]
+        # Only inv-a row counts: 5 * 3 = 15; profit = 5 * (3-2) = 5.
+        # Inv-b's 5*200=1000 and 5*(200-100)=500 MUST be excluded.
+        assert q["total_sum"] == 15
+        assert q["total_profit"] == 5
+
+    @patch('services.customer_service._get_supabase')
+    def test_split_invoice_items_contribute_per_row(self, mock_get_supabase):
+        """One quote_item is split across 2 invoice_items in the chosen
+        invoice. The aggregate must sum both invoice_items' values (not the
+        original quote_item's prices). This is the Phase 5c split semantic.
+        """
+        customer_id = "cust-1"
+        quote_id = "q-1"
+        invoice_id = "inv-a"
+        flat_quotes = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "idn_quote": "Q-2026-003",
+                "workflow_status": "draft",
+                "created_at": "2026-01-01T00:00:00Z",
+                "currency": "RUB",
+            },
+        ]
+        nested_quotes = [
+            {
+                "id": quote_id,
+                "customer_id": customer_id,
+                "quote_items": [
+                    {
+                        "id": "qi-split",
+                        "composition_selected_invoice_id": invoice_id,
+                        "coverage": [
+                            {
+                                "invoice_items": {
+                                    "invoice_id": invoice_id,
+                                    "quantity": 4,
+                                    "purchase_price_original": 1.0,
+                                    "base_price_vat": 2.0,
+                                },
+                            },
+                            {
+                                "invoice_items": {
+                                    "invoice_id": invoice_id,
+                                    "quantity": 6,
+                                    "purchase_price_original": 1.5,
+                                    "base_price_vat": 3.0,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]
+        mock_client = MagicMock()
+        mock_get_supabase.return_value = mock_client
+
+        call_count = {"n": 0}
+        flat_chain = _phase5d_chainable(flat_quotes)
+        nested_chain = _phase5d_chainable(nested_quotes)
+
+        def _table(name):
+            if name == "quotes":
+                call_count["n"] += 1
+                return flat_chain if call_count["n"] == 1 else nested_chain
+            return _phase5d_chainable([])
+
+        mock_client.table.side_effect = _table
+
+        quotes = get_customer_quotes(customer_id)
+
+        assert len(quotes) == 1
+        q = quotes[0]
+        # Row 1: 4 * 2 = 8, profit 4*(2-1) = 4
+        # Row 2: 6 * 3 = 18, profit 6*(3-1.5) = 9
+        # Sum = 26; profit = 13.
+        assert q["total_sum"] == 26
+        assert q["total_profit"] == 13
 
 
 # =============================================================================

@@ -17,6 +17,18 @@ export interface CompositionAlternative {
   production_time_days: number | null;
   version: number | null;
   frozen_at: string | null;
+  /**
+   * Structural context for this alternative (Phase 5c Task 14).
+   * "" for 1:1, "→ name ×ratio + ..." for split, "← name, ... объединены" for merge.
+   */
+  coverage_summary: string;
+  /**
+   * Set when this is a merged alternative (← объединены) AND the covered
+   * quote_items carry different `markup` values. The calc engine uses the
+   * first qi's markup (design.md §7.1 option a) — the UI surfaces this as
+   * a warning so the sales user can decide.
+   */
+  divergent_markups: boolean;
 }
 
 /** One row in the CompositionPicker — a quote_item with its alternatives. */
@@ -176,10 +188,23 @@ export interface QuoteDetail {
   created_by_profile?: { id: string; full_name: string } | null;
 }
 
+/**
+ * Customer-side quote_item shape after Phase 5c migration 284.
+ *
+ * Migration 284 drops 10 supplier-side columns from `kvota.quote_items`
+ * because they now live on `kvota.invoice_items` (per-supplier positions):
+ *   invoice_id, purchase_price_original, purchase_currency, base_price_vat,
+ *   price_includes_vat, customs_code, supplier_country, weight_in_kg,
+ *   production_time_days, minimum_order_quantity, dimension_*_mm,
+ *   license_*_cost.
+ *
+ * Those fields are intentionally absent here. Consumers that still read
+ * them are legacy surfaces scheduled for Phase 5d refactor — they import
+ * `QuoteItemRow` from `./queries`, not this type, and are unaffected.
+ */
 export interface QuoteItem {
   id: string;
   quote_id: string;
-  invoice_id: string | null;
   brand: string | null;
   sku: string | null;
   supplier_sku: string | null;
@@ -187,19 +212,10 @@ export interface QuoteItem {
   product_name: string;
   manufacturer_product_name: string | null;
   quantity: number;
-  min_order_quantity: number | null;
   unit: string | null;
-  purchase_price_original: number | null;
-  purchase_currency: string | null;
   sale_price: number | null;
-  weight_in_kg: number | null;
-  dimension_height_mm: number | null;
-  dimension_width_mm: number | null;
-  dimension_length_mm: number | null;
   vat_rate: number | null;
-  price_includes_vat: boolean;
   is_unavailable: boolean;
-  production_time_days: number | null;
   procurement_status: string | null;
   created_at: string;
 }

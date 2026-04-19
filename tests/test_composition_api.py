@@ -1,13 +1,13 @@
 """
-Tests for api/composition.py — Phase 5b (Tasks 6 + 7).
+Tests for api/composition.py — Phase 5b composition + Phase 5c
+procurement-unlock approve/reject handlers.
 
-Covers all 6 handlers:
+Covers:
 - GET  /api/quotes/{quote_id}/composition
 - POST /api/quotes/{quote_id}/composition
 - POST /api/invoices/{invoice_id}/verify
-- POST /api/invoices/{invoice_id}/edit-request
-- POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
-- POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+- POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
+- POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 
 Test style mirrors tests/test_api_deals.py — MagicMock chainable query
 stubs + patch on api.composition.get_supabase + AsyncMock for request.json.
@@ -25,10 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from api.composition import (  # noqa: E402
     apply_composition_endpoint,
-    approve_invoice_edit,
+    approve_procurement_unlock,
     get_composition,
-    reject_invoice_edit,
-    request_invoice_edit,
+    reject_procurement_unlock,
     verify_invoice,
 )
 
@@ -328,100 +327,7 @@ class TestVerifyInvoice:
 
 
 # ============================================================================
-# POST /api/invoices/{invoice_id}/edit-request
-# ============================================================================
-
-class TestRequestInvoiceEdit:
-
-    @pytest.mark.asyncio
-    async def test_happy_path_creates_pending_approval(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {
-                "proposed_changes": {"pickup_country": {"old": "Italy", "new": "Germany"}},
-                "reason": "Supplier changed pickup location after verification",
-            },
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "supplier_id": make_uuid(),
-            "verified_at": "2026-04-10T10:00:00+00:00",  # already verified
-            "verified_by": make_uuid(),
-            "status": "pending_procurement",
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        approval_id_generated = make_uuid()
-        approvals_chain = _chain(return_data=[{"id": approval_id_generated}])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-            "approvals": approvals_chain,
-        })
-
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-
-        assert response.status_code == 201
-        payload = json.loads(response.body)
-        assert payload["data"]["approval_id"] == approval_id_generated
-        assert payload["data"]["status"] == "pending"
-
-        # approvals.insert called with correct payload shape
-        approvals_chain.insert.assert_called_once()
-        insert_payload = approvals_chain.insert.call_args.args[0]
-        assert insert_payload["approval_type"] == "invoice_edit"
-        assert insert_payload["status"] == "pending"
-        assert insert_payload["modifications"]["invoice_id"] == invoice_id
-        assert insert_payload["modifications"]["diff"] == {
-            "pickup_country": {"old": "Italy", "new": "Germany"}
-        }
-
-    @pytest.mark.asyncio
-    async def test_409_when_invoice_not_verified(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {"proposed_changes": {"x": {"old": 1, "new": 2}}, "reason": "1234567890"},
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "verified_at": None,  # NOT verified
-            "verified_by": None,
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-        })
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-        assert response.status_code == 409
-        assert json.loads(response.body)["error"]["code"] == "INVOICE_NOT_VERIFIED"
-
-    @pytest.mark.asyncio
-    async def test_400_when_reason_too_short(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {"proposed_changes": {"x": {"old": 1, "new": 2}}, "reason": "short"},
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "verified_at": "2026-04-10T10:00:00+00:00",
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-        })
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-        assert response.status_code == 400
-
-
-# ============================================================================
-# POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/approve
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
 # ============================================================================
 
 class TestApproveInvoiceEdit:
@@ -456,7 +362,7 @@ class TestApproveInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 200
         payload = json.loads(response.body)
@@ -482,7 +388,7 @@ class TestApproveInvoiceEdit:
             "user_roles": _chain(return_data=_role_rows(["procurement"])),  # NOT head_of_procurement
         })
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
         assert response.status_code == 403
 
     @pytest.mark.asyncio
@@ -509,13 +415,13 @@ class TestApproveInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await approve_invoice_edit(request, invoice_id, approval_id)
+            response = await approve_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 404
 
 
 # ============================================================================
-# POST /api/invoices/{invoice_id}/edit-approval/{approval_id}/reject
+# POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 # ============================================================================
 
 class TestRejectInvoiceEdit:
@@ -546,7 +452,7 @@ class TestRejectInvoiceEdit:
         })
 
         with patch("api.composition.get_supabase", return_value=sb):
-            response = await reject_invoice_edit(request, invoice_id, approval_id)
+            response = await reject_procurement_unlock(request, invoice_id, approval_id)
 
         assert response.status_code == 200
         payload = json.loads(response.body)

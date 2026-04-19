@@ -12,6 +12,7 @@ from datetime import datetime
 
 import logging
 
+from services import composition_service
 from services.database import get_supabase
 from services.dadata_service import validate_inn, _call_dadata_api, normalize_dadata_result
 
@@ -129,20 +130,46 @@ def fetch_export_data(quote_id: str, org_id: str) -> ExportData:
 
     organization = org_result.data[0] if org_result.data else {}
 
-    # 4. Fetch quote items
-    items_result = supabase.table("quote_items") \
-        .select("*") \
-        .eq("quote_id", quote_id) \
-        .order("position") \
-        .execute()
+    # 4. Fetch composed items (Phase 5d Pattern A).
+    # Source supplier-side fields (weight_in_kg, base_price_vat,
+    # purchase_price_original, purchase_currency, customs_code,
+    # supplier_country, ...) from the selected invoice_items row via
+    # composition_service.get_composed_items rather than reading the
+    # legacy quote_items columns directly. See
+    # .kiro/specs/phase-5d-legacy-refactor/design.md §2.1.7 and REQ-1.6.
+    items = composition_service.get_composed_items(quote_id, supabase)
 
-    items = items_result.data or []
+    # 4b. Enrich composed items with customer-facing display fields
+    # (product_code, unit, description) that the composed shape does not
+    # carry. Customer-facing exports (specification PDF, invoice PDF)
+    # render these fields for the customer — they are NOT supplier-side
+    # and therefore do not belong in the calc-ready composition shape.
+    # One extra read keyed by quote_item_id; soft-deleted rows excluded.
+    qi_ids = [item["quote_item_id"] for item in items if item.get("quote_item_id")]
+    if qi_ids:
+        qi_result = supabase.table("quote_items") \
+            .select("id, product_code, unit, description, position") \
+            .in_("id", qi_ids) \
+            .execute()
+        by_qi = {row["id"]: row for row in (qi_result.data or [])}
+        for item in items:
+            qi = by_qi.get(item.get("quote_item_id"))
+            if qi:
+                # Don't clobber composed fields — only add customer-side
+                # fields that are absent from the composed shape.
+                for key in ("product_code", "unit", "description", "position"):
+                    item.setdefault(key, qi.get(key))
 
-    # 5. Fetch calculation results for each item
+    # 5. Merge per-item calculation results, keyed by the composed item's
+    #    quote_item_id traceability field.
     for item in items:
+        qi_id = item.get("quote_item_id")
+        if not qi_id:
+            item["calc"] = {}
+            continue
         calc_result = supabase.table("quote_calculation_results") \
             .select("phase_results") \
-            .eq("quote_item_id", item["id"]) \
+            .eq("quote_item_id", qi_id) \
             .execute()
 
         if calc_result.data:

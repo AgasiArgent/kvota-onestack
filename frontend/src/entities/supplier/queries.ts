@@ -256,28 +256,87 @@ export async function fetchSupplierQuoteItems(
   supplierId: string
 ): Promise<SupplierQuoteItem[]> {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("quote_items")
+  // Phase 5d Pattern C (design.md §2.3.2): read composed price data via
+  // invoice_item_coverage → invoice_items. A supplier's positions are
+  // the quote_items currently composed from that supplier's invoices
+  // (i.e., quote_item.composition_selected_invoice_id equals an invoice
+  // owned by this supplier). Legacy quote_items.supplier_id +
+  // purchase_price_original / purchase_currency /
+  // procurement_completed_at columns are dropped in migration 284.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+  const { data, error } = await untyped
+    .from("invoices")
     .select(
-      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, quotes!inner(idn_quote)"
+      "id, supplier_id, procurement_completed_at, " +
+        "invoice_items!inner(" +
+        "id, invoice_id, purchase_price_original, purchase_currency, " +
+        "coverage:invoice_item_coverage!invoice_item_id(" +
+        "quote_items!inner(" +
+        "id, product_name, brand, supplier_sku, idn_sku, quantity, " +
+        "composition_selected_invoice_id, created_at, " +
+        "quotes!inner(idn_quote)" +
+        ")" +
+        ")" +
+        ")"
     )
     .eq("supplier_id", supplierId)
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) throw error;
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    product_name: row.product_name,
-    brand: row.brand,
-    sku: row.supplier_sku,
-    idn_sku: row.idn_sku,
-    quantity: row.quantity,
-    purchase_price: row.purchase_price_original,
-    purchase_currency: row.purchase_currency,
-    procurement_date: row.procurement_completed_at,
-    quote_idn: (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
-  }));
+  type QuoteItemRow = {
+    id: string;
+    product_name: string | null;
+    brand: string | null;
+    supplier_sku: string | null;
+    idn_sku: string | null;
+    quantity: number | null;
+    composition_selected_invoice_id: string | null;
+    created_at: string | null;
+    quotes: { idn_quote: string } | null;
+  };
+  type CoverageRow = { quote_items: QuoteItemRow | null };
+  type InvoiceItemRow = {
+    id: string;
+    invoice_id: string;
+    purchase_price_original: number | null;
+    purchase_currency: string | null;
+    coverage: CoverageRow[] | null;
+  };
+  type InvoiceRow = {
+    id: string;
+    supplier_id: string;
+    procurement_completed_at: string | null;
+    invoice_items: InvoiceItemRow[] | null;
+  };
+
+  const rows: SupplierQuoteItem[] = [];
+  for (const invoice of (data ?? []) as InvoiceRow[]) {
+    for (const ii of invoice.invoice_items ?? []) {
+      for (const cov of ii.coverage ?? []) {
+        const qi = cov.quote_items;
+        if (!qi) continue;
+        // Only include quote_items whose composition pointer selects this
+        // invoice — otherwise the quote_item is currently "sourced from"
+        // a different supplier.
+        if (qi.composition_selected_invoice_id !== invoice.id) continue;
+        rows.push({
+          id: qi.id,
+          product_name: qi.product_name,
+          brand: qi.brand,
+          sku: qi.supplier_sku,
+          idn_sku: qi.idn_sku,
+          quantity: qi.quantity,
+          purchase_price: ii.purchase_price_original,
+          purchase_currency: ii.purchase_currency,
+          procurement_date: invoice.procurement_completed_at,
+          quote_idn: qi.quotes?.idn_quote ?? "—",
+        });
+      }
+    }
+  }
+  return rows;
 }
 
 /**

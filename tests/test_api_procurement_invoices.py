@@ -6,8 +6,10 @@ Tests the invoice-first procurement workflow API endpoints:
 - PATCH /api/procurement/{quote_id}/invoices/update - Update invoice
 - DELETE /api/procurement/{quote_id}/invoices/{invoice_id} - Delete invoice
 - POST /api/procurement/{quote_id}/items/assign - Assign items to invoice
-- PATCH /api/procurement/{quote_id}/items/bulk - Bulk update item prices
 - POST /api/procurement/{quote_id}/complete - Complete procurement
+
+Note: PATCH /api/procurement/{quote_id}/items/bulk (api_bulk_update_items)
+was removed in Phase 5d Task 10a (Q1). See test_items_bulk_endpoint_removed.
 
 Security tests verify:
 - org_id validation on all endpoints
@@ -148,11 +150,24 @@ class TestProcurementAPIEndpointsExist:
             content = f.read()
             assert '/api/procurement/{quote_id}/items/assign' in content
 
-    def test_items_bulk_endpoint_exists(self):
-        """Verify PATCH /api/procurement/{quote_id}/items/bulk endpoint is defined."""
+    def test_items_bulk_endpoint_removed(self):
+        """Phase 5d Group 3 Task 10a (Q1): api_bulk_update_items removed.
+
+        Rationale: The endpoint wrote to legacy quote_items columns
+        (purchase_price_original, production_time_days, price_includes_vat,
+        weight_in_kg, volume_m3, supplier_sku) that migration 284 drops.
+        No Next.js caller exists on this path — Next.js procurement-handsontable
+        uses updateQuoteItem (direct Supabase write per row). The only caller
+        was the dormant FastHTML JS inside /procurement/{quote_id} workspace
+        (classified DORMANT per main-py-classification.md §2.5). Removal is
+        cleaner than Pattern B refactor of dead code.
+        """
         with open("main.py", "r") as f:
             content = f.read()
-            assert '/api/procurement/{quote_id}/items/bulk' in content
+            assert '@rt("/api/procurement/{quote_id}/items/bulk"' not in content, \
+                "api_bulk_update_items endpoint should be removed (Phase 5d Q1)"
+            assert 'async def api_bulk_update_items' not in content, \
+                "api_bulk_update_items function should be removed (Phase 5d Q1)"
 
     def test_complete_endpoint_exists(self):
         """Verify POST /api/procurement/{quote_id}/complete endpoint is defined."""
@@ -289,13 +304,13 @@ class TestRoleBasedAccess:
         with open("main.py", "r") as f:
             content = f.read()
 
-            # All invoice endpoints should check roles
+            # All invoice endpoints should check roles.
+            # api_bulk_update_items removed in Phase 5d Task 10a (Q1).
             endpoints = [
                 'api_create_invoice',
                 'api_update_invoice',
                 'api_delete_invoice',
                 'api_assign_items_to_invoice',
-                'api_bulk_update_items',
                 'api_complete_procurement'
             ]
 
@@ -506,6 +521,74 @@ class TestCompleteProcurement:
 
             # Should get user's brands
             assert 'get_assigned_brands' in func_body or 'my_brands' in func_body
+
+
+# ============================================================================
+# PHASE 5D TASK 10B (Q2) — api_complete_invoice uses Pattern D
+# ============================================================================
+
+class TestCompleteInvoicePattern5d:
+    """Phase 5d Group 3 Task 10b: api_complete_invoice readiness check
+    must use composition_service.is_procurement_complete (Pattern D),
+    not raw quote_items.purchase_price_original / production_time_days scan.
+    """
+
+    def _func_body(self):
+        with open("main.py", "r") as f:
+            content = f.read()
+        start = content.find('async def api_complete_invoice')
+        if start == -1:
+            pytest.skip("api_complete_invoice function not found")
+        # function body ends at the next top-level @rt decorator
+        end_marker = content.find('\n@rt(', start + 1)
+        return content[start:end_marker if end_marker != -1 else start + 6000]
+
+    def test_no_legacy_readiness_columns(self):
+        """Pattern D: readiness check no longer reads legacy pricing columns."""
+        func_body = self._func_body()
+
+        # Neither column is read via a .select() on quote_items for readiness.
+        # (They may still legitimately appear in comments; the guard is the
+        # presence of the composition helper below.)
+        assert 'purchase_price_original' not in func_body, (
+            "Pattern D: api_complete_invoice must not scan "
+            "quote_items.purchase_price_original — use "
+            "composition_service.is_procurement_complete instead."
+        )
+        assert 'production_time_days' not in func_body, (
+            "Pattern D: api_complete_invoice must not scan "
+            "quote_items.production_time_days — use "
+            "composition_service.is_procurement_complete instead."
+        )
+
+    def test_uses_composition_service_is_procurement_complete(self):
+        """Pattern D helper is called for the readiness gate."""
+        func_body = self._func_body()
+        assert 'is_procurement_complete' in func_body, (
+            "api_complete_invoice must delegate readiness to "
+            "composition_service.is_procurement_complete (Pattern D)."
+        )
+
+    def test_response_shape_preserved(self):
+        """Success path still returns the pending_logistics transition result."""
+        func_body = self._func_body()
+
+        # Completion still stamps procurement_completed_at/by
+        assert 'procurement_completed_at' in func_body, (
+            "Response shape: procurement_completed_at must still be set"
+        )
+        assert 'procurement_completed_by' in func_body, (
+            "Response shape: procurement_completed_by must still be set"
+        )
+        # Still writes pending_logistics workflow status on the invoice
+        assert '"pending_logistics"' in func_body or \
+               "'pending_logistics'" in func_body, (
+            "Response shape: invoice still transitions to pending_logistics"
+        )
+        # 400 error body still surfaces "success: False"
+        assert '"success": False' in func_body, (
+            "Response shape: error responses still use success=False envelope"
+        )
 
 
 # ============================================================================

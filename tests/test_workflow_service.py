@@ -651,6 +651,32 @@ class TestPerformance:
 # WF-002: AUTO-TRANSITION PROCUREMENT COMPLETE TESTS
 # =============================================================================
 
+def _build_readiness_stub(quote_items, coverage_rows):
+    """Build a Supabase client mock that serves the two reads performed by
+    composition_service.is_procurement_complete:
+      1) quote_items.select(...).eq(quote_id, ...).execute()
+      2) invoice_item_coverage.select(...).in_(quote_item_id, ...).execute()
+    """
+    def _chain(rows):
+        q = MagicMock()
+        q.select.return_value = q
+        q.eq.return_value = q
+        q.in_.return_value = q
+        result = MagicMock()
+        result.data = rows
+        result.error = None
+        q.execute.return_value = result
+        return q
+
+    tables = {
+        "quote_items": _chain(quote_items),
+        "invoice_item_coverage": _chain(coverage_rows),
+    }
+    sb = MagicMock()
+    sb.table.side_effect = lambda name: tables[name]
+    return sb
+
+
 class TestProcurementAutoTransition:
     """Tests for WF-002: Auto-transition when all brands are evaluated."""
 
@@ -664,69 +690,168 @@ class TestProcurementAutoTransition:
         from services.workflow_service import complete_procurement
         assert callable(complete_procurement)
 
-    @patch('services.workflow_service.get_supabase')
-    def test_check_all_procurement_complete_all_done(self, mock_supabase):
-        """check_all_procurement_complete returns True when all items complete and priced."""
+    # ------------------------------------------------------------------
+    # Phase 5d: check_all_procurement_complete delegates to the canonical
+    # composition_service.is_procurement_complete readiness helper.
+    #
+    # The pre-phase-5d implementation read quote_items.purchase_price_original
+    # directly and returned a status dict. Post-5d the function returns a bool
+    # and forwards to composition_service, which computes readiness from the
+    # invoice_items + invoice_item_coverage pair (aligned with Phase 5c).
+    # ------------------------------------------------------------------
+
+    def test_check_all_procurement_complete_delegates_to_composition_service(self):
+        """Wrapper must call composition_service.is_procurement_complete exactly
+        once with (quote_id, supabase) and propagate the return value."""
+        from services import workflow_service
+
+        supabase = MagicMock()
+        with patch.object(
+            workflow_service.composition_service,
+            "is_procurement_complete",
+            return_value=True,
+        ) as helper_spy:
+            result = workflow_service.check_all_procurement_complete("q-1", supabase)
+
+        assert result is True
+        helper_spy.assert_called_once_with("q-1", supabase)
+
+    def test_returns_true_when_all_items_priced(self):
+        """All non-N/A quote_items covered in selected invoice with non-null
+        purchase_price_original → True."""
         from services.workflow_service import check_all_procurement_complete
 
-        # Mock Supabase response - all items completed with valid prices
-        mock_client = MagicMock()
-        mock_supabase.return_value = mock_client
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
-            {"id": "item2", "product_name": "item2", "procurement_status": "completed", "purchase_price_original": 200.0, "is_unavailable": False},
-            {"id": "item3", "product_name": "item3", "procurement_status": "completed", "purchase_price_original": None, "is_unavailable": True},  # Unavailable is OK
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
         ]
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
-
-        result = check_all_procurement_complete("quote-uuid")
-
-        assert result["is_complete"] is True
-        assert result["total_items"] == 2  # Unavailable items excluded from active count
-        assert result["completed_items"] == 2
-        assert result["pending_items"] == 0
-        assert result["items_without_price"] == 0
-
-    @patch('services.workflow_service.get_supabase')
-    def test_check_all_procurement_complete_partial(self, mock_supabase):
-        """check_all_procurement_complete returns False when items pending."""
-        from services.workflow_service import check_all_procurement_complete
-
-        # Mock Supabase response - some items pending
-        mock_client = MagicMock()
-        mock_supabase.return_value = mock_client
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
-            {"id": "item2", "product_name": "item2", "procurement_status": "pending", "purchase_price_original": None, "is_unavailable": False},
-            {"id": "item3", "product_name": "item3", "procurement_status": "in_progress", "purchase_price_original": None, "is_unavailable": False},
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 20.0,
+                },
+            },
         ]
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        supabase = _build_readiness_stub(items, coverage_rows)
 
-        result = check_all_procurement_complete("quote-uuid")
+        assert check_all_procurement_complete("q-1", supabase) is True
 
-        assert result["is_complete"] is False
-        assert result["total_items"] == 3
-        assert result["completed_items"] == 1
-        assert result["pending_items"] == 2
-
-    @patch('services.workflow_service.get_supabase')
-    def test_check_all_procurement_complete_empty(self, mock_supabase):
-        """check_all_procurement_complete returns False for empty quote."""
+    def test_returns_false_when_item_uncovered(self):
+        """One non-N/A quote_item has zero coverage rows → False."""
         from services.workflow_service import check_all_procurement_complete
 
-        # Mock Supabase response - no items
-        mock_client = MagicMock()
-        mock_supabase.return_value = mock_client
-        mock_response = MagicMock()
-        mock_response.data = []
-        mock_client.table.return_value.select.return_value.eq.return_value.execute.return_value = mock_response
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            # qi-2 missing from coverage
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+        ]
+        supabase = _build_readiness_stub(items, coverage_rows)
 
-        result = check_all_procurement_complete("quote-uuid")
+        assert check_all_procurement_complete("q-1", supabase) is False
 
-        assert result["is_complete"] is False
-        assert result["total_items"] == 0
+    def test_returns_false_when_covered_but_null_price(self):
+        """Covered quote_item whose invoice_item has NULL price → False."""
+        from services.workflow_service import check_all_procurement_complete
+
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+            {
+                "id": "qi-2",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 10.0,
+                },
+            },
+            {
+                "quote_item_id": "qi-2",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": None,
+                },
+            },
+        ]
+        supabase = _build_readiness_stub(items, coverage_rows)
+
+        assert check_all_procurement_complete("q-1", supabase) is False
+
+    def test_returns_false_when_empty_quote(self):
+        """Zero quote_items (or every item is N/A) → False — nothing to complete."""
+        from services.workflow_service import check_all_procurement_complete
+
+        supabase = _build_readiness_stub([], [])
+
+        assert check_all_procurement_complete("q-1", supabase) is False
+
+    def test_returns_false_when_coverage_in_other_invoice(self):
+        """Coverage row points to invoice_item in an invoice OTHER than the
+        quote_item's composition_selected_invoice_id → False."""
+        from services.workflow_service import check_all_procurement_complete
+
+        items = [
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+        coverage_rows = [
+            # Coverage in inv-b, but selection is inv-a — must be ignored
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-b",
+                    "purchase_price_original": 10.0,
+                },
+            },
+        ]
+        supabase = _build_readiness_stub(items, coverage_rows)
+
+        assert check_all_procurement_complete("q-1", supabase) is False
 
     @patch('services.workflow_service.get_supabase')
     def test_complete_procurement_wrong_role(self, mock_supabase):
@@ -744,14 +869,15 @@ class TestProcurementAutoTransition:
 
     @patch('services.workflow_service.get_supabase')
     def test_complete_procurement_procurement_role_accepted(self, mock_supabase):
-        """complete_procurement accepts procurement role."""
+        """complete_procurement accepts procurement role and succeeds when
+        readiness check (delegated to composition_service) returns True."""
         from services.workflow_service import complete_procurement, WorkflowStatus
 
         # Setup mocks
         mock_client = MagicMock()
         mock_supabase.return_value = mock_client
 
-        # Mock quote query
+        # Mock quote status query
         mock_quote_response = MagicMock()
         mock_quote_response.data = {
             "id": "quote-uuid",
@@ -759,10 +885,27 @@ class TestProcurementAutoTransition:
             "procurement_completed_at": None
         }
 
-        # Mock items query (all complete with valid price)
+        # Phase 5d readiness: quote_items shape queried by
+        # composition_service.is_procurement_complete
         mock_items_response = MagicMock()
         mock_items_response.data = [
-            {"id": "item1", "product_name": "item1", "procurement_status": "completed", "purchase_price_original": 100.0, "is_unavailable": False},
+            {
+                "id": "qi-1",
+                "is_unavailable": False,
+                "composition_selected_invoice_id": "inv-a",
+            },
+        ]
+
+        # Phase 5d readiness: invoice_item_coverage → invoice_items join
+        mock_coverage_response = MagicMock()
+        mock_coverage_response.data = [
+            {
+                "quote_item_id": "qi-1",
+                "invoice_items": {
+                    "invoice_id": "inv-a",
+                    "purchase_price_original": 100.0,
+                },
+            },
         ]
 
         # Mock update
@@ -773,14 +916,12 @@ class TestProcurementAutoTransition:
         mock_log_response = MagicMock()
         mock_log_response.data = [{"id": "transition-uuid"}]
 
-        # Setup call chain
-        table_mock = MagicMock()
-        mock_client.table.return_value = table_mock
-
-        # First call: quotes.select().eq().single().execute()
-        # Second call: quote_items.select().eq().execute()
-        # Third call: quotes.update().eq().execute()
-        # Fourth call: workflow_transitions.insert().execute()
+        # Call sequence:
+        # 1) quotes.select().eq().single().execute()   — initial status read
+        # 2) quote_items.select().eq().execute()       — readiness: items
+        # 3) invoice_item_coverage.select().in_().execute()  — readiness: coverage
+        # 4) quotes.update().eq().execute()             — transition write
+        # 5) workflow_transitions.insert().execute()    — audit log
         call_count = [0]
 
         def table_side_effect(table_name):
@@ -793,7 +934,11 @@ class TestProcurementAutoTransition:
                 chain = MagicMock()
                 chain.select.return_value.eq.return_value.execute.return_value = mock_items_response
                 return chain
-            elif table_name == "quotes" and call_count[0] > 1:
+            elif table_name == "invoice_item_coverage":
+                chain = MagicMock()
+                chain.select.return_value.in_.return_value.execute.return_value = mock_coverage_response
+                return chain
+            elif table_name == "quotes":
                 chain = MagicMock()
                 chain.update.return_value.eq.return_value.execute.return_value = mock_update_response
                 return chain

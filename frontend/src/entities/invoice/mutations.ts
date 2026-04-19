@@ -151,13 +151,17 @@ export async function downloadInvoiceXls(
 }
 
 // ---------------------------------------------------------------------------
-// Edit approval
+// Procurement-unlock request (Phase 5c)
+//
+// Name matches the backend route (/procurement-unlock-request). Phase 4a
+// previously used /edit-approval — the old export name `requestEditApproval`
+// has been renamed to `requestProcurementUnlock` to keep the contract obvious.
 // ---------------------------------------------------------------------------
 
-export async function requestEditApproval(invoiceId: string): Promise<void> {
+export async function requestProcurementUnlock(invoiceId: string): Promise<void> {
   const headers = await getAuthHeaders();
 
-  const res = await fetch(`/api/invoices/${invoiceId}/edit-request-approval`, {
+  const res = await fetch(`/api/invoices/${invoiceId}/procurement-unlock-request`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -172,6 +176,6 @@ export async function requestEditApproval(invoiceId: string): Promise<void> {
 
   const json = await res.json();
   if (!res.ok || !json.success) {
-    throw new Error(json.error?.message ?? "Failed to request edit approval");
+    throw new Error(json.error?.message ?? "Failed to request procurement-unlock approval");
   }
 }

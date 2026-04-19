@@ -1188,6 +1188,24 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_item_coverage: {
+        Row: {
+          invoice_item_id: string
+          quote_item_id: string
+          ratio: number
+        }
+        Insert: {
+          invoice_item_id: string
+          quote_item_id: string
+          ratio?: number
+        }
+        Update: {
+          invoice_item_id?: string
+          quote_item_id?: string
+          ratio?: number
+        }
+        Relationships: []
+      }
       invoice_item_prices: {
         Row: {
           id: string
@@ -1238,6 +1256,108 @@ export type Database = {
           price_includes_vat?: boolean
           production_time_days?: number | null
           minimum_order_quantity?: number | null
+          supplier_notes?: string | null
+          version?: number
+          frozen_at?: string | null
+          frozen_by?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      invoice_items: {
+        Row: {
+          id: string
+          invoice_id: string
+          organization_id: string
+          position: number
+          product_name: string
+          supplier_sku: string | null
+          brand: string | null
+          quantity: number
+          purchase_price_original: number | null
+          purchase_currency: string
+          base_price_vat: number | null
+          price_includes_vat: boolean
+          vat_rate: number | null
+          weight_in_kg: number | null
+          customs_code: string | null
+          supplier_country: string | null
+          production_time_days: number | null
+          minimum_order_quantity: number | null
+          dimension_height_mm: number | null
+          dimension_width_mm: number | null
+          dimension_length_mm: number | null
+          license_ds_cost: number | null
+          license_ss_cost: number | null
+          license_sgr_cost: number | null
+          supplier_notes: string | null
+          version: number
+          frozen_at: string | null
+          frozen_by: string | null
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          organization_id: string
+          position: number
+          product_name: string
+          supplier_sku?: string | null
+          brand?: string | null
+          quantity: number
+          purchase_price_original?: number | null
+          purchase_currency: string
+          base_price_vat?: number | null
+          price_includes_vat?: boolean
+          vat_rate?: number | null
+          weight_in_kg?: number | null
+          customs_code?: string | null
+          supplier_country?: string | null
+          production_time_days?: number | null
+          minimum_order_quantity?: number | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          license_ds_cost?: number | null
+          license_ss_cost?: number | null
+          license_sgr_cost?: number | null
+          supplier_notes?: string | null
+          version?: number
+          frozen_at?: string | null
+          frozen_by?: string | null
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          organization_id?: string
+          position?: number
+          product_name?: string
+          supplier_sku?: string | null
+          brand?: string | null
+          quantity?: number
+          purchase_price_original?: number | null
+          purchase_currency?: string
+          base_price_vat?: number | null
+          price_includes_vat?: boolean
+          vat_rate?: number | null
+          weight_in_kg?: number | null
+          customs_code?: string | null
+          supplier_country?: string | null
+          production_time_days?: number | null
+          minimum_order_quantity?: number | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          license_ds_cost?: number | null
+          license_ss_cost?: number | null
+          license_sgr_cost?: number | null
           supplier_notes?: string | null
           version?: number
           frozen_at?: string | null
@@ -3268,11 +3388,7 @@ export type Database = {
           position: number
           product_name: string
           product_code: string | null
-          base_price_vat: number | null
           quantity: number
-          weight_in_kg: number | null
-          customs_code: string | null
-          supplier_country: string | null
           description: string | null
           unit: string | null
           created_at: string | null
@@ -3280,7 +3396,6 @@ export type Database = {
           brand: string | null
           custom_fields: Json | null
           idn_sku: string | null
-          production_time_days: number | null
           product_category: string | null
           proforma_number: string | null
           proforma_date: string | null
@@ -3310,20 +3425,13 @@ export type Database = {
           logistics_hub_to_customs: number | null
           logistics_customs_to_customer: number | null
           logistics_total_days: number | null
-          purchase_currency: string | null
-          invoice_id: string | null
           buyer_company_id: string | null
           pickup_location_id: string | null
-          purchase_price_original: number | null
           volume_m3: number | null
           is_unavailable: boolean | null
-          price_includes_vat: boolean | null
           license_ds_required: boolean | null
-          license_ds_cost: number | null
           license_ss_required: boolean | null
-          license_ss_cost: number | null
           license_sgr_required: boolean | null
-          license_sgr_cost: number | null
           supplier_sku: string | null
           item_idn: string | null
           supplier_advance_percent: number | null
@@ -3332,9 +3440,6 @@ export type Database = {
           customs_extra_cost: number | null
           supplier_sku_note: string | null
           manufacturer_product_name: string | null
-          dimension_height_mm: number | null
-          dimension_width_mm: number | null
-          dimension_length_mm: number | null
           vat_rate: number | null
           customs_ds_sgr: string | null
           customs_util_fee: number | null
@@ -3349,8 +3454,23 @@ export type Database = {
           import_banned: boolean | null
           import_ban_reason: string | null
           composition_selected_invoice_id: string | null
-          min_order_quantity: number | null
           name_en: string | null
+          invoice_id: string | null
+          purchase_price_original: number | null
+          purchase_currency: string | null
+          base_price_vat: number | null
+          price_includes_vat: boolean | null
+          customs_code: string | null
+          supplier_country: string | null
+          weight_in_kg: number | null
+          production_time_days: number | null
+          min_order_quantity: number | null
+          dimension_height_mm: number | null
+          dimension_width_mm: number | null
+          dimension_length_mm: number | null
+          license_ds_cost: number | null
+          license_ss_cost: number | null
+          license_sgr_cost: number | null
         }
         Insert: {
           id?: string
@@ -3358,11 +3478,7 @@ export type Database = {
           position?: number
           product_name: string
           product_code?: string | null
-          base_price_vat?: number | null
           quantity: number
-          weight_in_kg?: number | null
-          customs_code?: string | null
-          supplier_country?: string | null
           description?: string | null
           unit?: string | null
           created_at?: string | null
@@ -3370,7 +3486,6 @@ export type Database = {
           brand?: string | null
           custom_fields?: Json | null
           idn_sku?: string | null
-          production_time_days?: number | null
           product_category?: string | null
           proforma_number?: string | null
           proforma_date?: string | null
@@ -3400,20 +3515,13 @@ export type Database = {
           logistics_hub_to_customs?: number | null
           logistics_customs_to_customer?: number | null
           logistics_total_days?: number | null
-          purchase_currency?: string | null
-          invoice_id?: string | null
           buyer_company_id?: string | null
           pickup_location_id?: string | null
-          purchase_price_original?: number | null
           volume_m3?: number | null
           is_unavailable?: boolean | null
-          price_includes_vat?: boolean | null
           license_ds_required?: boolean | null
-          license_ds_cost?: number | null
           license_ss_required?: boolean | null
-          license_ss_cost?: number | null
           license_sgr_required?: boolean | null
-          license_sgr_cost?: number | null
           supplier_sku?: string | null
           item_idn?: string | null
           supplier_advance_percent?: number | null
@@ -3422,9 +3530,6 @@ export type Database = {
           customs_extra_cost?: number | null
           supplier_sku_note?: string | null
           manufacturer_product_name?: string | null
-          dimension_height_mm?: number | null
-          dimension_width_mm?: number | null
-          dimension_length_mm?: number | null
           vat_rate?: number | null
           customs_ds_sgr?: string | null
           customs_util_fee?: number | null
@@ -3439,8 +3544,23 @@ export type Database = {
           import_banned?: boolean | null
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
-          min_order_quantity?: number | null
           name_en?: string | null
+          invoice_id?: string | null
+          purchase_price_original?: number | null
+          purchase_currency?: string | null
+          base_price_vat?: number | null
+          price_includes_vat?: boolean | null
+          customs_code?: string | null
+          supplier_country?: string | null
+          weight_in_kg?: number | null
+          production_time_days?: number | null
+          min_order_quantity?: number | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          license_ds_cost?: number | null
+          license_ss_cost?: number | null
+          license_sgr_cost?: number | null
         }
         Update: {
           id?: string
@@ -3448,11 +3568,7 @@ export type Database = {
           position?: number
           product_name?: string
           product_code?: string | null
-          base_price_vat?: number | null
           quantity?: number
-          weight_in_kg?: number | null
-          customs_code?: string | null
-          supplier_country?: string | null
           description?: string | null
           unit?: string | null
           created_at?: string | null
@@ -3460,7 +3576,6 @@ export type Database = {
           brand?: string | null
           custom_fields?: Json | null
           idn_sku?: string | null
-          production_time_days?: number | null
           product_category?: string | null
           proforma_number?: string | null
           proforma_date?: string | null
@@ -3490,20 +3605,13 @@ export type Database = {
           logistics_hub_to_customs?: number | null
           logistics_customs_to_customer?: number | null
           logistics_total_days?: number | null
-          purchase_currency?: string | null
-          invoice_id?: string | null
           buyer_company_id?: string | null
           pickup_location_id?: string | null
-          purchase_price_original?: number | null
           volume_m3?: number | null
           is_unavailable?: boolean | null
-          price_includes_vat?: boolean | null
           license_ds_required?: boolean | null
-          license_ds_cost?: number | null
           license_ss_required?: boolean | null
-          license_ss_cost?: number | null
           license_sgr_required?: boolean | null
-          license_sgr_cost?: number | null
           supplier_sku?: string | null
           item_idn?: string | null
           supplier_advance_percent?: number | null
@@ -3512,9 +3620,6 @@ export type Database = {
           customs_extra_cost?: number | null
           supplier_sku_note?: string | null
           manufacturer_product_name?: string | null
-          dimension_height_mm?: number | null
-          dimension_width_mm?: number | null
-          dimension_length_mm?: number | null
           vat_rate?: number | null
           customs_ds_sgr?: string | null
           customs_util_fee?: number | null
@@ -3529,8 +3634,23 @@ export type Database = {
           import_banned?: boolean | null
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
-          min_order_quantity?: number | null
           name_en?: string | null
+          invoice_id?: string | null
+          purchase_price_original?: number | null
+          purchase_currency?: string | null
+          base_price_vat?: number | null
+          price_includes_vat?: boolean | null
+          customs_code?: string | null
+          supplier_country?: string | null
+          weight_in_kg?: number | null
+          production_time_days?: number | null
+          min_order_quantity?: number | null
+          dimension_height_mm?: number | null
+          dimension_width_mm?: number | null
+          dimension_length_mm?: number | null
+          license_ds_cost?: number | null
+          license_ss_cost?: number | null
+          license_sgr_cost?: number | null
         }
         Relationships: []
       }

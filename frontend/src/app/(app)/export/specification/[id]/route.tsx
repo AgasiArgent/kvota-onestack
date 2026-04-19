@@ -40,8 +40,14 @@ export async function GET(
     return NextResponse.json({ error: "Specification not found" }, { status: 404 });
   }
 
-  // Fetch quote, customer, contract, items in parallel
-  const [quoteRes, contractRes, itemsRes] = await Promise.all([
+  // Phase 5d Pattern B (design.md §2.3.4): items for the specification
+  // are the composed invoice_items (filtered by each quote_item's
+  // composition_selected_invoice_id), not raw quote_items. Migration
+  // 284 drops base_price_vat and product_code from quote_items; both
+  // live on invoice_items now.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+  const [quoteRes, contractRes, composedRes] = await Promise.all([
     supabase
       .from("quotes")
       .select("id, idn_quote, customer_id, currency")
@@ -55,11 +61,22 @@ export async function GET(
           .eq("id", spec.contract_id)
           .single()
       : null,
-    supabase
-      .from("quote_items")
-      .select("brand, product_code, product_name, unit, quantity, base_price_vat")
-      .eq("quote_id", spec.quote_id)
-      .order("position", { ascending: true }),
+    untyped
+      .from("quotes")
+      .select(
+        "id, " +
+          "quote_items!inner(" +
+          "id, position, composition_selected_invoice_id, brand, " +
+          "coverage:invoice_item_coverage!quote_item_id(" +
+          "invoice_items!inner(" +
+          "invoice_id, product_name, supplier_sku, brand, quantity, " +
+          "base_price_vat" +
+          ")" +
+          ")" +
+          ")"
+      )
+      .eq("id", spec.quote_id)
+      .single(),
   ]);
 
   const quote = quoteRes.data;
@@ -78,7 +95,55 @@ export async function GET(
 
   const customer = customerRes?.data ?? null;
   const contract = contractRes?.data ?? null;
-  const items = itemsRes.data ?? [];
+
+  // Flatten composition → items for the PDF renderer. For each quote_item
+  // we keep the invoice_item(s) covered by the currently-selected
+  // invoice; split cases produce multiple rows, merge cases may share an
+  // invoice_item across several quote_items (still rendered once per
+  // coverage row, matching the customer's KP view).
+  type InvoiceItemComposedRow = {
+    invoice_id: string;
+    product_name: string | null;
+    supplier_sku: string | null;
+    brand: string | null;
+    quantity: number | null;
+    base_price_vat: number | null;
+  };
+  type CoverageComposedRow = { invoice_items: InvoiceItemComposedRow | null };
+  type QuoteItemComposedRow = {
+    id: string;
+    position: number | null;
+    composition_selected_invoice_id: string | null;
+    brand: string | null;
+    coverage: CoverageComposedRow[] | null;
+  };
+  type QuoteComposedRow = {
+    id: string;
+    quote_items: QuoteItemComposedRow[] | null;
+  };
+
+  const composedData = composedRes.data as QuoteComposedRow | null;
+  const orderedQuoteItems = (composedData?.quote_items ?? []).slice().sort(
+    (a, b) => (a.position ?? 0) - (b.position ?? 0)
+  );
+
+  const items = orderedQuoteItems.flatMap((qi) => {
+    const selected = qi.composition_selected_invoice_id;
+    return (qi.coverage ?? [])
+      .map((c) => c.invoice_items)
+      .filter(
+        (ii): ii is InvoiceItemComposedRow =>
+          ii != null && ii.invoice_id === selected
+      )
+      .map((ii) => ({
+        brand: ii.brand ?? qi.brand,
+        product_code: ii.supplier_sku,
+        product_name: ii.product_name ?? "",
+        unit: null as string | null,
+        quantity: ii.quantity,
+        base_price_vat: ii.base_price_vat,
+      }));
+  });
 
   const specNumber = spec.specification_number ?? "SP-???";
 

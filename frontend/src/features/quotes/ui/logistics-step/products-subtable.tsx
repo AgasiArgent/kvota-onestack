@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
+import type { QuoteInvoiceRow } from "@/entities/quote/queries";
 
 /** Safe accessor for columns that may be added by future migrations */
 function ext<T>(row: unknown): T {
@@ -31,8 +31,26 @@ const qtyFmt = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 2,
 });
 
+/**
+ * Phase 5d Task 14: per-invoice logistics rows source `weight_in_kg` and
+ * `dimension_*_mm` from `invoice_items` (supplier-side per-position values).
+ * The `product_code` column remains on quote_items for customer-side
+ * identification and is surfaced via the upstream coverage join. Row shape
+ * is kept permissive during the Phase 5c+5d transition.
+ */
+export interface LogisticsProductRow {
+  id: string;
+  product_name: string;
+  product_code?: string | null;
+  quantity: number;
+  weight_in_kg: number | null;
+  dimension_height_mm?: number | null;
+  dimension_width_mm?: number | null;
+  dimension_length_mm?: number | null;
+}
+
 interface ProductsSubtableProps {
-  items: QuoteItemRow[];
+  items: LogisticsProductRow[];
   invoice: QuoteInvoiceRow;
 }
 

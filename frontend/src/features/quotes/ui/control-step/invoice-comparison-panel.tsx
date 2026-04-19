@@ -8,11 +8,42 @@ import { createClient } from "@/shared/lib/supabase/client";
 import type { QuoteItemRow, QuoteInvoiceRow } from "@/entities/quote/queries";
 import type { DocumentRow } from "./use-control-data";
 
+/**
+ * Phase 5d Task 12 (Agent A) — supplier-side position shape for this panel.
+ *
+ * Migration 284 drops quote_items.{invoice_id, purchase_price_original,
+ * purchase_currency}. Per-invoice positions now live in kvota.invoice_items,
+ * which is what this component reads.
+ */
+export interface InvoiceItemRow {
+  id: string;
+  invoice_id: string;
+  position: number;
+  product_name: string;
+  supplier_sku: string | null;
+  brand: string | null;
+  quantity: number;
+  purchase_price_original: number | null;
+  purchase_currency: string;
+}
+
 interface InvoiceComparisonPanelProps {
   quoteId: string;
   invoices: QuoteInvoiceRow[];
-  items: QuoteItemRow[];
+  /**
+   * Legacy prop retained for interface compatibility with ControlStep.
+   * Post-Phase-5c this panel sources positions from invoice_items via an
+   * internal Supabase call (Pattern B), so quote_items are not consulted
+   * here. Deprecated and removed in Task 16 alongside control-step.tsx.
+   */
+  items?: QuoteItemRow[];
   invoiceDocuments: Map<string, DocumentRow>;
+  /**
+   * Test-only override. When provided, the internal Supabase fetch is
+   * skipped and these invoice_items are used directly. Mirrors the pattern
+   * used in procurement-step/invoice-card.tsx.
+   */
+  invoiceItemsByInvoiceIdOverride?: Map<string, InvoiceItemRow[]>;
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -31,15 +62,8 @@ function formatMoney(value: number, currency: string): string {
   return `${formatted} ${symbol}`;
 }
 
-function getInvoiceItems(
-  items: QuoteItemRow[],
-  invoiceId: string
-): QuoteItemRow[] {
-  return items.filter((item) => item.invoice_id === invoiceId);
-}
-
-function getInvoiceTotal(matchingItems: QuoteItemRow[]): number {
-  return matchingItems.reduce((sum, item) => {
+function sumInvoiceTotal(items: InvoiceItemRow[]): number {
+  return items.reduce((sum, item) => {
     const price = item.purchase_price_original ?? 0;
     const qty = item.quantity ?? 0;
     return sum + price * qty;
@@ -48,11 +72,16 @@ function getInvoiceTotal(matchingItems: QuoteItemRow[]): number {
 
 export function InvoiceComparisonPanel({
   invoices,
-  items,
   invoiceDocuments,
+  invoiceItemsByInvoiceIdOverride,
 }: InvoiceComparisonPanelProps) {
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [fetchedInvoiceItemsByInvoiceId, setFetchedInvoiceItemsByInvoiceId] =
+    useState<Map<string, InvoiceItemRow[]>>(new Map());
+
+  const invoiceItemsByInvoiceId =
+    invoiceItemsByInvoiceIdOverride ?? fetchedInvoiceItemsByInvoiceId;
 
   const handleInvoiceClick = useCallback(
     (invoiceId: string) => {
@@ -60,6 +89,60 @@ export function InvoiceComparisonPanel({
     },
     []
   );
+
+  // Load invoice_items for all invoices on the panel. Source of truth for
+  // per-invoice positions post-migration-284 (quote_items.invoice_id dropped).
+  useEffect(() => {
+    if (invoiceItemsByInvoiceIdOverride !== undefined) return;
+
+    // database.types.ts does not yet include invoice_items (added by
+    // migration 281). Cast through `from` until Task 16 types regen.
+    const supabase = createClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = supabase as unknown as { from: (t: string) => any };
+
+    let cancelled = false;
+    async function load() {
+      const invoiceIds = invoices.map((inv) => inv.id);
+      if (invoiceIds.length === 0) {
+        if (!cancelled) setFetchedInvoiceItemsByInvoiceId(new Map());
+        return;
+      }
+
+      const { data, error } = await untyped
+        .from("invoice_items")
+        .select(
+          "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency"
+        )
+        .in("invoice_id", invoiceIds);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Failed to load invoice_items:", error);
+        setFetchedInvoiceItemsByInvoiceId(new Map());
+        return;
+      }
+
+      const byId = new Map<string, InvoiceItemRow[]>();
+      for (const row of (data ?? []) as InvoiceItemRow[]) {
+        const list = byId.get(row.invoice_id) ?? [];
+        list.push(row);
+        byId.set(row.invoice_id, list);
+      }
+      // Sort each invoice's items by position for stable display order.
+      for (const list of byId.values()) {
+        list.sort((a, b) => a.position - b.position);
+      }
+      setFetchedInvoiceItemsByInvoiceId(byId);
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [invoices, invoiceItemsByInvoiceIdOverride]);
 
   useEffect(() => {
     if (!activeInvoiceId) {
@@ -117,8 +200,8 @@ export function InvoiceComparisonPanel({
     );
   }
 
-  const activeItems = activeInvoiceId
-    ? getInvoiceItems(items, activeInvoiceId)
+  const activeItems: InvoiceItemRow[] = activeInvoiceId
+    ? invoiceItemsByInvoiceId.get(activeInvoiceId) ?? []
     : [];
   const activeDoc = activeInvoiceId
     ? invoiceDocuments.get(activeInvoiceId) ?? null
@@ -136,8 +219,9 @@ export function InvoiceComparisonPanel({
         {/* Invoice list */}
         <div className="space-y-1">
           {invoices.map((invoice) => {
-            const matchingItems = getInvoiceItems(items, invoice.id);
-            const total = getInvoiceTotal(matchingItems);
+            const matchingItems =
+              invoiceItemsByInvoiceId.get(invoice.id) ?? [];
+            const total = sumInvoiceTotal(matchingItems);
             const hasDoc = invoiceDocuments.has(invoice.id);
             const isActive = activeInvoiceId === invoice.id;
 
@@ -220,7 +304,7 @@ export function InvoiceComparisonPanel({
                           className="border-b last:border-b-0"
                         >
                           <td className="px-3 py-2 text-foreground">
-                            {item.product_name ?? item.product_code ?? "\u2014"}
+                            {item.product_name ?? "\u2014"}
                           </td>
                           <td className="px-3 py-2 text-right text-foreground">
                             {item.quantity ?? 0}

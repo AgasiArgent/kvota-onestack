@@ -5,22 +5,32 @@ Helper functions for fetching and enriching deal-related data.
 Extracted from main.py to enable reuse in api/deals.py and main.py.
 
 Functions:
-  fetch_items_with_buyer_companies — Resolve quote items with buyer_company_id from invoices
+  fetch_items_with_buyer_companies — Resolve composed items with buyer_company_id
+    (Pattern A, Phase 5d §2.1.5 — sources items via composition_service, not raw quote_items)
   fetch_enrichment_data — Fetch contracts and bank accounts for currency invoice enrichment
 """
 
 import logging
 
+from services.composition_service import get_composed_items
+
 logger = logging.getLogger(__name__)
 
 
 def fetch_items_with_buyer_companies(supabase, quote_id: str) -> tuple[list[dict], dict[str, dict]]:
-    """Fetch quote items enriched with buyer_company_id from invoices.
+    """Fetch composition-aware items enriched with buyer_company_id.
 
-    buyer_company_id lives on the invoices table, not on quote_items.
-    Items link to invoices via quote_items.invoice_id.
-    This function resolves that indirection and returns items with
-    buyer_company_id set, plus a bc_lookup dict of buyer companies.
+    Pattern A (Phase 5d, design.md §2.1.5): items originate from
+    ``composition_service.get_composed_items`` — the final calc-ready shape
+    already joined with the selected invoice_items (supplier-side pricing).
+    We DO NOT read raw ``kvota.quote_items`` here; legacy price columns
+    (``purchase_price_original``, ``purchase_currency``) come through the
+    composed layer.
+
+    ``buyer_company_id`` lives on the ``invoices`` table (not on
+    quote_items and not on invoice_items). Each composed item carries the
+    ``invoice_id`` of its selected supplier offer — we resolve the buyer
+    company via that link.
 
     Args:
         supabase: Supabase client instance.
@@ -28,11 +38,10 @@ def fetch_items_with_buyer_companies(supabase, quote_id: str) -> tuple[list[dict
 
     Returns:
         Tuple of (items_list, bc_lookup_dict).
-        items_list: quote items with buyer_company_id populated.
+        items_list: composed items with ``buyer_company_id`` populated.
         bc_lookup_dict: mapping of buyer_company_id to company info dict.
     """
-    items_resp = supabase.table("quote_items").select("*").eq("quote_id", quote_id).execute()
-    items = items_resp.data or []
+    items = get_composed_items(quote_id, supabase)
 
     inv_resp = supabase.table("invoices").select(
         "id, buyer_company_id, buyer_companies!buyer_company_id(id, name, country, region)"
@@ -47,7 +56,7 @@ def fetch_items_with_buyer_companies(supabase, quote_id: str) -> tuple[list[dict
             bc_lookup[bc["id"]] = bc
             inv_bc_map[inv["id"]] = bc["id"]
 
-    enriched_items = []
+    enriched_items: list[dict] = []
     for item in items:
         enriched = {**item}
         if not enriched.get("buyer_company_id") and enriched.get("invoice_id"):

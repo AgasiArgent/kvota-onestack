@@ -6,7 +6,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { QuoteItemRow } from "@/entities/quote/queries";
+
+/**
+ * Phase 5d Task 12 — narrow composed-item shape for the sales items table.
+ *
+ * `base_price_vat` was dropped from `quote_items` in migration 284 and now
+ * lives on `invoice_items`. The parent `SalesStep` composes this shape
+ * from the selected invoice_item per quote_item via invoice_item_coverage.
+ */
+export interface SalesItemRow {
+  id: string;
+  brand: string | null;
+  product_code: string | null;
+  product_name: string;
+  quantity: number;
+  unit: string | null;
+  base_price_vat: number | null;
+}
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   EUR: "\u20AC",
@@ -26,7 +42,7 @@ const qtyFmt = new Intl.NumberFormat("ru-RU", {
 });
 
 interface SalesItemsTableProps {
-  items: QuoteItemRow[];
+  items: SalesItemRow[];
   currency: string;
   quoteId?: string;
 }

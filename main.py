@@ -66,7 +66,7 @@ from services.approval_service import request_approval, count_pending_approvals,
 # a single helper that overlays prices from invoice_item_prices when a
 # composition pointer is set on the item. Falls back to legacy quote_items
 # values when no composition exists, so pre-Phase-5b quotes compute identically.
-from services.composition_service import get_composed_items
+from services.composition_service import get_composed_items, is_procurement_complete
 
 # Import deal service (Feature #86)
 from services.deal_service import count_deals_by_status, get_deals_by_status
@@ -7742,7 +7742,7 @@ def _count_user_tasks(user_id: str, org_id: str, roles: list, supabase) -> int:
     # Sales tasks
     if 'sales' in roles:
         result = supabase.table("quotes").select("id", count="exact") \
-            .eq("organization_id", org_id).eq("workflow_status", "pending_sales_review").execute()
+            .eq("organization_id", org_id).eq("workflow_status", "pending_sales_review").is_("deleted_at", None).execute()
         total += result.count or 0
 
     return total
@@ -8050,6 +8050,7 @@ def _lookup_deal_for_quote(quote_id: str, org_id: str):
             .select("id") \
             .eq("quote_id", quote_id) \
             .limit(1) \
+            .is_("deleted_at", None) \
             .execute()
         if not spec_result.data:
             return None
@@ -8064,7 +8065,7 @@ def _lookup_deal_for_quote(quote_id: str, org_id: str):
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
             "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
-        ).eq("specification_id", spec_id).eq("organization_id", org_id).limit(1).execute()
+        ).eq("specification_id", spec_id).eq("organization_id", org_id).limit(1).is_("deleted_at", None).execute()
 
         if deal_result.data:
             return deal_result.data[0]
@@ -8704,6 +8705,7 @@ def post(session,
                 .like("idn_quote", f"{month_prefix}%") \
                 .order("idn_quote", desc=True) \
                 .limit(1) \
+                .is_("deleted_at", None) \
                 .execute()
 
             if existing_result.data and existing_result.data[0].get("idn_quote"):
@@ -9114,6 +9116,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
         .select("*, customers(name, inn, email)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not result.data:
@@ -9413,6 +9416,7 @@ def get(quote_id: str, session, tab: str = "summary", subtab: str = "info"):
                 .select("created_at") \
                 .eq("quote_id", quote_id) \
                 .limit(1) \
+                .is_("deleted_at", None) \
                 .execute()
             if spec_result.data:
                 spec_created_at = spec_result.data[0].get("created_at")
@@ -11012,6 +11016,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11171,6 +11176,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11253,6 +11259,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11367,6 +11374,7 @@ def post(session, quote_id: str, justification: str = ""):
         .select("workflow_status, needs_justification, idn_quote, total_amount, currency, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -11552,6 +11560,7 @@ def get(session, quote_id: str):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12016,6 +12025,7 @@ async def patch_quote_item(quote_id: str, item_id: str, session, request):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12065,6 +12075,7 @@ async def bulk_insert_quote_items(quote_id: str, session, request):
         .select("id, organization_id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12134,6 +12145,7 @@ async def inline_update_quote(quote_id: str, session, request):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12203,6 +12215,7 @@ def cancel_quote(quote_id: str, session):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -12241,6 +12254,7 @@ def get(quote_id: str, session):
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not result.data:
@@ -13339,6 +13353,7 @@ def post(
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -13476,6 +13491,7 @@ def get(quote_id: str, session):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -14028,6 +14044,7 @@ def post(
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -14491,11 +14508,12 @@ def post(
 
             if not existing_versions:
                 # First version - always create (no dialog shown)
+                # Phase 5d: items sourced from composition_service inside the
+                # snapshot function — not passed as kwarg.
                 version = create_quote_version(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -14513,7 +14531,6 @@ def post(
                         org_id=user["org_id"],
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text
@@ -14525,7 +14542,6 @@ def post(
                         quote_id=quote_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text,
@@ -14539,7 +14555,6 @@ def post(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -14716,6 +14731,7 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
         .select("*") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15112,12 +15128,13 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
             current_version = get_current_quote_version(quote_id, org_id) if existing_versions else None
             reason_text = change_reason if change_reason else "Calculation saved"
 
+            # Phase 5d: items sourced from composition_service inside the
+            # snapshot function — not passed as kwarg.
             if not existing_versions:
                 create_quote_version(
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -15132,7 +15149,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                         org_id=org_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text
@@ -15142,7 +15158,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                         quote_id=quote_id,
                         user_id=user["id"],
                         variables=variables,
-                        items=items,
                         results=all_results,
                         totals=version_totals,
                         change_reason=reason_text,
@@ -15153,7 +15168,6 @@ async def api_calculate_quote(session, request: Request, quote_id: str):
                     quote_id=quote_id,
                     user_id=user["id"],
                     variables=variables,
-                    items=items,
                     results=all_results,
                     totals=version_totals,
                     change_reason=reason_text,
@@ -15241,6 +15255,7 @@ async def api_cancel_quote(session, request: Request, quote_id: str):
         .select("id, workflow_status, idn_quote, customer_id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15441,6 +15456,7 @@ def get(quote_id: str, session):
         .select("id, idn_quote, customer_id, status, workflow_status, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15727,7 +15743,7 @@ def _render_currency_invoices_section(quote_id: str, supabase):
     """
     # Check if a deal exists for this quote
     try:
-        deal_resp = supabase.table("deals").select("id").eq("quote_id", quote_id).execute()
+        deal_resp = supabase.table("deals").select("id").eq("quote_id", quote_id).is_("deleted_at", None).execute()
         deals = deal_resp.data or []
     except Exception as e:
         print(f"Error checking deals for quote {quote_id}: {e}")
@@ -15820,6 +15836,7 @@ def get(quote_id: str, session):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", user["org_id"]) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -15971,6 +15988,7 @@ def get(quote_id: str, version_num: int, session):
     quote_result = supabase.table("quotes") \
         .select("idn_quote, currency") \
         .eq("id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data[0] if quote_result.data else {}
@@ -17605,6 +17623,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data
@@ -19055,6 +19074,7 @@ async def api_create_invoice(quote_id: str, session, request):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19183,12 +19203,12 @@ async def api_update_invoice(quote_id: str, session, request):
     if not invoice_id:
         return JSONResponse({"success": False, "error": "Invoice ID required"}, status_code=400)
 
-    # Edit-after-send guard: block edits on sent invoices unless user has override role
+    # Procurement-lock guard: block edits once the quote's procurement stage completes
     from services.invoice_send_service import check_edit_permission
     user_roles = user.get("roles", [])
     if not check_edit_permission(invoice_id, user_roles):
         return JSONResponse(
-            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            {"success": False, "error": {"code": "PROCUREMENT_LOCKED", "message": "Procurement for this quote has completed. Request unlock approval to edit."}},
             status_code=403,
         )
 
@@ -19324,6 +19344,7 @@ async def api_delete_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19372,6 +19393,7 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19408,48 +19430,14 @@ async def api_complete_invoice(quote_id: str, invoice_id: str, session):
             "error": "Укажите страну отгрузки для инвойса перед завершением. Без страны отгрузки невозможно назначить логиста."
         }, status_code=400)
 
-    # Get items in this invoice
-    items_result = supabase.table("quote_items") \
-        .select("id, product_name, purchase_price_original, production_time_days, is_unavailable") \
-        .eq("invoice_id", invoice_id) \
-        .eq("quote_id", quote_id) \
-        .execute()
-
-    items = items_result.data or []
-
-    if not items:
-        return JSONResponse({"success": False, "error": "Invoice has no items"}, status_code=400)
-
-    # Validate: all items must have (price > 0 AND production_time > 0) OR be marked unavailable
-    items_without_price = []
-    items_without_time = []
-    for item in items:
-        is_unavailable = item.get("is_unavailable", False)
-        if is_unavailable:
-            continue  # Unavailable items are OK
-
-        item_name = item.get("product_name") or item.get("id", "?")
-        has_price = item.get("purchase_price_original") and float(item.get("purchase_price_original", 0)) > 0
-        has_time = item.get("production_time_days") and int(item.get("production_time_days", 0)) > 0
-
-        if not has_price:
-            items_without_price.append(item_name)
-        if not has_time:
-            items_without_time.append(item_name)
-
-    if items_without_price or items_without_time:
-        error_parts = []
-        if items_without_price:
-            names = ", ".join(items_without_price[:5])
-            suffix = f" и ещё {len(items_without_price) - 5}" if len(items_without_price) > 5 else ""
-            error_parts.append(f"Без цены ({len(items_without_price)}): {names}{suffix}")
-        if items_without_time:
-            names = ", ".join(items_without_time[:5])
-            suffix = f" и ещё {len(items_without_time) - 5}" if len(items_without_time) > 5 else ""
-            error_parts.append(f"Без срока производства ({len(items_without_time)}): {names}{suffix}")
+    # Phase 5d Task 10b (Q2): readiness via canonical helper.
+    # Quote is procurement-complete iff every non-N/A quote_item is covered
+    # by an invoice_item (in its selected invoice) with a non-null price.
+    # See composition_service.is_procurement_complete for the full contract.
+    if not is_procurement_complete(quote_id, supabase):
         return JSONResponse({
             "success": False,
-            "error": "Не все позиции заполнены. " + ". ".join(error_parts) + "."
+            "error": "Не все позиции заполнены. Проверьте, что для каждой позиции выбран инвойс с ценой и сроком производства."
         }, status_code=400)
 
     try:
@@ -19588,6 +19576,7 @@ async def api_reopen_invoice(quote_id: str, invoice_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19652,12 +19641,12 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
     if not item_ids or not invoice_id:
         return JSONResponse({"success": False, "error": "item_ids and invoice_id required"}, status_code=400)
 
-    # Edit-after-send guard: block item assignment changes on sent invoices
+    # Procurement-lock guard: block item assignment changes once procurement completes
     from services.invoice_send_service import check_edit_permission
     user_roles = user.get("roles", [])
     if not check_edit_permission(invoice_id, user_roles):
         return JSONResponse(
-            {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "This invoice has been sent. Request approval to edit."}},
+            {"success": False, "error": {"code": "PROCUREMENT_LOCKED", "message": "Procurement for this quote has completed. Request unlock approval to edit."}},
             status_code=403,
         )
 
@@ -19669,6 +19658,7 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -19718,140 +19708,6 @@ async def api_assign_items_to_invoice(quote_id: str, session, request):
             _log.warning(f"auto-advance brand fetch failed for {quote_id}: {e}")
 
         return JSONResponse({"success": True, "updated": len(item_ids)})
-
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-
-
-@rt("/api/procurement/{quote_id}/items/bulk", methods=["PATCH"])
-async def api_bulk_update_items(quote_id: str, session, request):
-    """Bulk update item prices and production times."""
-    redirect = require_login(session)
-    if redirect:
-        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
-
-    user = session["user"]
-    org_id = user["org_id"]
-
-    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
-        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
-
-    body = await request.body()
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        return JSONResponse({"success": False, "error": "Invalid JSON"}, status_code=400)
-
-    items = data.get("items", [])
-    if not items:
-        return JSONResponse({"success": True, "updated": 0})
-
-    supabase = get_supabase()
-
-    # Verify quote belongs to user's organization
-    quote_result = supabase.table("quotes") \
-        .select("id") \
-        .eq("id", quote_id) \
-        .eq("organization_id", org_id) \
-        .single() \
-        .execute()
-
-    if not quote_result.data:
-        return JSONResponse({"success": False, "error": "Quote not found"}, status_code=404)
-
-    # Get valid item IDs for this quote (batch validation)
-    item_ids = [item.get("id") for item in items if item.get("id")]
-    if not item_ids:
-        return JSONResponse({"success": False, "error": "No valid item IDs"}, status_code=400)
-
-    valid_items_result = supabase.table("quote_items") \
-        .select("id, invoice_id") \
-        .eq("quote_id", quote_id) \
-        .in_("id", item_ids) \
-        .execute()
-
-    # Edit-after-send guard: check if any items belong to sent invoices
-    from services.invoice_send_service import check_edit_permission
-    user_roles = user.get("roles", [])
-    sent_invoice_ids = set()
-    for qi in (valid_items_result.data or []):
-        inv_id = qi.get("invoice_id")
-        if inv_id:
-            sent_invoice_ids.add(inv_id)
-    for inv_id in sent_invoice_ids:
-        if not check_edit_permission(inv_id, user_roles):
-            return JSONResponse(
-                {"success": False, "error": {"code": "EDIT_REQUIRES_APPROVAL", "message": "Some items belong to a sent invoice. Request approval to edit."}},
-                status_code=403,
-            )
-
-    valid_item_ids = set(item["id"] for item in valid_items_result.data or [])
-
-    try:
-        updated = 0
-        for item in items:
-            item_id = item.get("id")
-            if not item_id or item_id not in valid_item_ids:
-                continue
-
-            update_data = {}
-
-            if "purchase_price_original" in item and item["purchase_price_original"] is not None:
-                update_data["purchase_price_original"] = item["purchase_price_original"]
-
-            if "production_time_days" in item and item["production_time_days"] is not None:
-                update_data["production_time_days"] = item["production_time_days"]
-
-            # Support price_includes_vat checkbox
-            if "price_includes_vat" in item:
-                update_data["price_includes_vat"] = bool(item["price_includes_vat"])
-
-            # Support is_unavailable checkbox
-            if "is_unavailable" in item:
-                update_data["is_unavailable"] = bool(item["is_unavailable"])
-
-            # Support weight_in_kg field (JS sends as weight_kg)
-            if "weight_kg" in item:
-                update_data["weight_in_kg"] = float(item["weight_kg"]) if item["weight_kg"] is not None else None
-
-            # Support volume_m3 field
-            if "volume_m3" in item:
-                update_data["volume_m3"] = float(item["volume_m3"]) if item["volume_m3"] is not None else None
-
-            # Support supplier_sku field (alternative SKU offered by supplier)
-            if "supplier_sku" in item:
-                update_data["supplier_sku"] = item["supplier_sku"] if item["supplier_sku"] else None
-
-            # Note: supplier_country is now set at invoice level, not per-item
-
-            if update_data:
-                supabase.table("quote_items") \
-                    .update(update_data) \
-                    .eq("id", item_id) \
-                    .execute()
-                updated += 1
-
-        # Auto-advance (quote, brand) substates out of 'distributing' when the
-        # brand is fully routed. is_unavailable toggles can complete a brand.
-        # Safe/idempotent — silent on failure.
-        import logging as _logging
-        _log = _logging.getLogger(__name__)
-        try:
-            brand_rows = supabase.table("quote_items") \
-                .select("brand") \
-                .in_("id", list(valid_item_ids)) \
-                .execute()
-            from services.workflow_service import maybe_advance_after_distribution
-            brands_affected = {(it.get("brand") or "") for it in (brand_rows.data or [])}
-            for b in brands_affected:
-                try:
-                    maybe_advance_after_distribution(quote_id, b, user["id"])
-                except Exception as e:
-                    _log.warning(f"auto-advance failed for {quote_id}/{b!r}: {e}")
-        except Exception as e:
-            _log.warning(f"auto-advance brand fetch failed for {quote_id}: {e}")
-
-        return JSONResponse({"success": True, "updated": updated})
 
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -20178,6 +20034,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -20342,6 +20199,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -20423,6 +20281,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     quote = quote_result.data
@@ -20531,6 +20390,7 @@ def get(session, quote_id: str):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21162,6 +21022,7 @@ async def post(session, quote_id: str, request):
         .select("id, workflow_status, logistics_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21268,6 +21129,7 @@ async def post(session, quote_id: str, request):
                     .select("partial_recalc") \
                     .eq("id", quote_id) \
                     .single() \
+                    .is_("deleted_at", None) \
                     .execute()
 
                 partial_recalc = partial_check.data.get("partial_recalc") if partial_check.data else None
@@ -21319,6 +21181,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -21480,6 +21343,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -22066,6 +21930,7 @@ def get(session, quote_id: str, error: str = ""):
         .select("*, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23008,6 +22873,7 @@ async def post(session, quote_id: str, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23172,6 +23038,7 @@ async def api_customs_items_bulk_update(quote_id: str, session, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23261,6 +23128,7 @@ async def patch(session, quote_id: str, item_id: str, request):
         .select("id, workflow_status, customs_completed_at") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23339,6 +23207,7 @@ def get(quote_id: str, session):
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
         .single() \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23500,6 +23369,7 @@ def post(quote_id: str, session, comment: str = ""):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -23768,6 +23638,7 @@ def get_cost_analysis(session, quote_id: str):
     quote_result = supabase.table("quotes") \
         .select("id, organization_id, idn_quote, title, currency, seller_company_id, delivery_terms, delivery_days, payment_terms, workflow_status, total_amount, customers(name)") \
         .eq("id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -24459,6 +24330,7 @@ def get(session, quote_id: str, preset: str = None):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -25696,6 +25568,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -25894,6 +25767,7 @@ def post(session, quote_id: str, comment: str = "", department: str = "sales"):
         .select("workflow_status") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26005,6 +25879,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26163,6 +26038,7 @@ def post(session, quote_id: str, comment: str = ""):
         .select("workflow_status, idn_quote, total_amount, currency, customers(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26262,6 +26138,7 @@ def get(session, quote_id: str):
         .select("*, customers(name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26422,6 +26299,7 @@ def post(session, quote_id: str, comment: str = ""):
         .select("workflow_status, idn_quote") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26933,6 +26811,7 @@ def get(session, quote_id: str):
         .select("*, customers(id, name, inn)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -26958,6 +26837,7 @@ def get(session, quote_id: str):
     existing_spec = supabase.table("specifications") \
         .select("id") \
         .eq("quote_id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if existing_spec.data:
@@ -27255,6 +27135,7 @@ def post(session, quote_id: str, action: str = "create",
         .select("id, organization_id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -27264,6 +27145,7 @@ def post(session, quote_id: str, action: str = "create",
     existing_spec = supabase.table("specifications") \
         .select("id") \
         .eq("quote_id", quote_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if existing_spec.data:
@@ -27417,6 +27299,7 @@ def get(session, spec_id: str):
             .select("*, quotes(id, idn_quote, total_amount, currency, workflow_status, customers(id, name, inn))") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .execute()
     except Exception as e:
         # Log detailed error to Sentry
@@ -27474,6 +27357,7 @@ def get(session, spec_id: str):
         existing_deal = supabase.table("deals") \
             .select("id, deal_number") \
             .eq("specification_id", spec_id) \
+            .is_("deleted_at", None) \
             .execute()
         has_deal = bool(existing_deal and existing_deal.data)
 
@@ -27934,6 +27818,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
         .select("id, status, quote_id, contract_id, specification_currency, sign_date") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not spec_result.data:
@@ -27980,6 +27865,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
             existing_deal = supabase.table("deals") \
                 .select("id, deal_number") \
                 .eq("specification_id", spec_id) \
+                .is_("deleted_at", None) \
                 .execute()
 
             if not existing_deal.data:
@@ -27988,6 +27874,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                 quote_result = supabase.table("quotes") \
                     .select("id, total_amount, customers(id, name)") \
                     .eq("id", quote_id_val) \
+                    .is_("deleted_at", None) \
                     .execute()
 
                 total_amount = (quote_result.data[0].get("total_amount") or 0) if quote_result.data else 0
@@ -28009,6 +27896,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
                     count_result = supabase.table("deals") \
                         .select("id", count="exact") \
                         .eq("organization_id", org_id) \
+                        .is_("deleted_at", None) \
                         .execute()
                     seq_num = (count_result.count or 0) + 1
                     deal_number = f"DEAL-{year}-{seq_num:04d}"
@@ -28048,7 +27936,7 @@ def post(session, spec_id: str, action: str = "save", new_status: str = "",
 
                         ci_quote_resp = supabase.table("quotes").select(
                             "idn_quote, seller_companies!seller_company_id(id, name)"
-                        ).eq("id", quote_id_val).single().execute()
+                        ).eq("id", quote_id_val).single().is_("deleted_at", None).execute()
                         ci_quote_data = ci_quote_resp.data or {}
                         sc = (ci_quote_data.get("seller_companies") or {})
                         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -28420,6 +28308,7 @@ async def post(session, spec_id: str, request):
         .select("id, status, specification_number, quote_id") \
         .eq("id", spec_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not spec_result.data:
@@ -28556,6 +28445,7 @@ def post(session, spec_id: str):
             .select("id, quote_id, organization_id, status, signed_scan_url, specification_number, sign_date, specification_currency, exchange_rate_to_ruble") \
             .eq("id", spec_id) \
             .eq("organization_id", org_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if not spec_result.data:
@@ -28612,6 +28502,7 @@ def post(session, spec_id: str):
         existing_deal = supabase.table("deals") \
             .select("id, deal_number") \
             .eq("specification_id", spec_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if existing_deal.data:
@@ -28629,6 +28520,7 @@ def post(session, spec_id: str):
         quote_result = supabase.table("quotes") \
             .select("id, total_amount, customers(id, name)") \
             .eq("id", quote_id) \
+            .is_("deleted_at", None) \
             .execute()
 
         if not quote_result.data:
@@ -28658,6 +28550,7 @@ def post(session, spec_id: str):
             count_result = supabase.table("deals") \
                 .select("id", count="exact") \
                 .eq("organization_id", org_id) \
+                .is_("deleted_at", None) \
                 .execute()
 
             seq_num = (count_result.count or 0) + 1
@@ -28717,7 +28610,7 @@ def post(session, spec_id: str):
             # Get seller_company and quote IDN
             ci_quote_resp = supabase.table("quotes").select(
                 "idn_quote, seller_companies!seller_company_id(id, name)"
-            ).eq("id", quote_id).single().execute()
+            ).eq("id", quote_id).single().is_("deleted_at", None).execute()
             ci_quote_data = ci_quote_resp.data or {}
             sc = (ci_quote_data.get("seller_companies") or {})
             ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -29013,6 +28906,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
             count_result = supabase.table("deals").select("id", count="exact") \
                 .eq("organization_id", org_id) \
                 .eq("status", status) \
+                .is_("deleted_at", None) \
                 .execute()
             stats[status] = count_result.count or 0
 
@@ -29022,6 +28916,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         active_result = supabase.table("deals").select("total_amount") \
             .eq("organization_id", org_id) \
             .eq("status", "active") \
+            .is_("deleted_at", None) \
             .execute()
         if active_result.data:
             stats["active_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in active_result.data)
@@ -29030,6 +28925,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         completed_result = supabase.table("deals").select("total_amount") \
             .eq("organization_id", org_id) \
             .eq("status", "completed") \
+            .is_("deleted_at", None) \
             .execute()
         if completed_result.data:
             stats["completed_amount"] = sum(float(d.get("total_amount", 0) or 0) for d in completed_result.data)
@@ -29051,7 +28947,7 @@ def finance_workspace_tab(session, user, org_id, status_filter=None):
         if target_status:
             query = query.eq("status", target_status)
 
-        deals_result = query.order("signed_at", desc=True).limit(100).execute()
+        deals_result = query.order("signed_at", desc=True).limit(100).is_("deleted_at", None).execute()
         deals = deals_result.data or []
     except Exception as e:
         print(f"Error getting deals: {e}")
@@ -30663,7 +30559,7 @@ def get(session, deal_id: str, tab: str = "main", generated: str = "", payment_r
     try:
         deal_result = supabase.table("deals").select(
             "id, specifications!deals_specification_id_fkey(quote_id)"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
 
         deal = deal_result.data
         if not deal:
@@ -30931,7 +30827,7 @@ def get(session, deal_id: str, source: str = "", stage_id: str = ""):
     supabase = get_supabase()
 
     # Verify deal belongs to user's organization
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -30998,7 +30894,7 @@ async def post(session, request, deal_id: str, mode: str = "plan", item_id: str 
 
     # Verify deal belongs to user's organization
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -31140,7 +31036,7 @@ def delete(session, deal_id: str, item_id: str):
     user = session["user"]
     org_id = user["org_id"]
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Ошибка: сделка не найдена", style="color: #ef4444; font-size: 14px; padding: 12px;")
 
@@ -31509,7 +31405,7 @@ def get(session, deal_id: str, item_id: str):
     try:
         deal_result = supabase.table("deals").select(
             "id, deal_number, organization_id"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
 
         deal = deal_result.data
         if not deal or str(deal.get("organization_id")) != str(org_id):
@@ -31798,7 +31694,7 @@ def post(session, deal_id: str, item_id: str,
         # First verify the deal belongs to user's org
         deal_result = supabase.table("deals").select(
             "id, deal_number, organization_id"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
 
         if not deal_result.data:
             return page_layout("Ошибка",
@@ -45138,7 +45034,7 @@ def _finance_fetch_deal_data(deal_id, org_id, user_roles):
             "  specification_currency, exchange_rate_to_ruble, client_payment_terms, "
             "  our_legal_entity, client_legal_entity), "
             "quotes!deals_quote_id_fkey(id, idn_quote, currency, customers(name))"
-        ).eq("id", deal_id).eq("organization_id", org_id).single().execute()
+        ).eq("id", deal_id).eq("organization_id", org_id).single().is_("deleted_at", None).execute()
     except Exception as e:
         print(f"Error fetching deal {deal_id}: {e}")
         return None, [], []
@@ -45887,7 +45783,7 @@ def post(session, deal_id: str, stage_id: str, status: str = ""):
     supabase = get_supabase()
 
     # Verify deal belongs to org
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return RedirectResponse("/deals", status_code=303)
 
@@ -46004,7 +45900,7 @@ def post(session, deal_id: str, stage_id: str = "", expense_subtype: str = "tran
 
     # Verify deal belongs to user's org
     supabase = get_supabase()
-    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).execute()
+    deal_check = supabase.table("deals").select("id").eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return P("Сделка не найдена", style="color: #ef4444;")
 
@@ -46219,7 +46115,7 @@ def post(session, deal_id: str):
     # Verify deal belongs to org
     deal_check = supabase.table("deals").select(
         "id, quote_id, organization_id"
-    ).eq("id", deal_id).eq("organization_id", org_id).execute()
+    ).eq("id", deal_id).eq("organization_id", org_id).is_("deleted_at", None).execute()
     if not deal_check.data:
         return RedirectResponse("/deals", status_code=303)
 
@@ -46243,7 +46139,7 @@ def post(session, deal_id: str):
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
             "idn_quote, seller_companies!seller_company_id(id, name)"
-        ).eq("id", quote_id).single().execute()
+        ).eq("id", quote_id).single().is_("deleted_at", None).execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -47129,7 +47025,7 @@ def get(session):
         deals_resp = supabase.table("deals").select(
             "id, deal_number, quote_id, "
             "quotes!deals_quote_id_fkey(id, idn_quote, customers(name))"
-        ).eq("organization_id", org_id).execute()
+        ).eq("organization_id", org_id).is_("deleted_at", None).execute()
         all_deals = deals_resp.data or []
     except Exception as e:
         print(f"Error fetching deals for currency invoices registry: {e}")
@@ -47363,7 +47259,7 @@ def get(session, ci_id: str):
     try:
         deal_resp = supabase.table("deals").select(
             "deal_number, specification_id, specifications!specification_id(quote_id)"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
         deal_data = deal_resp.data or {}
         deal_number = deal_data.get("deal_number", "")
         specs = deal_data.get("specifications") or {}
@@ -48110,7 +48006,7 @@ def post(session, ci_id: str):
     try:
         deal_resp = supabase.table("deals").select(
             "id, specification_id, specifications!specification_id(quote_id)"
-        ).eq("id", deal_id).single().execute()
+        ).eq("id", deal_id).single().is_("deleted_at", None).execute()
         deal_data = deal_resp.data or {}
         specs = deal_data.get("specifications") or {}
         quote_id = specs.get("quote_id", "")
@@ -48143,7 +48039,7 @@ def post(session, ci_id: str):
         # Get seller_company and quote IDN
         ci_quote_resp = supabase.table("quotes").select(
             "idn_quote, seller_companies!seller_company_id(id, name)"
-        ).eq("id", quote_id).single().execute()
+        ).eq("id", quote_id).single().is_("deleted_at", None).execute()
         ci_quote_data = ci_quote_resp.data or {}
         sc = (ci_quote_data.get("seller_companies") or {})
         ci_seller_company = {"id": sc.get("id"), "name": sc.get("name"), "entity_type": "seller_company"}
@@ -48412,9 +48308,8 @@ from api.composition import (
     get_composition as api_get_composition,
     apply_composition_endpoint as api_apply_composition,
     verify_invoice as api_verify_invoice,
-    request_invoice_edit as api_request_invoice_edit,
-    approve_invoice_edit as api_approve_invoice_edit,
-    reject_invoice_edit as api_reject_invoice_edit,
+    approve_procurement_unlock as api_approve_procurement_unlock,
+    reject_procurement_unlock as api_reject_procurement_unlock,
 )
 
 @rt("/api/quotes/{quote_id}/composition", methods=["GET"])
@@ -48429,17 +48324,13 @@ async def post_quote_composition(request, quote_id: str):
 async def post_invoice_verify(request, invoice_id: str):
     return await api_verify_invoice(request, invoice_id)
 
-@rt("/api/invoices/{invoice_id}/edit-request", methods=["POST"])
-async def post_invoice_edit_request(request, invoice_id: str):
-    return await api_request_invoice_edit(request, invoice_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve", methods=["POST"])
+async def post_invoice_procurement_unlock_approve(request, invoice_id: str, approval_id: str):
+    return await api_approve_procurement_unlock(request, invoice_id, approval_id)
 
-@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/approve", methods=["POST"])
-async def post_invoice_edit_approve(request, invoice_id: str, approval_id: str):
-    return await api_approve_invoice_edit(request, invoice_id, approval_id)
-
-@rt("/api/invoices/{invoice_id}/edit-approval/{approval_id}/reject", methods=["POST"])
-async def post_invoice_edit_reject(request, invoice_id: str, approval_id: str):
-    return await api_reject_invoice_edit(request, invoice_id, approval_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject", methods=["POST"])
+async def post_invoice_procurement_unlock_reject(request, invoice_id: str, approval_id: str):
+    return await api_reject_procurement_unlock(request, invoice_id, approval_id)
 
 
 # --- Admin User Management JSON API (for Next.js frontend) ---
@@ -48485,7 +48376,7 @@ from api.invoices import (
     send_letter_draft as api_send_letter_draft,
     delete_letter_draft as api_delete_letter_draft,
     get_send_history as api_get_send_history,
-    request_edit_approval as api_request_edit_approval,
+    request_procurement_unlock as api_request_procurement_unlock,
 )
 
 @rt("/api/invoices/{invoice_id}/download-xls", methods=["POST"])
@@ -48512,9 +48403,9 @@ async def delete_invoice_letter_draft(request, invoice_id: str, draft_id: str):
 async def get_invoice_send_history(request, invoice_id: str):
     return await api_get_send_history(request, invoice_id)
 
-@rt("/api/invoices/{invoice_id}/edit-request-approval", methods=["POST"])
-async def post_invoice_edit_request_approval(request, invoice_id: str):
-    return await api_request_edit_approval(request, invoice_id)
+@rt("/api/invoices/{invoice_id}/procurement-unlock-request", methods=["POST"])
+async def post_invoice_procurement_unlock_request(request, invoice_id: str):
+    return await api_request_procurement_unlock(request, invoice_id)
 
 
 # --- Procurement Sub-Status JSON API (Phase 4c Kanban — for Next.js frontend) ---
@@ -48804,6 +48695,7 @@ def get(quote_id: str, session):
         .select("id, idn_quote, customer_id, status, workflow_status, customers!customer_id(name)") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:
@@ -48875,6 +48767,7 @@ def post(session, quote_id: str, body: str = "", mentions_json: str = ""):
         .select("id") \
         .eq("id", quote_id) \
         .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
         .execute()
 
     if not quote_result.data:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { completeCustoms, skipCustoms } from "@/entities/quote/mutations";
@@ -9,6 +9,7 @@ import type {
   QuoteItemRow,
   QuoteInvoiceRow,
 } from "@/entities/quote/queries";
+import { createClient } from "@/shared/lib/supabase/client";
 import { CustomsActionBar } from "./customs-action-bar";
 import { CustomsItemsEditor } from "./customs-items-editor";
 import { CustomsExpenses } from "./customs-expenses";
@@ -17,6 +18,94 @@ import { CustomsInfoBlock } from "./customs-info-block";
 
 function ext<T>(row: unknown): T {
   return row as T;
+}
+
+function useSupplierByQuoteItemId(
+  items: QuoteItemRow[]
+): Map<
+  string,
+  { supplier_country: string | null; invoice_id: string | null }
+> {
+  const [map, setMap] = useState<
+    Map<
+      string,
+      { supplier_country: string | null; invoice_id: string | null }
+    >
+  >(new Map());
+
+  useEffect(() => {
+    if (items.length === 0) {
+      setMap(new Map());
+      return;
+    }
+    // database.types.ts does not yet include invoice_items / coverage.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = createClient() as unknown as { from: (t: string) => any };
+    let cancelled = false;
+
+    async function load() {
+      const qiIds = items.map((it) => it.id);
+      const { data, error } = await untyped
+        .from("invoice_item_coverage")
+        .select(
+          "quote_item_id, invoice_items!inner(invoice_id, supplier_country)"
+        )
+        .in("quote_item_id", qiIds);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error(
+          "Failed to load invoice_items coverage for customs:",
+          error
+        );
+        setMap(new Map());
+        return;
+      }
+
+      const rowsByQi = new Map<
+        string,
+        Array<{ invoice_id: string; supplier_country: string | null }>
+      >();
+      for (const row of (data ?? []) as Array<{
+        quote_item_id: string;
+        invoice_items: {
+          invoice_id: string;
+          supplier_country: string | null;
+        };
+      }>) {
+        const list = rowsByQi.get(row.quote_item_id) ?? [];
+        list.push(row.invoice_items);
+        rowsByQi.set(row.quote_item_id, list);
+      }
+
+      const result = new Map<
+        string,
+        { supplier_country: string | null; invoice_id: string | null }
+      >();
+      for (const qi of items) {
+        const selected = qi.composition_selected_invoice_id ?? null;
+        const candidates = rowsByQi.get(qi.id) ?? [];
+        const match =
+          candidates.find((c) =>
+            selected == null ? true : c.invoice_id === selected
+          ) ?? null;
+        result.set(qi.id, {
+          supplier_country: match?.supplier_country ?? null,
+          invoice_id: match?.invoice_id ?? null,
+        });
+      }
+      setMap(result);
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
+  return map;
 }
 
 interface CustomsStepProps {
@@ -50,6 +139,12 @@ export function CustomsStep({
     }
     return map;
   }, [invoices]);
+
+  // Phase 5d: supplier_country + invoice_id now live on invoice_items.
+  // Project them per quote_item via invoice_item_coverage, filtered by
+  // composition_selected_invoice_id (or first covering invoice if no
+  // explicit selection has been made).
+  const supplierByQuoteItemId = useSupplierByQuoteItemId(items);
 
   const customsNotes = ext<{ customs_notes?: string | null }>(quote).customs_notes ?? "";
 
@@ -98,6 +193,7 @@ export function CustomsStep({
         <CustomsItemsEditor
           items={items}
           invoiceCountryMap={invoiceCountryMap}
+          supplierByQuoteItemId={supplierByQuoteItemId}
           userRoles={userRoles}
         />
 

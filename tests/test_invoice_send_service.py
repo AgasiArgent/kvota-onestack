@@ -7,8 +7,7 @@ Tests:
 - save_draft updates existing draft
 - get_active_draft returns None when no draft
 - get_send_history returns ordered list
-- is_invoice_sent returns True/False correctly
-- check_edit_permission logic
+- check_edit_permission logic (gated on procurement_completed_at)
 """
 
 import pytest
@@ -24,8 +23,8 @@ from services.invoice_send_service import (
     save_draft,
     get_active_draft,
     get_send_history,
-    is_invoice_sent,
     check_edit_permission,
+    is_quote_procurement_locked,
 )
 
 
@@ -242,87 +241,174 @@ class TestGetSendHistory:
         assert result == []
 
 
-class TestIsInvoiceSent:
-    """Tests for is_invoice_sent."""
-
-    @patch("services.invoice_send_service.get_supabase")
-    def test_returns_true_when_sent(self, mock_get_sb):
-        """is_invoice_sent returns True when invoices.sent_at is not null."""
-        mock_sb = _mock_supabase()
-        mock_get_sb.return_value = mock_sb
-
-        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
-            {"sent_at": "2026-04-11T10:00:00+00:00"}
-        ]
-
-        assert is_invoice_sent("inv-001") is True
-
-    @patch("services.invoice_send_service.get_supabase")
-    def test_returns_false_when_not_sent(self, mock_get_sb):
-        """is_invoice_sent returns False when invoices.sent_at is null."""
-        mock_sb = _mock_supabase()
-        mock_get_sb.return_value = mock_sb
-
-        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = [
-            {"sent_at": None}
-        ]
-
-        assert is_invoice_sent("inv-001") is False
-
-    @patch("services.invoice_send_service.get_supabase")
-    def test_returns_false_when_invoice_not_found(self, mock_get_sb):
-        """is_invoice_sent returns False when invoice doesn't exist."""
-        mock_sb = _mock_supabase()
-        mock_get_sb.return_value = mock_sb
-
-        mock_sb.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
-
-        assert is_invoice_sent("nonexistent") is False
-
-
 class TestCheckEditPermission:
-    """Tests for check_edit_permission."""
+    """Tests for check_edit_permission (Phase 5c: gated on procurement_completed_at)."""
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_returns_true_when_unsent(self, mock_is_sent):
-        """Unsent invoices are always editable."""
-        mock_is_sent.return_value = False
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_returns_true_when_unlocked(self, mock_locked):
+        """Unlocked quotes (procurement active) are always editable."""
+        mock_locked.return_value = False
 
         assert check_edit_permission("inv-001", ["procurement"]) is True
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_returns_true_for_admin_on_sent_invoice(self, mock_is_sent):
-        """Admin can edit sent invoices."""
-        mock_is_sent.return_value = True
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_returns_true_for_admin_on_locked_quote(self, mock_locked):
+        """Admin can edit procurement-locked invoices."""
+        mock_locked.return_value = True
 
         assert check_edit_permission("inv-001", ["admin"]) is True
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_returns_true_for_head_of_procurement_on_sent_invoice(self, mock_is_sent):
-        """Head of procurement can edit sent invoices."""
-        mock_is_sent.return_value = True
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_returns_true_for_head_of_procurement_on_locked_quote(self, mock_locked):
+        """Head of procurement can edit procurement-locked invoices."""
+        mock_locked.return_value = True
 
         assert check_edit_permission("inv-001", ["head_of_procurement"]) is True
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_returns_false_for_procurement_on_sent_invoice(self, mock_is_sent):
-        """Regular procurement user cannot edit sent invoices."""
-        mock_is_sent.return_value = True
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_returns_false_for_procurement_on_locked_quote(self, mock_locked):
+        """Regular procurement user cannot edit procurement-locked invoices."""
+        mock_locked.return_value = True
 
         assert check_edit_permission("inv-001", ["procurement"]) is False
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_returns_false_for_sales_on_sent_invoice(self, mock_is_sent):
-        """Sales user cannot edit sent invoices."""
-        mock_is_sent.return_value = True
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_returns_false_for_sales_on_locked_quote(self, mock_locked):
+        """Sales user cannot edit procurement-locked invoices."""
+        mock_locked.return_value = True
 
         assert check_edit_permission("inv-001", ["sales"]) is False
 
-    @patch("services.invoice_send_service.is_invoice_sent")
-    def test_multiple_roles_checked(self, mock_is_sent):
+    @patch("services.invoice_send_service.is_quote_procurement_locked")
+    def test_multiple_roles_checked(self, mock_locked):
         """User with multiple roles — if any is admin/head_of_procurement, edit allowed."""
-        mock_is_sent.return_value = True
+        mock_locked.return_value = True
 
         assert check_edit_permission("inv-001", ["procurement", "admin"]) is True
         assert check_edit_permission("inv-001", ["sales", "head_of_procurement"]) is True
         assert check_edit_permission("inv-001", ["sales", "procurement"]) is False
+
+
+class TestIsQuoteProcurementLocked:
+    """Tests for is_quote_procurement_locked (Phase 5c: soft-delete aware)."""
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_locked_when_procurement_completed(self, mock_get_sb):
+        """Quote with non-null procurement_completed_at → locked."""
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        # invoices lookup returns quote_id
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        # quotes lookup returns procurement_completed_at set
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {
+            "procurement_completed_at": "2026-04-11T10:00:00+00:00"
+        }
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is True
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_locked_excludes_soft_deleted_quote(self, mock_get_sb):
+        """Soft-deleted quote (deleted_at IS NOT NULL) must NOT trigger the lock.
+
+        Even if procurement_completed_at is set, a soft-deleted quote is
+        effectively gone — the edit-gate should fail open so the invoice row
+        remains editable by legacy flows that have not yet filtered on it.
+        The ``.is_("deleted_at", None)`` filter in the PostgREST query makes
+        the quotes lookup return no data for soft-deleted quotes, which the
+        fail-open branch treats as "not locked".
+        """
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-deleted"}
+        # Soft-deleted quote: PostgREST .is_("deleted_at", None) filter
+        # excludes it, so data is empty.
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = None
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is False
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_unlocked_when_procurement_completed_at_null(self, mock_get_sb):
+        """Active quote without procurement_completed_at → not locked."""
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {"procurement_completed_at": None}
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:
+                table_mock.select.return_value.eq.return_value.is_.return_value.single.return_value = q_chain
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        assert is_quote_procurement_locked("inv-001") is False
+
+    @patch("services.invoice_send_service.get_supabase")
+    def test_soft_delete_filter_uses_none_not_string_literal(self, mock_get_sb):
+        """The `.is_("deleted_at", ...)` filter must pass Python ``None``.
+
+        Regression guard for the services-layer soft-delete audit
+        (``tests/test_services_soft_delete_audit.py``) which scans for the
+        canonical ``.is_("deleted_at", None)`` form. The string literal
+        ``"null"`` also works at the PostgREST level but is not recognised
+        by the audit regex — a read with the string form silently bypasses
+        the guardrail and shows up as a violation on every CI run.
+        """
+        mock_sb = MagicMock()
+        mock_get_sb.return_value = mock_sb
+
+        inv_chain = MagicMock()
+        inv_chain.execute.return_value.data = {"quote_id": "q-001"}
+        q_chain = MagicMock()
+        q_chain.execute.return_value.data = {"procurement_completed_at": None}
+
+        # Capture the .is_() call args from the quotes query chain.
+        quotes_is_mock = MagicMock()
+        quotes_is_mock.single.return_value = q_chain
+
+        def table_side_effect(name):
+            table_mock = MagicMock()
+            if name == "invoices":
+                table_mock.select.return_value.eq.return_value.single.return_value = inv_chain
+            else:  # quotes
+                table_mock.select.return_value.eq.return_value.is_ = quotes_is_mock
+                quotes_is_mock.return_value = quotes_is_mock
+            return table_mock
+
+        mock_sb.table.side_effect = table_side_effect
+
+        is_quote_procurement_locked("inv-001")
+
+        quotes_is_mock.assert_called_once_with("deleted_at", None)

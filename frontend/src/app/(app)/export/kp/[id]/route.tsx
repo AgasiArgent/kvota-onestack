@@ -4,6 +4,7 @@ import fs from "fs";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createClient } from "@/shared/lib/supabase/server";
 import { KPDocument } from "@/features/quotes/ui/pdf/kp-document";
+import type { KPComposedItem } from "@/features/quotes/ui/pdf/kp-document";
 
 // Lazy-load logo (avoid build-time fs.readFileSync which fails in Docker)
 let logoBase64Cache: string | null = null;
@@ -40,8 +41,16 @@ export async function GET(
     return NextResponse.json({ error: "Quote not found" }, { status: 404 });
   }
 
-  // Resolve FKs in parallel
-  const [customerRes, contactRes, creatorRes, itemsRes] = await Promise.all([
+  // Phase 5d Pattern B (Group 5 Appendix, mirroring Task 11 b5b0173):
+  // items for the KP are the composed invoice_items (filtered by each
+  // quote_item's composition_selected_invoice_id), not raw quote_items.
+  // Migration 284 drops base_price_vat and product_code from quote_items;
+  // both live on invoice_items now.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+
+  // Resolve FKs + composition in parallel
+  const [customerRes, contactRes, creatorRes, composedRes] = await Promise.all([
     quote.customer_id
       ? supabase
           .from("customers")
@@ -63,11 +72,22 @@ export async function GET(
           .eq("user_id", quote.created_by)
           .single()
       : null,
-    supabase
-      .from("quote_items")
-      .select("*")
-      .eq("quote_id", id)
-      .order("position", { ascending: true }),
+    untyped
+      .from("quotes")
+      .select(
+        "id, " +
+          "quote_items!inner(" +
+          "id, position, composition_selected_invoice_id, brand, " +
+          "coverage:invoice_item_coverage!quote_item_id(" +
+          "invoice_items!inner(" +
+          "invoice_id, product_name, supplier_sku, brand, quantity, " +
+          "base_price_vat" +
+          ")" +
+          ")" +
+          ")"
+      )
+      .eq("id", id)
+      .single(),
   ]);
 
   const quoteDetail = {
@@ -83,7 +103,53 @@ export async function GET(
       : null,
   };
 
-  const items = itemsRes.data ?? [];
+  // Flatten composition → items for the PDF renderer. For each quote_item
+  // we keep the invoice_item(s) covered by the currently-selected
+  // invoice; split cases produce multiple rows.
+  type InvoiceItemComposedRow = {
+    invoice_id: string;
+    product_name: string | null;
+    supplier_sku: string | null;
+    brand: string | null;
+    quantity: number | null;
+    base_price_vat: number | null;
+  };
+  type CoverageComposedRow = { invoice_items: InvoiceItemComposedRow | null };
+  type QuoteItemComposedRow = {
+    id: string;
+    position: number | null;
+    composition_selected_invoice_id: string | null;
+    brand: string | null;
+    coverage: CoverageComposedRow[] | null;
+  };
+  type QuoteComposedRow = {
+    id: string;
+    quote_items: QuoteItemComposedRow[] | null;
+  };
+
+  const composedData = composedRes.data as QuoteComposedRow | null;
+  const orderedQuoteItems = (composedData?.quote_items ?? []).slice().sort(
+    (a, b) => (a.position ?? 0) - (b.position ?? 0)
+  );
+
+  const items: KPComposedItem[] = orderedQuoteItems.flatMap((qi) => {
+    const selected = qi.composition_selected_invoice_id;
+    return (qi.coverage ?? [])
+      .map((c, covIdx) => ({ ii: c.invoice_items, covIdx }))
+      .filter(
+        (entry): entry is { ii: InvoiceItemComposedRow; covIdx: number } =>
+          entry.ii != null && entry.ii.invoice_id === selected
+      )
+      .map(({ ii, covIdx }) => ({
+        id: `${qi.id}:${covIdx}`,
+        brand: ii.brand ?? qi.brand,
+        product_code: ii.supplier_sku,
+        product_name: ii.product_name ?? "",
+        unit: null as string | null,
+        quantity: ii.quantity,
+        base_price_vat: ii.base_price_vat,
+      }));
+  });
 
   // Determine VAT rate from calc variables (DDP + not export → 20%, else → 0%)
   const { data: calcVars } = await supabase

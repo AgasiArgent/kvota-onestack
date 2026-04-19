@@ -9,7 +9,7 @@ import type {
 } from "@/entities/quote/queries";
 import { createClient } from "@/shared/lib/supabase/client";
 import { useControlData } from "./use-control-data";
-import { useControlChecks } from "./use-control-checks";
+import { useControlChecks, type ControlCheckItem } from "./use-control-checks";
 import { WorkflowStatusBanner } from "./workflow-status-banner";
 import { DealSummaryPanel } from "./deal-summary-panel";
 import { VerificationStrip } from "./verification-strip";
@@ -45,6 +45,112 @@ function toNumber(value: unknown, fallback: number = 0): number {
   return isNaN(n) ? fallback : n;
 }
 
+/**
+ * Phase 5d — project each quote_item onto the supplier-side fields the
+ * control-step checks need. Reads invoice_items via invoice_item_coverage
+ * for the invoice pinned on each quote_item (composition_selected_invoice_id).
+ * When no selection exists, the first covering invoice wins so the check
+ * can still display a meaningful value.
+ */
+function useControlCheckItems(
+  items: QuoteItemRow[],
+): ControlCheckItem[] {
+  const [checkItems, setCheckItems] = useState<ControlCheckItem[]>([]);
+
+  useEffect(() => {
+    if (items.length === 0) {
+      setCheckItems([]);
+      return;
+    }
+
+    // database.types.ts does not yet include invoice_items / coverage.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const untyped = createClient() as unknown as { from: (t: string) => any };
+    let cancelled = false;
+
+    async function load() {
+      const qiIds = items.map((it) => it.id);
+      const { data, error } = await untyped
+        .from("invoice_item_coverage")
+        .select(
+          "quote_item_id, invoice_items!inner(invoice_id, supplier_country, price_includes_vat, purchase_price_original)"
+        )
+        .in("quote_item_id", qiIds);
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error(
+          "Failed to load invoice_items coverage for control:",
+          error
+        );
+        setCheckItems(items.map(toEmptyCheckItem));
+        return;
+      }
+
+      const rowsByQi = new Map<
+        string,
+        Array<{
+          invoice_id: string;
+          supplier_country: string | null;
+          price_includes_vat: boolean | null;
+          purchase_price_original: number | null;
+        }>
+      >();
+      for (const row of (data ?? []) as Array<{
+        quote_item_id: string;
+        invoice_items: {
+          invoice_id: string;
+          supplier_country: string | null;
+          price_includes_vat: boolean | null;
+          purchase_price_original: number | null;
+        };
+      }>) {
+        const list = rowsByQi.get(row.quote_item_id) ?? [];
+        list.push(row.invoice_items);
+        rowsByQi.set(row.quote_item_id, list);
+      }
+
+      setCheckItems(
+        items.map((qi) => {
+          const selected = qi.composition_selected_invoice_id ?? null;
+          const candidates = rowsByQi.get(qi.id) ?? [];
+          const match =
+            candidates.find((c) =>
+              selected == null ? true : c.invoice_id === selected
+            ) ?? null;
+          return {
+            quantity: qi.quantity ?? 0,
+            invoice_id: match?.invoice_id ?? null,
+            supplier_country: match?.supplier_country ?? null,
+            price_includes_vat: match?.price_includes_vat ?? null,
+            purchase_price_original:
+              match?.purchase_price_original ?? null,
+          };
+        })
+      );
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
+
+  return checkItems;
+}
+
+function toEmptyCheckItem(item: QuoteItemRow): ControlCheckItem {
+  return {
+    quantity: item.quantity ?? 0,
+    invoice_id: null,
+    supplier_country: null,
+    price_includes_vat: null,
+    purchase_price_original: null,
+  };
+}
+
 export function ControlStep({
   quote,
   items,
@@ -76,10 +182,16 @@ export function ControlStep({
     invoiceIds,
   );
 
+  // Phase 5d: supplier-side fields (supplier_country, price_includes_vat,
+  // purchase_price_original, invoice_id) now live on invoice_items. Build
+  // the per-quote-item supplier-side projection filtered by each item's
+  // composition_selected_invoice_id.
+  const checkItems = useControlCheckItems(items);
+
   // Compute 7 verification checks
   const checks = useControlChecks(
     quote,
-    items,
+    checkItems,
     calcVariables,
     calcSummary,
     invoiceDocuments,
