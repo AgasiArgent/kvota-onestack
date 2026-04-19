@@ -399,29 +399,100 @@ export async function fetchOrgUsers(
 
 export async function fetchCustomerPositions(customerId: string) {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("quote_items")
+  // Phase 5d Pattern C (design.md §2.3.1): read composed price data via
+  // invoice_item_coverage → invoice_items filtered by each quote_item's
+  // composition_selected_invoice_id. Legacy direct reads of
+  // quote_items.purchase_price_original / purchase_currency /
+  // procurement_completed_at are dropped in migration 284.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const untyped = supabase as unknown as { from: (t: string) => any };
+  const { data } = await untyped
+    .from("quotes")
     .select(
-      "id, product_name, brand, supplier_sku, idn_sku, quantity, purchase_price_original, purchase_currency, procurement_completed_at, created_at, quotes!inner(idn_quote, customer_id)"
+      "id, idn_quote, customer_id, " +
+        "quote_items!inner(" +
+        "id, product_name, brand, supplier_sku, idn_sku, quantity, created_at, " +
+        "composition_selected_invoice_id, " +
+        "coverage:invoice_item_coverage!quote_item_id(" +
+        "invoice_items!inner(" +
+        "invoice_id, purchase_price_original, purchase_currency, " +
+        "invoices!inner(procurement_completed_at)" +
+        ")" +
+        ")" +
+        ")"
     )
-    .eq("quotes.customer_id", customerId)
-    .order("created_at", { ascending: false })
+    .eq("customer_id", customerId)
+    .order("quote_items.created_at", { ascending: false })
     .limit(100);
 
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    product_name: row.product_name,
-    brand: row.brand,
-    sku: row.supplier_sku,
-    idn_sku: row.idn_sku,
-    quantity: row.quantity,
-    purchase_price: row.purchase_price_original,
-    purchase_currency: row.purchase_currency,
-    procurement_date: row.procurement_completed_at,
-    request_date: row.created_at,
-    quote_idn:
-      (row.quotes as unknown as { idn_quote: string })?.idn_quote ?? "—",
-  }));
+  type InvoiceItemRow = {
+    invoice_id: string;
+    purchase_price_original: number | null;
+    purchase_currency: string | null;
+    invoices: { procurement_completed_at: string | null } | null;
+  };
+  type CoverageRow = { invoice_items: InvoiceItemRow | null };
+  type QuoteItemRow = {
+    id: string;
+    // product_name is NOT NULL at the DB level — match database.types
+    product_name: string;
+    brand: string | null;
+    supplier_sku: string | null;
+    idn_sku: string | null;
+    quantity: number | null;
+    created_at: string | null;
+    composition_selected_invoice_id: string | null;
+    coverage: CoverageRow[] | null;
+  };
+  type QuoteRow = {
+    id: string;
+    idn_quote: string;
+    customer_id: string;
+    quote_items: QuoteItemRow[] | null;
+  };
+
+  const rows: Array<{
+    id: string;
+    product_name: string;
+    brand: string | null;
+    sku: string | null;
+    idn_sku: string | null;
+    quantity: number | null;
+    purchase_price: number | null;
+    purchase_currency: string | null;
+    procurement_date: string | null;
+    request_date: string | null;
+    quote_idn: string;
+  }> = [];
+
+  for (const quote of (data ?? []) as QuoteRow[]) {
+    for (const qi of quote.quote_items ?? []) {
+      const selected = qi.composition_selected_invoice_id;
+      const picked =
+        (qi.coverage ?? [])
+          .map((c) => c.invoice_items)
+          .find(
+            (ii): ii is InvoiceItemRow =>
+              ii != null && ii.invoice_id === selected
+          ) ?? null;
+
+      rows.push({
+        id: qi.id,
+        product_name: qi.product_name,
+        brand: qi.brand,
+        sku: qi.supplier_sku,
+        idn_sku: qi.idn_sku,
+        quantity: qi.quantity,
+        purchase_price: picked?.purchase_price_original ?? null,
+        purchase_currency: picked?.purchase_currency ?? null,
+        procurement_date: picked?.invoices?.procurement_completed_at ?? null,
+        request_date: qi.created_at,
+        quote_idn: quote.idn_quote ?? "—",
+      });
+    }
+  }
+
+  return rows;
 }
 
 export async function fetchCustomerAssignees(

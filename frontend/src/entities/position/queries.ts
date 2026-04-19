@@ -136,15 +136,28 @@ export async function fetchPositionsList(
   if (products.length > 0) {
     // Build product keys for filtering details
     const productBrands = [...new Set(products.map((p) => p.brand))];
-    // Query quote_items for detail entries joined with quotes and user_profiles
-    // We use RPC-style query since we need a multi-table join
-    let detailQuery = supabase
+    // Phase 5d Pattern C (design.md §2.3.3): source price data for each
+    // quote_item through invoice_item_coverage → invoice_items filtered
+    // by composition_selected_invoice_id. Legacy direct reads of
+    // quote_items.purchase_price_original / purchase_currency /
+    // product_code are dropped in migration 284.
+    //
+    // We still anchor on quote_items because the detail view is "all
+    // sourcing attempts for this product", not just the currently
+    // composed one — so we read the item's own coverage set and pick
+    // the row matching its selected invoice (null when uncovered).
+    let detailQuery = untyped
       .from("quote_items")
       .select(
-        `id, quote_id, brand, product_code, updated_at, is_unavailable,
-         purchase_price_original, purchase_currency, assigned_procurement_user,
+        `id, quote_id, brand, supplier_sku, updated_at, is_unavailable,
+         composition_selected_invoice_id, assigned_procurement_user,
          proforma_number,
-         quotes!inner(idn, organization_id)`
+         quotes!inner(idn, organization_id),
+         coverage:invoice_item_coverage!quote_item_id(
+           invoice_items!inner(
+             invoice_id, purchase_price_original, purchase_currency
+           )
+         )`
       )
       .in("brand", productBrands)
       .or("procurement_status.eq.completed,is_unavailable.eq.true")
@@ -157,18 +170,24 @@ export async function fetchPositionsList(
     // so we filter to current-page products client-side below.
 
     const detailResult = await detailQuery;
+    type InvoiceItemRow = {
+      invoice_id: string;
+      purchase_price_original: number | null;
+      purchase_currency: string | null;
+    };
+    type CoverageRow = { invoice_items: InvoiceItemRow | null };
     const detailRows = (detailResult.data ?? []) as unknown as Array<{
       id: string;
       quote_id: string;
       brand: string;
-      product_code: string | null;
+      supplier_sku: string | null;
       updated_at: string;
       is_unavailable: boolean | null;
-      purchase_price_original: number | null;
-      purchase_currency: string | null;
+      composition_selected_invoice_id: string | null;
       assigned_procurement_user: string | null;
       proforma_number: string | null;
       quotes: { idn: string; organization_id: string } | null;
+      coverage: CoverageRow[] | null;
     }>;
 
     // Fetch user_profiles for moz names
@@ -197,7 +216,20 @@ export async function fetchPositionsList(
 
     // Group detail rows by product key, filtering to current page products
     for (const row of detailRows) {
-      const key = `${row.brand}::${row.product_code ?? ""}`;
+      // Post-Phase-5d, the view (positions_registry_view) continues to
+      // group by (brand, supplier_sku) after its own rewrite. We mirror
+      // that here by using quote_items.supplier_sku — a column retained
+      // by migration 284 — as the product_code key. Price and currency
+      // come from the composed invoice_item via coverage.
+      const picked =
+        (row.coverage ?? [])
+          .map((c) => c.invoice_items)
+          .find(
+            (ii): ii is InvoiceItemRow =>
+              ii != null &&
+              ii.invoice_id === row.composition_selected_invoice_id
+          ) ?? null;
+      const key = `${row.brand}::${row.supplier_sku ?? ""}`;
       if (!pageProductKeys.has(key)) continue;
 
       const entry: SourcingEntry = {
@@ -206,8 +238,8 @@ export async function fetchPositionsList(
         quoteIdn: (row.quotes || {}).idn ?? "",
         updatedAt: row.updated_at,
         isUnavailable: row.is_unavailable ?? false,
-        price: row.purchase_price_original,
-        currency: row.purchase_currency,
+        price: picked?.purchase_price_original ?? null,
+        currency: picked?.purchase_currency ?? null,
         mozName: mozMap.get(row.assigned_procurement_user ?? "") ?? null,
         proformaNumber: row.proforma_number,
       };
