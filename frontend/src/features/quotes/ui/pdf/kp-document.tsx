@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Font,
 } from "@react-pdf/renderer";
-import type { QuoteDetailRow, QuoteItemRow } from "@/entities/quote/queries";
+import type { QuoteDetailRow } from "@/entities/quote/queries";
 
 // ---------------------------------------------------------------------------
 // Font registration (Roboto — good Cyrillic support, similar to Manrope)
@@ -323,7 +323,25 @@ interface ItemCalc {
   totalWithVat: number;
 }
 
-function calcItem(item: QuoteItemRow, vatRate: number): ItemCalc {
+/**
+ * Narrow composed-item shape consumed by the KP PDF. Fields are the
+ * intersection of what the renderer reads and what Phase 5d's
+ * composition (invoice_items via composition_selected_invoice_id)
+ * supplies. After migration 284 drops legacy columns from quote_items,
+ * the upstream /export/kp/[id]/route.tsx must assemble this shape
+ * instead of passing raw quote_items rows.
+ */
+export interface KPComposedItem {
+  id: string;
+  brand: string | null;
+  product_code: string | null;
+  product_name: string;
+  unit: string | null;
+  quantity: number | null;
+  base_price_vat: number | null;
+}
+
+function calcItem(item: KPComposedItem, vatRate: number): ItemCalc {
   const basePrice = item.base_price_vat ?? 0;
   const qty = item.quantity ?? 0;
 
@@ -347,7 +365,7 @@ function calcItem(item: QuoteItemRow, vatRate: number): ItemCalc {
 
 export interface KPDocumentProps {
   quote: QuoteDetailRow;
-  items: QuoteItemRow[];
+  items: KPComposedItem[];
   logoBase64: string;
   vatRate?: number;
 }
