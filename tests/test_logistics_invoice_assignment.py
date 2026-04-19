@@ -591,16 +591,32 @@ class TestCompleteProcurementLogisticsWiring:
     """Integration tests: complete_procurement calls assign_logistics_to_invoices."""
 
     def _setup_successful_procurement_mocks(self, mock_client):
-        """Set up mock chain for a successful complete_procurement call."""
+        """Set up mock chain for a successful complete_procurement call.
+
+        Covers the full Phase 5d readiness flow:
+          1. quotes.select().eq().is_().single().execute() — status check
+             (soft-delete filter requires .is_("deleted_at", None) in chain)
+          2. composition_service.is_procurement_complete:
+               a) quote_items.select(id, is_unavailable,
+                  composition_selected_invoice_id).eq().execute()
+               b) invoice_item_coverage.select(..., invoice_items!inner(...))
+                  .in_().execute() — coverage row must reference invoice_items
+                  with the selected invoice_id and non-null
+                  purchase_price_original so readiness returns True.
+          3. quotes.update().eq().execute() — transition write
+          4. workflow_transitions.insert().execute() — audit log
+        """
         call_count = {"n": 0}
+        qi_id = "qi-1"
+        selected_invoice_id = INVOICE_1
 
         def table_side_effect(table_name):
             call_count["n"] += 1
             chain = MagicMock()
 
             if table_name == "quotes" and call_count["n"] == 1:
-                # First quotes call: select for status check
-                chain.select.return_value.eq.return_value.single.return_value.execute.return_value = MagicMock(
+                # First quotes call: select for status check (with soft-delete filter)
+                chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
                     data={
                         "id": QUOTE_ID,
                         "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
@@ -610,27 +626,29 @@ class TestCompleteProcurementLogisticsWiring:
                 return chain
 
             elif table_name == "quote_items":
-                # Items check: all complete
+                # Readiness: one priced, non-N/A quote_item with composition pointer
                 chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=[
                         {
-                            "id": "item1",
-                            "product_name": "Item 1",
-                            "procurement_status": "completed",
-                            "purchase_price_original": 100.0,
+                            "id": qi_id,
                             "is_unavailable": False,
+                            "composition_selected_invoice_id": selected_invoice_id,
                         },
                     ]
                 )
                 return chain
 
-            elif table_name == "invoices":
-                # Invoices check for procurement completion validation
-                chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
+            elif table_name == "invoice_item_coverage":
+                # Readiness: coverage row pointing at an invoice_item in the
+                # selected invoice with a non-null purchase_price_original.
+                chain.select.return_value.in_.return_value.execute.return_value = MagicMock(
                     data=[
                         {
-                            "id": INVOICE_1,
-                            "status": "completed",
+                            "quote_item_id": qi_id,
+                            "invoice_items": {
+                                "invoice_id": selected_invoice_id,
+                                "purchase_price_original": 100.0,
+                            },
                         },
                     ]
                 )
