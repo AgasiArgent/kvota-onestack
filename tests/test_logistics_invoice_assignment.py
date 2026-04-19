@@ -84,16 +84,21 @@ def _mock_supabase_for_assignment(
     """
     mock_client = MagicMock()
 
-    call_counter = {"count": 0}
+    # Per-table call counters captured in closure. Using separate counters
+    # (instead of a single shared one) avoids cross-table interference: the
+    # first quotes call should always be the fetch regardless of how many
+    # invoice accesses happened in between.
+    quotes_calls = {"count": 0}
+    invoices_calls = {"count": 0}
 
     def table_side_effect(table_name):
-        call_counter["count"] += 1
         chain = MagicMock()
 
         if table_name == "quotes":
+            quotes_calls["count"] += 1
             # First quotes call is the fetch (select+is_ chain).
             # Subsequent are updates (update().eq().execute()).
-            if quote_data is not None and call_counter["count"] <= 1:
+            if quote_data is not None and quotes_calls["count"] == 1:
                 chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
                     data=quote_data
                 )
@@ -104,10 +109,9 @@ def _mock_supabase_for_assignment(
             return chain
 
         elif table_name == "invoices":
-            # Could be select (fetch invoices) or update (set per-invoice user).
+            invoices_calls["count"] += 1
             # First invoices access = select; subsequent = update (batch .in_ or .eq).
-            if invoices_data is not None and not hasattr(table_side_effect, "_invoices_fetched"):
-                table_side_effect._invoices_fetched = True
+            if invoices_data is not None and invoices_calls["count"] == 1:
                 chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
                     data=invoices_data
                 )
@@ -122,10 +126,6 @@ def _mock_supabase_for_assignment(
             return chain
 
         return chain
-
-    # Reset fetch state each time this helper is called
-    if hasattr(table_side_effect, "_invoices_fetched"):
-        delattr(table_side_effect, "_invoices_fetched")
 
     mock_client.table.side_effect = table_side_effect
     return mock_client
