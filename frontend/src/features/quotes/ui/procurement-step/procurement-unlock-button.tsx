@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { requestEditApproval } from "@/entities/invoice/mutations";
+import { requestProcurementUnlock } from "@/entities/invoice/mutations";
 
 interface ProcurementUnlockButtonProps {
   invoiceId: string;
@@ -26,7 +26,7 @@ export function ProcurementUnlockButton({
   async function handleRequest() {
     setRequesting(true);
     try {
-      await requestEditApproval(invoiceId);
+      await requestProcurementUnlock(invoiceId);
       setRequested(true);
       toast.success("Запрос на одобрение отправлен");
     } catch {

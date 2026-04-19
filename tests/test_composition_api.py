@@ -6,7 +6,6 @@ Covers:
 - GET  /api/quotes/{quote_id}/composition
 - POST /api/quotes/{quote_id}/composition
 - POST /api/invoices/{invoice_id}/verify
-- request_invoice_edit (internal — no longer routed post-5c)
 - POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve
 - POST /api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject
 
@@ -29,7 +28,6 @@ from api.composition import (  # noqa: E402
     approve_procurement_unlock,
     get_composition,
     reject_procurement_unlock,
-    request_invoice_edit,
     verify_invoice,
 )
 
@@ -326,99 +324,6 @@ class TestVerifyInvoice:
         with patch("api.composition.get_supabase", return_value=sb):
             response = await verify_invoice(request, invoice_id)
         assert response.status_code == 403
-
-
-# ============================================================================
-# request_invoice_edit (internal — no route post-5c, kept for continuity)
-# ============================================================================
-
-class TestRequestInvoiceEdit:
-
-    @pytest.mark.asyncio
-    async def test_happy_path_creates_pending_approval(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {
-                "proposed_changes": {"pickup_country": {"old": "Italy", "new": "Germany"}},
-                "reason": "Supplier changed pickup location after verification",
-            },
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "supplier_id": make_uuid(),
-            "verified_at": "2026-04-10T10:00:00+00:00",  # already verified
-            "verified_by": make_uuid(),
-            "status": "pending_procurement",
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        approval_id_generated = make_uuid()
-        approvals_chain = _chain(return_data=[{"id": approval_id_generated}])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-            "approvals": approvals_chain,
-        })
-
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-
-        assert response.status_code == 201
-        payload = json.loads(response.body)
-        assert payload["data"]["approval_id"] == approval_id_generated
-        assert payload["data"]["status"] == "pending"
-
-        # approvals.insert called with correct payload shape
-        approvals_chain.insert.assert_called_once()
-        insert_payload = approvals_chain.insert.call_args.args[0]
-        assert insert_payload["approval_type"] == "invoice_edit"
-        assert insert_payload["status"] == "pending"
-        assert insert_payload["modifications"]["invoice_id"] == invoice_id
-        assert insert_payload["modifications"]["diff"] == {
-            "pickup_country": {"old": "Italy", "new": "Germany"}
-        }
-
-    @pytest.mark.asyncio
-    async def test_409_when_invoice_not_verified(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {"proposed_changes": {"x": {"old": 1, "new": 2}}, "reason": "1234567890"},
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "verified_at": None,  # NOT verified
-            "verified_by": None,
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-        })
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-        assert response.status_code == 409
-        assert json.loads(response.body)["error"]["code"] == "INVOICE_NOT_VERIFIED"
-
-    @pytest.mark.asyncio
-    async def test_400_when_reason_too_short(self, invoice_id, user_id, org_id, quote_id):
-        request = _make_request(
-            {"proposed_changes": {"x": {"old": 1, "new": 2}}, "reason": "short"},
-            api_user=_make_api_user(user_id, org_id),
-        )
-        invoices_chain = _chain(return_data=[{
-            "id": invoice_id,
-            "quote_id": quote_id,
-            "verified_at": "2026-04-10T10:00:00+00:00",
-            "quotes": {"id": quote_id, "organization_id": org_id},
-        }])
-        sb = _make_supabase({
-            "user_roles": _chain(return_data=_role_rows(["procurement"])),
-            "invoices": invoices_chain,
-        })
-        with patch("api.composition.get_supabase", return_value=sb):
-            response = await request_invoice_edit(request, invoice_id)
-        assert response.status_code == 400
 
 
 # ============================================================================

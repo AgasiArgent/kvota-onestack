@@ -153,11 +153,12 @@ export async function downloadInvoiceXls(
 // ---------------------------------------------------------------------------
 // Procurement-unlock request (Phase 5c)
 //
-// Exported name preserved (requestEditApproval) for minimal cross-commit
-// breakage — the React component rename happens in Task 11.
+// Name matches the backend route (/procurement-unlock-request). Phase 4a
+// previously used /edit-approval — the old export name `requestEditApproval`
+// has been renamed to `requestProcurementUnlock` to keep the contract obvious.
 // ---------------------------------------------------------------------------
 
-export async function requestEditApproval(invoiceId: string): Promise<void> {
+export async function requestProcurementUnlock(invoiceId: string): Promise<void> {
   const headers = await getAuthHeaders();
 
   const res = await fetch(`/api/invoices/${invoiceId}/procurement-unlock-request`, {

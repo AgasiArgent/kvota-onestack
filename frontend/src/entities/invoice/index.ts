@@ -11,5 +11,5 @@ export {
   sendLetterDraft,
   deleteLetterDraft,
   downloadInvoiceXls,
-  requestEditApproval,
+  requestProcurementUnlock,
 } from "./mutations";
