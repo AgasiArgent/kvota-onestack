@@ -19080,40 +19080,9 @@ async def api_complete_procurement(quote_id: str, session):
 # ============================================================================
 # DOCUMENT API ENDPOINTS
 # ============================================================================
-
-@rt("/api/documents/{document_id}/download")
-def api_document_download(document_id: str, session):
-    """Get a download URL for a document."""
-    redirect = require_login(session)
-    if redirect:
-        return RedirectResponse("/login", status_code=303)
-
-    # Get download URL
-    download_url = get_download_url(document_id, expires_in=3600, force_download=True)
-    if not download_url:
-        return JSONResponse({"success": False, "error": "Document not found"}, status_code=404)
-
-    return RedirectResponse(download_url, status_code=302)
-
-
-@rt("/api/documents/{document_id}", methods=["DELETE"])
-def api_delete_document(document_id: str, session):
-    """Delete a document."""
-    redirect = require_login(session)
-    if redirect:
-        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
-
-    user = session["user"]
-
-    if not user_has_any_role(session, ["procurement", "admin", "head_of_procurement"]):
-        return JSONResponse({"success": False, "error": "Forbidden"}, status_code=403)
-
-    # Delete the document
-    success, error = delete_document(document_id)
-    if success:
-        return JSONResponse({"success": True})
-    else:
-        return JSONResponse({"success": False, "error": error or "Delete failed"}, status_code=500)
+# Phase 6B-9: /api/documents/{document_id}/download (GET) and
+# /api/documents/{document_id} (DELETE) moved to api/documents.py + routed via
+# api/routers/documents.py on the FastAPI sub-app mounted at /api.
 
 
 async def render_invoices_list(quote_id: str, org_id: str, session):
@@ -22272,99 +22241,8 @@ async def post(session, quote_id: str, request):
 # ============================================================================
 # CUSTOMS ITEM API (bulk save on form submit)
 # ============================================================================
-
-@rt("/api/customs/{quote_id}/items/bulk", methods=["PATCH"])
-async def api_customs_items_bulk_update(quote_id: str, session, request):
-    """Bulk update customs items (hs_code, customs_duty) on form submit"""
-    redirect = require_login(session)
-    if redirect:
-        return {"success": False, "error": "Not authenticated"}
-
-    user = session["user"]
-    org_id = user["org_id"]
-
-    # Check role
-    if not user_has_any_role(session, ["customs", "admin", "head_of_customs"]):
-        return {"success": False, "error": "Unauthorized"}
-
-    try:
-        body = await request.json()
-    except:
-        return {"success": False, "error": "Invalid JSON"}
-
-    items = body.get("items", [])
-    if not items:
-        return {"success": True}  # Nothing to update
-
-    supabase = get_supabase()
-
-    # Verify quote exists and belongs to org
-    quote_result = supabase.table("quotes") \
-        .select("id, workflow_status, customs_completed_at") \
-        .eq("id", quote_id) \
-        .eq("organization_id", org_id) \
-        .is_("deleted_at", None) \
-        .execute()
-
-    if not quote_result.data:
-        return {"success": False, "error": "Quote not found"}
-
-    quote = quote_result.data[0]
-    workflow_status = quote.get("workflow_status", "draft")
-
-    # Check if quote is ready for customs (procurement must be done first)
-    ready_statuses = ["pending_customs", "pending_logistics", "pending_logistics_and_customs", "pending_sales_review"]
-    if workflow_status not in ready_statuses or quote.get("customs_completed_at"):
-        return {"success": False, "error": "Quote not editable - waiting for procurement"}
-
-    # Update each item
-    for item in items:
-        item_id = item.get("id")
-        if not item_id:
-            continue
-
-        hs_code = item.get("hs_code", "")
-        customs_duty = item.get("customs_duty", 0)
-
-        try:
-            customs_duty = float(customs_duty) if customs_duty else 0
-        except:
-            customs_duty = 0
-
-        # License fields
-        license_ds_required = bool(item.get("license_ds_required", False))
-        license_ss_required = bool(item.get("license_ss_required", False))
-        license_sgr_required = bool(item.get("license_sgr_required", False))
-
-        try:
-            license_ds_cost = float(item.get("license_ds_cost", 0)) if item.get("license_ds_cost") else 0
-        except:
-            license_ds_cost = 0
-        try:
-            license_ss_cost = float(item.get("license_ss_cost", 0)) if item.get("license_ss_cost") else 0
-        except:
-            license_ss_cost = 0
-        try:
-            license_sgr_cost = float(item.get("license_sgr_cost", 0)) if item.get("license_sgr_cost") else 0
-        except:
-            license_sgr_cost = 0
-
-        supabase.table("quote_items") \
-            .update({
-                "hs_code": hs_code if hs_code else None,
-                "customs_duty": customs_duty,
-                "license_ds_required": license_ds_required,
-                "license_ds_cost": license_ds_cost,
-                "license_ss_required": license_ss_required,
-                "license_ss_cost": license_ss_cost,
-                "license_sgr_required": license_sgr_required,
-                "license_sgr_cost": license_sgr_cost,
-            }) \
-            .eq("id", item_id) \
-            .eq("quote_id", quote_id) \
-            .execute()
-
-    return {"success": True}
+# Phase 6B-9: PATCH /api/customs/{quote_id}/items/bulk moved to api/customs.py
+# + routed via api/routers/customs.py on the FastAPI sub-app mounted at /api.
 
 
 @rt("/customs/{quote_id}/items/{item_id}")

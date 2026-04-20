@@ -164,13 +164,24 @@ class TestKeptRoutesStillExist:
         )
 
     def test_documents_delete_route_exists(self):
-        """DELETE /api/documents/{document_id} must still exist."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(
-            source, r'@rt\("/api/documents/\{document_id\}".*DELETE'
+        """DELETE /api/documents/{document_id} must still be registered.
+
+        Phase 6B-9: moved from a main.py ``@rt`` decorator to the FastAPI
+        sub-app (``api.routers.documents``). Verify it's reachable via the
+        /api mount.
+        """
+        from api.routers.documents import router as documents_router
+
+        routes_with_methods = {
+            (route.path, method)
+            for route in documents_router.routes
+            for method in getattr(route, "methods", set())
+        }
+        assert ("/{document_id}", "DELETE") in routes_with_methods, (
+            "Missing DELETE /{document_id} on documents router — "
+            "should be registered at /api/documents/{document_id} after "
+            "Phase 6B-9 extraction"
         )
-        assert len(decorators) >= 1, \
-            "Missing DELETE /api/documents/{document_id} route"
 
     def test_telegram_webhook_handler_is_async(self):
         """Telegram webhook handler should be async (it processes request body).
