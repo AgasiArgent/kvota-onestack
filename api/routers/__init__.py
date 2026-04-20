@@ -5,6 +5,6 @@ endpoints by business domain. Routers do NOT include the /api/ prefix in
 their path decorators — the mount in main.py provides it.
 """
 
-from api.routers import public  # re-export for import convenience
+from api.routers import admin, public  # re-export for import convenience
 
-__all__ = ["public"]
+__all__ = ["admin", "public"]
