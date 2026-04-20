@@ -1,19 +1,29 @@
 """
-TDD Tests for Customs Page Fixes (3 changes):
+TDD Tests for Customs License Cost Integration with Calculation Engine.
 
-1. Button text: "Сохранить расходы" -> "Сохранить данные" (button + instruction text)
-2. RUB footnote: informational note that license costs (DS, SS, SGR) are in rubles
-3. Calc engine integration: license costs summed and passed to build_calculation_inputs()
+Previously this file also tested FastHTML /customs/{quote_id} page details:
+- "Сохранить данные" button text (TestButtonTextChange)
+- RUB footnote for license costs (TestRubFootnote)
+- customs_form definition + Handsontable consistency (TestConsistencyChecks
+  partially)
 
-These tests are written BEFORE implementation (TDD).
-All tests should FAIL until the feature is implemented.
+Those classes were removed in Phase 6C-2B-Mega-A because they targeted
+FastHTML UI that now lives in legacy-fasthtml/ops_deal_finance_customs_logistics.py
+and no longer runs. The calc-engine integration remains the authoritative
+validation: license costs summed into `build_calculation_inputs()` flow
+through the existing customs_documentation / brokerage_extra fields into
+the calculation pipeline. The UI will be rebuilt via Next.js + /api/customs
+post-cutover.
+
+IMPORTANT: We must NOT modify calculation_engine.py, calculation_models.py,
+or calculation_mapper.py. Only the data preparation in main.py is changed.
 """
 
 import pytest
 import re
 import os
-import json
 import subprocess
+
 
 # Path constants (relative to project root)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -41,196 +51,7 @@ LICENSE_COST_FIELDS = [
 
 
 # ==============================================================================
-# 1. Button Text Change: "Сохранить расходы" -> "Сохранить данные"
-# ==============================================================================
-
-class TestButtonTextChange:
-    """Customs page save button must say 'Сохранить данные' not 'Сохранить расходы'."""
-
-    def test_no_old_button_text_in_customs_form(self):
-        """The old button text 'Сохранить расходы' must NOT appear in main.py."""
-        source = _read_main_source()
-        assert "Сохранить расходы" not in source, (
-            "Old button text 'Сохранить расходы' still present in main.py. "
-            "Must be replaced with 'Сохранить данные'."
-        )
-
-    def test_customs_form_button_says_save_data(self):
-        """The customs form save button must read 'Сохранить данные'."""
-        source = _read_main_source()
-        # Find the customs form action buttons area (around customs_form definition)
-        # The button should appear in the customs workspace section
-        customs_section = re.search(
-            r'customs_form\s*=\s*Form\((.*?)method="post"',
-            source,
-            re.DOTALL,
-        )
-        assert customs_section, "customs_form definition not found in main.py"
-        form_body = customs_section.group(1)
-        assert "Сохранить данные" in form_body, (
-            "Customs form save button must read 'Сохранить данные'. "
-            "Found form body but text not present."
-        )
-
-    def test_instruction_text_references_save_data(self):
-        """The instruction text must reference 'Сохранить данные' button."""
-        source = _read_main_source()
-        # The instruction paragraph tells users which button to click
-        instruction_match = re.search(
-            r"Заполните код ТН ВЭД.*?для сохранения",
-            source,
-            re.DOTALL,
-        )
-        assert instruction_match, (
-            "Customs page instruction text not found in main.py"
-        )
-        instruction_text = instruction_match.group(0)
-        assert "Сохранить данные" in instruction_text, (
-            "Instruction text must reference 'Сохранить данные' button, "
-            f"but found: {instruction_text[:100]}"
-        )
-
-    def test_instruction_text_does_not_reference_old_button(self):
-        """The instruction text must NOT reference old 'Сохранить расходы'."""
-        source = _read_main_source()
-        instruction_match = re.search(
-            r"Заполните код ТН ВЭД.*?для сохранения",
-            source,
-            re.DOTALL,
-        )
-        assert instruction_match, "Instruction text not found"
-        instruction_text = instruction_match.group(0)
-        assert "Сохранить расходы" not in instruction_text, (
-            "Instruction text still references old button name 'Сохранить расходы'"
-        )
-
-    def test_save_data_button_count(self):
-        """'Сохранить данные' should appear at least twice (logistics + customs)."""
-        source = _read_main_source()
-        count = source.count("Сохранить данные")
-        assert count >= 2, (
-            f"'Сохранить данные' appears {count} time(s), expected at least 2 "
-            "(logistics page already uses it, customs page should too)"
-        )
-
-    def test_old_button_text_count_is_zero(self):
-        """'Сохранить расходы' should appear exactly 0 times in the entire codebase."""
-        source = _read_main_source()
-        count = source.count("Сохранить расходы")
-        assert count == 0, (
-            f"'Сохранить расходы' still appears {count} time(s) in main.py. "
-            "All occurrences must be replaced with 'Сохранить данные'."
-        )
-
-
-# ==============================================================================
-# 2. RUB Footnote for License Costs
-# ==============================================================================
-
-class TestRubFootnote:
-    """Customs page must display a note that license costs are in rubles (RUB)."""
-
-    def _get_customs_page_source(self):
-        """Extract the customs workspace page render section."""
-        source = _read_main_source()
-        # The customs page is between the GET handler for /customs/{quote_id}
-        # and the next route. We look for the Handsontable section and surrounding area.
-        match = re.search(
-            r'(async def get_customs_workspace.*?)(?=\nasync def |\ndef (?!_)\w+\()',
-            source,
-            re.DOTALL,
-        )
-        if not match:
-            # Fallback: look for the customs page broader section
-            match = re.search(
-                r'(items_for_handsontable.*?customs_form)',
-                source,
-                re.DOTALL,
-            )
-        return match.group(1) if match else source
-
-    def test_rub_note_exists_on_customs_page(self):
-        """A note about RUB currency for license costs must exist on the page."""
-        source = _read_main_source()
-        # The note can contain "руб" or "RUB" or "рубл" in some form
-        # near the license/customs/Handsontable context
-        rub_near_license = re.search(
-            r'(?:лицензи|license|ДС|СС|СГР).*?(?:руб|RUB|рубл)',
-            source,
-            re.DOTALL | re.IGNORECASE,
-        )
-        rub_before_license = re.search(
-            r'(?:руб|RUB|рубл).*?(?:лицензи|license|ДС|СС|СГР)',
-            source,
-            re.DOTALL | re.IGNORECASE,
-        )
-        assert rub_near_license or rub_before_license, (
-            "No RUB footnote found near license columns. "
-            "Customs page must inform users that license costs are in rubles."
-        )
-
-    def test_rub_note_is_visible_text(self):
-        """The RUB note must be in visible HTML text (P, Span, Div), not just a comment."""
-        source = _read_main_source()
-        # Look for a pattern like P("...руб...", or Span("...руб...",
-        # in the customs page context near license references
-        visible_rub = re.search(
-            r'(?:P|Span|Div|Small)\(["\'].*?(?:руб|RUB).*?["\']',
-            source,
-            re.IGNORECASE,
-        )
-        assert visible_rub, (
-            "RUB note must be in visible HTML (P, Span, Div, Small element), "
-            "not just a code comment. Expected something like "
-            "P('* Стоимость лицензий указана в рублях (RUB)')"
-        )
-
-    def test_rub_note_near_handsontable_or_license_section(self):
-        """The RUB note should be near the Handsontable or license columns section."""
-        source = _read_main_source()
-        # Find the customs Handsontable section
-        ht_idx = source.find("customs-spreadsheet")
-        assert ht_idx != -1, "customs-spreadsheet element not found"
-
-        # Look for RUB note within a reasonable range around the Handsontable
-        # (3000 chars before or 5000 after the Handsontable reference)
-        context_start = max(0, ht_idx - 3000)
-        context_end = min(len(source), ht_idx + 5000)
-        context = source[context_start:context_end]
-
-        has_rub_in_context = re.search(
-            r'(?:руб|RUB|рубл)',
-            context,
-            re.IGNORECASE,
-        )
-        assert has_rub_in_context, (
-            "RUB note not found near the Handsontable section. "
-            "The footnote should be placed close to the license columns."
-        )
-
-    def test_rub_note_mentions_license_types(self):
-        """The RUB note should mention at least one license type (ДС, СС, СГР)."""
-        source = _read_main_source()
-        # Find visible RUB notes and check they mention license types
-        # Search for text elements containing both RUB and license type references
-        rub_with_license_type = re.search(
-            r'(?:P|Span|Div|Small)\(["\'].*?(?:ДС|СС|СГР|лицензи).*?(?:руб|RUB).*?["\']',
-            source,
-            re.IGNORECASE | re.DOTALL,
-        )
-        rub_before_type = re.search(
-            r'(?:P|Span|Div|Small)\(["\'].*?(?:руб|RUB).*?(?:ДС|СС|СГР|лицензи).*?["\']',
-            source,
-            re.IGNORECASE | re.DOTALL,
-        )
-        assert rub_with_license_type or rub_before_type, (
-            "RUB note should mention license types (ДС, СС, СГР) or the word 'лицензий' "
-            "to make it clear which costs are in rubles."
-        )
-
-
-# ==============================================================================
-# 3. Calc Engine Integration: License Costs in build_calculation_inputs()
+# Calc Engine Integration: License Costs in build_calculation_inputs()
 # ==============================================================================
 
 class TestCalcEngineLicenseIntegration:
@@ -449,7 +270,7 @@ class TestCalcEngineLicenseIntegration:
 
 
 # ==============================================================================
-# 4. Edge Cases for License Cost Summation
+# Edge Cases for License Cost Summation
 # ==============================================================================
 
 class TestLicenseCostEdgeCases:
@@ -572,60 +393,17 @@ class TestLicenseCostEdgeCases:
 
 
 # ==============================================================================
-# 5. Consistency Checks
+# Consistency Checks (remainder after FastHTML-targeting tests archived)
 # ==============================================================================
 
 class TestConsistencyChecks:
-    """Cross-cutting checks to ensure all 3 changes are consistent."""
-
-    def test_customs_form_still_exists(self):
-        """The customs_form = Form(...) definition must still exist in main.py."""
-        source = _read_main_source()
-        assert "customs_form" in source, "customs_form definition missing from main.py"
-
-    def test_handsontable_section_still_exists(self):
-        """The Handsontable section for customs items must still be present."""
-        source = _read_main_source()
-        assert "customs-spreadsheet" in source, (
-            "customs-spreadsheet element missing from main.py"
-        )
+    """Cross-cutting checks to ensure the calc engine integration is intact."""
 
     def test_build_calculation_inputs_still_exists(self):
         """The build_calculation_inputs function must still exist."""
         source = _read_main_source()
         assert "def build_calculation_inputs(" in source, (
             "build_calculation_inputs function missing from main.py"
-        )
-
-    def test_customs_save_button_has_correct_action_value(self):
-        """The save button must have value='save' for the form handler."""
-        source = _read_main_source()
-        customs_section = re.search(
-            r'customs_form\s*=\s*Form\((.*?)method="post"',
-            source,
-            re.DOTALL,
-        )
-        assert customs_section, "customs_form not found"
-        form_body = customs_section.group(1)
-        assert 'value="save"' in form_body, (
-            "Customs save button must have value='save' for the POST handler"
-        )
-
-    def test_no_duplicate_save_buttons_in_customs(self):
-        """Customs form should have exactly one save button (not both old and new)."""
-        source = _read_main_source()
-        customs_section = re.search(
-            r'customs_form\s*=\s*Form\((.*?)method="post"',
-            source,
-            re.DOTALL,
-        )
-        assert customs_section, "customs_form not found"
-        form_body = customs_section.group(1)
-        # Count occurrences of button text patterns
-        save_buttons = len(re.findall(r'Сохранить \w+', form_body))
-        assert save_buttons <= 1, (
-            f"Found {save_buttons} save buttons in customs form. "
-            "There should be exactly 1."
         )
 
 

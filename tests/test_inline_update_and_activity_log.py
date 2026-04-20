@@ -321,8 +321,13 @@ class TestWorkflowTransitionHistoryCallSites:
 
         # Phase 6C-1: /procurement/{quote_id} FastHTML page was archived to
         # legacy-fasthtml/procurement_workspace.py, removing one call site.
-        assert len(calls) >= 6, \
-            f"Expected at least 6 call sites, found {len(calls)}: {calls}"
+        # Phase 6C-2B-Mega-A (2026-04-20): /logistics/{quote_id} and
+        # /customs/{quote_id} FastHTML pages archived to
+        # legacy-fasthtml/ops_deal_finance_customs_logistics.py, removing
+        # two more call sites. Remaining sites: /quote-control/{quote_id},
+        # /spec-control/{spec_id}, /quotes/{quote_id}, /quotes/{quote_id}/edit.
+        assert len(calls) >= 4, \
+            f"Expected at least 4 call sites, found {len(calls)}: {calls}"
 
         for call in calls:
             # Each call should have at least one positional arg (quote_id)
@@ -350,10 +355,14 @@ class TestWorkflowTransitionHistoryCallSites:
             source = f.read()
 
         import re
-        # Count calls that use just (quote_id) with no extra args
+        # Count calls that use just (quote_id) with no extra args.
+        # Phase 6C-2B-Mega-A (2026-04-20): /logistics/{quote_id} and
+        # /customs/{quote_id} FastHTML pages archived, each removed one
+        # simple call site. Remaining workspaces: /quote-control/{quote_id},
+        # /spec-control/{spec_id} (at minimum).
         simple_calls = re.findall(r'workflow_transition_history\(quote_id\)', source)
-        assert len(simple_calls) >= 4, \
-            f"Expected at least 4 simple calls (workspaces), found {len(simple_calls)}"
+        assert len(simple_calls) >= 2, \
+            f"Expected at least 2 simple calls (workspaces), found {len(simple_calls)}"
 
 
 # ============================================================================
