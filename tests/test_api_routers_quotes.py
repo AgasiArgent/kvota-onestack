@@ -127,6 +127,31 @@ class TestQuotesSoftDeleteRoutes:
         )
 
 
+class TestQuotesCalculateRoute:
+    """6B-6a: POST /{quote_id}/calculate extracted from main.py."""
+
+    _QUOTE_ID = "11111111-1111-1111-1111-111111111111"
+
+    def test_post_calculate_registered(self, subapp_client: TestClient) -> None:
+        """POST /quotes/{quote_id}/calculate must exist on the sub-app."""
+        response = subapp_client.post(f"/quotes/{self._QUOTE_ID}/calculate")
+        # No auth → 401. 404 would mean the route was not registered.
+        assert response.status_code != 404, (
+            "Route not registered: POST /quotes/{id}/calculate returned 404. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_schema_includes_calculate_path(self, subapp_client: TestClient) -> None:
+        """The /calculate endpoint must appear in the OpenAPI schema."""
+        response = subapp_client.get("/openapi.json")
+        paths = response.json().get("paths", {})
+        assert "/quotes/{quote_id}/calculate" in paths, (
+            f"Missing /quotes/{{quote_id}}/calculate in OpenAPI. "
+            f"Present: {sorted(paths.keys())}"
+        )
+        assert "post" in paths["/quotes/{quote_id}/calculate"]
+
+
 class TestQuotesOpenApiSchema:
     """Verify the quotes router endpoints appear in the OpenAPI schema."""
 
@@ -259,5 +284,24 @@ class TestQuotesMountIntegration:
         )
         assert response.status_code != 404, (
             "Mount routing broken for POST /api/quotes/{id}/restore. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_calculate_reachable_through_mount(
+        self, outer_app_client: TestClient
+    ) -> None:
+        """POST /api/quotes/{id}/calculate must resolve through the mount.
+
+        Pre-6B-6a this was served by a FastHTML ``@rt`` decorator directly
+        on the outer app. After extraction the FastAPI sub-app at /api
+        takes over — this test ensures the mount is correctly serving
+        the new wrapper.
+        """
+        response = outer_app_client.post(
+            f"/api/quotes/{self._QUOTE_ID}/calculate"
+        )
+        # No JWT → 401 from handler. 404 would mean the mount didn't route.
+        assert response.status_code != 404, (
+            "Mount routing broken for POST /api/quotes/{id}/calculate. "
             f"Body: {response.text[:200]}"
         )

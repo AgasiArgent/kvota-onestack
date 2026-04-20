@@ -2,7 +2,9 @@
 
 Expanded in 6B-4 to cover procurement kanban + substatus workflow and
 quote composition (multi-supplier). Expanded in 6B-5 with admin-only
-soft-delete / restore (entity lifecycle). Grows further in 6B-6 (quote actions).
+soft-delete / restore (entity lifecycle). 6B-6a adds the calculate
+endpoint (recalc pipeline). Grows further in 6B-6b (remaining quote
+actions: submit-procurement, cancel, workflow transition).
 
 Route order matters: FastAPI matches routes in registration order within a
 router. Static paths (``/search``, ``/kanban``) MUST be declared BEFORE any
@@ -24,6 +26,7 @@ from api.procurement import (
     get_status_history as _get_status_history,
     post_substatus as _post_substatus,
 )
+from api.quotes import calculate_quote as _calculate_quote
 from api.soft_delete import (
     restore_quote as _restore_quote,
     soft_delete_quote as _soft_delete_quote,
@@ -84,3 +87,13 @@ async def post_soft_delete(request: Request, quote_id: str) -> JSONResponse:
 async def post_restore(request: Request, quote_id: str) -> JSONResponse:
     """Admin-only restore of a previously soft-deleted quote."""
     return await _restore_quote(request, quote_id)
+
+
+@router.post("/{quote_id}/calculate")
+async def post_calculate(request: Request, quote_id: str) -> JSONResponse:
+    """Recalculate totals for a quote. Delegates to api.quotes.calculate_quote.
+
+    Dual auth: JWT (Next.js) first, then legacy session (FastHTML) via
+    ``request.session`` (provided by Starlette's SessionMiddleware).
+    """
+    return await _calculate_quote(request, quote_id)
