@@ -10,6 +10,7 @@ Archived during Phase 6C of the FastAPI migration (2026-04-20 onwards).
 - `cities_search.py` — `GET /api/cities/search` HTMX endpoint (superseded by FastAPI `GET /api/geo/cities/search`) — archived 2026-04-20 Phase 6C-1
 - `customers.py` — 26 /customers routes (registry, detail with tabs, inline-edit fragments, contacts, warehouses, calls, notes) + 9 render helpers + ORDER_SOURCE constants. Superseded by Next.js `/customers` + children — archived 2026-04-20 Phase 6C-2B-1
 - `suppliers.py` — 10 /suppliers routes (registry, create form, detail with general+brands tabs, edit form, deactivate, brand CRUD) + 4 render helpers (`_supplier_brand_row`, `_supplier_brands_tab`, `_supplier_brands_list_partial`, `_supplier_form`). Superseded by Next.js `/suppliers` + children — archived 2026-04-20 Phase 6C-2B-2. NOT including `/supplier-invoices/*` (no Next.js replacement yet, separate archive decision).
+- `companies.py` — 15 routes (/companies unified tabs page + /buyer-companies + /seller-companies legacy split: registry redirects, create forms, detail views, edit forms, soft-delete) + 2 render helpers (`_buyer_company_form`, `_seller_company_form`). Superseded by Next.js `/companies` — archived 2026-04-20 Phase 6C-2B-3. NOT including `/api/{buyer-,seller-,}companies/*` (FastAPI, still alive) or `/customer-contracts/*` (separate area).
 
 ## Why preserve
 
