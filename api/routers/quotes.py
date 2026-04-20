@@ -1,7 +1,8 @@
 """Quote-related /api/quotes/* endpoints.
 
 Expanded in 6B-4 to cover procurement kanban + substatus workflow and
-quote composition (multi-supplier). Grows further in 6B-6 (quote actions).
+quote composition (multi-supplier). Expanded in 6B-5 with admin-only
+soft-delete / restore (entity lifecycle). Grows further in 6B-6 (quote actions).
 
 Route order matters: FastAPI matches routes in registration order within a
 router. Static paths (``/search``, ``/kanban``) MUST be declared BEFORE any
@@ -22,6 +23,10 @@ from api.procurement import (
     get_kanban as _get_kanban,
     get_status_history as _get_status_history,
     post_substatus as _post_substatus,
+)
+from api.soft_delete import (
+    restore_quote as _restore_quote,
+    soft_delete_quote as _soft_delete_quote,
 )
 
 router = APIRouter(tags=["quotes"])
@@ -67,3 +72,15 @@ async def get_composition(request: Request, quote_id: str) -> JSONResponse:
 async def post_composition(request: Request, quote_id: str) -> JSONResponse:
     """Apply (validate + persist) a composition plan for a quote."""
     return await _apply_composition(request, quote_id)
+
+
+@router.post("/{quote_id}/soft-delete")
+async def post_soft_delete(request: Request, quote_id: str) -> JSONResponse:
+    """Admin-only soft-delete of a quote (cascades to spec + deal)."""
+    return await _soft_delete_quote(request, quote_id)
+
+
+@router.post("/{quote_id}/restore")
+async def post_restore(request: Request, quote_id: str) -> JSONResponse:
+    """Admin-only restore of a previously soft-deleted quote."""
+    return await _restore_quote(request, quote_id)

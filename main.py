@@ -34547,130 +34547,8 @@ def get(session, q: str = "", pickup_city: str = "", limit: int = 5):
     return Group(*options)
 
 
-# Resolve English country name via pycountry (same fallback posture as
-# services/here_service.py — if the import fails, we gracefully degrade
-# to returning the country name HERE already gave us).
-try:
-    import pycountry as _pycountry  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    _pycountry = None
-
-
-def _english_country_name_from_code(code: str) -> str:
-    """Resolve ISO 3166-1 alpha-2 -> English country name via pycountry.
-
-    Returns an empty string for unknown / empty codes. `pycountry.countries.get`
-    returns None (never raises) for unknown keys.
-    """
-    if not code or not _pycountry:
-        return ""
-    country = _pycountry.countries.get(alpha_2=code.upper())
-    if country is None:
-        return ""
-    return getattr(country, "name", "") or ""
-
-
-@app.get("/api/geo/cities/search")
-def get_api_geo_cities_search(session, request, q: str = "", limit: int = 10):
-    """Structured city search backed by HERE Geocode API.
-
-    Path: GET /api/geo/cities/search
-    Params:
-        q:     str (required, min 2 chars after trim)
-        limit: int (optional, default 10, clamped 1..25)
-    Returns:
-        JSON { "success": True, "data": [{city, country_code, country_name_ru, country_name_en, display}, ...] }
-    Side Effects: none (read-only HERE API call, LRU-cached per process)
-    Roles: any authenticated user
-
-    Auth: Supabase JWT via `request.state.api_user` (set by middleware) OR
-    legacy session cookie. Returns 401 when both are missing.
-
-    Error handling:
-        - Missing / short q          -> 400 INVALID_QUERY
-        - Unauthenticated            -> 401 UNAUTHENTICATED
-        - HERE API failure / timeout -> 200 with empty data (graceful
-          degradation — the underlying services.here_service.search_cities
-          returns [] on any exception and logs server-side)
-    """
-    # ------------------------------------------------------------------
-    # Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
-    # Matches the pattern in feedback_dual_auth_api.md and other /api/*
-    # handlers in this file (e.g. submit-procurement at ~line 10820).
-    # ------------------------------------------------------------------
-    api_user = getattr(request.state, "api_user", None) if request else None
-    authenticated = False
-    if api_user is not None:
-        authenticated = True
-    else:
-        user = session.get("user") if session else None
-        if user and user.get("id"):
-            authenticated = True
-
-    if not authenticated:
-        return JSONResponse(
-            {
-                "success": False,
-                "error": {
-                    "code": "UNAUTHENTICATED",
-                    "message": "Authentication required",
-                },
-            },
-            status_code=401,
-        )
-
-    # ------------------------------------------------------------------
-    # Validate q (REQ 3.2)
-    # ------------------------------------------------------------------
-    trimmed_q = (q or "").strip()
-    if len(trimmed_q) < 2:
-        return JSONResponse(
-            {
-                "success": False,
-                "error": {
-                    "code": "INVALID_QUERY",
-                    "message": "q must be at least 2 characters after trimming whitespace",
-                },
-            },
-            status_code=400,
-        )
-
-    # ------------------------------------------------------------------
-    # Clamp limit silently (REQ 3.3)
-    # ------------------------------------------------------------------
-    try:
-        limit_int = int(limit)
-    except (TypeError, ValueError):
-        limit_int = 10
-    clamped_limit = max(1, min(25, limit_int))
-
-    # ------------------------------------------------------------------
-    # Call HERE service — search_cities already handles its own exceptions
-    # and returns [] on any failure (graceful degradation, REQ 3.6).
-    # ------------------------------------------------------------------
-    from services import here_service
-
-    cities = here_service.search_cities(trimmed_q, count=clamped_limit)
-
-    # ------------------------------------------------------------------
-    # Enrich with bilingual country names (REQ 8.5)
-    # ------------------------------------------------------------------
-    data = []
-    for c in cities:
-        country_code = c.get("country_code", "") or ""
-        country_name_ru = c.get("country", "") or ""  # HERE already localizes
-        country_name_en = _english_country_name_from_code(country_code) or country_name_ru
-        data.append(
-            {
-                "city": c.get("city", "") or "",
-                "country_code": country_code,
-                "country_name_ru": country_name_ru,
-                "country_name_en": country_name_en,
-                "display": c.get("display", "") or "",
-            }
-        )
-
-    return JSONResponse({"success": True, "data": data}, status_code=200)
+# GET /api/geo/cities/search → api/routers/geo.py (mounted FastAPI)
+# Inline handler + pycountry helper extracted to api/geo.py in Phase 6B-5.
 
 
 # ============================================================================
@@ -48278,13 +48156,8 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
 
 
 # --- VAT Rate JSON API (for Next.js frontend) ---
+# GET /api/geo/vat-rate  → api/routers/geo.py (mounted FastAPI)
 # PUT /api/admin/vat-rates → api/routers/admin.py (mounted FastAPI)
-
-from api.geo import get_vat_rate as api_get_vat_rate
-
-@rt("/api/geo/vat-rate", methods=["GET"])
-async def get_geo_vat_rate(request):
-    return await api_get_vat_rate(request)
 
 
 # --- Procurement Kanban + Sub-Status JSON API (Phase 6B-4) ---
@@ -48293,22 +48166,9 @@ async def get_geo_vat_rate(request):
 # GET  /api/quotes/{quote_id}/status-history       → api/routers/quotes.py
 
 
-# --- Soft-delete / restore JSON API (Task 2 of soft-delete-entity-lifecycle) ---
-
-from api.soft_delete import (
-    soft_delete_quote as api_soft_delete_quote,
-    restore_quote as api_restore_quote,
-)
-
-
-@rt("/api/quotes/{quote_id}/soft-delete", methods=["POST"])
-async def post_quote_soft_delete(request, quote_id: str):
-    return await api_soft_delete_quote(request, quote_id)
-
-
-@rt("/api/quotes/{quote_id}/restore", methods=["POST"])
-async def post_quote_restore(request, quote_id: str):
-    return await api_restore_quote(request, quote_id)
+# --- Soft-delete / restore JSON API (Phase 6B-5) ---
+# POST /api/quotes/{quote_id}/soft-delete → api/routers/quotes.py (mounted FastAPI)
+# POST /api/quotes/{quote_id}/restore     → api/routers/quotes.py (mounted FastAPI)
 
 
 @rt("/api/procurement/{quote_id}/check-distribution", methods=["POST"])
@@ -48402,12 +48262,7 @@ async def post_check_distribution(request, quote_id: str):
 
 
 # --- Cron JSON API (for scheduled background tasks) ---
-
-from api.cron import cron_check_overdue
-
-@rt("/api/cron/check-overdue", methods=["GET"])
-async def get_cron_check_overdue(request):
-    return await cron_check_overdue(request)
+# GET /api/cron/check-overdue → api/routers/cron.py (mounted FastAPI)
 
 
 # ============================================================================

@@ -104,6 +104,29 @@ class TestQuotesKanbanAndWorkflowRoutes:
         assert response.status_code != 404
 
 
+class TestQuotesSoftDeleteRoutes:
+    """6B-5: admin-only soft-delete + restore endpoints."""
+
+    _QUOTE_ID = "11111111-1111-1111-1111-111111111111"
+
+    def test_post_soft_delete_registered(self, subapp_client: TestClient) -> None:
+        """POST /quotes/{quote_id}/soft-delete must exist."""
+        response = subapp_client.post(f"/quotes/{self._QUOTE_ID}/soft-delete")
+        # No auth → 401. 404 would mean the route was not registered.
+        assert response.status_code != 404, (
+            f"Route not registered: POST /quotes/{{id}}/soft-delete returned 404. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_post_restore_registered(self, subapp_client: TestClient) -> None:
+        """POST /quotes/{quote_id}/restore must exist."""
+        response = subapp_client.post(f"/quotes/{self._QUOTE_ID}/restore")
+        assert response.status_code != 404, (
+            f"Route not registered: POST /quotes/{{id}}/restore returned 404. "
+            f"Body: {response.text[:200]}"
+        )
+
+
 class TestQuotesOpenApiSchema:
     """Verify the quotes router endpoints appear in the OpenAPI schema."""
 
@@ -142,6 +165,24 @@ class TestQuotesOpenApiSchema:
         # /composition serves both GET and POST on the same path
         assert "get" in paths["/quotes/{quote_id}/composition"]
         assert "post" in paths["/quotes/{quote_id}/composition"]
+
+    def test_schema_includes_6b5_soft_delete_paths(
+        self, subapp_client: TestClient
+    ) -> None:
+        """Soft-delete + restore (6B-5) must appear in the OpenAPI schema."""
+        response = subapp_client.get("/openapi.json")
+        schema = response.json()
+        paths = schema["paths"]
+
+        expected = {
+            "/quotes/{quote_id}/soft-delete",
+            "/quotes/{quote_id}/restore",
+        }
+        missing = expected - set(paths.keys())
+        assert not missing, f"Missing OpenAPI paths: {missing}"
+
+        assert "post" in paths["/quotes/{quote_id}/soft-delete"]
+        assert "post" in paths["/quotes/{quote_id}/restore"]
 
 
 @pytest.fixture
@@ -193,5 +234,30 @@ class TestQuotesMountIntegration:
         )
         assert response.status_code != 404, (
             "Mount routing broken for GET /api/quotes/{id}/composition. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_soft_delete_reachable_through_mount(
+        self, outer_app_client: TestClient
+    ) -> None:
+        """POST /api/quotes/{id}/soft-delete must resolve through the mount."""
+        response = outer_app_client.post(
+            f"/api/quotes/{self._QUOTE_ID}/soft-delete"
+        )
+        # No JWT → 401 from handler. 404 would mean the mount didn't route.
+        assert response.status_code != 404, (
+            "Mount routing broken for POST /api/quotes/{id}/soft-delete. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_restore_reachable_through_mount(
+        self, outer_app_client: TestClient
+    ) -> None:
+        """POST /api/quotes/{id}/restore must resolve through the mount."""
+        response = outer_app_client.post(
+            f"/api/quotes/{self._QUOTE_ID}/restore"
+        )
+        assert response.status_code != 404, (
+            "Mount routing broken for POST /api/quotes/{id}/restore. "
             f"Body: {response.text[:200]}"
         )

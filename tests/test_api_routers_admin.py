@@ -142,17 +142,17 @@ class TestAdminMountIntegration:
         assert response.status_code != 404
 
 
-class TestGeoVatRateLegacyRegression:
-    """GET /api/geo/vat-rate is still served by @rt in main.py (migrates in 6B-5)."""
+class TestGeoVatRateMountIntegration:
+    """GET /api/geo/vat-rate is served by the FastAPI geo router (migrated in 6B-5)."""
 
-    def test_legacy_geo_vat_rate_still_reachable(
+    def test_geo_vat_rate_reachable_through_mount(
         self, outer_app_client: TestClient
     ) -> None:
-        """The GET endpoint must continue working via the @rt wrapper."""
+        """The GET endpoint must continue working via the /api mount."""
         response = outer_app_client.get("/api/geo/vat-rate")
         # Without auth or country_code, handler returns 401 or 400. 404 would
-        # mean the @rt registration was accidentally removed.
+        # mean the mount routing was accidentally broken.
         assert response.status_code != 404, (
-            f"Legacy @rt('/api/geo/vat-rate') was removed. "
+            f"Mount routing broken for GET /api/geo/vat-rate. "
             f"Body: {response.text[:200]}"
         )

@@ -1,8 +1,9 @@
 """
-Geo API endpoints — VAT rate lookup and admin CRUD.
+Geo API endpoints — VAT rate lookup, admin CRUD, and city autocomplete.
 
-GET /api/geo/vat-rate   — Lookup VAT rate for a country
-PUT /api/admin/vat-rates — Admin-only rate upsert
+GET /api/geo/vat-rate      — Lookup VAT rate for a country
+PUT /api/admin/vat-rates   — Admin-only rate upsert
+GET /api/geo/cities/search — City autocomplete via HERE Geocoding API
 
 Auth: JWT via ApiAuthMiddleware (request.state.api_user) OR
       legacy session cookie (dual auth during strangler fig migration).
@@ -17,6 +18,14 @@ from starlette.responses import JSONResponse
 from services.database import get_supabase
 
 logger = logging.getLogger(__name__)
+
+# Resolve English country name via pycountry (same fallback posture as
+# services/here_service.py — if the import fails, we gracefully degrade
+# to returning the country name HERE already gave us).
+try:
+    import pycountry as _pycountry  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover
+    _pycountry = None
 
 # ISO 3166-1 alpha-2: exactly 2 ASCII letters
 _COUNTRY_CODE_RE = re.compile(r"^[A-Za-z]{2}$")
@@ -225,3 +234,133 @@ async def update_vat_rate(request) -> JSONResponse:
         },
         status_code=200,
     )
+
+
+# ============================================================================
+# GET /api/geo/cities/search
+# ============================================================================
+
+
+def _english_country_name_from_code(code: str) -> str:
+    """Resolve ISO 3166-1 alpha-2 -> English country name via pycountry.
+
+    Returns an empty string for unknown / empty codes. `pycountry.countries.get`
+    returns None (never raises) for unknown keys.
+    """
+    if not code or not _pycountry:
+        return ""
+    country = _pycountry.countries.get(alpha_2=code.upper())
+    if country is None:
+        return ""
+    return getattr(country, "name", "") or ""
+
+
+async def get_cities_search(request) -> JSONResponse:
+    """Structured city search backed by HERE Geocode API.
+
+    Path: GET /api/geo/cities/search
+    Params:
+        q:     str (required, min 2 chars after trim) — query string
+        limit: int (optional, default 10, clamped 1..25) — max results
+    Returns:
+        JSON { "success": True, "data": [{city, country_code, country_name_ru, country_name_en, display}, ...] }
+    Side Effects: none (read-only HERE API call, LRU-cached per process)
+    Roles: any authenticated user
+
+    Auth: Supabase JWT via `request.state.api_user` (set by middleware) OR
+    legacy session cookie. Returns 401 when both are missing.
+
+    Error handling:
+        - Missing / short q          -> 400 INVALID_QUERY
+        - Unauthenticated            -> 401 UNAUTHENTICATED
+        - HERE API failure / timeout -> 200 with empty data (graceful
+          degradation — the underlying services.here_service.search_cities
+          returns [] on any exception and logs server-side)
+    """
+    # ------------------------------------------------------------------
+    # Dual auth: JWT (Next.js) first, then legacy session (FastHTML).
+    # Matches the pattern in feedback_dual_auth_api.md and other /api/*
+    # handlers.
+    # ------------------------------------------------------------------
+    api_user = getattr(request.state, "api_user", None)
+    authenticated = False
+    if api_user is not None:
+        authenticated = True
+    else:
+        # Starlette exposes the session via request.session when
+        # SessionMiddleware is installed (FastHTML's fast_app does this).
+        try:
+            session = request.session
+        except (AssertionError, AttributeError):
+            session = None
+        if session:
+            user = session.get("user")
+            if user and user.get("id"):
+                authenticated = True
+
+    if not authenticated:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "UNAUTHENTICATED",
+                    "message": "Authentication required",
+                },
+            },
+            status_code=401,
+        )
+
+    # ------------------------------------------------------------------
+    # Parse query params (starlette request.query_params is a mapping).
+    # ------------------------------------------------------------------
+    q = request.query_params.get("q", "")
+    limit_raw = request.query_params.get("limit", "10")
+
+    # Validate q (REQ 3.2)
+    trimmed_q = (q or "").strip()
+    if len(trimmed_q) < 2:
+        return JSONResponse(
+            {
+                "success": False,
+                "error": {
+                    "code": "INVALID_QUERY",
+                    "message": "q must be at least 2 characters after trimming whitespace",
+                },
+            },
+            status_code=400,
+        )
+
+    # Clamp limit silently (REQ 3.3)
+    try:
+        limit_int = int(limit_raw)
+    except (TypeError, ValueError):
+        limit_int = 10
+    clamped_limit = max(1, min(25, limit_int))
+
+    # ------------------------------------------------------------------
+    # Call HERE service — search_cities already handles its own exceptions
+    # and returns [] on any failure (graceful degradation, REQ 3.6).
+    # ------------------------------------------------------------------
+    from services import here_service
+
+    cities = here_service.search_cities(trimmed_q, count=clamped_limit)
+
+    # ------------------------------------------------------------------
+    # Enrich with bilingual country names (REQ 8.5)
+    # ------------------------------------------------------------------
+    data = []
+    for c in cities:
+        country_code = c.get("country_code", "") or ""
+        country_name_ru = c.get("country", "") or ""  # HERE already localizes
+        country_name_en = _english_country_name_from_code(country_code) or country_name_ru
+        data.append(
+            {
+                "city": c.get("city", "") or "",
+                "country_code": country_code,
+                "country_name_ru": country_name_ru,
+                "country_name_en": country_name_en,
+                "display": c.get("display", "") or "",
+            }
+        )
+
+    return JSONResponse({"success": True, "data": data}, status_code=200)
