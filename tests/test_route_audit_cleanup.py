@@ -6,14 +6,12 @@ Verifies:
 2. Removed routes are actually gone (start-negotiation, items POST, locations/search/json)
 3. Kept routes still exist (telegram webhook POST, documents DELETE)
 4. (removed) /customers route consolidation — archived in Phase 6C-2B-1 (2026-04-20)
-5. Enhanced /profile/{user_id} at ~line 31928 is the canonical GET handler
+5. (removed) /profile/{user_id} route consolidation — archived in Phase 6C-2B-4 (2026-04-20)
 6. No dangling href="/specifications" links remain
 """
 
 import os
 import re
-
-import pytest
 
 
 # ============================================================================
@@ -204,43 +202,11 @@ class TestKeptRoutesStillExist:
 
 
 # ============================================================================
-# TEST 5: Enhanced /profile/{user_id} GET is canonical
+# TEST 5: /profile/{user_id} route consolidation — REMOVED
 # ============================================================================
-
-class TestProfileRouteConsolidation:
-    """Verify the enhanced /profile/{user_id} GET handler exists."""
-
-    def test_profile_route_exists(self):
-        """At least one @rt('/profile/{user_id}') must exist."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/profile/\{user_id\}"\)$')
-        assert len(decorators) >= 1, \
-            "No @rt('/profile/{user_id}') route found"
-
-    def test_profile_get_handler_has_tab_support(self):
-        """The profile GET handler should support tab parameter."""
-        source = _read_main_source()
-        # Find the GET handler (has tab parameter)
-        lines = source.splitlines()
-        for i, line in enumerate(lines):
-            if '@rt("/profile/{user_id}")' in line:
-                # Check next few lines for the function signature
-                handler_area = "\n".join(lines[i:i + 5])
-                if "tab:" in handler_area and "def get" in handler_area:
-                    return  # Found the enhanced handler
-        pytest.fail("No profile GET handler with tab support found")
-
-    def test_profile_edit_field_routes_exist(self):
-        """Profile edit-field and update-field sub-routes should exist."""
-        source = _read_main_source()
-        edit_routes = _find_route_decorators(
-            source, r'@rt\("/profile/\{user_id\}/edit-field/'
-        )
-        update_routes = _find_route_decorators(
-            source, r'@rt\("/profile/\{user_id\}/update-field/'
-        )
-        assert len(edit_routes) >= 1, "Missing /profile/{user_id}/edit-field route"
-        assert len(update_routes) >= 1, "Missing /profile/{user_id}/update-field route"
+# The /profile + /profile/{user_id} FastHTML routes were archived to
+# legacy-fasthtml/settings_profile.py in Phase 6C-2B-4 (2026-04-20). The
+# Next.js app now serves /profile.
 
 
 # ============================================================================

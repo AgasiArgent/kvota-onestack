@@ -6,7 +6,6 @@ M2: Suppliers filter inputs lack max-width constraint, too spacious.
 M4: Quote detail status badge uses inline styles, not status-badge-v2 class.
 M6: Spec-control group separators use raw "--- text ---" instead of styled divs.
 M8: Document chain page header lacks card-elevated wrapper.
-M10: Settings page header uses inline style, not card-elevated class.
 L1: Zero profit rendered in green with "0" instead of dash/gray.
 L3: Deals page renders "Финансовый менеджер" as a section heading.
 
@@ -223,35 +222,9 @@ class TestM8DocumentChainHeader:
 
 
 # ==============================================================================
-# M10: Settings page -- header should use card-elevated class
+# M10 (deleted) — covered /settings page header styling; route archived to
+# legacy-fasthtml/settings_profile.py in Phase 6C-2B-4 (2026-04-20).
 # ==============================================================================
-
-class TestM10SettingsHeader:
-    """Settings page header should use the card-elevated CSS class
-    instead of duplicating gradient styles inline."""
-
-    def test_settings_header_uses_card_elevated_class(self):
-        """The settings page header card should use cls='card-elevated'
-        instead of inline header_style with duplicated gradient CSS."""
-        source = _read_main_source()
-        # Find the /settings GET handler
-        route_start = source.find('@rt("/settings")\ndef get(session)')
-        assert route_start != -1, "/settings route not found"
-
-        handler_end = source.find('\n@rt(', route_start + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler_source = source[route_start:handler_end]
-
-        # The header card should use class, not inline gradient
-        # Currently: style=header_style (with inline gradient)
-        # Should use: cls="card-elevated" or cls="card-elevated-static"
-        uses_class = 'card-elevated' in handler_source
-        assert uses_class, (
-            "Settings page header uses inline header_style with duplicated "
-            "gradient CSS instead of the card-elevated class from the design system. "
-            "Replace style=header_style with cls='card-elevated' or 'card-elevated-static'."
-        )
 
 
 # ==============================================================================
