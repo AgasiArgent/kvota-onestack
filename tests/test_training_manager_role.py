@@ -353,65 +353,12 @@ class TestImpersonationRouteAllowsTrainingManager:
 
 
 # =============================================================================
-# TEST 6: Training page shows no edit/delete for training_manager
+# TEST 6 (deleted) — covered /training page role gates; routes archived to
+# legacy-fasthtml/training.py in Phase 6C-2B-5 (2026-04-20). The
+# training_manager role itself remains alive; this test section probed the
+# now-archived @rt("/training") + @rt("/training/new-form") source and is
+# no longer applicable.
 # =============================================================================
-
-class TestTrainingPageReadOnlyForTrainingManager:
-    """Training page must NOT give training_manager edit/delete access.
-    The is_admin check on /training should remain 'admin' in roles only."""
-
-    def test_training_page_is_admin_excludes_training_manager(self):
-        """The /training route's is_admin should be strictly 'admin' in roles,
-        NOT include training_manager."""
-        source = _read_main_py()
-
-        # Find the /training route handler
-        training_match = re.search(
-            r'@rt\("/training"\)\s*\ndef get\(session\):\s*\n'
-            r'\s*""".*?"""\s*\n'
-            r'(.*?)(?=\n@rt|\nclass )',
-            source,
-            re.DOTALL
-        )
-        assert training_match, "Could not find /training route"
-        route_body = training_match.group(1)
-
-        # The is_admin = "admin" in roles line should NOT include training_manager
-        is_admin_match = re.search(
-            r'is_admin\s*=\s*"admin"\s+in\s+roles',
-            route_body
-        )
-        assert is_admin_match, (
-            "Training page is_admin check not found or changed from expected pattern"
-        )
-
-        # Make sure training_manager is NOT in the is_admin calculation
-        is_admin_line_start = is_admin_match.start()
-        # Get the full line
-        line_end = route_body.find('\n', is_admin_line_start)
-        is_admin_line = route_body[is_admin_line_start:line_end]
-
-        assert "training_manager" not in is_admin_line, (
-            f"Training page is_admin includes training_manager: '{is_admin_line}'. "
-            "training_manager should NOT get edit/delete on training page."
-        )
-
-    def test_training_new_form_excludes_training_manager(self):
-        """The /training/new-form route should only allow admin, not training_manager."""
-        source = _read_main_py()
-
-        # Find the role check for /training/new-form
-        new_form_match = re.search(
-            r'/training/new-form.*?user_has_any_role\(session,\s*\[(.*?)\]',
-            source,
-            re.DOTALL
-        )
-        if new_form_match:
-            roles_in_check = new_form_match.group(1)
-            assert "training_manager" not in roles_in_check, (
-                f"training/new-form allows training_manager: [{roles_in_check}]. "
-                "training_manager should NOT create training videos."
-            )
 
 
 # =============================================================================
