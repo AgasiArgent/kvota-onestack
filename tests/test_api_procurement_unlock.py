@@ -163,12 +163,28 @@ class TestRoutePathsRenamed:
     """Verify main.py routing uses new paths and old paths are removed."""
 
     def test_new_unlock_request_route_registered(self):
-        """/api/invoices/{id}/procurement-unlock-request must be a registered POST route."""
+        """/api/invoices/{id}/procurement-unlock-request must be reachable.
+
+        Phase 6B-3: migrated from @rt in main.py to FastAPI sub-app router
+        (api/routers/invoices.py). Route is no longer in main.app.routes
+        directly; it resolves via the /api mount. Reachability check via
+        TestClient confirms the route is wired end-to-end.
+        """
+        from starlette.testclient import TestClient
         import main
 
-        app = main.app
-        paths = {getattr(r, "path", None) for r in app.routes}
-        assert "/api/invoices/{invoice_id}/procurement-unlock-request" in paths
+        client = TestClient(main.app)
+        response = client.post(
+            "/api/invoices/11111111-1111-1111-1111-111111111111"
+            "/procurement-unlock-request",
+            json={},
+        )
+        # Without auth, handler returns 401. 404 would mean the route is
+        # not registered / not reachable through the mount.
+        assert response.status_code != 404, (
+            f"Route unreachable: POST /api/invoices/{{id}}/procurement-unlock-request "
+            f"returned 404. Body: {response.text[:200]}"
+        )
 
     def test_new_unlock_approve_route_registered(self):
         import main
