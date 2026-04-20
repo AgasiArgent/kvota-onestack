@@ -55,7 +55,8 @@ interface FakeSupabase {
     idn_sku: string | null;
     vat_rate: number | null;
   }>;
-  invoice: { id: string; organization_id: string } | null;
+  invoice: { id: string; quote_id: string } | null;
+  quote: { id: string; organization_id: string } | null;
   existingInvoiceItemsMaxPosition: number;
   createdInvoiceItemIdCounter: number;
 
@@ -77,7 +78,11 @@ let fakeSupabase: FakeSupabase;
 function makeFakeSupabase(): FakeSupabase {
   const state: FakeSupabase = {
     quoteItems: [],
-    invoice: { id: "inv-A", organization_id: "org-1" },
+    // `kvota.invoices` has no organization_id column (Phase 5d discovery);
+    // the org boundary lives on `kvota.quotes` and is inherited through
+    // quote_id. Mock reflects the real schema.
+    invoice: { id: "inv-A", quote_id: "q-1" },
+    quote: { id: "q-1", organization_id: "org-1" },
     existingInvoiceItemsMaxPosition: 0,
     createdInvoiceItemIdCounter: 0,
     insertedInvoiceItems: [],
@@ -127,6 +132,19 @@ function makeFakeSupabase(): FakeSupabase {
             eq: () => ({
               single: async () => ({
                 data: state.invoice,
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === "quotes") {
+        // Used by getInvoiceOrganizationId: invoice → quote_id → quote.org_id.
+        return {
+          select: () => ({
+            eq: () => ({
+              single: async () => ({
+                data: state.quote,
                 error: null,
               }),
             }),
