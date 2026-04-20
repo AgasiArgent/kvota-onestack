@@ -6,9 +6,9 @@ Registered via thin wrappers in ``api/routers/quotes.py``.
 
 Currently hosts:
   - ``calculate_quote`` — POST /api/quotes/{quote_id}/calculate
-
-Subsequent task 6B-6b adds: ``submit_procurement``, ``cancel_quote``,
-``transition_workflow``.
+  - ``submit_procurement`` — POST /api/quotes/{quote_id}/submit-procurement
+  - ``cancel_quote`` — POST /api/quotes/{quote_id}/cancel
+  - ``transition_workflow`` — POST /api/quotes/{quote_id}/workflow/transition
 
 Auth: dual — JWT via ``ApiAuthMiddleware`` (Next.js) OR legacy session
 (FastHTML). Response shape is byte-identical to the pre-extraction handler
@@ -16,7 +16,9 @@ in main.py so existing callers (calculation-action-bar.tsx, sales-action-bar
 .tsx) continue to work unchanged.
 """
 
-from datetime import datetime
+import json
+import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -35,9 +37,22 @@ from services.quote_version_service import (
     list_quote_versions,
     update_quote_version,
 )
-from services.workflow_service import transition_quote_status
+from services.role_service import get_user_role_codes
+from services.workflow_service import (
+    complete_customs as wf_complete_customs,
+    complete_procurement,
+    transition_quote_status,
+    transition_to_pending_procurement,
+)
 
-__all__ = ["calculate_quote"]
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "calculate_quote",
+    "submit_procurement",
+    "cancel_quote",
+    "transition_workflow",
+]
 
 
 async def calculate_quote(
@@ -582,3 +597,378 @@ async def calculate_quote(
         import traceback
         traceback.print_exc()
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def submit_procurement(
+    request: Request,
+    quote_id: str,
+) -> JSONResponse:
+    """Submit a draft quote for procurement evaluation with sales checklist.
+
+    Path: POST /api/quotes/{quote_id}/submit-procurement
+    Auth: dual — JWT (Next.js) first, then legacy session (FastHTML).
+    Body (JSON):
+        checklist: object (required)
+            is_estimate: bool
+            is_tender: bool
+            direct_request: bool
+            trading_org_request: bool
+            equipment_description: str (required, non-empty)
+    Returns:
+        redirect: str — path to the quote page (on success)
+        error: str — error message (on failure)
+    Side Effects:
+        - Updates quotes.sales_checklist
+        - Transitions workflow to pending_procurement
+    Roles: sales, admin (authorization enforced by the workflow service).
+    """
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_meta = api_user.user_metadata or {}
+        org_id = user_meta.get("org_id")
+        if not org_id:
+            try:
+                sb = get_supabase()
+                om = sb.table("organization_members").select("organization_id").eq("user_id", str(api_user.id)).eq("status", "active").order("created_at").limit(1).execute()
+                if om.data:
+                    org_id = om.data[0]["organization_id"]
+            except Exception:
+                pass
+        user = {
+            "id": str(api_user.id),
+            "email": api_user.email or "",
+            "name": user_meta.get("name", api_user.email or ""),
+            "org_id": org_id,
+            "org_name": user_meta.get("org_name", ""),
+        }
+        user_roles = get_user_role_codes(user["id"], org_id)
+    else:
+        try:
+            session = request.session
+        except (AssertionError, AttributeError):
+            session = None
+        if not session or not session.get("user"):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user = session["user"]
+        user_roles = user.get("roles", [])
+        org_id = user["org_id"]
+
+    if not user or not user.get("id"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    # Parse checklist from JSON body
+    checklist_data = None
+    body = None
+    try:
+        body = await request.body()
+        print(f"[SUBMIT-PROCUREMENT] quote_id={quote_id}, body_len={len(body) if body else 0}, roles={user_roles}")
+        if body:
+            data = json.loads(body)
+            checklist_data = data.get("checklist")
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"[SUBMIT-PROCUREMENT] JSON parse error: {e}, body={body[:200] if body else 'empty'}")
+
+    # Validate checklist is present and has required field
+    if not checklist_data or not checklist_data.get("equipment_description", "").strip():
+        print(f"[SUBMIT-PROCUREMENT] Checklist validation failed: checklist_data={checklist_data}")
+        return JSONResponse({"error": "Заполните контрольный список перед передачей в закупки"}, status_code=400)
+
+    # Save checklist to quotes table
+    checklist_to_save = {
+        "is_estimate": bool(checklist_data.get("is_estimate", False)),
+        "is_tender": bool(checklist_data.get("is_tender", False)),
+        "direct_request": bool(checklist_data.get("direct_request", False)),
+        "trading_org_request": bool(checklist_data.get("trading_org_request", False)),
+        "equipment_description": checklist_data["equipment_description"].strip(),
+        "completed_at": datetime.utcnow().isoformat(),
+        "completed_by": user["id"]
+    }
+
+    supabase = get_supabase()
+    try:
+        supabase.table("quotes") \
+            .update({"sales_checklist": checklist_to_save}) \
+            .eq("id", quote_id) \
+            .eq("organization_id", org_id) \
+            .execute()
+    except Exception as e:
+        return JSONResponse({"error": f"Ошибка сохранения чеклиста: {str(e)}"}, status_code=500)
+
+    # Use the workflow service to transition to pending_procurement
+    result = transition_to_pending_procurement(
+        quote_id=quote_id,
+        actor_id=user["id"],
+        actor_roles=user_roles,
+        comment="Submitted by sales for procurement evaluation"
+    )
+
+    if result.success:
+        print(f"[SUBMIT-PROCUREMENT] SUCCESS quote_id={quote_id}")
+        return JSONResponse({"redirect": f"/quotes/{quote_id}"})
+    else:
+        print(f"[SUBMIT-PROCUREMENT] TRANSITION FAILED: {result.error_message}")
+        return JSONResponse({"error": f"Ошибка перехода: {result.error_message}"}, status_code=400)
+
+
+async def cancel_quote(
+    request: Request,
+    quote_id: str,
+) -> JSONResponse:
+    """Cancel a quote with mandatory reason.
+
+    Path: POST /api/quotes/{quote_id}/cancel
+    Auth: dual — JWT (Next.js) first, then legacy session (FastHTML).
+    Body (JSON or form):
+        reason: str (required, non-empty) — free-text cancellation reason
+    Returns:
+        success: bool
+        error: str — on failure
+    Side Effects:
+        - Sets quotes.workflow_status = 'cancelled'
+        - Records cancellation_reason, cancellation_comment, cancelled_at,
+          cancelled_by, stage_entered_at, clears overdue_notified_at
+        - Sends Telegram notifications if quote was in
+          procurement/logistics/customs stage
+    Roles: sales, head_of_sales, admin.
+    """
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_id = str(api_user.id)
+        supabase = get_supabase()
+        om = supabase.table("organization_members").select("organization_id").eq("user_id", user_id).limit(1).execute()
+        org_id = om.data[0]["organization_id"] if om.data else None
+        user_roles = get_user_role_codes(user_id, org_id) if org_id else []
+    else:
+        try:
+            session = request.session
+        except (AssertionError, AttributeError):
+            session = None
+        if not session or not session.get("user"):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user_data = session.get("user", {})
+        user_id = user_data.get("id")
+        org_id = user_data.get("org_id")
+        user_roles = user_data.get("roles", [])
+
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not org_id:
+        return JSONResponse({"error": "No organization"}, status_code=403)
+
+    # Only sales users and admins can cancel
+    cancel_roles = {"sales", "head_of_sales", "admin"}
+    if not cancel_roles.intersection(user_roles):
+        return JSONResponse({"error": "У вас нет прав для отмены КП"}, status_code=403)
+
+    # Parse request body
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+    else:
+        body = dict(await request.form())
+
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        return JSONResponse({"error": "Причина отмены обязательна"}, status_code=400)
+
+    supabase = get_supabase()
+
+    # Verify quote exists and belongs to user's org
+    quote_result = supabase.table("quotes") \
+        .select("id, workflow_status, idn_quote, customer_id") \
+        .eq("id", quote_id) \
+        .eq("organization_id", org_id) \
+        .is_("deleted_at", None) \
+        .execute()
+
+    if not quote_result.data:
+        return JSONResponse({"error": "КП не найдено"}, status_code=404)
+
+    quote = quote_result.data[0]
+    current_status = quote.get("workflow_status", "draft")
+
+    # Cannot cancel already cancelled quotes
+    if current_status == "cancelled":
+        return JSONResponse({"error": "КП уже отменена"}, status_code=422)
+
+    # Cannot cancel deals (spec_signed, deal)
+    if current_status in ("spec_signed", "deal"):
+        return JSONResponse({"error": "Невозможно отменить КП на этапе сделки"}, status_code=422)
+
+    # Determine if we need to notify procurement/logistics users
+    notify_statuses = {"pending_procurement", "logistics", "pending_customs", "pending_logistics_and_customs"}
+    should_notify = current_status in notify_statuses
+
+    try:
+        supabase.table("quotes") \
+            .update({
+                "workflow_status": "cancelled",
+                "cancellation_reason": "cancelled_by_user",
+                "cancellation_comment": reason,
+                "cancelled_at": datetime.now(timezone.utc).isoformat(),
+                "cancelled_by": user_id,
+                "stage_entered_at": datetime.now(timezone.utc).isoformat(),
+                "overdue_notified_at": None,
+            }) \
+            .eq("id", quote_id) \
+            .execute()
+
+        # Send Telegram notifications if quote was in procurement/logistics
+        if should_notify:
+            try:
+                from services.telegram_service import (
+                    send_notification,
+                    NotificationType,
+                    get_user_telegram_id,
+                    is_bot_configured,
+                )
+                if is_bot_configured():
+                    # Get customer name for notification
+                    customer_name = ""
+                    if quote.get("customer_id"):
+                        cust = supabase.table("customers").select("name").eq("id", quote["customer_id"]).execute()
+                        if cust.data:
+                            customer_name = cust.data[0].get("name", "")
+
+                    # Get canceller name
+                    canceller = supabase.table("user_profiles").select("full_name").eq("user_id", user_id).execute()
+                    canceller_name = canceller.data[0].get("full_name", "") if canceller.data else ""
+
+                    # Find users to notify based on current stage
+                    notify_role_slugs = []
+                    if current_status == "pending_procurement":
+                        notify_role_slugs = ["procurement", "head_of_procurement"]
+                    elif current_status in ("logistics", "pending_logistics_and_customs"):
+                        notify_role_slugs = ["logistics", "head_of_logistics"]
+                    elif current_status == "pending_customs":
+                        notify_role_slugs = ["customs"]
+
+                    if notify_role_slugs:
+                        members = supabase.table("organization_members") \
+                            .select("user_id, roles!inner(slug)") \
+                            .eq("organization_id", org_id) \
+                            .in_("roles.slug", notify_role_slugs) \
+                            .execute()
+
+                        for member in (members.data or []):
+                            member_telegram_id = await get_user_telegram_id(member["user_id"])
+                            if member_telegram_id:
+                                message = (
+                                    f"❌ КП {quote.get('idn_quote', '')} отменена\n"
+                                    f"Клиент: {customer_name}\n"
+                                    f"Отменил: {canceller_name}\n"
+                                    f"Причина: {reason}"
+                                )
+                                await send_notification(
+                                    telegram_id=member_telegram_id,
+                                    notification_type=NotificationType.TASK_ASSIGNED,
+                                    quote_id=quote_id,
+                                    message=message,
+                                )
+            except Exception as notify_err:
+                logger.error(f"Failed to send cancellation notifications: {notify_err}")
+
+        return JSONResponse({"success": True})
+    except Exception as e:
+        logger.error(f"Failed to cancel quote {quote_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+async def transition_workflow(
+    request: Request,
+    quote_id: str,
+) -> JSONResponse:
+    """Execute a workflow status transition.
+
+    Path: POST /api/quotes/{quote_id}/workflow/transition
+    Auth: dual — JWT (Next.js) first, then legacy session (FastHTML).
+    Body (JSON or form):
+        to_status: str — target workflow status (required unless action set)
+        action: str — special action: ``complete_procurement`` or
+                      ``complete_customs``
+        comment: str (optional) — transition comment
+    Returns:
+        success: bool
+        from_status: str — status before the transition (on success)
+        to_status: str — status after the transition (on success)
+        error: str — error message (on failure)
+    Side Effects:
+        - Transitions workflow via ``workflow_service``
+    Roles: role check delegated to the workflow service transition rules.
+    """
+    # Dual auth: JWT (Next.js) or session (FastHTML)
+    api_user = getattr(request.state, 'api_user', None)
+    if api_user:
+        user_id = str(api_user.id)
+        supabase = get_supabase()
+        om = supabase.table("organization_members").select("organization_id").eq("user_id", user_id).limit(1).execute()
+        org_id = om.data[0]["organization_id"] if om.data else None
+        user_roles = get_user_role_codes(user_id, org_id) if org_id else []
+    else:
+        try:
+            session = request.session
+        except (AssertionError, AttributeError):
+            session = None
+        if not session or not session.get("user"):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        user_data = session.get("user", {})
+        user_id = user_data.get("id")
+        org_id = user_data.get("org_id")
+        user_roles = user_data.get("roles", [])
+
+    if not user_id:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not org_id:
+        return JSONResponse({"error": "No organization"}, status_code=403)
+
+    # Parse request body
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        body = await request.json()
+    else:
+        body = dict(await request.form())
+
+    to_status = body.get("to_status")
+    action = body.get("action")
+    comment = body.get("comment")
+
+    if not to_status and not action:
+        return JSONResponse({"error": "to_status or action is required"}, status_code=400)
+
+    # Handle special actions that have dedicated workflow functions
+    if action == "complete_procurement":
+        result = complete_procurement(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles,
+        )
+    elif action == "complete_customs":
+        result = wf_complete_customs(
+            quote_id=quote_id,
+            actor_id=user_id,
+            actor_roles=user_roles,
+        )
+    else:
+        if not to_status:
+            return JSONResponse({"error": "to_status is required"}, status_code=400)
+        result = transition_quote_status(
+            quote_id=quote_id,
+            to_status=to_status,
+            actor_id=user_id,
+            actor_roles=user_roles,
+            comment=comment,
+        )
+
+    if result.success:
+        return JSONResponse({
+            "success": True,
+            "from_status": result.from_status,
+            "to_status": result.to_status,
+        })
+    else:
+        return JSONResponse({
+            "success": False,
+            "error": result.error_message,
+        }, status_code=422)

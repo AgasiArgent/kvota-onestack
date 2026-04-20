@@ -152,6 +152,66 @@ class TestQuotesCalculateRoute:
         assert "post" in paths["/quotes/{quote_id}/calculate"]
 
 
+class TestQuotesActionRoutes:
+    """6B-6b: submit-procurement + cancel + workflow/transition."""
+
+    _QUOTE_ID = "11111111-1111-1111-1111-111111111111"
+
+    def test_post_submit_procurement_registered(
+        self, subapp_client: TestClient
+    ) -> None:
+        """POST /quotes/{quote_id}/submit-procurement must exist."""
+        response = subapp_client.post(
+            f"/quotes/{self._QUOTE_ID}/submit-procurement"
+        )
+        # No auth → 401. 404 would mean the route was not registered.
+        assert response.status_code != 404, (
+            "Route not registered: POST /quotes/{id}/submit-procurement "
+            f"returned 404. Body: {response.text[:200]}"
+        )
+
+    def test_post_cancel_registered(self, subapp_client: TestClient) -> None:
+        """POST /quotes/{quote_id}/cancel must exist."""
+        response = subapp_client.post(f"/quotes/{self._QUOTE_ID}/cancel")
+        assert response.status_code != 404, (
+            "Route not registered: POST /quotes/{id}/cancel returned 404. "
+            f"Body: {response.text[:200]}"
+        )
+
+    def test_post_workflow_transition_registered(
+        self, subapp_client: TestClient
+    ) -> None:
+        """POST /quotes/{quote_id}/workflow/transition must exist."""
+        response = subapp_client.post(
+            f"/quotes/{self._QUOTE_ID}/workflow/transition"
+        )
+        assert response.status_code != 404, (
+            "Route not registered: POST /quotes/{id}/workflow/transition "
+            f"returned 404. Body: {response.text[:200]}"
+        )
+
+    def test_schema_includes_6b6b_action_paths(
+        self, subapp_client: TestClient
+    ) -> None:
+        """All 6B-6b quotes action endpoints must appear in the OpenAPI schema."""
+        response = subapp_client.get("/openapi.json")
+        paths = response.json().get("paths", {})
+        expected = {
+            "/quotes/{quote_id}/submit-procurement",
+            "/quotes/{quote_id}/cancel",
+            "/quotes/{quote_id}/workflow/transition",
+        }
+        missing = expected - set(paths.keys())
+        assert not missing, (
+            f"Missing 6B-6b action paths in OpenAPI: {missing}. "
+            f"Present: {sorted(paths.keys())}"
+        )
+        for path in expected:
+            assert "post" in paths[path], (
+                f"Path {path} has no POST method entry"
+            )
+
+
 class TestQuotesOpenApiSchema:
     """Verify the quotes router endpoints appear in the OpenAPI schema."""
 
