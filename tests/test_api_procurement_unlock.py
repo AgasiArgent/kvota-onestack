@@ -187,23 +187,45 @@ class TestRoutePathsRenamed:
         )
 
     def test_new_unlock_approve_route_registered(self):
+        """/api/invoices/{id}/procurement-unlock-approval/{id}/approve must be reachable.
+
+        Phase 6B-4: migrated from @rt in main.py to FastAPI sub-app router
+        (api/routers/invoices.py). Route is no longer in main.app.routes
+        directly; it resolves via the /api mount. Reachability check via
+        TestClient confirms the route is wired end-to-end.
+        """
+        from starlette.testclient import TestClient
         import main
 
-        app = main.app
-        paths = {getattr(r, "path", None) for r in app.routes}
-        assert (
-            "/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve"
-            in paths
+        client = TestClient(main.app)
+        response = client.post(
+            "/api/invoices/11111111-1111-1111-1111-111111111111"
+            "/procurement-unlock-approval/22222222-2222-2222-2222-222222222222/approve",
+            json={},
+        )
+        assert response.status_code != 404, (
+            "Route unreachable: POST /api/invoices/{id}/procurement-unlock-approval"
+            f"/{{approval_id}}/approve returned 404. Body: {response.text[:200]}"
         )
 
     def test_new_unlock_reject_route_registered(self):
+        """/api/invoices/{id}/procurement-unlock-approval/{id}/reject must be reachable.
+
+        Phase 6B-4: migrated from @rt in main.py to FastAPI sub-app router.
+        Reachability check via TestClient mirrors the ``approve`` test above.
+        """
+        from starlette.testclient import TestClient
         import main
 
-        app = main.app
-        paths = {getattr(r, "path", None) for r in app.routes}
-        assert (
-            "/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject"
-            in paths
+        client = TestClient(main.app)
+        response = client.post(
+            "/api/invoices/11111111-1111-1111-1111-111111111111"
+            "/procurement-unlock-approval/22222222-2222-2222-2222-222222222222/reject",
+            json={},
+        )
+        assert response.status_code != 404, (
+            "Route unreachable: POST /api/invoices/{id}/procurement-unlock-approval"
+            f"/{{approval_id}}/reject returned 404. Body: {response.text[:200]}"
         )
 
     def test_old_edit_request_approval_route_removed(self):

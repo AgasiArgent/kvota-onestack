@@ -9,6 +9,11 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from api.composition import (
+    approve_procurement_unlock as _approve_procurement_unlock,
+    reject_procurement_unlock as _reject_procurement_unlock,
+    verify_invoice as _verify_invoice,
+)
 from api.invoices import (
     delete_letter_draft as _delete_letter_draft,
     download_invoice_xls as _download_xls,
@@ -66,3 +71,25 @@ async def post_procurement_unlock_request(
 ) -> JSONResponse:
     """Procurement lead requests unlock to edit a sent invoice."""
     return await _request_procurement_unlock(request, invoice_id)
+
+
+@router.post("/{invoice_id}/verify")
+async def post_verify(request: Request, invoice_id: str) -> JSONResponse:
+    """Mark invoice as verified (composition verification step)."""
+    return await _verify_invoice(request, invoice_id)
+
+
+@router.post("/{invoice_id}/procurement-unlock-approval/{approval_id}/approve")
+async def post_procurement_unlock_approve(
+    request: Request, invoice_id: str, approval_id: str
+) -> JSONResponse:
+    """Approve a pending procurement-unlock request."""
+    return await _approve_procurement_unlock(request, invoice_id, approval_id)
+
+
+@router.post("/{invoice_id}/procurement-unlock-approval/{approval_id}/reject")
+async def post_procurement_unlock_reject(
+    request: Request, invoice_id: str, approval_id: str
+) -> JSONResponse:
+    """Reject a pending procurement-unlock request."""
+    return await _reject_procurement_unlock(request, invoice_id, approval_id)
