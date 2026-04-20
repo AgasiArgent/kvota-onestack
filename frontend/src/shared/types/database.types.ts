@@ -1206,66 +1206,6 @@ export type Database = {
         }
         Relationships: []
       }
-      invoice_item_prices: {
-        Row: {
-          id: string
-          invoice_id: string
-          quote_item_id: string
-          organization_id: string
-          purchase_price_original: number
-          purchase_currency: string
-          base_price_vat: number | null
-          price_includes_vat: boolean
-          production_time_days: number | null
-          minimum_order_quantity: number | null
-          supplier_notes: string | null
-          version: number
-          frozen_at: string | null
-          frozen_by: string | null
-          created_at: string
-          updated_at: string
-          created_by: string | null
-        }
-        Insert: {
-          id?: string
-          invoice_id: string
-          quote_item_id: string
-          organization_id: string
-          purchase_price_original: number
-          purchase_currency: string
-          base_price_vat?: number | null
-          price_includes_vat?: boolean
-          production_time_days?: number | null
-          minimum_order_quantity?: number | null
-          supplier_notes?: string | null
-          version?: number
-          frozen_at?: string | null
-          frozen_by?: string | null
-          created_at?: string
-          updated_at?: string
-          created_by?: string | null
-        }
-        Update: {
-          id?: string
-          invoice_id?: string
-          quote_item_id?: string
-          organization_id?: string
-          purchase_price_original?: number
-          purchase_currency?: string
-          base_price_vat?: number | null
-          price_includes_vat?: boolean
-          production_time_days?: number | null
-          minimum_order_quantity?: number | null
-          supplier_notes?: string | null
-          version?: number
-          frozen_at?: string | null
-          frozen_by?: string | null
-          created_at?: string
-          updated_at?: string
-          created_by?: string | null
-        }
-        Relationships: []
-      }
       invoice_items: {
         Row: {
           id: string
@@ -3455,22 +3395,6 @@ export type Database = {
           import_ban_reason: string | null
           composition_selected_invoice_id: string | null
           name_en: string | null
-          invoice_id: string | null
-          purchase_price_original: number | null
-          purchase_currency: string | null
-          base_price_vat: number | null
-          price_includes_vat: boolean | null
-          customs_code: string | null
-          supplier_country: string | null
-          weight_in_kg: number | null
-          production_time_days: number | null
-          min_order_quantity: number | null
-          dimension_height_mm: number | null
-          dimension_width_mm: number | null
-          dimension_length_mm: number | null
-          license_ds_cost: number | null
-          license_ss_cost: number | null
-          license_sgr_cost: number | null
         }
         Insert: {
           id?: string
@@ -3545,22 +3469,6 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           name_en?: string | null
-          invoice_id?: string | null
-          purchase_price_original?: number | null
-          purchase_currency?: string | null
-          base_price_vat?: number | null
-          price_includes_vat?: boolean | null
-          customs_code?: string | null
-          supplier_country?: string | null
-          weight_in_kg?: number | null
-          production_time_days?: number | null
-          min_order_quantity?: number | null
-          dimension_height_mm?: number | null
-          dimension_width_mm?: number | null
-          dimension_length_mm?: number | null
-          license_ds_cost?: number | null
-          license_ss_cost?: number | null
-          license_sgr_cost?: number | null
         }
         Update: {
           id?: string
@@ -3635,22 +3543,6 @@ export type Database = {
           import_ban_reason?: string | null
           composition_selected_invoice_id?: string | null
           name_en?: string | null
-          invoice_id?: string | null
-          purchase_price_original?: number | null
-          purchase_currency?: string | null
-          base_price_vat?: number | null
-          price_includes_vat?: boolean | null
-          customs_code?: string | null
-          supplier_country?: string | null
-          weight_in_kg?: number | null
-          production_time_days?: number | null
-          min_order_quantity?: number | null
-          dimension_height_mm?: number | null
-          dimension_width_mm?: number | null
-          dimension_length_mm?: number | null
-          license_ds_cost?: number | null
-          license_ss_cost?: number | null
-          license_sgr_cost?: number | null
         }
         Relationships: []
       }
