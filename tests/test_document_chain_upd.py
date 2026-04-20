@@ -188,114 +188,11 @@ class TestUPDMigration:
 
 
 # ==============================================================================
-# P2.6: Supplier Invoice Documents Column on List Page
+# P2.6 Supplier Invoice classes (TestSupplierInvoiceDocumentCount +
+# TestSupplierInvoiceDetailDocuments) removed Phase 6C-2B-10b — they
+# targeted /supplier-invoices handlers archived to
+# legacy-fasthtml/supplier_invoices.py.
 # ==============================================================================
-
-class TestSupplierInvoiceDocumentCount:
-    """
-    The /supplier-invoices list page table must include a document count column
-    showing how many documents are attached to each invoice.
-    """
-
-    def _get_supplier_invoices_list_source(self):
-        """Extract the supplier invoices list route handler source."""
-        source = _read_main_source()
-        # Find the GET /supplier-invoices handler
-        match = re.search(
-            r'@rt\("/supplier-invoices"\)\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL
-        )
-        if not match:
-            pytest.fail("Could not find GET /supplier-invoices route in main.py")
-        return match.group(0)
-
-    def test_supplier_invoices_table_has_documents_header(self):
-        """
-        The supplier invoices table Thead must include a 'Документы' or 'Док.' column.
-        """
-        source = self._get_supplier_invoices_list_source()
-
-        has_docs_header = (
-            '"Документы"' in source
-            or '"Док."' in source
-            or '"Док"' in source
-            or '"Файлы"' in source
-        )
-        assert has_docs_header, (
-            "Supplier invoices table must have a 'Документы' (or similar) column header "
-            "for document count display"
-        )
-
-    def test_supplier_invoices_imports_count_documents(self):
-        """
-        The supplier invoices list route must import or use
-        count_documents_for_entity to count documents per invoice.
-        """
-        source = self._get_supplier_invoices_list_source()
-
-        has_count_fn = (
-            "count_documents_for_entity" in source
-            or "document_count" in source
-            or "doc_count" in source
-        )
-        assert has_count_fn, (
-            "Supplier invoices list must use count_documents_for_entity or equivalent "
-            "to show document count per invoice"
-        )
-
-
-# ==============================================================================
-# P2.6: Supplier Invoice Detail Page Documents Section
-# ==============================================================================
-
-class TestSupplierInvoiceDetailDocuments:
-    """
-    The /supplier-invoices/{invoice_id} detail page must include a
-    documents section using the existing _documents_section() pattern.
-    """
-
-    def _get_supplier_invoice_detail_source(self):
-        """Extract the supplier invoice detail route handler source."""
-        source = _read_main_source()
-        match = re.search(
-            r'@rt\("/supplier-invoices/\{invoice_id\}"\)\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL
-        )
-        if not match:
-            pytest.fail("Could not find GET /supplier-invoices/{invoice_id} route in main.py")
-        return match.group(0)
-
-    def test_invoice_detail_has_documents_section(self):
-        """
-        The invoice detail page must call _documents_section() to render
-        an attached documents section.
-        """
-        source = self._get_supplier_invoice_detail_source()
-
-        has_docs = (
-            "_documents_section(" in source
-            or "documents_section(" in source
-        )
-        assert has_docs, (
-            "Supplier invoice detail page must include _documents_section() "
-            "for viewing and uploading invoice documents"
-        )
-
-    def test_invoice_detail_passes_supplier_invoice_entity_type(self):
-        """
-        The _documents_section must be called with entity_type='supplier_invoice'.
-        """
-        source = self._get_supplier_invoice_detail_source()
-
-        has_entity_type = (
-            '"supplier_invoice"' in source
-            and "_documents_section(" in source
-        )
-        assert has_entity_type, (
-            "Invoice detail documents section must pass entity_type='supplier_invoice'"
-        )
 
 
 # ==============================================================================
@@ -559,29 +456,6 @@ class TestDocumentChainEdgeCases:
             "to handle quotes with no documents"
         )
 
-    def test_document_chain_supplier_invoice_column_includes_count(self):
-        """
-        The supplier invoices list page must show actual document count
-        (not just a boolean/icon), i.e., it must render a number.
-        """
-        source = _read_main_source()
-
-        # Find the supplier invoices list route
-        match = re.search(
-            r'@rt\("/supplier-invoices"\)\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL
-        )
-        assert match is not None, "Could not find GET /supplier-invoices route"
-
-        handler_source = match.group(0)
-
-        # Should call count_documents_for_entity for each invoice
-        has_count = (
-            "count_documents_for_entity" in handler_source
-            or "doc_count" in handler_source
-            or "document_count" in handler_source
-        )
-        assert has_count, (
-            "Supplier invoices list must count documents per invoice for display"
-        )
+    # test_document_chain_supplier_invoice_column_includes_count removed
+    # Phase 6C-2B-10b — targeted the archived /supplier-invoices registry
+    # handler (moved to legacy-fasthtml/supplier_invoices.py).
