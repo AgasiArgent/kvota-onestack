@@ -29,6 +29,8 @@ from unittest.mock import patch, MagicMock, AsyncMock
 # Path constants
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 MAIN_PY = os.path.join(_PROJECT_ROOT, "main.py")
+# Phase 6B-7: submit_feedback moved from main.py to api/feedback.py.
+FEEDBACK_API_PY = os.path.join(_PROJECT_ROOT, "api", "feedback.py")
 TELEGRAM_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "telegram_service.py")
 CLICKUP_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "clickup_service.py")
 FEEDBACK_SERVICE_PY = os.path.join(_PROJECT_ROOT, "services", "feedback_service.py")
@@ -43,6 +45,11 @@ def _read_source(path):
 def _read_main_source():
     """Read main.py source code without importing it."""
     return _read_source(MAIN_PY)
+
+
+def _read_feedback_handler_source():
+    """Read the api/feedback.py source that hosts submit_feedback (Phase 6B-7)."""
+    return _read_source(FEEDBACK_API_PY)
 
 
 def _make_uuid():
@@ -608,95 +615,74 @@ class TestEnhancedFeedbackPostHandler:
 
     def test_handler_accepts_screenshot_field(self):
         """The POST handler must accept a 'screenshot' form field."""
-        source = _read_main_source()
-        # Find submit_feedback handler
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
-        assert "screenshot" in handler, (
+        # Phase 6B-7: submit_feedback moved to api/feedback.py.
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
+        assert "screenshot" in source, (
             "submit_feedback handler must accept 'screenshot' form field"
         )
 
     def test_handler_calls_clickup_service(self):
         """The handler must call create_clickup_bug_task."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
-        assert "create_clickup_bug_task" in handler, (
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
+        assert "create_clickup_bug_task" in source, (
             "submit_feedback must call create_clickup_bug_task for ClickUp integration"
         )
 
     def test_handler_calls_send_admin_bug_report_with_photo(self):
         """The handler must call the new send_admin_bug_report_with_photo function."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
-        assert "send_admin_bug_report_with_photo" in handler, (
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
+        assert "send_admin_bug_report_with_photo" in source, (
             "submit_feedback must call send_admin_bug_report_with_photo"
         )
 
     def test_handler_saves_screenshot_data_to_db(self):
         """The handler must include screenshot_data in the DB insert payload."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
-        assert "screenshot_data" in handler, (
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
+        assert "screenshot_data" in source, (
             "submit_feedback must save screenshot_data to the database"
         )
 
     def test_handler_saves_clickup_task_id_to_db(self):
         """After ClickUp task creation, handler must update clickup_task_id in DB."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
-        assert "clickup_task_id" in handler, (
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
+        assert "clickup_task_id" in source, (
             "submit_feedback must save clickup_task_id after ClickUp task creation"
         )
 
     def test_handler_strips_data_uri_prefix(self):
         """Screenshot data URI prefix (data:image/png;base64,) must be stripped before DB storage."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
         # Should contain logic to strip data URI prefix
-        assert "data:image" in handler or "split" in handler, (
+        assert "data:image" in source or "split" in source, (
             "Handler must strip 'data:image/png;base64,' prefix from screenshot data"
         )
 
     def test_handler_validates_empty_description(self):
         """Empty description should still return an error (backward compatible)."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
         # Must still validate description is not empty
-        assert "not description" in handler or "description" in handler, (
+        assert "not description" in source or "description" in source, (
             "Handler must validate that description is not empty"
         )
 
@@ -1100,19 +1086,17 @@ class TestFeedbackEdgeCases:
     def test_existing_text_only_feedback_still_works(self):
         """The existing text-only submit_feedback behavior must be preserved.
         The handler should still accept submissions without a screenshot field."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
+        # Phase 6B-7: submit_feedback moved to api/feedback.py.
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
         # Handler must accept screenshot field with a default value
         # so text-only submissions continue to work
         has_screenshot_with_default = (
-            'form.get("screenshot", "")' in handler or
-            'form.get("screenshot")' in handler or
-            'body.get("screenshot"' in handler
+            'form.get("screenshot", "")' in source or
+            'form.get("screenshot")' in source or
+            'body.get("screenshot"' in source
         )
         assert has_screenshot_with_default, (
             "submit_feedback must read 'screenshot' from request body with a default value "
@@ -1122,39 +1106,33 @@ class TestFeedbackEdgeCases:
     def test_clickup_failure_does_not_fail_submission(self):
         """ClickUp API failure must not cause the feedback submission to fail.
         The feedback should still be saved to DB."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
         # ClickUp call must exist AND be wrapped in try/except
-        clickup_idx = handler.find("create_clickup_bug_task")
+        clickup_idx = source.find("create_clickup_bug_task(")
         assert clickup_idx >= 0, (
             "submit_feedback must call create_clickup_bug_task (ClickUp integration)"
         )
         # Find the surrounding try/except
-        before_clickup = handler[:clickup_idx]
+        before_clickup = source[:clickup_idx]
         assert "try:" in before_clickup[max(0, len(before_clickup) - 200):], (
             "ClickUp call must be wrapped in try/except so failures don't break submission"
         )
 
     def test_telegram_failure_does_not_fail_submission(self):
         """Telegram failure must not cause the feedback submission to fail."""
-        source = _read_main_source()
-        idx = source.find("async def submit_feedback")
-        assert idx >= 0, "submit_feedback handler not found"
-        handler_end = source.find("\n@rt(", idx + 10)
-        if handler_end == -1:
-            handler_end = len(source)
-        handler = source[idx:handler_end]
+        source = _read_feedback_handler_source()
+        assert "async def submit_feedback" in source, (
+            "submit_feedback handler not found in api/feedback.py"
+        )
         # Telegram call must exist AND be wrapped in try/except
-        telegram_idx = handler.find("send_admin_bug_report_with_photo")
+        telegram_idx = source.find("send_admin_bug_report_with_photo(")
         assert telegram_idx >= 0, (
             "submit_feedback must call send_admin_bug_report_with_photo (Telegram photo)"
         )
-        before_telegram = handler[:telegram_idx]
+        before_telegram = source[:telegram_idx]
         assert "try:" in before_telegram[max(0, len(before_telegram) - 200):], (
             "Telegram call must be wrapped in try/except so failures don't break submission"
         )
