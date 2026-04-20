@@ -45,46 +45,13 @@ def _find_route_decorators(source, route_pattern):
 
 
 # ============================================================================
-# TEST 1: /spec-control route exists and /specifications is gone
+# TEST 1: /spec-control route audit — REMOVED
 # ============================================================================
-
-class TestSpecControlRouteExists:
-    """Verify /spec-control is the canonical route, /specifications is gone."""
-
-    def test_spec_control_route_is_registered(self):
-        """At least one @rt('/spec-control') decorator must exist."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/spec-control"')
-        assert len(decorators) >= 1, \
-            "No @rt('/spec-control') route found in main.py"
-
-    def test_spec_control_sub_routes_exist(self):
-        """Sub-routes like /spec-control/create and /spec-control/{spec_id} must exist."""
-        source = _read_main_source()
-        create_routes = _find_route_decorators(source, r'@rt\("/spec-control/create/')
-        detail_routes = _find_route_decorators(source, r'@rt\("/spec-control/\{spec_id\}"')
-        assert len(create_routes) >= 1, "Missing /spec-control/create/{quote_id} route"
-        assert len(detail_routes) >= 1, "Missing /spec-control/{spec_id} route"
-
-    def test_no_specifications_route_registered(self):
-        """No @rt('/specifications') route should exist (was renamed to /spec-control)."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/specifications"')
-        assert len(decorators) == 0, \
-            f"Found legacy @rt('/specifications') route at lines: {decorators}"
-
-    def test_no_href_to_specifications(self):
-        """No href='/specifications' or href="/specifications" links should remain."""
-        source = _read_main_source()
-        matches = re.findall(r'href=["\']\/specifications["\'/]', source)
-        assert len(matches) == 0, \
-            f"Found {len(matches)} dangling href to /specifications: {matches}"
-
-    def test_nav_links_use_spec_control(self):
-        """Navigation links should reference /spec-control, not /specifications."""
-        source = _read_main_source()
-        assert 'href="/spec-control"' in source, \
-            "No navigation link to /spec-control found"
+# TestSpecControlRouteExists class removed in Phase 6C-2B Mega-B — the
+# /spec-control routes were archived to legacy-fasthtml/control_flow.py.
+# The sidebar `href="/spec-control"` nav link remains (dead link post-Caddy
+# cutover, safe) and its presence is still implicitly exercised by
+# TestNoOrphanedReferences.test_spec_control_links_are_consistent below.
 
 
 # ============================================================================
