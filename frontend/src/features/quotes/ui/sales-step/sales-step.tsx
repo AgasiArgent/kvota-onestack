@@ -65,14 +65,12 @@ function useSalesItemRows(items: QuoteItemRow[]): SalesItemRow[] {
       setRows([]);
       return;
     }
-    // database.types.ts lacks invoice_items / coverage until post-284 regen.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = createClient() as unknown as { from: (t: string) => any };
+    const supabase = createClient();
     let cancelled = false;
 
     async function load() {
       const qiIds = items.map((it) => it.id);
-      const { data, error } = await untyped
+      const { data, error } = await supabase
         .from("invoice_item_coverage")
         .select(
           "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
@@ -88,7 +86,7 @@ function useSalesItemRows(items: QuoteItemRow[]): SalesItemRow[] {
       }
 
       const priceByQi = new Map<string, number | null>();
-      for (const row of (data ?? []) as Array<{
+      for (const row of (data ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: { invoice_id: string; base_price_vat: number | null };
       }>) {

@@ -63,14 +63,12 @@ function useControlCheckItems(
       return;
     }
 
-    // database.types.ts does not yet include invoice_items / coverage.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = createClient() as unknown as { from: (t: string) => any };
+    const supabase = createClient();
     let cancelled = false;
 
     async function load() {
       const qiIds = items.map((it) => it.id);
-      const { data, error } = await untyped
+      const { data, error } = await supabase
         .from("invoice_item_coverage")
         .select(
           "quote_item_id, invoice_items!inner(invoice_id, supplier_country, price_includes_vat, purchase_price_original)"
@@ -97,7 +95,7 @@ function useControlCheckItems(
           purchase_price_original: number | null;
         }>
       >();
-      for (const row of (data ?? []) as Array<{
+      for (const row of (data ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: {
           invoice_id: string;

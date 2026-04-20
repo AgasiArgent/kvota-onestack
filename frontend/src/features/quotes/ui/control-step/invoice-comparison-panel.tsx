@@ -95,11 +95,7 @@ export function InvoiceComparisonPanel({
   useEffect(() => {
     if (invoiceItemsByInvoiceIdOverride !== undefined) return;
 
-    // database.types.ts does not yet include invoice_items (added by
-    // migration 281). Cast through `from` until Task 16 types regen.
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
 
     let cancelled = false;
     async function load() {
@@ -109,7 +105,7 @@ export function InvoiceComparisonPanel({
         return;
       }
 
-      const { data, error } = await untyped
+      const { data, error } = await supabase
         .from("invoice_items")
         .select(
           "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency"
@@ -125,7 +121,7 @@ export function InvoiceComparisonPanel({
       }
 
       const byId = new Map<string, InvoiceItemRow[]>();
-      for (const row of (data ?? []) as InvoiceItemRow[]) {
+      for (const row of data ?? []) {
         const list = byId.get(row.invoice_id) ?? [];
         list.push(row);
         byId.set(row.invoice_id, list);

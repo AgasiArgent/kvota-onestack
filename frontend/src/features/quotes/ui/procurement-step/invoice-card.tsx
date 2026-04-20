@@ -158,18 +158,13 @@ export function InvoiceCard({
 
   useEffect(() => {
     if (invoiceItemsOverride !== undefined) return;
-    // database.types.ts does not include invoice_items / invoice_item_coverage
-    // yet (migrations 281-282 add them). Cast through `from` to bypass the
-    // missing types.
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
 
     let cancelled = false;
     async function load() {
       setInvoiceItemsLoading(true);
       try {
-        const { data: ii } = await untyped
+        const { data: ii } = await supabase
           .from("invoice_items")
           .select(
             "id, invoice_id, position, product_name, supplier_sku, brand, quantity, purchase_price_original, purchase_currency, minimum_order_quantity, production_time_days, weight_in_kg, dimension_height_mm, dimension_width_mm, dimension_length_mm"
@@ -190,7 +185,7 @@ export function InvoiceCard({
         //   split  = 1 quote_item → N invoice_items → "→ A ×1 + B ×2"
         //   merge  = N quote_items → 1 invoice_item → "← A, B, C объединены"
         //   1:1    = no entry in map
-        const { data: cov } = await untyped
+        const { data: cov } = await supabase
           .from("invoice_item_coverage")
           .select(
             "invoice_item_id, quote_item_id, ratio, quote_items!inner(id, product_name, quantity)"
@@ -210,7 +205,7 @@ export function InvoiceCard({
           }>
         >();
         const iiByQi = new Map<string, string[]>();
-        for (const row of (cov ?? []) as Array<{
+        for (const row of (cov ?? []) as unknown as Array<{
           invoice_item_id: string;
           quote_item_id: string;
           ratio: number;
@@ -364,11 +359,9 @@ export function InvoiceCard({
       // composition pointers on quote_items that pointed here. Does not
       // touch alternative coverage in other invoices (non-destructive).
       const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const untyped = supabase as unknown as { from: (t: string) => any };
 
       if (invoiceItems.length > 0) {
-        const { error: delErr } = await untyped
+        const { error: delErr } = await supabase
           .from("invoice_items")
           .delete()
           .in(

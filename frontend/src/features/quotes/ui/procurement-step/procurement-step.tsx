@@ -128,21 +128,17 @@ export function ProcurementStep({
   }, [quote.organization_id]);
 
   // Phase 5d: derive priceReady from invoice_item_coverage → invoice_items.
-  // `database.types.ts` does not include invoice_items / invoice_item_coverage
-  // until post-migration-284 regen — cast through `from` to bypass typing.
   useEffect(() => {
     if (items.length === 0) {
       setPriceReadyByQuoteItemId({});
       return;
     }
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
 
     let cancelled = false;
     void (async () => {
       const qiIds = items.map((i) => i.id);
-      const { data } = await untyped
+      const { data } = await supabase
         .from("invoice_item_coverage")
         .select(
           "quote_item_id, invoice_items!inner(invoice_id, purchase_price_original, minimum_order_quantity)"
@@ -160,7 +156,7 @@ export function ProcurementStep({
       const ready: PriceReadyMap = {};
       const invoiceIdMap: Record<string, string | null> = {};
       const moqMap: Record<string, number | null> = {};
-      for (const row of (data ?? []) as Array<{
+      for (const row of (data ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: {
           invoice_id: string;

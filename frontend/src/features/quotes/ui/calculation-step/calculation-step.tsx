@@ -35,12 +35,7 @@ export function CalculationStep({
   );
 
   useEffect(() => {
-    // database.types.ts does not yet include invoice_items / coverage
-    // (added by migrations 281-282). Cast through `from` to bypass the
-    // missing types until the next regeneration.
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
 
     let cancelled = false;
 
@@ -51,7 +46,7 @@ export function CalculationStep({
         return;
       }
 
-      const { data: cov, error } = await untyped
+      const { data: cov, error } = await supabase
         .from("invoice_item_coverage")
         .select(
           "quote_item_id, invoice_items!inner(invoice_id, base_price_vat)"
@@ -70,7 +65,7 @@ export function CalculationStep({
       // composition_selected_invoice_id (null-case: first coverage row wins,
       // so the renderer still shows a value even when selection is implicit).
       const priceByQi = new Map<string, number | null>();
-      for (const row of (cov ?? []) as Array<{
+      for (const row of (cov ?? []) as unknown as Array<{
         quote_item_id: string;
         invoice_items: { invoice_id: string; base_price_vat: number | null };
       }>) {
