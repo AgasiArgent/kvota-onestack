@@ -8,7 +8,7 @@ Run with: python main.py
 from fasthtml.common import *
 from datetime import datetime, date, timedelta, timezone
 from decimal import Decimal
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, cast
 import os
 import json
 import html as html_mod
@@ -19635,7 +19635,7 @@ async def patch(session, quote_id: str, item_id: str, request):
     if not quote_result.data:
         return {"success": False, "error": "Quote not found"}
 
-    quote = quote_result.data[0]
+    quote = cast(dict, quote_result.data[0])
     workflow_status = quote.get("workflow_status", "draft")
 
     # Check if quote is ready for customs (procurement must be done first)

@@ -20,7 +20,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -142,7 +142,7 @@ async def calculate_quote(
     if not quote_result.data:
         return JSONResponse({"error": "Quote not found"}, status_code=404)
 
-    quote = quote_result.data[0]
+    quote = cast(dict, quote_result.data[0])
 
     # Get items via composition_service (Phase 5b): overlays purchase price
     # fields from invoice_item_prices when the item has an active composition
@@ -155,7 +155,7 @@ async def calculate_quote(
         return JSONResponse({"error": "Cannot calculate - no products in quote"}, status_code=400)
 
     # Extract parameters from body
-    currency = body.get("currency", quote.get("currency", "USD"))
+    currency = str(body.get("currency") or quote.get("currency") or "USD")
     markup = body.get("markup", "15")
     supplier_discount = body.get("supplier_discount", "0")
     exchange_rate = body.get("exchange_rate", "1.0")
@@ -223,7 +223,7 @@ async def calculate_quote(
         max_production_days = 0
 
         for item in items:
-            prod_days = item.get("production_time_days") or 0
+            prod_days = int(item.get("production_time_days") or 0)
             if prod_days > max_production_days:
                 max_production_days = prod_days
 
@@ -233,7 +233,7 @@ async def calculate_quote(
             .execute()
 
         for inv in (invoices_days_result.data or []):
-            log_days = inv.get("logistics_total_days") or 0
+            log_days = int(inv.get("logistics_total_days") or 0)
             if log_days > max_logistics_days:
                 max_logistics_days = log_days
 
@@ -257,17 +257,17 @@ async def calculate_quote(
 
             for inv in invoices_logistics:
                 s2h_amount = Decimal(str(inv.get("logistics_supplier_to_hub") or 0))
-                s2h_currency = inv.get("logistics_supplier_to_hub_currency") or "USD"
+                s2h_currency = str(inv.get("logistics_supplier_to_hub_currency") or "USD")
                 if s2h_amount > 0:
                     total_logistics_supplier_hub += convert_amount(s2h_amount, s2h_currency, "USD")
 
                 h2c_amount = Decimal(str(inv.get("logistics_hub_to_customs") or 0))
-                h2c_currency = inv.get("logistics_hub_to_customs_currency") or "USD"
+                h2c_currency = str(inv.get("logistics_hub_to_customs_currency") or "USD")
                 if h2c_amount > 0:
                     total_logistics_hub_customs += convert_amount(h2c_amount, h2c_currency, "USD")
 
                 c2c_amount = Decimal(str(inv.get("logistics_customs_to_customer") or 0))
-                c2c_currency = inv.get("logistics_customs_to_customer_currency") or "USD"
+                c2c_currency = str(inv.get("logistics_customs_to_customer_currency") or "USD")
                 if c2c_amount > 0:
                     total_logistics_customs_client += convert_amount(c2c_amount, c2c_currency, "USD")
 
@@ -786,7 +786,7 @@ async def cancel_quote(
     if not quote_result.data:
         return JSONResponse({"error": "КП не найдено"}, status_code=404)
 
-    quote = quote_result.data[0]
+    quote = cast(dict, quote_result.data[0])
     current_status = quote.get("workflow_status", "draft")
 
     # Cannot cancel already cancelled quotes
