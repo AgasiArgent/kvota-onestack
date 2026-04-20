@@ -233,32 +233,39 @@ class TestLicenseMigrationExists:
 # ==============================================================================
 
 class TestBulkUpdateLicenseFields:
-    """PATCH /api/customs/{quote_id}/items/bulk must accept license fields."""
+    """PATCH /api/customs/{quote_id}/items/bulk must accept license fields.
+
+    Phase 6B-9: handler moved from main.py to api/customs.py.
+    Source inspection now targets the new module.
+    """
 
     def _get_bulk_handler_source(self):
-        """Extract the api_customs_items_bulk_update function source."""
-        source = _read_main_source()
-        # Find the function between its decorator and the next route
+        """Extract the bulk_update_items handler source from api/customs.py."""
+        customs_module_path = os.path.join(_PROJECT_ROOT, "api", "customs.py")
+        with open(customs_module_path) as f:
+            source = f.read()
+        # Match from ``async def bulk_update_items`` until the end of file
+        # (it's the last/only public handler in the module).
         match = re.search(
-            r'(async def api_customs_items_bulk_update.*?)(?=\n@rt\(|$)',
+            r'(async def bulk_update_items.*)',
             source,
             re.DOTALL,
         )
-        assert match, "api_customs_items_bulk_update function not found in main.py"
+        assert match, "bulk_update_items function not found in api/customs.py"
         return match.group(1)
 
     def test_handler_processes_license_ds_required(self):
         """Bulk update handler must process license_ds_required."""
         handler = self._get_bulk_handler_source()
         assert "license_ds_required" in handler, (
-            "api_customs_items_bulk_update must handle license_ds_required"
+            "bulk_update_items must handle license_ds_required"
         )
 
     def test_handler_processes_license_ds_cost(self):
         """Bulk update handler must process license_ds_cost."""
         handler = self._get_bulk_handler_source()
         assert "license_ds_cost" in handler, (
-            "api_customs_items_bulk_update must handle license_ds_cost"
+            "bulk_update_items must handle license_ds_cost"
         )
 
     def test_handler_processes_license_ss_required(self):
@@ -286,8 +293,7 @@ class TestBulkUpdateLicenseFields:
         handler = self._get_bulk_handler_source()
         for field in LICENSE_FIELDS:
             assert field in handler, (
-                f"{field} must be in the .update() call in "
-                "api_customs_items_bulk_update"
+                f"{field} must be in the .update() call in bulk_update_items"
             )
 
 
