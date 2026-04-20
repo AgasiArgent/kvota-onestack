@@ -10,7 +10,7 @@ e.g., `@router.get("/health")` is served at `/api/health`.
 
 from fastapi import FastAPI
 
-from api.routers import admin, public
+from api.routers import admin, deals, plan_fact, public, quotes
 
 api_app = FastAPI(
     title="OneStack API",
@@ -21,4 +21,7 @@ api_app = FastAPI(
 )
 
 api_app.include_router(public.router)
-api_app.include_router(admin.router, prefix="/admin")  # full path: /api/admin/*
+api_app.include_router(admin.router, prefix="/admin")  # → /api/admin/*
+api_app.include_router(plan_fact.router, prefix="/plan-fact")  # → /api/plan-fact/*
+api_app.include_router(deals.router, prefix="/deals")  # → /api/deals
+api_app.include_router(quotes.router, prefix="/quotes")  # → /api/quotes/*
