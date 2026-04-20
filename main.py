@@ -25627,143 +25627,20 @@ def post(session, quote_id: str, comment: str = ""):
 
 
 # ============================================================================
-# TELEGRAM BOT WEBHOOK (Feature #53)
+# TELEGRAM BOT — service imports used by non-webhook handlers
 # ============================================================================
+# The /api/telegram/webhook endpoint was extracted to api/integrations.py in
+# Phase 6B-8. The imports below remain because they are used by
+# /telegram/connect and related FastHTML routes later in this file.
 
-# Import asyncio for running async webhook handler
-import asyncio
-
-# Import telegram service functions
 from services.telegram_service import (
-    is_bot_configured,
-    process_webhook_update,
-    respond_to_command,
-    WebhookResult,
-    # Feature #56 imports
-    get_user_telegram_status,
-    request_verification_code,
-    unlink_telegram_account,
-    # Feature #60 imports
-    handle_approve_callback,
-    send_callback_response,
-    # Feature #61 imports
-    handle_reject_callback,
-    # Feature #63 imports
-    notify_creator_of_return,
-    # Procurement invoice complete notification
-    send_procurement_invoice_complete_notification,
-    # Bug report imports
-    send_admin_bug_report,
-    # Telegram connection page
-    get_user_telegram_id,
-    send_feedback_resolved_notification,
     TELEGRAM_BOT_USERNAME,
+    get_user_telegram_status,
+    notify_creator_of_return,
+    request_verification_code,
+    send_procurement_invoice_complete_notification,
+    unlink_telegram_account,
 )
-
-
-@rt("/api/telegram/webhook")
-async def telegram_webhook(request):
-    """Handle incoming Telegram webhook updates.
-
-    This endpoint receives updates from Telegram when:
-    - Users send messages to the bot (/start, /status, /help)
-    - Users press inline buttons (approve, reject, details)
-
-    Returns:
-        JSON response with status
-
-    Note:
-        - This endpoint must be publicly accessible (HTTPS in production)
-        - Webhook URL must be registered with Telegram via set_webhook()
-        - Always return 200 OK quickly to prevent Telegram from retrying
-    """
-    import json
-    import logging
-
-    logger = logging.getLogger(__name__)
-
-    # Check if bot is configured
-    if not is_bot_configured():
-        logger.warning("Telegram webhook received but bot is not configured")
-        return {"ok": True, "message": "Bot not configured"}
-
-    # Get the request body
-    try:
-        # FastHTML provides the body through request
-        body = await request.body()
-        json_data = json.loads(body)
-    except Exception as e:
-        logger.error(f"Failed to parse webhook request: {e}")
-        return {"ok": False, "error": "Invalid request body"}
-
-    # Log the incoming update (for debugging)
-    logger.info(f"Telegram webhook received update: {json_data.get('update_id', 'unknown')}")
-
-    # Process the update asynchronously
-    try:
-        result: WebhookResult = await process_webhook_update(json_data)
-
-        if result.success:
-            # Handle different update types
-            if result.update_type == "command" and result.telegram_id and result.text:
-                # Respond to commands, passing any arguments (e.g., /start ABC123)
-                # Also pass telegram_username for verification (Feature #55)
-                await respond_to_command(result.telegram_id, result.text, result.args, result.telegram_username)
-
-            elif result.update_type == "callback_query" and result.callback_data:
-                # Handle callback queries (inline button presses)
-                callback_data = result.callback_data
-                logger.info(f"Callback query: {callback_data.action} for {callback_data.quote_id}")
-
-                # Feature #60: Handle approve callback
-                if callback_data.action == "approve":
-                    approve_result = await handle_approve_callback(
-                        telegram_id=result.telegram_id,
-                        quote_id=callback_data.quote_id
-                    )
-                    logger.info(f"Approve callback result: success={approve_result.success}, quote={approve_result.quote_idn}")
-
-                    # Get message_id from the original update to edit the message
-                    message_id = ((json_data.get("callback_query") or {}).get("message") or {}).get("message_id")
-                    if message_id and result.telegram_id:
-                        await send_callback_response(result.telegram_id, message_id, approve_result)
-
-                # Feature #61: Handle reject callback
-                elif callback_data.action == "reject":
-                    reject_result = await handle_reject_callback(
-                        telegram_id=result.telegram_id,
-                        quote_id=callback_data.quote_id
-                    )
-                    logger.info(f"Reject callback result: success={reject_result.success}, quote={reject_result.quote_idn}")
-
-                    # Get message_id from the original update to edit the message
-                    message_id = ((json_data.get("callback_query") or {}).get("message") or {}).get("message_id")
-                    if message_id and result.telegram_id:
-                        await send_callback_response(result.telegram_id, message_id, reject_result)
-
-                # Handle details callback - just log for now
-                elif callback_data.action == "details":
-                    logger.info(f"Details callback for quote {callback_data.quote_id}")
-
-            elif result.update_type == "message":
-                # Regular text message — if unlinked, tell them; if linked, ignore
-                logger.info(f"Text message from {result.telegram_id}: {result.text}")
-                if result.telegram_id:
-                    linked_user = get_user_telegram_id(result.telegram_id)
-                    if not linked_user:
-                        await respond_to_command(result.telegram_id, "/unlinked", [], result.telegram_username)
-
-            logger.info(f"Webhook processed: {result.message}")
-        else:
-            logger.warning(f"Webhook processing failed: {result.error}")
-
-    except Exception as e:
-        logger.error(f"Error processing webhook: {e}")
-        # Still return 200 to prevent Telegram from retrying
-        return {"ok": True, "error": str(e)}
-
-    # Always return 200 OK to Telegram
-    return {"ok": True}
 
 
 # ============================================================================
@@ -31426,32 +31303,9 @@ async def post_feedback_status(session, short_id: str, status: str = "new"):
     return Span(f"Сохранено: {status_label}{suffix}", cls="text-success text-sm")
 
 
-INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
-
-
-@rt("/api/internal/feedback/{short_id}/status", methods=["POST"])
-async def post_internal_feedback_status(request, short_id: str, status: str = "resolved"):
-    """Internal API to update feedback status with notifications.
-
-    Protected by INTERNAL_API_KEY header. Used by CLI workflows (e.g., /fix-bugs)
-    to ensure Telegram notifications fire when resolving feedback via automation.
-
-    Usage: curl -X POST 'https://kvotaflow.ru/api/internal/feedback/FB-XXX/status?status=resolved' \\
-             -H 'X-Internal-Key: <key>'
-    """
-    auth_key = request.headers.get("x-internal-key", "")
-    if not INTERNAL_API_KEY or auth_key != INTERNAL_API_KEY:
-        return JSONResponse({"success": False, "error": "Unauthorized"}, status_code=401)
-
-    from services.feedback_service import update_feedback_status
-    result = await update_feedback_status(short_id, status)
-
-    return JSONResponse({
-        "success": result.success,
-        "message": result.message,
-        "telegram_notified": result.telegram_notified,
-        "clickup_synced": result.clickup_synced,
-    }, status_code=200 if result.success else 400)
+# /api/internal/feedback/{short_id}/status was extracted to
+# api/feedback.py::update_feedback_status in Phase 6B-8. The INTERNAL_API_KEY
+# env var is still required in production — it is read there.
 
 
 @rt("/admin" + "/feedback/{short_id}/sync-clickup", methods=["POST"])

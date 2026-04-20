@@ -1,10 +1,12 @@
 """Feedback API — user-submitted feedback (bug reports, feature requests).
 
-Handler module (not router). Registered via thin wrapper in
-api/routers/feedback.py. Moved verbatim from main.py @rt("/api/feedback") in
-Phase 6B-7.
+Handler module (not router). Registered via thin wrappers in
+api/routers/feedback.py (public submit) and api/routers/integrations.py
+(internal status updater). Moved verbatim from main.py
+@rt("/api/feedback") in Phase 6B-7 and
+@rt("/api/internal/feedback/{short_id}/status") in Phase 6B-8.
 
-Supports dual body shapes:
+Supports dual body shapes on submit:
     - JSON (Next.js): application/json body → JSON response.
     - Form (legacy FastHTML): application/x-www-form-urlencoded → HTML response
       (the HTMX-triggered modal expects a ``Div(...)`` snippet).
@@ -31,6 +33,10 @@ from services.database import get_supabase
 from services.telegram_service import send_admin_bug_report_with_photo
 
 logger = logging.getLogger(__name__)
+
+# Shared secret for internal CLI/admin tooling (e.g., /fix-bugs).
+# Empty string disables the endpoint (always 401) — must be set in prod.
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
 
 
 def _generate_short_id() -> str:
@@ -358,3 +364,52 @@ async def submit_feedback(request: Request) -> JSONResponse | HTMLResponse:
             "Ошибка при отправке",
             hint="Попробуйте ещё раз через несколько секунд",
         )
+
+
+async def update_feedback_status(
+    request: Request, short_id: str
+) -> JSONResponse:
+    """Internal API to update feedback status with notifications.
+
+    Path: POST /api/internal/feedback/{short_id}/status
+    Auth: X-Internal-Key header (shared secret, not JWT/session). Empty or
+        mismatching key → 401. Used by CLI workflows (e.g., /fix-bugs) to
+        ensure Telegram notifications fire when resolving feedback via
+        automation.
+    Query: status=resolved (default) | dismissed | ...
+    Returns:
+        JSON {success, message, telegram_notified, clickup_synced}.
+        200 on success, 400 on business failure, 401 on auth failure.
+    Side Effects:
+        - UPDATE kvota.user_feedback.status (via feedback_service).
+        - Optional Telegram notification to feedback author.
+        - Optional ClickUp task status sync.
+    Roles: internal (X-Internal-Key holders only).
+
+    Usage:
+        curl -X POST 'https://kvotaflow.ru/api/internal/feedback/FB-XXX/status?status=resolved' \\
+             -H 'X-Internal-Key: <key>'
+    """
+    auth_key = request.headers.get("x-internal-key", "")
+    if not INTERNAL_API_KEY or auth_key != INTERNAL_API_KEY:
+        return JSONResponse(
+            {"success": False, "error": "Unauthorized"}, status_code=401
+        )
+
+    status = request.query_params.get("status", "resolved")
+
+    from services.feedback_service import (  # lazy import: avoid boot cost
+        update_feedback_status as _svc_update_feedback_status,
+    )
+
+    result = await _svc_update_feedback_status(short_id, status)
+
+    return JSONResponse(
+        {
+            "success": result.success,
+            "message": result.message,
+            "telegram_notified": result.telegram_notified,
+            "clickup_synced": result.clickup_synced,
+        },
+        status_code=200 if result.success else 400,
+    )

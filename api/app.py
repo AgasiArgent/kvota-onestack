@@ -17,6 +17,7 @@ from api.routers import (
     deals,
     feedback,
     geo,
+    integrations,
     invoices,
     plan_fact,
     public,
@@ -41,3 +42,5 @@ api_app.include_router(cron.router, prefix="/cron")  # → /api/cron/*
 api_app.include_router(geo.router, prefix="/geo")  # → /api/geo/*
 api_app.include_router(chat.router, prefix="/chat")  # → /api/chat/*
 api_app.include_router(feedback.router, prefix="/feedback")  # → /api/feedback
+# integrations.router spans /telegram/* + /internal/* — no single prefix fits.
+api_app.include_router(integrations.router)

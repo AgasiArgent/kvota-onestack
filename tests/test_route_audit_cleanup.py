@@ -149,11 +149,19 @@ class TestKeptRoutesStillExist:
     """Verify routes that should have been kept are still present."""
 
     def test_telegram_webhook_route_exists(self):
-        """POST /api/telegram/webhook must still exist."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/api/telegram/webhook"\)')
-        assert len(decorators) >= 1, \
-            "Missing /api/telegram/webhook route - it should not have been removed"
+        """POST /api/telegram/webhook must still be registered on the FastAPI sub-app.
+
+        Phase 6B-8: the @rt("/api/telegram/webhook") decorator was removed from
+        main.py and the endpoint was extracted to api.routers.integrations.
+        The route must still be reachable via the /api mount.
+        """
+        from api.routers.integrations import router as integrations_router
+
+        paths = {route.path for route in integrations_router.routes}
+        assert "/telegram/webhook" in paths, (
+            "Missing /telegram/webhook on integrations router — "
+            "should be registered at /api/telegram/webhook after Phase 6B-8 extraction"
+        )
 
     def test_documents_delete_route_exists(self):
         """DELETE /api/documents/{document_id} must still exist."""
@@ -165,13 +173,16 @@ class TestKeptRoutesStillExist:
             "Missing DELETE /api/documents/{document_id} route"
 
     def test_telegram_webhook_handler_is_async(self):
-        """Telegram webhook handler should be async (it processes request body)."""
-        source = _read_main_source()
-        idx = source.find('@rt("/api/telegram/webhook")')
-        assert idx > 0
-        handler_start = source[idx:idx + 300]
-        assert "async def" in handler_start, \
-            "Telegram webhook handler should be async"
+        """Telegram webhook handler should be async (it processes request body).
+
+        Phase 6B-8: handler moved to api.integrations.telegram_webhook.
+        """
+        import inspect
+
+        from api.integrations import telegram_webhook
+
+        assert inspect.iscoroutinefunction(telegram_webhook), \
+            "api.integrations.telegram_webhook must be async (handles request body)"
 
 
 # ============================================================================
