@@ -1,6 +1,9 @@
 """
-Tests for Currency Invoices Grouped Registry and
-Quote Documents Currency Invoices Section.
+Tests for Quote Documents Currency Invoices Section helper
+(_render_currency_invoices_section). The /currency-invoices/* route area
+was archived to legacy-fasthtml/currency_invoices.py during Phase 6C-2B-8
+(2026-04-20), so the old TestGroupedRegistryStructure class was removed.
+The section helper itself remains live in main.py.
 """
 import os
 
@@ -11,78 +14,6 @@ MAIN_PY = os.path.join(PROJECT_ROOT, "main.py")
 def _read_source():
     with open(MAIN_PY) as f:
         return f.read()
-
-
-class TestGroupedRegistryStructure:
-    """Registry groups CI by quote, not flat list."""
-
-    def test_registry_fetches_all_deals(self):
-        """Registry must fetch deals table to include 0-invoice quotes."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        assert idx != -1
-        body = src[idx:idx + 4000]
-        assert '.table("deals")' in body, (
-            "Registry handler must fetch deals table to include quotes with 0 invoices"
-        )
-
-    def test_registry_uses_group_separator_class(self):
-        """Registry must use group-separator Tr rows for quote headers."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        body = src[idx:idx + 8000]
-        assert "group-separator" in body, "Registry must use group-separator CSS class"
-
-    def test_registry_shows_quote_idn_in_header(self):
-        """Quote group header must include idn_quote."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        body = src[idx:idx + 8000]
-        assert "idn_quote" in body, "Registry must reference idn_quote for quote header"
-
-    def test_registry_handles_zero_invoice_quote(self):
-        """Registry must emit placeholder for quotes with no invoices."""
-        src = _read_source()
-        assert "Нет валютных инвойсов" in src, (
-            "Registry must include 'Нет валютных инвойсов' placeholder for empty quote groups"
-        )
-
-    def test_registry_colspan_matches_column_count(self):
-        """Group-separator row colspan must match table column count (8)."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        body = src[idx:idx + 8000]
-        assert 'colspan="8"' in body, (
-            "Group separator row must have colspan matching 8 table columns"
-        )
-
-    def test_registry_sorts_within_group_by_segment(self):
-        """Invoices within each group should be sorted by segment (EURTR first)."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        body = src[idx:idx + 8000]
-        assert "EURTR" in body and "TRRU" in body, (
-            "Registry must define segment sort order (EURTR first, TRRU second)"
-        )
-
-    def test_registry_dropped_deal_column(self):
-        """Grouped registry should not have a 'Сделка' column header."""
-        src = _read_source()
-        marker = 'def get(session):\n    """Currency invoices registry'
-        idx = src.find(marker)
-        body = src[idx:idx + 8000]
-        # The table headers should NOT contain "Сделка" since deal# is redundant when grouped
-        thead_start = body.find("Thead(")
-        if thead_start != -1:
-            thead_block = body[thead_start:thead_start + 600]
-            assert "Сделка" not in thead_block, (
-                "Grouped registry should not have 'Сделка' column — redundant when grouped by quote"
-            )
 
 
 class TestCurrencyInvoicesSectionExists:
