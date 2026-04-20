@@ -48263,35 +48263,12 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
     )
 
 
-# --- Composition JSON API (Phase 5b — multi-supplier quote composition) ---
-
-from api.composition import (
-    get_composition as api_get_composition,
-    apply_composition_endpoint as api_apply_composition,
-    verify_invoice as api_verify_invoice,
-    approve_procurement_unlock as api_approve_procurement_unlock,
-    reject_procurement_unlock as api_reject_procurement_unlock,
-)
-
-@rt("/api/quotes/{quote_id}/composition", methods=["GET"])
-async def get_quote_composition(request, quote_id: str):
-    return await api_get_composition(request, quote_id)
-
-@rt("/api/quotes/{quote_id}/composition", methods=["POST"])
-async def post_quote_composition(request, quote_id: str):
-    return await api_apply_composition(request, quote_id)
-
-@rt("/api/invoices/{invoice_id}/verify", methods=["POST"])
-async def post_invoice_verify(request, invoice_id: str):
-    return await api_verify_invoice(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/approve", methods=["POST"])
-async def post_invoice_procurement_unlock_approve(request, invoice_id: str, approval_id: str):
-    return await api_approve_procurement_unlock(request, invoice_id, approval_id)
-
-@rt("/api/invoices/{invoice_id}/procurement-unlock-approval/{approval_id}/reject", methods=["POST"])
-async def post_invoice_procurement_unlock_reject(request, invoice_id: str, approval_id: str):
-    return await api_reject_procurement_unlock(request, invoice_id, approval_id)
+# --- Composition + Procurement-unlock JSON API (Phase 5b / Phase 6B-4) ---
+# GET    /api/quotes/{quote_id}/composition                                     → api/routers/quotes.py (mounted FastAPI)
+# POST   /api/quotes/{quote_id}/composition                                     → api/routers/quotes.py
+# POST   /api/invoices/{invoice_id}/verify                                      → api/routers/invoices.py
+# POST   /api/invoices/{id}/procurement-unlock-approval/{approval_id}/approve   → api/routers/invoices.py
+# POST   /api/invoices/{id}/procurement-unlock-approval/{approval_id}/reject    → api/routers/invoices.py
 
 
 # --- Admin User Management JSON API ---
@@ -48310,25 +48287,10 @@ async def get_geo_vat_rate(request):
     return await api_get_vat_rate(request)
 
 
-# --- Procurement Sub-Status JSON API (Phase 4c Kanban — for Next.js frontend) ---
-
-from api.procurement import (
-    get_kanban as api_get_kanban,
-    post_substatus as api_post_substatus,
-    get_status_history as api_get_status_history,
-)
-
-@rt("/api/quotes/kanban", methods=["GET"])
-async def get_quotes_kanban(request):
-    return await api_get_kanban(request)
-
-@rt("/api/quotes/{quote_id}/substatus", methods=["POST"])
-async def post_quote_substatus(request, quote_id: str):
-    return await api_post_substatus(request, quote_id)
-
-@rt("/api/quotes/{quote_id}/status-history", methods=["GET"])
-async def get_quote_status_history(request, quote_id: str):
-    return await api_get_status_history(request, quote_id)
+# --- Procurement Kanban + Sub-Status JSON API (Phase 6B-4) ---
+# GET  /api/quotes/kanban                          → api/routers/quotes.py (mounted FastAPI)
+# POST /api/quotes/{quote_id}/substatus            → api/routers/quotes.py
+# GET  /api/quotes/{quote_id}/status-history       → api/routers/quotes.py
 
 
 # --- Soft-delete / restore JSON API (Task 2 of soft-delete-entity-lifecycle) ---
