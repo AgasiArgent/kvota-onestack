@@ -48310,47 +48310,6 @@ async def get_geo_vat_rate(request):
     return await api_get_vat_rate(request)
 
 
-# --- Invoice Send Flow JSON API (for Next.js frontend) ---
-
-from api.invoices import (
-    download_invoice_xls as api_download_invoice_xls,
-    get_letter_draft as api_get_letter_draft,
-    save_letter_draft as api_save_letter_draft,
-    send_letter_draft as api_send_letter_draft,
-    delete_letter_draft as api_delete_letter_draft,
-    get_send_history as api_get_send_history,
-    request_procurement_unlock as api_request_procurement_unlock,
-)
-
-@rt("/api/invoices/{invoice_id}/download-xls", methods=["POST"])
-async def post_invoice_download_xls(request, invoice_id: str):
-    return await api_download_invoice_xls(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/letter-draft", methods=["GET"])
-async def get_invoice_letter_draft(request, invoice_id: str):
-    return await api_get_letter_draft(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/letter-draft", methods=["POST"])
-async def post_invoice_letter_draft(request, invoice_id: str):
-    return await api_save_letter_draft(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/letter-draft/send", methods=["POST"])
-async def post_invoice_letter_draft_send(request, invoice_id: str):
-    return await api_send_letter_draft(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/letter-draft/{draft_id}", methods=["DELETE"])
-async def delete_invoice_letter_draft(request, invoice_id: str, draft_id: str):
-    return await api_delete_letter_draft(request, invoice_id, draft_id)
-
-@rt("/api/invoices/{invoice_id}/letter-drafts/history", methods=["GET"])
-async def get_invoice_send_history(request, invoice_id: str):
-    return await api_get_send_history(request, invoice_id)
-
-@rt("/api/invoices/{invoice_id}/procurement-unlock-request", methods=["POST"])
-async def post_invoice_procurement_unlock_request(request, invoice_id: str):
-    return await api_request_procurement_unlock(request, invoice_id)
-
-
 # --- Procurement Sub-Status JSON API (Phase 4c Kanban — for Next.js frontend) ---
 
 from api.procurement import (
