@@ -319,8 +319,10 @@ class TestWorkflowTransitionHistoryCallSites:
         # Filter out the definition
         calls = [c for c in calls if "def " not in source[max(0, source.find(c)-10):source.find(c)]]
 
-        assert len(calls) >= 7, \
-            f"Expected at least 7 call sites, found {len(calls)}: {calls}"
+        # Phase 6C-1: /procurement/{quote_id} FastHTML page was archived to
+        # legacy-fasthtml/procurement_workspace.py, removing one call site.
+        assert len(calls) >= 6, \
+            f"Expected at least 6 call sites, found {len(calls)}: {calls}"
 
         for call in calls:
             # Each call should have at least one positional arg (quote_id)

@@ -345,20 +345,9 @@ def test_here_failure_returns_200_empty_data(request_authenticated_session):
 
 
 # ============================================================================
-# Legacy HTMX endpoint preservation (REQ 3.9, 9.5)
+# Legacy HTMX endpoint preservation — REMOVED (Phase 6C-1, 2026-04-20)
 # ============================================================================
-
-
-def test_legacy_cities_search_endpoint_still_exists():
-    """The legacy `/api/cities/search` HTMX route must remain in main.py.
-
-    Distinct from the migrated JSON endpoint at /api/geo/cities/search.
-    """
-    with open(
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py"),
-        "r",
-    ) as f:
-        source = f.read()
-    assert '@rt("/api/cities/search")' in source, (
-        "Legacy /api/cities/search HTMX endpoint must not be removed"
-    )
+# The legacy `@rt("/api/cities/search")` HTMX handler was archived to
+# legacy-fasthtml/cities_search.py. `GET /api/geo/cities/search` (above) is
+# now the sole live endpoint for city autocomplete.
+# ============================================================================
