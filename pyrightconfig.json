@@ -1,0 +1,32 @@
+{
+  "include": [
+    "main.py",
+    "api",
+    "services",
+    "tests"
+  ],
+  "exclude": [
+    "venv",
+    "node_modules",
+    "frontend",
+    "legacy-fasthtml",
+    "tmp",
+    ".git",
+    "__pycache__",
+    ".kiro",
+    ".planning",
+    ".serena",
+    ".playwright-mcp"
+  ],
+  "extraPaths": ["."],
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "reportOptionalMemberAccess": "warning",
+  "reportAttributeAccessIssue": "warning",
+  "reportArgumentType": "warning"
+}
