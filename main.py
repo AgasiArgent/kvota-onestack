@@ -48263,51 +48263,6 @@ def get(session, q: str = "", call_type: str = "", user_filter: str = ""):
     )
 
 
-# --- Plan-Fact JSON API (for Next.js frontend) ---
-
-from api.plan_fact import (
-    plan_fact_list_items,
-    plan_fact_create_item,
-    plan_fact_update_item,
-    plan_fact_delete_item,
-    plan_fact_list_categories,
-    quotes_search,
-)
-
-@rt("/api/plan-fact/categories", methods=["GET"])
-async def get_plan_fact_categories(request):
-    return await plan_fact_list_categories(request)
-
-@rt("/api/quotes/search", methods=["GET"])
-async def get_quotes_search(request):
-    return await quotes_search(request)
-
-@rt("/api/plan-fact/{deal_id}/items", methods=["GET"])
-async def get_plan_fact_items(request, deal_id: str):
-    return await plan_fact_list_items(request, deal_id)
-
-@rt("/api/plan-fact/{deal_id}/items", methods=["POST"])
-async def post_plan_fact_items(request, deal_id: str):
-    return await plan_fact_create_item(request, deal_id)
-
-@rt("/api/plan-fact/{deal_id}/items/{id}", methods=["PATCH"])
-async def patch_plan_fact_item(request, deal_id: str, id: str):
-    return await plan_fact_update_item(request, deal_id, id)
-
-@rt("/api/plan-fact/{deal_id}/items/{id}", methods=["DELETE"])
-async def delete_plan_fact_item(request, deal_id: str, id: str):
-    return await plan_fact_delete_item(request, deal_id, id)
-
-
-# --- Deals JSON API (for Next.js frontend) ---
-
-from api.deals import create_deal as api_create_deal
-
-@rt("/api/deals", methods=["POST"])
-async def post_deals(request):
-    return await api_create_deal(request)
-
-
 # --- Composition JSON API (Phase 5b — multi-supplier quote composition) ---
 
 from api.composition import (
