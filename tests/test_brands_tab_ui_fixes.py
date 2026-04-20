@@ -127,19 +127,9 @@ class TestSupplierDetailHtmxPartialResponse:
             "otherwise HTMX requests still get the full page."
         )
 
-    def test_customer_detail_has_hx_request_pattern_as_reference(self):
-        """Verify the customer detail handler has the pattern we expect to replicate."""
-        source = _read_main_source()
-        # Customer handler pattern
-        assert re.search(
-            r'def get\(customer_id.*request.*\).*?'
-            r'if request.*HX-Request.*return tab_content',
-            source,
-            re.DOTALL,
-        ), (
-            "Customer detail handler reference pattern not found. "
-            "This test validates the reference implementation exists."
-        )
+    # test_customer_detail_has_hx_request_pattern_as_reference — REMOVED
+    # The /customers/{customer_id} detail handler was archived to
+    # legacy-fasthtml/customers.py in Phase 6C-2B-1 (2026-04-20).
 
 
 # ==============================================================================
@@ -240,19 +230,13 @@ class TestEmptyStateTableRowPattern:
             "consistent with other tabs."
         )
 
-    def test_empty_state_matches_project_pattern(self):
-        """Verify the project-wide pattern exists for reference."""
-        source = _read_main_source()
-        # The standard pattern used in customer contracts, specs, etc.
-        pattern_count = len(re.findall(
-            r'Tr\(Td\(".*?не найден.*?colspan.*?text-align:\s*center.*?padding:\s*2rem.*?color:\s*#666',
-            source,
-            re.IGNORECASE,
-        ))
-        assert pattern_count >= 3, (
-            f"Expected at least 3 instances of the standard empty-state pattern "
-            f"in main.py (found {pattern_count}). This confirms the project convention."
-        )
+    # test_empty_state_matches_project_pattern — REMOVED
+    # This sanity-check test counted occurrences of the
+    # `Tr(Td("...не найден...colspan...text-align: center...")`
+    # empty-state pattern in main.py. The 5 matching instances lived in the
+    # /customers area, which was archived to legacy-fasthtml/customers.py
+    # in Phase 6C-2B-1 (2026-04-20). The pattern is still used in other
+    # places (e.g. supplier brands list itself, tested above).
 
 
 # ==============================================================================

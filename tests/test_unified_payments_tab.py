@@ -991,105 +991,14 @@ class TestDebtSummaryQueryChain:
 
 
 # ==============================================================================
-# PART 4: Customer Detail Page — Debt Card
+# PART 4: Customer Detail Page — Debt Card — REMOVED
 # ==============================================================================
-
-class TestCustomerDetailDebtCard:
-    """The customer detail page /customers/{id} must show a debt summary card."""
-
-    def test_customer_detail_calls_debt_summary(self):
-        """The /customers/{customer_id} GET handler must call get_customer_debt_summary."""
-        source = _read_main_source()
-        # Find the customer detail handler and check for debt summary
-        match = re.search(
-            r'@rt\(\s*"/customers/\{customer_id\}"\s*\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /customers/{customer_id} handler not found"
-        handler_body = match.group(1)
-        assert "get_customer_debt_summary" in handler_body, (
-            "Customer detail page must call get_customer_debt_summary()"
-        )
-
-    def test_customer_detail_shows_debt_total(self):
-        """The customer page must render total_debt from the debt summary."""
-        source = _read_main_source()
-        match = re.search(
-            r'@rt\(\s*"/customers/\{customer_id\}"\s*\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /customers/{customer_id} handler not found"
-        handler_body = match.group(1)
-        has_debt_display = (
-            "total_debt" in handler_body
-            or "Задолженность" in handler_body
-            or "Долг" in handler_body
-        )
-        assert has_debt_display, (
-            "Customer detail page must display total_debt amount"
-        )
-
-    def test_customer_debt_card_links_to_finance_payments(self):
-        """The debt card must link to /finance?tab=payments&customer_filter={id}."""
-        source = _read_main_source()
-        match = re.search(
-            r'@rt\(\s*"/customers/\{customer_id\}"\s*\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /customers/{customer_id} handler not found"
-        handler_body = match.group(1)
-        has_finance_link = (
-            "tab=payments" in handler_body
-            and "customer_filter" in handler_body
-        )
-        assert has_finance_link, (
-            "Debt card must link to /finance?tab=payments&customer_filter={customer_id}"
-        )
-
-
-class TestCustomerDebtCardContent:
-    """Test the specific content elements of the debt summary card."""
-
-    def test_debt_card_shows_overdue_count(self):
-        """Debt card must display number of overdue items."""
-        source = _read_main_source()
-        match = re.search(
-            r'@rt\(\s*"/customers/\{customer_id\}"\s*\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /customers/{customer_id} handler not found"
-        handler_body = match.group(1)
-        has_overdue = (
-            "overdue_count" in handler_body
-            or "overdue" in handler_body.lower()
-            or "просроч" in handler_body.lower()
-        )
-        assert has_overdue, (
-            "Debt card must show overdue item count"
-        )
-
-    def test_debt_card_shows_last_payment_info(self):
-        """Debt card must display last payment date/amount."""
-        source = _read_main_source()
-        match = re.search(
-            r'@rt\(\s*"/customers/\{customer_id\}"\s*\)\s*\ndef get\(.*?\n(.*?)(?=\n@rt\()',
-            source,
-            re.DOTALL,
-        )
-        assert match, "GET /customers/{customer_id} handler not found"
-        handler_body = match.group(1)
-        has_last_payment = (
-            "last_payment" in handler_body
-            or "Последний платёж" in handler_body
-            or "Последняя оплата" in handler_body
-        )
-        assert has_last_payment, (
-            "Debt card must display last payment information"
-        )
+# TestCustomerDetailDebtCard (3 tests) and TestCustomerDebtCardContent (2 tests)
+# inspected the FastHTML @rt("/customers/{customer_id}") handler for the debt
+# card integration. That handler was archived to legacy-fasthtml/customers.py
+# in Phase 6C-2B-1 (2026-04-20). The Next.js /customers/[id] page now owns
+# the debt card UI; the get_customer_debt_summary service remains unchanged
+# and is exercised by services/plan_fact_service tests.
 
 
 # ==============================================================================
