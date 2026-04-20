@@ -5,7 +5,7 @@ Verifies:
 1. /spec-control route exists and is referenced correctly (not /specifications)
 2. Removed routes are actually gone (start-negotiation, items POST, locations/search/json)
 3. Kept routes still exist (telegram webhook POST, documents DELETE)
-4. v3.0 /customers GET at ~line 29861 is the only /customers handler
+4. (removed) /customers route consolidation — archived in Phase 6C-2B-1 (2026-04-20)
 5. Enhanced /profile/{user_id} at ~line 31928 is the canonical GET handler
 6. No dangling href="/specifications" links remain
 """
@@ -197,37 +197,10 @@ class TestKeptRoutesStillExist:
 
 
 # ============================================================================
-# TEST 4: v3.0 /customers GET is the only handler
+# TEST 4: /customers route consolidation — REMOVED
 # ============================================================================
-
-class TestCustomersRouteConsolidation:
-    """Verify there is exactly one /customers GET handler (v3.0)."""
-
-    def test_single_customers_route(self):
-        """There should be exactly one @rt('/customers') decorator."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/customers"\)$')
-        assert len(decorators) == 1, \
-            f"Expected exactly 1 @rt('/customers'), found {len(decorators)}: {decorators}"
-
-    def test_customers_route_is_v3(self):
-        """The /customers handler should be the v3.0 version (after line 25000)."""
-        source = _read_main_source()
-        decorators = _find_route_decorators(source, r'@rt\("/customers"\)$')
-        assert len(decorators) == 1
-        line_no = decorators[0][0]
-        # v3.0 should be well past the midpoint of the file (~35k lines)
-        assert line_no > 25000, \
-            f"@rt('/customers') at line {line_no} seems too early - expected v3.0 version (>25000)"
-
-    def test_customers_handler_has_search_params(self):
-        """v3.0 customers handler supports q (search) and status filter params."""
-        source = _read_main_source()
-        idx = source.find('@rt("/customers")')
-        assert idx > 0
-        handler_sig = source[idx:idx + 300]
-        assert "q: str" in handler_sig, "Customers handler missing search param 'q'"
-        assert "status: str" in handler_sig, "Customers handler missing 'status' filter param"
+# The /customers FastHTML route was archived to legacy-fasthtml/customers.py
+# in Phase 6C-2B-1 (2026-04-20). The Next.js app now serves /customers.
 
 
 # ============================================================================

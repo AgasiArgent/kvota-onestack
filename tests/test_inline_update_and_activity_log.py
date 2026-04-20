@@ -14,8 +14,8 @@ Tests cover:
 - workflow_transition_history handles empty history
 - No dangling references to deleted _render_activity_log
 - No dangling references to deleted _ROLE_LABELS_RU, _ROLE_BG_COLORS, _ROLE_TEXT_COLORS
-- ORDER_SOURCE_OPTIONS / ORDER_SOURCE_LABELS consistency
-- Customer inline edit order_source clearing bug (cannot clear value)
+- update_customer() service-layer guard for order_source (still documented
+  post-archive of the FastHTML /customers area in Phase 6C-2B-1)
 """
 
 import pytest
@@ -357,44 +357,20 @@ class TestWorkflowTransitionHistoryCallSites:
 
 
 # ============================================================================
-# ORDER_SOURCE Tests
+# ORDER_SOURCE Tests — REMOVED
 # ============================================================================
-
-class TestOrderSourceConstants:
-    """Tests for ORDER_SOURCE_OPTIONS and ORDER_SOURCE_LABELS."""
-
-    def test_options_and_labels_are_consistent(self):
-        """ORDER_SOURCE_LABELS should be built from ORDER_SOURCE_OPTIONS."""
-        main = _import_main()
-        options = main.ORDER_SOURCE_OPTIONS
-        labels = main.ORDER_SOURCE_LABELS
-
-        assert isinstance(options, list), "ORDER_SOURCE_OPTIONS should be a list"
-        assert isinstance(labels, dict), "ORDER_SOURCE_LABELS should be a dict"
-        assert len(options) == len(labels), \
-            "ORDER_SOURCE_OPTIONS and ORDER_SOURCE_LABELS have different lengths"
-
-        for val, lbl in options:
-            assert val in labels, f"Value '{val}' not in ORDER_SOURCE_LABELS"
-            assert labels[val] == lbl, f"Label mismatch for '{val}': '{labels[val]}' != '{lbl}'"
-
-    def test_options_have_expected_values(self):
-        """ORDER_SOURCE_OPTIONS should include standard source types."""
-        main = _import_main()
-        values = [val for val, _ in main.ORDER_SOURCE_OPTIONS]
-        expected = ["cold_call", "recommendation", "tender", "website", "repeat"]
-        for exp in expected:
-            assert exp in values, f"Missing expected source type: {exp}"
+# ORDER_SOURCE_OPTIONS / ORDER_SOURCE_LABELS constants and the inline edit
+# handler for order_source lived in the /customers FastHTML area, which was
+# archived to legacy-fasthtml/customers.py in Phase 6C-2B-1 (2026-04-20).
+# The remaining tests in this class documented archived handler behavior.
 
 
-class TestOrderSourceInlineEditBug:
-    """Tests documenting the bug where clearing order_source via inline edit fails.
+class TestOrderSourceServiceBehavior:
+    """Tests for order_source behavior in services/customer_service.py.
 
-    Bug: When user selects the empty option in the order_source dropdown,
-    the inline edit handler sets new_value=None, then calls
-    update_customer(customer_id, order_source=None). But update_customer
-    interprets None as "don't change this field" (guard: if order_source is not None).
-    So the database value is never actually cleared.
+    The UI layer moved to Next.js and the FastHTML inline edit handler was
+    archived in Phase 6C-2B-1, but the service-layer behavior documented
+    here still applies (for /api/customers/* consumers).
     """
 
     def test_update_customer_cannot_clear_order_source_with_none(self):
@@ -415,33 +391,20 @@ class TestOrderSourceInlineEditBug:
         assert "if order_source is not None:" in source, \
             "update_customer guard for order_source changed - re-check the bug"
 
-    def test_inline_edit_handler_sends_none_for_empty_selection(self):
-        """Inline edit POST handler converts empty order_source to None.
+    def test_full_form_edit_route_absent(self):
+        """Full-form /customers/{id}/edit route must not exist in main.py.
 
-        This interacts badly with update_customer's None guard (see above).
-        """
-        source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
-        with open(source_path, "r") as f:
-            source = f.read()
-
-        # The handler converts empty string to None for order_source
-        assert 'if new_value == "" and field_name == "order_source":\n        new_value = None' in source, \
-            "Inline edit handler does not convert empty order_source to None"
-
-    def test_full_form_edit_removed_in_favor_of_inline(self):
-        """Full-form edit page was removed — all editing now happens inline on detail page.
-
-        The old /customers/{id}/edit route was removed because the detail page
-        already supports inline editing for all fields including order_source.
+        The /customers area was archived in Phase 6C-2B-1. The entire
+        /customers/{customer_id}/edit handler now lives in
+        legacy-fasthtml/customers.py (if it existed) or was removed earlier.
         """
         source_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
         with open(source_path, "r") as f:
             source = f.read()
 
         # The standalone edit route should no longer exist
-        assert '/customers/{customer_id}/edit' not in source or \
-            'RedirectResponse' in source, \
-            "Old edit route should be removed or redirect"
+        assert '@rt("/customers/{customer_id}/edit")' not in source, \
+            "/customers/{id}/edit route should be absent post-archive"
 
 
 # ============================================================================
