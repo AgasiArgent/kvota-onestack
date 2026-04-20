@@ -150,6 +150,12 @@ app, rt = fast_app(
 from api.auth import ApiAuthMiddleware
 app.add_middleware(ApiAuthMiddleware)
 
+# NOTE: FastAPI sub-app for /api/* is mounted at the bottom of this file,
+# AFTER all legacy @rt("/api/...") handlers are registered. Starlette routes
+# in declaration order, so specific @rt routes resolve first and unmatched
+# /api/* paths fall through to the mount. Moving the mount above @rt blocks
+# every legacy endpoint (Mount takes full ownership of its prefix).
+
 # ============================================================================
 # STYLES
 # ============================================================================
@@ -48962,26 +48968,7 @@ def get(session):
 
 
 # --- Changelog JSON API (for Next.js frontend) ---
-
-@rt("/api/changelog")
-def get_changelog_api():
-    """Return changelog entries as JSON. Public endpoint — release notes are not sensitive."""
-
-    from services.changelog_service import get_all_entries, render_entry_html
-
-    entries = get_all_entries()
-    result = []
-    for entry in entries:
-        result.append({
-            "slug": entry["slug"],
-            "title": entry["title"],
-            "date": entry["date"].isoformat(),
-            "category": entry.get("category", "update"),
-            "version": entry.get("version"),
-            "body_html": render_entry_html(entry),
-        })
-
-    return JSONResponse({"success": True, "data": result})
+# GET /api/changelog is served by api.routers.public via the /api mount.
 
 
 # ============================================================================
@@ -49195,9 +49182,20 @@ def get_telegram_status_check(session):
 
 
 # === API: Health check (for Next.js frontend) ===
-@rt("/api/health")
-def get():
-    return JSONResponse({"success": True, "status": "ok"})
+# GET /api/health is served by api.routers.public via the /api mount.
+
+
+# ============================================================================
+# FASTAPI SUB-APP MOUNT (Phase 6B onwards)
+# ============================================================================
+# Mount AFTER all legacy @rt("/api/...") handlers. Starlette matches routes in
+# declaration order, so specific @rt("/api/...") routes above resolve first,
+# and any /api/* path not handled by an @rt route falls through to the mount.
+# As endpoints migrate to FastAPI, their @rt registrations are removed and the
+# sub-app takes over transparently. Once all endpoints are migrated, this mount
+# becomes the sole handler for /api/*.
+from api.app import api_app
+app.mount("/api", api_app)
 
 
 # ============================================================================
