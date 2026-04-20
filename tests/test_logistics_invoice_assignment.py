@@ -14,18 +14,12 @@ The function:
 - Wired into complete_procurement() as best-effort try/except
 """
 
-import pytest
-from unittest.mock import patch, MagicMock, call
-import sys
 import os
+import sys
+from typing import Any, Callable, Optional
+from unittest.mock import patch
 
-# TODO(phase-5d-recovery): mock chain behavior differs between Python 3.14 (local pass)
-# and 3.12 (CI fail). Function works in production per post-recovery browser smoke on
-# logistics tab. Skip in CI; re-enable after mock refactor aligned with 3.12 MagicMock.
-pytestmark = pytest.mark.skipif(
-    os.environ.get("CI") == "true",
-    reason="Mock-chain CI-only flakiness; see PR #11 recovery notes."
-)
+import pytest
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,7 +32,7 @@ except ImportError as e:
     _IMPORT_ERROR = str(e)
     assign_logistics_to_invoices = None
 
-from services.workflow_service import complete_procurement, WorkflowStatus, TransitionResult
+from services.workflow_service import WorkflowStatus, complete_procurement
 
 
 def _require_function():
@@ -71,72 +65,210 @@ INVOICE_2 = _make_uuid("invoice2")
 INVOICE_3 = _make_uuid("invoice3")
 
 
-def _mock_supabase_for_assignment(
-    quote_data=None,
-    invoices_data=None,
-    update_responses=None,
-):
+# =============================================================================
+# IN-MEMORY FAKE SUPABASE CLIENT
+#
+# Purpose: replace unittest.mock.MagicMock chains with a deterministic
+# fluent-API stub. MagicMock's chain resolution changed between Python
+# 3.12 and 3.14 — when a caller walks a sub-set of a pre-configured chain,
+# 3.12 returns a fresh Mock instead of the configured .data, which was
+# silently masked by MagicMock's permissive attribute access and caused
+# 14/16 tests to fail on CI only. This fake implements exactly the fluent
+# subset workflow_service.assign_logistics_to_invoices() + complete_procurement()
+# exercise, stores call data, and is completely Python-version-agnostic.
+# =============================================================================
+
+
+class _Response:
+    """Mimic the ``.data``/``.error`` shape returned by supabase-py."""
+
+    def __init__(self, data: Any):
+        self.data = data
+        self.error = None
+
+
+class _Query:
+    """Chainable query builder translating fluent calls into filtered reads
+    or tracked writes against the parent FakeSupabase's in-memory state."""
+
+    def __init__(self, client: "FakeSupabase", table: str):
+        self._client = client
+        self._table = table
+        self._mode: Optional[str] = None  # "select" | "update" | "insert"
+        self._update_payload: Any = None
+        self._insert_payload: Any = None
+        self._filters: list[tuple[str, str, Any]] = []
+        self._single = False
+
+    # --- query builders ---
+    def select(self, cols: str = "*") -> "_Query":
+        self._mode = "select"
+        return self
+
+    def update(self, payload: dict) -> "_Query":
+        self._mode = "update"
+        self._update_payload = payload
+        return self
+
+    def insert(self, payload: Any) -> "_Query":
+        self._mode = "insert"
+        self._insert_payload = payload
+        return self
+
+    def eq(self, col: str, val: Any) -> "_Query":
+        self._filters.append(("=", col, val))
+        return self
+
+    def in_(self, col: str, values: list) -> "_Query":
+        self._filters.append(("IN", col, tuple(values)))
+        return self
+
+    def is_(self, col: str, val: Any) -> "_Query":
+        self._filters.append(("IS", col, val))
+        return self
+
+    def order(self, *args, **kwargs) -> "_Query":
+        return self
+
+    def limit(self, n: int) -> "_Query":
+        return self
+
+    def single(self) -> "_Query":
+        self._single = True
+        return self
+
+    # --- terminal ---
+    def execute(self) -> _Response:
+        if self._mode == "select":
+            return self._execute_select()
+        if self._mode == "update":
+            return self._execute_update()
+        if self._mode == "insert":
+            return self._execute_insert()
+        raise RuntimeError(f"Query on {self._table} terminated without a mode")
+
+    # --- internal ---
+    def _matches(self, row: dict) -> bool:
+        for op, col, val in self._filters:
+            cell = row.get(col)
+            if op == "=" and cell != val:
+                return False
+            if op == "IN" and cell not in val:
+                return False
+            if op == "IS" and cell is not val:
+                return False
+        return True
+
+    def _execute_select(self) -> _Response:
+        rows = [r for r in self._client._rows(self._table) if self._matches(r)]
+
+        # Allow tests to override the reader entirely for a given table (used
+        # for embedded joins like invoice_item_coverage → invoice_items!inner).
+        override = self._client._select_overrides.get(self._table)
+        if override is not None:
+            rows = override(self._filters)
+
+        if self._single:
+            if not rows:
+                # supabase-py raises on single() with zero rows; mirror that
+                # so the tested code path hits its except branch.
+                raise RuntimeError(f"No rows found in {self._table} for .single()")
+            return _Response(rows[0])
+        return _Response(rows)
+
+    def _execute_update(self) -> _Response:
+        rows = self._client._rows(self._table)
+        updated = []
+        for row in rows:
+            if self._matches(row):
+                row.update(self._update_payload)
+                updated.append(row)
+        self._client._updates.append(
+            (self._table, dict(self._update_payload), list(self._filters))
+        )
+        return _Response([{"id": r.get("id")} for r in updated] or [{"id": "updated"}])
+
+    def _execute_insert(self) -> _Response:
+        payload = self._insert_payload
+        if isinstance(payload, dict):
+            payload = [payload]
+        inserted = []
+        for record in payload:
+            record = dict(record)
+            record.setdefault("id", _make_uuid())
+            self._client._rows(self._table).append(record)
+            inserted.append(record)
+        self._client._inserts.append((self._table, [dict(r) for r in inserted]))
+        return _Response(inserted)
+
+
+class FakeSupabase:
+    """Minimal in-memory Supabase client supporting the fluent subset used
+    by workflow_service.assign_logistics_to_invoices() and complete_procurement()."""
+
+    def __init__(self):
+        self._tables: dict[str, list[dict]] = {}
+        self._select_overrides: dict[str, Callable[[list], list[dict]]] = {}
+        self._updates: list[tuple[str, dict, list]] = []
+        self._inserts: list[tuple[str, list[dict]]] = []
+
+    # --- data seeding ---
+    def seed(self, table: str, rows: list[dict]) -> None:
+        """Replace ``table``'s rows with ``rows`` (deep-copied)."""
+        self._tables[table] = [dict(r) for r in rows]
+
+    def set_select_override(
+        self, table: str, handler: Callable[[list], list[dict]]
+    ) -> None:
+        """Override SELECT results for ``table`` with a custom handler.
+
+        Useful for tables whose query includes an embedded join (e.g.
+        ``invoice_item_coverage`` selecting ``invoice_items!inner(...)``)
+        where the row shape differs from the raw seeded rows.
+        """
+        self._select_overrides[table] = handler
+
+    def _rows(self, table: str) -> list[dict]:
+        return self._tables.setdefault(table, [])
+
+    # --- fluent entry point ---
+    def table(self, name: str) -> _Query:
+        return _Query(self, name)
+
+    # --- test introspection ---
+    def updates_for(self, table: str) -> list[tuple[dict, list]]:
+        """Return (payload, filters) tuples for every UPDATE on ``table``."""
+        return [(p, f) for (t, p, f) in self._updates if t == table]
+
+    def inserts_for(self, table: str) -> list[list[dict]]:
+        """Return one list of inserted records per INSERT call on ``table``."""
+        return [records for (t, records) in self._inserts if t == table]
+
+
+def _make_fake(
+    quote_data: Optional[dict] = None,
+    invoices_data: Optional[list[dict]] = None,
+) -> FakeSupabase:
+    """Seed a FakeSupabase with the rows assign_logistics_to_invoices reads.
+
+    Preserves the public contract of the original helper (quote_data and
+    invoices_data parameters) so call sites don't change.
     """
-    Build a MagicMock Supabase client for assign_logistics_to_invoices tests.
+    sb = FakeSupabase()
+    if quote_data is not None:
+        sb.seed("quotes", [quote_data])
+    if invoices_data is not None:
+        # Each invoice row needs a quote_id link for the .eq("quote_id", ...) filter.
+        sb.seed(
+            "invoices",
+            [{**inv, "quote_id": (quote_data or {}).get("id", QUOTE_ID)} for inv in invoices_data],
+        )
+    return sb
 
-    Chain shapes used by the implementation:
-    - quotes (fetch):  .select().eq().is_("deleted_at", None).single().execute()
-    - quotes (update): .update().eq().execute()
-    - invoices (fetch): .select().eq().execute()
-    - invoices (update): .update().in_().execute()  (batch) or .update().eq().execute()
 
-    Quote-fetch uses the Phase 5c soft-delete filter (.is_("deleted_at", None))
-    so the chain has four steps (select→eq→is_→single) before .execute.
-
-    Returns the mock client directly.
-    """
-    mock_client = MagicMock()
-
-    # Per-table call counters captured in closure. Using separate counters
-    # (instead of a single shared one) avoids cross-table interference: the
-    # first quotes call should always be the fetch regardless of how many
-    # invoice accesses happened in between.
-    quotes_calls = {"count": 0}
-    invoices_calls = {"count": 0}
-
-    def table_side_effect(table_name):
-        chain = MagicMock()
-
-        if table_name == "quotes":
-            quotes_calls["count"] += 1
-            # First quotes call is the fetch (select+is_ chain).
-            # Subsequent are updates (update().eq().execute()).
-            if quote_data is not None and quotes_calls["count"] == 1:
-                chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
-                    data=quote_data
-                )
-            else:
-                chain.update.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=[{"id": QUOTE_ID}]
-                )
-            return chain
-
-        elif table_name == "invoices":
-            invoices_calls["count"] += 1
-            # First invoices access = select; subsequent = update (batch .in_ or .eq).
-            if invoices_data is not None and invoices_calls["count"] == 1:
-                chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=invoices_data
-                )
-            else:
-                # Implementation uses batch-update with .in_() per distinct user_id
-                chain.update.return_value.in_.return_value.execute.return_value = MagicMock(
-                    data=[{"id": "updated"}]
-                )
-                chain.update.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=[{"id": "updated"}]
-                )
-            return chain
-
-        return chain
-
-    mock_client.table.side_effect = table_side_effect
-    return mock_client
+# Keep the old name exported for any out-of-tree callers still importing it.
+# The signature matches; only the return type changes from MagicMock to FakeSupabase.
+_mock_supabase_for_assignment = _make_fake
 
 
 # =============================================================================
@@ -161,7 +293,7 @@ class TestAssignLogisticsToInvoices:
         self, mock_get_logistics, mock_get_sb
     ):
         """Two invoices both with pickup_country='Китай' → both get same manager, quote gets that manager."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -172,7 +304,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_2, "pickup_country": "Китай"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         mock_get_logistics.return_value = MANAGER_A
 
         result = assign_logistics_to_invoices(QUOTE_ID)
@@ -195,7 +327,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_multi_country_majority_vote(self, mock_get_logistics, mock_get_sb):
         """2 invoices 'Китай' (→A) + 1 invoice 'Турция' (→B) → quote gets A (majority)."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -207,7 +339,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_3, "pickup_country": "Турция"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
 
         def side_effect(org_id, origin, dest):
             if origin == "Китай":
@@ -244,7 +376,7 @@ class TestAssignLogisticsToInvoices:
     @patch("services.workflow_service.get_supabase")
     def test_no_invoices(self, mock_get_sb):
         """Quote has zero invoices → success=True, empty lists, no assignment."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -252,7 +384,7 @@ class TestAssignLogisticsToInvoices:
             },
             invoices_data=[],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
 
         result = assign_logistics_to_invoices(QUOTE_ID)
 
@@ -267,7 +399,7 @@ class TestAssignLogisticsToInvoices:
     @patch("services.workflow_service.get_supabase")
     def test_invoices_no_pickup_country(self, mock_get_sb):
         """All invoices have NULL pickup_country → all in unmatched_invoice_ids."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -278,7 +410,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_2, "pickup_country": None},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
 
         result = assign_logistics_to_invoices(QUOTE_ID)
 
@@ -296,7 +428,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_no_matching_route_pattern(self, mock_get_logistics, mock_get_sb):
         """pickup_country='Австралия' with no route → unmatched."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -306,7 +438,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_1, "pickup_country": "Австралия"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         mock_get_logistics.return_value = None  # No match
 
         result = assign_logistics_to_invoices(QUOTE_ID)
@@ -325,7 +457,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_no_delivery_city_on_quote(self, mock_get_logistics, mock_get_sb):
         """delivery_city=None → routing still works (wildcard patterns match)."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -335,7 +467,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_1, "pickup_country": "Китай"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         mock_get_logistics.return_value = MANAGER_A
 
         result = assign_logistics_to_invoices(QUOTE_ID)
@@ -356,7 +488,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_routing_service_exception(self, mock_get_logistics, mock_get_sb):
         """get_logistics_manager_for_locations throws → success=False, error_message set."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -366,7 +498,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_1, "pickup_country": "Китай"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         mock_get_logistics.side_effect = Exception("DB connection failed")
 
         result = assign_logistics_to_invoices(QUOTE_ID)
@@ -382,11 +514,8 @@ class TestAssignLogisticsToInvoices:
     @patch("services.workflow_service.get_supabase")
     def test_quote_not_found(self, mock_get_sb):
         """Bad quote_id → success=False."""
-        mock_client = _mock_supabase_for_assignment(
-            quote_data=None,
-            invoices_data=None,
-        )
-        mock_get_sb.return_value = mock_client
+        sb = _make_fake(quote_data=None, invoices_data=None)
+        mock_get_sb.return_value = sb
 
         result = assign_logistics_to_invoices("nonexistent-id")
 
@@ -402,7 +531,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_quote_missing_organization_id(self, mock_get_logistics, mock_get_sb):
         """Quote with organization_id=None → routing receives None org_id, may not match."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": None,
@@ -412,7 +541,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_1, "pickup_country": "Китай"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         # With None org_id, routing returns None
         mock_get_logistics.return_value = None
 
@@ -432,59 +561,18 @@ class TestAssignLogisticsToInvoices:
     )
     def test_db_update_calls(self, mock_get_logistics, mock_get_sb):
         """Verify supabase.table('invoices').update() called with correct user_id for each invoice."""
-        mock_client = MagicMock()
-        mock_get_sb.return_value = mock_client
-
-        # Track calls by table name
-        update_calls = []
-
-        def table_side_effect(table_name):
-            chain = MagicMock()
-            if table_name == "quotes":
-                # First call is select (Phase 5c chain: .select().eq().is_().single()),
-                # subsequent are updates.
-                if not hasattr(table_side_effect, "_quotes_select_done"):
-                    table_side_effect._quotes_select_done = True
-                    chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
-                        data={
-                            "id": QUOTE_ID,
-                            "organization_id": ORG_ID,
-                            "delivery_city": "Москва",
-                        }
-                    )
-                else:
-                    def capture_update(data):
-                        update_calls.append(("quotes", data))
-                        inner = MagicMock()
-                        inner.eq.return_value.execute.return_value = MagicMock(data=[{"id": QUOTE_ID}])
-                        return inner
-                    chain.update.side_effect = capture_update
-                return chain
-
-            elif table_name == "invoices":
-                # First invoices call is .select().eq().execute(); subsequent are
-                # batch updates using .update().in_("id", [...]).execute().
-                if not hasattr(table_side_effect, "_invoices_select_done"):
-                    table_side_effect._invoices_select_done = True
-                    chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
-                        data=[
-                            {"id": INVOICE_1, "pickup_country": "Китай"},
-                            {"id": INVOICE_2, "pickup_country": "Турция"},
-                        ]
-                    )
-                else:
-                    def capture_invoice_update(data):
-                        update_calls.append(("invoices", data))
-                        inner = MagicMock()
-                        inner.in_.return_value.execute.return_value = MagicMock(data=[{"id": "ok"}])
-                        inner.eq.return_value.execute.return_value = MagicMock(data=[{"id": "ok"}])
-                        return inner
-                    chain.update.side_effect = capture_invoice_update
-                return chain
-
-            return chain
-
-        mock_client.table.side_effect = table_side_effect
+        sb = _make_fake(
+            quote_data={
+                "id": QUOTE_ID,
+                "organization_id": ORG_ID,
+                "delivery_city": "Москва",
+            },
+            invoices_data=[
+                {"id": INVOICE_1, "pickup_country": "Китай"},
+                {"id": INVOICE_2, "pickup_country": "Турция"},
+            ],
+        )
+        mock_get_sb.return_value = sb
 
         def logistics_lookup(org_id, origin, dest):
             if origin == "Китай":
@@ -499,16 +587,16 @@ class TestAssignLogisticsToInvoices:
 
         assert result["success"] is True
 
-        # Verify invoice updates
-        invoice_updates = [c for c in update_calls if c[0] == "invoices"]
+        # Verify invoice updates — one update per distinct user_id (batch by .in_())
+        invoice_updates = sb.updates_for("invoices")
         assert len(invoice_updates) == 2
 
-        update_user_ids = {u[1]["assigned_logistics_user"] for u in invoice_updates}
+        update_user_ids = {p["assigned_logistics_user"] for (p, _f) in invoice_updates}
         assert MANAGER_A in update_user_ids
         assert MANAGER_B in update_user_ids
 
         # Verify quote-level update (majority = MANAGER_A if tied, or whichever is more common)
-        quote_updates = [c for c in update_calls if c[0] == "quotes"]
+        quote_updates = sb.updates_for("quotes")
         assert len(quote_updates) >= 1
 
     # -------------------------------------------------------------------------
@@ -517,7 +605,7 @@ class TestAssignLogisticsToInvoices:
     @patch("services.workflow_service.get_supabase")
     def test_return_dict_shape(self, mock_get_sb):
         """Verify all keys present and correct types in return dict."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -525,7 +613,7 @@ class TestAssignLogisticsToInvoices:
             },
             invoices_data=[],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
 
         result = assign_logistics_to_invoices(QUOTE_ID)
 
@@ -558,7 +646,7 @@ class TestAssignLogisticsToInvoices:
     )
     def test_mixed_invoices(self, mock_get_logistics, mock_get_sb):
         """Some invoices have pickup_country, some don't → only those with country get assigned."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -570,7 +658,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_3, "pickup_country": "Китай"},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
         mock_get_logistics.return_value = MANAGER_A
 
         result = assign_logistics_to_invoices(QUOTE_ID)
@@ -586,7 +674,7 @@ class TestAssignLogisticsToInvoices:
     @patch("services.workflow_service.get_supabase")
     def test_empty_string_pickup_country(self, mock_get_sb):
         """Invoice with pickup_country='' (empty string) should be treated as unmatched."""
-        mock_client = _mock_supabase_for_assignment(
+        sb = _make_fake(
             quote_data={
                 "id": QUOTE_ID,
                 "organization_id": ORG_ID,
@@ -597,7 +685,7 @@ class TestAssignLogisticsToInvoices:
                 {"id": INVOICE_2, "pickup_country": "  "},
             ],
         )
-        mock_get_sb.return_value = mock_client
+        mock_get_sb.return_value = sb
 
         result = assign_logistics_to_invoices(QUOTE_ID)
 
@@ -613,12 +701,11 @@ class TestAssignLogisticsToInvoices:
 class TestCompleteProcurementLogisticsWiring:
     """Integration tests: complete_procurement calls assign_logistics_to_invoices."""
 
-    def _setup_successful_procurement_mocks(self, mock_client):
-        """Set up mock chain for a successful complete_procurement call.
+    def _setup_successful_procurement_mocks(self, sb: FakeSupabase):
+        """Seed FakeSupabase for a successful complete_procurement call.
 
         Covers the full Phase 5d readiness flow:
-          1. quotes.select().eq().is_().single().execute() — status check
-             (soft-delete filter requires .is_("deleted_at", None) in chain)
+          1. quotes.select(...).eq("id", quote_id).single().execute() — status check
           2. composition_service.is_procurement_complete:
                a) quote_items.select(id, is_unavailable,
                   composition_selected_invoice_id).eq().execute()
@@ -629,69 +716,46 @@ class TestCompleteProcurementLogisticsWiring:
           3. quotes.update().eq().execute() — transition write
           4. workflow_transitions.insert().execute() — audit log
         """
-        call_count = {"n": 0}
         qi_id = "qi-1"
         selected_invoice_id = INVOICE_1
 
-        def table_side_effect(table_name):
-            call_count["n"] += 1
-            chain = MagicMock()
+        sb.seed(
+            "quotes",
+            [
+                {
+                    "id": QUOTE_ID,
+                    "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
+                    "procurement_completed_at": None,
+                }
+            ],
+        )
+        sb.seed(
+            "quote_items",
+            [
+                {
+                    "id": qi_id,
+                    "quote_id": QUOTE_ID,
+                    "is_unavailable": False,
+                    "composition_selected_invoice_id": selected_invoice_id,
+                }
+            ],
+        )
+        # The invoice_item_coverage query has an embedded join
+        # "invoice_items!inner(invoice_id, purchase_price_original)" that our
+        # generic select handler can't resolve by itself. Override it to
+        # return the join-shaped row readiness expects.
+        def coverage_select(_filters):
+            return [
+                {
+                    "quote_item_id": qi_id,
+                    "invoice_items": {
+                        "invoice_id": selected_invoice_id,
+                        "purchase_price_original": 100.0,
+                    },
+                }
+            ]
 
-            if table_name == "quotes" and call_count["n"] == 1:
-                # First quotes call: select for status check (with soft-delete filter)
-                chain.select.return_value.eq.return_value.is_.return_value.single.return_value.execute.return_value = MagicMock(
-                    data={
-                        "id": QUOTE_ID,
-                        "workflow_status": WorkflowStatus.PENDING_PROCUREMENT.value,
-                        "procurement_completed_at": None,
-                    }
-                )
-                return chain
-
-            elif table_name == "quote_items":
-                # Readiness: one priced, non-N/A quote_item with composition pointer
-                chain.select.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=[
-                        {
-                            "id": qi_id,
-                            "is_unavailable": False,
-                            "composition_selected_invoice_id": selected_invoice_id,
-                        },
-                    ]
-                )
-                return chain
-
-            elif table_name == "invoice_item_coverage":
-                # Readiness: coverage row pointing at an invoice_item in the
-                # selected invoice with a non-null purchase_price_original.
-                chain.select.return_value.in_.return_value.execute.return_value = MagicMock(
-                    data=[
-                        {
-                            "quote_item_id": qi_id,
-                            "invoice_items": {
-                                "invoice_id": selected_invoice_id,
-                                "purchase_price_original": 100.0,
-                            },
-                        },
-                    ]
-                )
-                return chain
-
-            elif table_name == "quotes":
-                # Subsequent quotes calls: updates
-                chain.update.return_value.eq.return_value.execute.return_value = MagicMock(
-                    data=[{"id": QUOTE_ID}]
-                )
-                return chain
-
-            else:
-                # workflow_transitions insert
-                chain.insert.return_value.execute.return_value = MagicMock(
-                    data=[{"id": "transition-uuid"}]
-                )
-                return chain
-
-        mock_client.table.side_effect = table_side_effect
+        sb.set_select_override("invoice_item_coverage", coverage_select)
 
     # -------------------------------------------------------------------------
     # Test 13: complete_procurement calls assign_logistics_to_invoices
@@ -705,9 +769,9 @@ class TestCompleteProcurementLogisticsWiring:
         self, mock_assign_logistics, mock_get_sb
     ):
         """complete_procurement calls assign_logistics_to_invoices after status transition."""
-        mock_client = MagicMock()
-        mock_get_sb.return_value = mock_client
-        self._setup_successful_procurement_mocks(mock_client)
+        sb = FakeSupabase()
+        mock_get_sb.return_value = sb
+        self._setup_successful_procurement_mocks(sb)
 
         mock_assign_logistics.return_value = {
             "success": True,
@@ -742,9 +806,9 @@ class TestCompleteProcurementLogisticsWiring:
         self, mock_assign_logistics, mock_get_sb
     ):
         """complete_procurement succeeds even if assign_logistics_to_invoices raises."""
-        mock_client = MagicMock()
-        mock_get_sb.return_value = mock_client
-        self._setup_successful_procurement_mocks(mock_client)
+        sb = FakeSupabase()
+        mock_get_sb.return_value = sb
+        self._setup_successful_procurement_mocks(sb)
 
         mock_assign_logistics.side_effect = Exception("Logistics routing DB down")
 
@@ -773,9 +837,9 @@ class TestCompleteProcurementLogisticsWiring:
         self, mock_assign_logistics, mock_get_sb
     ):
         """complete_procurement succeeds when assignment returns success=False."""
-        mock_client = MagicMock()
-        mock_get_sb.return_value = mock_client
-        self._setup_successful_procurement_mocks(mock_client)
+        sb = FakeSupabase()
+        mock_get_sb.return_value = sb
+        self._setup_successful_procurement_mocks(sb)
 
         mock_assign_logistics.return_value = {
             "success": False,

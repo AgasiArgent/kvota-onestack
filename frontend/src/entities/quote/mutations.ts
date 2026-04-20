@@ -163,6 +163,40 @@ export async function fetchSellerCompanies(
   }));
 }
 
+/**
+ * Resolve the organization_id for an invoice via its owning quote.
+ *
+ * `kvota.invoices` has no `organization_id` column (Phase 5d discovery): the
+ * org boundary lives on `kvota.quotes`, and invoices inherit it through
+ * `quote_id`. Used by assignment/split/merge to stamp the new
+ * `invoice_items.organization_id` for RLS.
+ *
+ * Two round trips rather than a PostgREST FK embed so the shape stays simple
+ * and easy to stub in tests.
+ */
+async function getInvoiceOrganizationId(
+  supabase: ReturnType<typeof createClient>,
+  invoiceId: string
+): Promise<string> {
+  const { data: inv, error: invErr } = await supabase
+    .from("invoices")
+    .select("quote_id")
+    .eq("id", invoiceId)
+    .single();
+  if (invErr) throw invErr;
+  if (!inv) throw new Error("invoice not found");
+
+  const { data: quote, error: quoteErr } = await supabase
+    .from("quotes")
+    .select("organization_id")
+    .eq("id", inv.quote_id)
+    .single();
+  if (quoteErr) throw quoteErr;
+  if (!quote) throw new Error("quote not found");
+
+  return quote.organization_id;
+}
+
 // ---------------------------------------------------------------------------
 // Quote Detail mutations (for quote detail page migration)
 // ---------------------------------------------------------------------------
@@ -293,17 +327,11 @@ export async function assignItemsToInvoice(
   if (itemsErr) throw itemsErr;
   if (!items || items.length === 0) return;
 
-  // 2. Resolve invoice organization_id (needed for RLS + invoice_items row).
-  // `invoices.organization_id` is not in the generated database.types.ts;
-  // narrow cast on the response keeps the rest of the handler type-checked.
-  const { data: invRaw, error: invErr } = await supabase
-    .from("invoices")
-    .select("organization_id")
-    .eq("id", invoiceId)
-    .single();
-  if (invErr) throw invErr;
-  if (!invRaw) throw new Error("invoice not found");
-  const inv = invRaw as unknown as { organization_id: string };
+  // 2. Resolve invoice organization_id via the owning quote (needed for RLS
+  //    + invoice_items.organization_id). `kvota.invoices` has no
+  //    organization_id column — it lives on kvota.quotes and is inherited
+  //    through quote_id.
+  const organizationId = await getInvoiceOrganizationId(supabase, invoiceId);
 
   // 3. Compute next position within target invoice (MAX + 1).
   const { data: posRow } = await supabase
@@ -351,7 +379,7 @@ export async function assignItemsToInvoice(
     //    until frozen).
     const iiRows = itemsToInsert.map((item, idx) => ({
       invoice_id: invoiceId,
-      organization_id: inv.organization_id,
+      organization_id: organizationId,
       position: startPos + idx,
       product_name: item.product_name ?? "",
       supplier_sku: item.supplier_sku ?? null,
@@ -490,17 +518,10 @@ export async function splitInvoiceItem(
     throw new Error("Некорректное количество исходной позиции");
   }
 
-  // 3. Invoice metadata — organization_id + next position anchor.
-  // `invoices.organization_id` is not in the generated database.types.ts;
-  // narrow cast on the response keeps the rest of the handler type-checked.
-  const { data: invRaw, error: invErr } = await supabase
-    .from("invoices")
-    .select("organization_id")
-    .eq("id", invoiceId)
-    .single();
-  if (invErr) throw invErr;
-  if (!invRaw) throw new Error("invoice not found");
-  const inv = invRaw as unknown as { organization_id: string };
+  // 3. Invoice metadata — organization_id (sourced via quote) + next
+  //    position anchor. `kvota.invoices` has no organization_id column; it
+  //    lives on kvota.quotes and is inherited through quote_id.
+  const organizationId = await getInvoiceOrganizationId(supabase, invoiceId);
 
   const { data: posRow } = await supabase
     .from("invoice_items")
@@ -524,7 +545,7 @@ export async function splitInvoiceItem(
   // 5. INSERT N child invoice_items.
   const iiRows = children.map((c, idx) => ({
     invoice_id: invoiceId,
-    organization_id: inv.organization_id,
+    organization_id: organizationId,
     position: startPos + idx,
     product_name: c.product_name,
     supplier_sku: c.supplier_sku,
@@ -688,17 +709,10 @@ export async function mergeInvoiceItems(
     );
   }
 
-  // 2. Invoice metadata — organization_id + next position anchor.
-  // `invoices.organization_id` is not in the generated database.types.ts;
-  // narrow cast on the response keeps the rest of the handler type-checked.
-  const { data: invRaw, error: invErr } = await supabase
-    .from("invoices")
-    .select("organization_id")
-    .eq("id", invoiceId)
-    .single();
-  if (invErr) throw invErr;
-  if (!invRaw) throw new Error("invoice not found");
-  const inv = invRaw as unknown as { organization_id: string };
+  // 2. Invoice metadata — organization_id (sourced via quote) + next
+  //    position anchor. `kvota.invoices` has no organization_id column; it
+  //    lives on kvota.quotes and is inherited through quote_id.
+  const organizationId = await getInvoiceOrganizationId(supabase, invoiceId);
 
   const { data: posRow } = await supabase
     .from("invoice_items")
@@ -723,7 +737,7 @@ export async function mergeInvoiceItems(
     .from("invoice_items")
     .insert({
       invoice_id: invoiceId,
-      organization_id: inv.organization_id,
+      organization_id: organizationId,
       position: nextPos,
       product_name: merged.product_name,
       supplier_sku: merged.supplier_sku,
