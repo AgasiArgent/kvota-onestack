@@ -71,20 +71,9 @@ class TestFinanceRegistryUsesSupplierInvoices:
 
 
 # ============================================================================
-# TEST CLASS: Finance invoices tab reads from invoices table
+# TEST CLASS REMOVED (Phase 6C-2B-10c1, 2026-04-20):
+#   - TestFinanceInvoicesTab
+# This verified the /finance?tab=invoices page (finance_invoices_tab helper)
+# in main.py. The helper was archived to legacy-fasthtml/finance_lifecycle.py
+# along with the parent GET /finance handler.
 # ============================================================================
-
-class TestFinanceInvoicesTab:
-    """
-    The /finance?tab=invoices page should read from the invoices table
-    (showing procurement workflow invoices in the registry view).
-    """
-
-    def test_finance_invoices_tab_exists(self):
-        """The finance page must have an invoices tab."""
-        with open(MAIN_PY, "r") as f:
-            content = f.read()
-
-        assert "tab=invoices" in content or 'tab == "invoices"' in content, (
-            "Finance page must have an invoices tab"
-        )
