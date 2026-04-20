@@ -248,50 +248,8 @@ class TestNormalizeCountryToIso:
         assert normalize(None) == ""
 
 
-# ============================================================================
-# 8. build_vat_zone_info — aggregate status
-# ============================================================================
-
-class TestBuildVatZoneInfo:
-    def test_all_items_ok(self):
-        build_info = _import_from_main("build_vat_zone_info")
-        items = [
-            {"product_name": "SKF Bearing", "supplier_country": "BE", "price_includes_vat": True},
-            {"product_name": "Pump", "supplier_country": "TR", "price_includes_vat": True},
-        ]
-        result = build_info(items)
-        assert result["status"] == "ok"
-        assert len(result["items"]) == 2
-
-    def test_items_with_warning(self):
-        build_info = _import_from_main("build_vat_zone_info")
-        items = [
-            {"product_name": "Bearing", "supplier_country": "BE", "price_includes_vat": False},
-        ]
-        result = build_info(items)
-        assert result["status"] == "warning"
-
-    def test_items_with_error(self):
-        build_info = _import_from_main("build_vat_zone_info")
-        items = [
-            {"product_name": "Motor", "supplier_country": "DE", "price_includes_vat": True},
-        ]
-        result = build_info(items)
-        assert result["status"] == "error"
-        assert result["items"][0]["error"] is not None
-
-    def test_empty_items(self):
-        build_info = _import_from_main("build_vat_zone_info")
-        result = build_info([])
-        assert result["status"] == "info"
-
-    def test_mixed_items(self):
-        """Error takes priority over warning."""
-        build_info = _import_from_main("build_vat_zone_info")
-        items = [
-            {"product_name": "OK item", "supplier_country": "TR", "price_includes_vat": True},
-            {"product_name": "Warn item", "supplier_country": "BE", "price_includes_vat": False},
-            {"product_name": "Error item", "supplier_country": "DE", "price_includes_vat": True},
-        ]
-        result = build_info(items)
-        assert result["status"] == "error"
+# TestBuildVatZoneInfo removed in Phase 6C-2B Mega-B — `build_vat_zone_info`
+# lived in main.py next to the other Janna checklist helpers and was archived
+# to legacy-fasthtml/control_flow.py alongside its only caller
+# /quote-control/{quote_id}. The live `normalize_country_to_iso` and
+# `resolve_vat_zone` coverage above is unchanged.

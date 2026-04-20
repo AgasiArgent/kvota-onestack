@@ -364,35 +364,10 @@ class TestChecklistItems:
         assert "11. Наличие инвойсов от поставщиков" == "11. Наличие инвойсов от поставщиков"
 
 
-# =============================================================================
-# MAIN.PY INTEGRATION TESTS
-# =============================================================================
-
-class TestMainPyIntegration:
-    """Tests that main.py has the correct integration for criterion 11."""
-
-    def test_invoices_table_query_in_main(self):
-        """main.py should query invoices table for criterion 11."""
-        with open("main.py", "r") as f:
-            content = f.read()
-
-        # Check that we query the invoices table directly
-        assert 'table("invoices")' in content
-
-    def test_checklist_uses_janna_7_items(self):
-        """main.py should use build_janna_checklist with 7 items (replaced old 11-item checklist)."""
-        with open("main.py", "r") as f:
-            content = f.read()
-
-        assert "build_janna_checklist" in content
-
-    def test_invoice_id_check_in_main(self):
-        """main.py should check quote_items.invoice_id for coverage."""
-        with open("main.py", "r") as f:
-            content = f.read()
-
-        # Check that we count items with invoice_id
-        assert "invoice_id" in content
+# TestMainPyIntegration removed in Phase 6C-2B Mega-B — the old assertions
+# searched main.py for `build_janna_checklist`, which was archived to
+# legacy-fasthtml/control_flow.py alongside its only caller
+# /quote-control/{quote_id}.
 
 
 if __name__ == "__main__":
@@ -411,7 +386,6 @@ if __name__ == "__main__":
             TestQuoteInvoicingSummary,
             TestChecklistLogic,
             TestChecklistItems,
-            TestMainPyIntegration
         ]
 
         for cls in test_classes:
