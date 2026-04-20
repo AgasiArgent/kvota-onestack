@@ -1,11 +1,17 @@
 """
-Tests for Phase 5c Task 6 — verify the 3 calc entry points in main.py
-flow through the rewritten composition_service.get_composed_items().
+Tests for Phase 5c Task 6 — verify the calc entry points flow through the
+rewritten composition_service.get_composed_items().
 
-The 3 call sites are:
-  - main.py:13463 — POST /quotes/{quote_id}/preview (HTMX preview)
-  - main.py:14252 — POST /quotes/{quote_id}/calculate (full calc run)
-  - main.py:14910 — POST /api/quotes/{quote_id}/calculate (JSON API)
+Originally 3 call sites in main.py (Phase 5c Task 6). After Phase 6B-6a
+the /api/quotes/{id}/calculate handler moved to api/quotes.py, leaving 2
+call sites in main.py plus 1 in api/quotes.py — total still 3 across the
+codebase.
+
+Current call sites:
+  - main.py — POST /quotes/{quote_id}/preview (HTMX preview)
+  - main.py — POST /quotes/{quote_id}/calculate (full calc run)
+  - api/quotes.py — POST /api/quotes/{quote_id}/calculate (JSON API,
+    extracted in Phase 6B-6a)
 
 All three read ``items = get_composed_items(quote_id, supabase)`` and pass
 that list directly into ``build_calculation_inputs(items, variables)``.
@@ -41,12 +47,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MAIN_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"
 )
+API_QUOTES_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "api",
+    "quotes.py",
+)
 
-# Target call sites — per agent-3 earlier exploration and confirmed by grep
-# The numbers track the line where build_calculation_inputs(items, variables)
-# is called in main.py. Changes to main.py may shift them ±a few lines — the
-# tests tolerate that.
-EXPECTED_CALL_SITES = 3
+# Call sites after Phase 6B-6a: 2 in main.py (preview + full-calc) and 1
+# in api/quotes.py (the JSON API handler that used to live in main.py).
+# Total across the codebase is unchanged at 3.
+EXPECTED_CALL_SITES = 2
+EXPECTED_API_QUOTES_CALL_SITES = 1
 
 
 # ============================================================================
@@ -128,12 +139,73 @@ def test_all_build_calculation_inputs_calls_use_composed_items():
             bci_sites_missing_composed.append(func.name)
 
     assert bci_call_count == EXPECTED_CALL_SITES, (
-        f"Expected {EXPECTED_CALL_SITES} call sites to build_calculation_inputs; "
-        f"found {bci_call_count}. main.py may have drifted — update EXPECTED_CALL_SITES."
+        f"Expected {EXPECTED_CALL_SITES} call sites to build_calculation_inputs "
+        f"in main.py; found {bci_call_count}. main.py may have drifted — "
+        f"update EXPECTED_CALL_SITES."
     )
     assert not bci_sites_missing_composed, (
         f"Found build_calculation_inputs call(s) without a preceding "
         f"items = get_composed_items(...) assignment in these handlers: "
+        f"{bci_sites_missing_composed}. Migration 284 will break these sites."
+    )
+
+
+def test_api_quotes_calculate_uses_composed_items():
+    """After Phase 6B-6a the JSON calc handler lives in api/quotes.py.
+
+    The invariant from Phase 5c Task 6 still applies: every
+    build_calculation_inputs call must be preceded by
+    ``items = get_composed_items(...)`` so migration 284 (legacy
+    quote_items column drop) doesn't break the calc flow.
+    """
+    with open(API_QUOTES_PATH, "r") as f:
+        source = f.read()
+    tree = ast.parse(source)
+
+    bci_call_count = 0
+    bci_sites_missing_composed: list[str] = []
+
+    for func in ast.walk(tree):
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+
+        bci_nodes = []
+        for node in ast.walk(func):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                if isinstance(fn, ast.Name) and fn.id == "build_calculation_inputs":
+                    bci_nodes.append(node)
+
+        if not bci_nodes:
+            continue
+
+        has_composed_items_assignment = False
+        for node in ast.walk(func):
+            if isinstance(node, ast.Assign):
+                for tgt in node.targets:
+                    if isinstance(tgt, ast.Name) and tgt.id == "items":
+                        value = node.value
+                        if (
+                            isinstance(value, ast.Call)
+                            and isinstance(value.func, ast.Name)
+                            and value.func.id == "get_composed_items"
+                        ):
+                            has_composed_items_assignment = True
+                            break
+            if has_composed_items_assignment:
+                break
+
+        bci_call_count += len(bci_nodes)
+        if not has_composed_items_assignment:
+            bci_sites_missing_composed.append(func.name)
+
+    assert bci_call_count == EXPECTED_API_QUOTES_CALL_SITES, (
+        f"Expected {EXPECTED_API_QUOTES_CALL_SITES} call site(s) to "
+        f"build_calculation_inputs in api/quotes.py; found {bci_call_count}."
+    )
+    assert not bci_sites_missing_composed, (
+        f"Found build_calculation_inputs call(s) without a preceding "
+        f"items = get_composed_items(...) assignment in api/quotes.py: "
         f"{bci_sites_missing_composed}. Migration 284 will break these sites."
     )
 
