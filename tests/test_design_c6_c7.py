@@ -1,10 +1,5 @@
 """
-Tests for design audit bugs C6 and C7.
-
-C6: Dashboard procurement tab returns 500 -- _dashboard_procurement_content()
-    has no error handling. If any Supabase query fails or data is malformed,
-    the function raises an unhandled exception (500 Internal Server Error).
-    Fix: wrap the function body in try-except with a user-friendly fallback.
+Tests for design audit bug C7.
 
 C7: Admin FIO column shows UUIDs instead of names -- the admin users table
     column header says "FIO" but the code sets email_display = member_user_id[:8] + "..."
@@ -14,9 +9,11 @@ C7: Admin FIO column shows UUIDs instead of names -- the admin users table
 
 These tests are written BEFORE the fix (TDD).
 All tests MUST FAIL until the bugs are fixed.
+
+Note: Former C6 tests (dashboard procurement error handling) were removed
+during Phase 6C-2B-7 archive of /dashboard + /tasks (2026-04-20).
 """
 
-import pytest
 import os
 import re
 
@@ -29,23 +26,6 @@ def _read_main_source():
     """Read main.py source code without importing it."""
     with open(MAIN_PY, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def _extract_function_source(func_name: str, source: str = None) -> str:
-    """Extract a function's source code from main.py by its def name.
-
-    Finds `def func_name(` and grabs everything until the next top-level
-    definition (def/class/@rt) or end of file.
-    """
-    if source is None:
-        source = _read_main_source()
-    pattern = re.compile(
-        rf'^(def {re.escape(func_name)}\(.*?)(?=\ndef |\n@rt\(|\nclass |\Z)',
-        re.MULTILINE | re.DOTALL,
-    )
-    match = pattern.search(source)
-    assert match, f"Function '{func_name}' not found in main.py"
-    return match.group(1)
 
 
 def _extract_admin_get_handler(source: str = None) -> str:
@@ -66,89 +46,6 @@ def _extract_admin_get_handler(source: str = None) -> str:
     match = pattern.search(source)
     assert match, '/admin GET handler not found in main.py'
     return match.group(1)
-
-
-# ==============================================================================
-# C6: Dashboard procurement tab -- error handling
-# ==============================================================================
-
-class TestC6ProcurementTabErrorHandling:
-    """_dashboard_procurement_content must not crash with unhandled exceptions.
-
-    Currently the function (lines ~5033-5300) has zero try-except blocks.
-    If get_assigned_brands() raises, or Supabase returns unexpected data,
-    the entire dashboard tab returns a 500 Internal Server Error.
-
-    Fix: wrap the main logic in try-except and return a user-friendly
-    error card (e.g., "Failed to load procurement data") instead of crashing.
-    """
-
-    def test_procurement_content_has_try_except(self):
-        """Function body must contain try-except error handling."""
-        fn_source = _extract_function_source("_dashboard_procurement_content")
-
-        has_try = "try:" in fn_source
-        has_except = re.search(r'except\s+', fn_source) is not None
-
-        assert has_try and has_except, (
-            "_dashboard_procurement_content() has NO error handling (no try-except). "
-            "If Supabase query fails or get_assigned_brands() raises, "
-            "the dashboard returns a 500. Must wrap in try-except with fallback UI."
-        )
-
-    def test_procurement_content_except_returns_user_friendly_fallback(self):
-        """The except block must return a visual fallback, not re-raise."""
-        fn_source = _extract_function_source("_dashboard_procurement_content")
-
-        # Look for an except block that returns some kind of error card/div
-        # The pattern: except ... : ... return [... error-message ...]
-        except_match = re.search(
-            r'except\s+.*?:\s*\n(.*?)(?=\ndef |\n@rt\(|\nclass |\Z)',
-            fn_source,
-            re.DOTALL,
-        )
-
-        assert except_match, (
-            "_dashboard_procurement_content() has no except block. "
-            "Need try-except that returns a fallback error card."
-        )
-
-        except_body = except_match.group(1)
-
-        # The except block should return something (not just log/pass)
-        assert "return" in except_body, (
-            "The except block in _dashboard_procurement_content() does not return "
-            "a fallback value. It should return a list with a user-friendly "
-            "error message (e.g., Div with error text) so the page does not crash."
-        )
-
-    def test_procurement_content_except_does_not_reraise(self):
-        """The except block must not re-raise -- it must gracefully degrade."""
-        fn_source = _extract_function_source("_dashboard_procurement_content")
-
-        # If there IS an except block, it should not contain bare `raise`
-        except_blocks = re.findall(
-            r'except\s+.*?:\s*\n((?:[ \t]+.*\n)*)',
-            fn_source,
-        )
-
-        if not except_blocks:
-            pytest.fail(
-                "_dashboard_procurement_content() has no except block at all. "
-                "Need try-except that gracefully handles errors."
-            )
-
-        for block in except_blocks:
-            # Strip comments
-            lines = [l for l in block.split('\n') if l.strip() and not l.strip().startswith('#')]
-            has_bare_raise = any(
-                l.strip() == 'raise' or l.strip().startswith('raise ')
-                for l in lines
-            )
-            assert not has_bare_raise, (
-                "The except block re-raises the exception. The procurement tab "
-                "should gracefully degrade, not propagate the error to the user."
-            )
 
 
 # ==============================================================================
