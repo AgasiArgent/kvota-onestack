@@ -9,6 +9,7 @@ Archived during Phase 6C of the FastAPI migration (2026-04-20 onwards).
 - `procurement_workspace.py` — `/procurement/{id}` GET page + 7 invoice/items HTMX endpoints + `render_invoices_list` helper (superseded by Next.js `/procurement/kanban` and `/quotes/[id]` procurement step) — archived 2026-04-20 Phase 6C-1
 - `cities_search.py` — `GET /api/cities/search` HTMX endpoint (superseded by FastAPI `GET /api/geo/cities/search`) — archived 2026-04-20 Phase 6C-1
 - `customers.py` — 26 /customers routes (registry, detail with tabs, inline-edit fragments, contacts, warehouses, calls, notes) + 9 render helpers + ORDER_SOURCE constants. Superseded by Next.js `/customers` + children — archived 2026-04-20 Phase 6C-2B-1
+- `suppliers.py` — 10 /suppliers routes (registry, create form, detail with general+brands tabs, edit form, deactivate, brand CRUD) + 4 render helpers (`_supplier_brand_row`, `_supplier_brands_tab`, `_supplier_brands_list_partial`, `_supplier_form`). Superseded by Next.js `/suppliers` + children — archived 2026-04-20 Phase 6C-2B-2. NOT including `/supplier-invoices/*` (no Next.js replacement yet, separate archive decision).
 
 ## Why preserve
 
