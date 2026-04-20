@@ -20,11 +20,8 @@ from __future__ import annotations
 
 import os
 import sys
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
-
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -71,67 +68,16 @@ def _supabase_with_table_routes(routes: dict[str, list]):
 
 
 # ----------------------------------------------------------------------------
-# Test 1 — "my quotes" filter returns item-level-assigned quotes
+# Test 1 — Permission check via quote_items
 # ----------------------------------------------------------------------------
-
-
-class TestMyQuotesQueriesItemLevel:
-    """The procurement dashboard reader must fetch quote_ids from quote_items,
-    not from a quote-level array (which no longer exists).
-    """
-
-    def test_dashboard_procurement_reader_queries_quote_items(self):
-        """_dashboard_procurement_content_inner resolves assigned quote IDs
-        from ``quote_items.assigned_procurement_user`` for non-admin users.
-        """
-        import main
-
-        user_id = str(uuid4())
-        org_id = str(uuid4())
-        assigned_quote_id = str(uuid4())
-
-        routes = {
-            "quote_items": [
-                {"quote_id": assigned_quote_id},
-            ],
-            "quotes": [
-                {
-                    "id": assigned_quote_id,
-                    "idn_quote": "Q-TEST-0001",
-                    "customer_id": None,
-                    "customers": None,
-                    "workflow_status": "pending_procurement",
-                    "status": "draft",
-                    "total_amount": 0,
-                    "created_at": "2026-04-14T00:00:00Z",
-                },
-            ],
-        }
-        sb = _supabase_with_table_routes(routes)
-
-        with patch.object(main, "get_assigned_brands", return_value=[]):
-            result = main._dashboard_procurement_content_inner(
-                user_id=user_id,
-                org_id=org_id,
-                supabase=sb,
-                status_filter=None,
-                roles=["procurement"],
-            )
-
-        # Sanity: function returned *something* (content list), no exceptions.
-        assert result is not None
-
-        # Verify the reader queried quote_items with the right filter.
-        calls = [c.args[0] for c in sb.table.call_args_list]
-        assert "quote_items" in calls, (
-            "Expected _dashboard_procurement_content_inner to query quote_items "
-            "for item-level assignment resolution, but it did not."
-        )
-
-
-# ----------------------------------------------------------------------------
-# Test 2 — Permission check via quote_items
-# ----------------------------------------------------------------------------
+#
+# Note: a prior TestMyQuotesQueriesItemLevel class covered the
+# _dashboard_procurement_content_inner reader. That helper was archived to
+# legacy-fasthtml/dashboard_tasks.py in Phase 6C-2B-7 (2026-04-20) alongside
+# the /dashboard and /tasks FastHTML routes, so the corresponding test was
+# removed. Item-level assignment regression coverage for the remaining live
+# surfaces (quote_detail_tabs, get_quote_procurement_status,
+# _fetch_procurement_users_by_quote) is preserved below.
 
 
 class TestPermissionCheckItemLevel:
