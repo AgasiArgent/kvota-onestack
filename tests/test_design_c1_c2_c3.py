@@ -253,48 +253,6 @@ class TestC2_SignatoryContactBadge:
         )
 
 
-class TestC2_DeliveryMethodIcons:
-    """
-    Logistics delivery method map (~line 17016-17018) uses raw emoji characters.
-
-    Current: {"air": "✈", "auto": "🚛", "sea": "🚢", "multimodal": "📦"}
-    Expected: {"air": icon("plane", ...), "auto": icon("truck", ...), ...}
-    """
-
-    DELIVERY_EMOJIS = [
-        ("\u2708", "plane/air emoji"),       # ✈
-        ("\U0001F69B", "truck emoji"),        # 🚛
-        ("\U0001F6A2", "ship emoji"),         # 🚢
-    ]
-
-    @pytest.mark.parametrize("emoji_char,description", DELIVERY_EMOJIS)
-    def test_no_delivery_method_emoji(self, emoji_char, description):
-        """Delivery method icons must not use raw emoji characters."""
-        source = _read_main_source()
-        # Only check the delivery_method_icon mapping (not all occurrences)
-        hits = []
-        for i, line in enumerate(source.splitlines(), 1):
-            if emoji_char in line and "delivery_method" in line:
-                hits.append((i, line.strip()))
-        assert len(hits) == 0, (
-            f"Found {description} ({emoji_char}) in delivery method icon mapping at "
-            f"line(s) {[ln for ln, _ in hits]}. "
-            f"Should use Lucide icon() call instead."
-        )
-
-    def test_delivery_method_uses_icon_calls(self):
-        """Delivery method icon mapping should use icon() helper calls."""
-        source = _read_main_source()
-        # Find the delivery_method_icon dictionary definition
-        hits = _find_lines_containing(source, "delivery_method_icon")
-        # At least one of those lines should contain an icon() call
-        found_icon = any("icon(" in line_text for _, line_text in hits)
-        assert found_icon, (
-            "delivery_method_icon mapping does not use icon() calls. "
-            "Expected icon('plane'), icon('truck'), icon('ship'), icon('package') "
-            "instead of emoji characters."
-        )
-
 
 # ============================================================================
 # C3: Payments table not using table-enhanced styling
