@@ -48339,38 +48339,20 @@ async def post_invoice_procurement_unlock_reject(request, invoice_id: str, appro
     return await api_reject_procurement_unlock(request, invoice_id, approval_id)
 
 
-# --- Admin User Management JSON API (for Next.js frontend) ---
-
-from api.admin_users import (
-    create_user as admin_create_user,
-    update_user_status as admin_update_user_status,
-    update_user_roles as admin_update_user_roles,
-)
-
-@rt("/api/admin/users", methods=["POST"])
-async def post_admin_users(request):
-    return await admin_create_user(request)
-
-@rt("/api/admin/users/{user_id}/roles", methods=["PATCH"])
-async def patch_admin_user_roles(request, user_id: str):
-    return await admin_update_user_roles(request, user_id)
-
-@rt("/api/admin/users/{user_id}", methods=["PATCH"])
-async def patch_admin_user(request, user_id: str):
-    return await admin_update_user_status(request, user_id)
+# --- Admin User Management JSON API ---
+# POST   /api/admin/users                 → api/routers/admin.py (mounted FastAPI)
+# PATCH  /api/admin/users/{user_id}/roles → api/routers/admin.py (mounted FastAPI)
+# PATCH  /api/admin/users/{user_id}       → api/routers/admin.py (mounted FastAPI)
 
 
 # --- VAT Rate JSON API (for Next.js frontend) ---
+# PUT /api/admin/vat-rates → api/routers/admin.py (mounted FastAPI)
 
-from api.geo import get_vat_rate as api_get_vat_rate, update_vat_rate as api_update_vat_rate
+from api.geo import get_vat_rate as api_get_vat_rate
 
 @rt("/api/geo/vat-rate", methods=["GET"])
 async def get_geo_vat_rate(request):
     return await api_get_vat_rate(request)
-
-@rt("/api/admin/vat-rates", methods=["PUT"])
-async def put_admin_vat_rates(request):
-    return await api_update_vat_rate(request)
 
 
 # --- Invoice Send Flow JSON API (for Next.js frontend) ---
