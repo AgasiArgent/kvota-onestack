@@ -6143,7 +6143,7 @@ def _dashboard_procurement_content_inner(user_id: str, org_id: str, supabase, st
             Td(format_money(q.get("total_amount"))),
             Td(format_date_russian(q.get("created_at")) if q.get("created_at") else "—"),
             Td(
-                btn_link("Открыть", href=f"/procurement/{q['id']}", variant="primary", size="sm")
+                btn_link("Открыть", href=f"/quotes/{q['id']}", variant="primary", size="sm")
                 if show_work_button and workflow_status == "pending_procurement" else
                 btn_link("Просмотр", href=f"/quotes/{q['id']}", variant="ghost", size="sm")
             )
@@ -15954,7 +15954,7 @@ def quote_detail_tabs(quote_id: str, active_tab: str, user_roles: list, deal=Non
             "id": "procurement",
             "label": "Закупки",
             "icon": "shopping-cart",
-            "href": f"/procurement/{quote_id}",
+            "href": f"/quotes/{quote_id}",
             "roles": ["procurement", "admin"],
         },
         {
@@ -16648,7 +16648,7 @@ def get(quote_id: str, session):
         return page_layout("Возврат невозможен",
             H1("Возврат невозможен"),
             P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(workflow_status), workflow_status)}»."),
-            A("← Назад", href=f"/procurement/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -16707,7 +16707,7 @@ def get(quote_id: str, session):
         # Header card
         Div(
             Div(
-                A(icon("arrow-left", size=16), f" Назад к закупкам", href=f"/procurement/{quote_id}",
+                A(icon("arrow-left", size=16), f" Назад к закупкам", href=f"/quotes/{quote_id}",
                   style="color: #64748b; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 6px;"),
                 style="margin-bottom: 12px;"
             ),
@@ -16748,7 +16748,7 @@ def get(quote_id: str, session):
             Div(
                 Button(icon("check", size=14), " Вернуть на проверку", type="submit",
                        style="padding: 10px 20px; background: #22c55e; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px;"),
-                A(icon("x", size=14), " Отмена", href=f"/procurement/{quote_id}",
+                A(icon("x", size=14), " Отмена", href=f"/quotes/{quote_id}",
                   style="padding: 10px 20px; background: #f1f5f9; color: #475569; border: none; border-radius: 6px; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px;"),
                 style="display: flex; gap: 12px;"
             ),
@@ -16807,7 +16807,7 @@ def post(quote_id: str, session, comment: str = ""):
         return page_layout("Возврат невозможен",
             H1("Возврат невозможен"),
             P(f"КП находится в статусе «{STATUS_NAMES.get(WorkflowStatus(current_status), current_status)}»."),
-            A("← Назад", href=f"/procurement/{quote_id}"),
+            A("← Назад", href=f"/quotes/{quote_id}"),
             session=session
         )
 
@@ -16907,7 +16907,7 @@ def get(quote_id: str, session):
 
     if not my_items:
         # No items to export, redirect back with message
-        return RedirectResponse(f"/procurement/{quote_id}", status_code=303)
+        return RedirectResponse(f"/quotes/{quote_id}", status_code=303)
 
     # Generate Excel
     excel_bytes = create_procurement_excel(
