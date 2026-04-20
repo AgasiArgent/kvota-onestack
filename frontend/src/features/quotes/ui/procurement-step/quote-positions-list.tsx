@@ -76,15 +76,9 @@ export function QuotePositionsList({
       return;
     }
 
-    // database.types.ts does not include invoice_item_coverage /
-    // invoice_items yet (migrations 281-282 add them but types have not
-    // been regenerated in this commit). Cast through `from` to bypass the
-    // missing types — same pattern used for stage_deadlines in queries.ts.
     const supabase = createClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
 
-    const { data, error } = await untyped
+    const { data, error } = await supabase
       .from("invoice_item_coverage")
       .select("quote_item_id, invoice_items!inner(invoice_id, invoices!inner(id, invoice_number))")
       .in(
@@ -98,7 +92,7 @@ export function QuotePositionsList({
     }
 
     const map: Record<string, CoverageChip[]> = {};
-    for (const row of data as Array<{
+    for (const row of data as unknown as Array<{
       quote_item_id: string;
       invoice_items: {
         invoice_id: string;

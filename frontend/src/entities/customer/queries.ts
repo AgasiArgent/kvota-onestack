@@ -404,9 +404,7 @@ export async function fetchCustomerPositions(customerId: string) {
   // composition_selected_invoice_id. Legacy direct reads of
   // quote_items.purchase_price_original / purchase_currency /
   // procurement_completed_at are dropped in migration 284.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const untyped = supabase as unknown as { from: (t: string) => any };
-  const { data } = await untyped
+  const { data } = await supabase
     .from("quotes")
     .select(
       "id, idn_quote, customer_id, " +
@@ -465,7 +463,7 @@ export async function fetchCustomerPositions(customerId: string) {
     quote_idn: string;
   }> = [];
 
-  for (const quote of (data ?? []) as QuoteRow[]) {
+  for (const quote of (data ?? []) as unknown as QuoteRow[]) {
     for (const qi of quote.quote_items ?? []) {
       const selected = qi.composition_selected_invoice_id;
       const picked =

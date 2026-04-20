@@ -46,8 +46,6 @@ export async function GET(
   // quote_item's composition_selected_invoice_id), not raw quote_items.
   // Migration 284 drops base_price_vat and product_code from quote_items;
   // both live on invoice_items now.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const untyped = supabase as unknown as { from: (t: string) => any };
 
   // Resolve FKs + composition in parallel
   const [customerRes, contactRes, creatorRes, composedRes] = await Promise.all([
@@ -72,7 +70,7 @@ export async function GET(
           .eq("user_id", quote.created_by)
           .single()
       : null,
-    untyped
+    supabase
       .from("quotes")
       .select(
         "id, " +

@@ -969,9 +969,7 @@ export async function fetchFilterOptions(
   };
 
   async function fetchUsersByRoleSlugs(slugs: string[]): Promise<{ id: string; full_name: string }[]> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = supabase as unknown as { from: (t: string) => any };
-    const { data, error } = await untyped
+    const { data, error } = await supabase
       .from("user_roles")
       .select("user_id, roles!inner(slug)")
       .eq("organization_id", orgId)
@@ -981,7 +979,7 @@ export async function fetchFilterOptions(
       return [];
     }
     const userIds = Array.from(
-      new Set((data as Array<{ user_id: string }>).map((r) => r.user_id))
+      new Set(data.map((r) => r.user_id))
     );
     if (userIds.length === 0) return [];
     const { data: profiles } = await supabase

@@ -98,15 +98,12 @@ function useInvoiceItemsByInvoiceId(
       setMap(new Map());
       return;
     }
-    // database.types.ts does not yet include invoice_items (added by
-    // migration 281). Cast through `from` until the next type regen.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const untyped = createClient() as unknown as { from: (t: string) => any };
+    const supabase = createClient();
     let cancelled = false;
 
     async function load() {
       const invoiceIds = invoices.map((inv) => inv.id);
-      const itemsRes = await untyped
+      const itemsRes = await supabase
         .from("invoice_items")
         .select(
           "id, invoice_id, product_name, quantity, weight_in_kg, dimension_height_mm, dimension_width_mm, dimension_length_mm"
@@ -120,12 +117,10 @@ function useInvoiceItemsByInvoiceId(
         return;
       }
 
-      const invoiceItemIds = (itemsRes.data ?? []).map(
-        (r: { id: string }) => r.id
-      );
+      const invoiceItemIds = (itemsRes.data ?? []).map((r) => r.id);
       const coverageRes =
         invoiceItemIds.length > 0
-          ? await untyped
+          ? await supabase
               .from("invoice_item_coverage")
               .select("invoice_item_id, quote_item_id")
               .in("invoice_item_id", invoiceItemIds)
@@ -143,10 +138,7 @@ function useInvoiceItemsByInvoiceId(
       // customer SKU is shown, which matches the pre-284 behavior where
       // one quote_item claimed the invoice_id anchor).
       const iiToQi = new Map<string, string>();
-      for (const c of (coverageRes.data ?? []) as Array<{
-        invoice_item_id: string;
-        quote_item_id: string;
-      }>) {
+      for (const c of coverageRes.data ?? []) {
         if (!iiToQi.has(c.invoice_item_id)) {
           iiToQi.set(c.invoice_item_id, c.quote_item_id);
         }
@@ -154,16 +146,7 @@ function useInvoiceItemsByInvoiceId(
       const qiById = new Map(items.map((qi) => [qi.id, qi]));
 
       const byInvoice = new Map<string, LogisticsProductRow[]>();
-      for (const row of (itemsRes.data ?? []) as Array<{
-        id: string;
-        invoice_id: string;
-        product_name: string;
-        quantity: number;
-        weight_in_kg: number | null;
-        dimension_height_mm: number | null;
-        dimension_width_mm: number | null;
-        dimension_length_mm: number | null;
-      }>) {
+      for (const row of itemsRes.data ?? []) {
         const qiId = iiToQi.get(row.id);
         const qi = qiId ? qiById.get(qiId) : null;
         const list = byInvoice.get(row.invoice_id) ?? [];

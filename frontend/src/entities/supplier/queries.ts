@@ -263,9 +263,7 @@ export async function fetchSupplierQuoteItems(
   // owned by this supplier). Legacy quote_items.supplier_id +
   // purchase_price_original / purchase_currency /
   // procurement_completed_at columns are dropped in migration 284.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const untyped = supabase as unknown as { from: (t: string) => any };
-  const { data, error } = await untyped
+  const { data, error } = await supabase
     .from("invoices")
     .select(
       "id, supplier_id, procurement_completed_at, " +
@@ -312,7 +310,7 @@ export async function fetchSupplierQuoteItems(
   };
 
   const rows: SupplierQuoteItem[] = [];
-  for (const invoice of (data ?? []) as InvoiceRow[]) {
+  for (const invoice of (data ?? []) as unknown as InvoiceRow[]) {
     for (const ii of invoice.invoice_items ?? []) {
       for (const cov of ii.coverage ?? []) {
         const qi = cov.quote_items;
