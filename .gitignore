@@ -9,3 +9,15 @@ __pycache__/
 
 # Claude Code runtime state (sessions, test reports, code intelligence)
 tmp/
+.claude/dev-team/sessions/compaction-log.txt
+
+# MCP server runtime caches
+.playwright-mcp/
+.serena/
+
+# Session planning scratch (recovery notes, transient logs)
+.planning/recovery/
+
+# Browser-test / UI-test screenshots — session artifacts, not long-term docs
+# (Individual PNG at repo root is almost always a session screenshot, not a tracked asset)
+/*.png
