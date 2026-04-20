@@ -56,7 +56,7 @@ def _find_route_handler_body(source, route_pattern, method="get", max_chars=1500
     """
     escaped = re.escape(route_pattern).replace(r'\{', '{').replace(r'\}', '}')
     pattern = (
-        rf'@rt\(\s*["\']'
+        r'@rt\(\s*["\']'
         + escaped
         + rf'["\']\s*\)\s*\ndef {method}\(.*?\).*?:\s*\n(.*?)(?=\n@rt\(|\ndef [a-z]|\Z)'
     )
@@ -65,100 +65,6 @@ def _find_route_handler_body(source, route_pattern, method="get", max_chars=1500
         return match.group(1)[:max_chars]
     return None
 
-
-# ==============================================================================
-# PART 1: Finance page must render LOGISTIKA section
-# ==============================================================================
-
-class TestFinancePageRendersLogistics:
-    """The /finance/{deal_id} page must show a logistics section."""
-
-    def test_finance_page_contains_logistics_heading(self):
-        """Logistics heading must exist in a helper function called from quote detail page.
-
-        After the architectural refactor, /finance/{deal_id} redirects to
-        /quotes/{quote_id}. Logistics content is rendered by
-        _finance_logistics_tab_content() which is called from the quote detail
-        page when tab == 'logistics_stages'. The redirect itself proves the
-        finance route delegates to the quote page.
-        """
-        source = _read_main_source()
-
-        # 1. /finance/{deal_id} must redirect (no longer renders inline)
-        handler = _find_route_handler_body(source, "/finance/{deal_id}", "get")
-        assert handler is not None, "GET /finance/{deal_id} handler not found"
-        assert "RedirectResponse" in handler, (
-            "GET /finance/{deal_id} must redirect to /quotes/{quote_id}"
-        )
-
-        # 2. _finance_logistics_tab_content helper must contain the heading
-        helper = _find_function_body(source, "_finance_logistics_tab_content")
-        assert helper is not None, (
-            "_finance_logistics_tab_content helper function not found in main.py"
-        )
-        has_logistics = (
-            "ЛОГИСТИКА" in helper
-            or "Логистика" in helper
-            or "_deals_logistics_tab" in helper
-        )
-        assert has_logistics, (
-            "_finance_logistics_tab_content must render a logistics section "
-            "(ЛОГИСТИКА heading or call _deals_logistics_tab)."
-        )
-
-    def test_finance_page_calls_logistics_tab_renderer(self):
-        """Finance page must call _deals_logistics_tab() or equivalent."""
-        source = _read_main_source()
-        handler = _find_route_handler_body(source, "/finance/{deal_id}", "get")
-        assert handler is not None, "GET /finance/{deal_id} handler not found"
-        has_call = (
-            "_deals_logistics_tab" in handler
-            or "get_stages_for_deal" in handler
-            or "logistics_stages" in handler
-        )
-        assert has_call, (
-            "GET /finance/{deal_id} must call _deals_logistics_tab() or "
-            "get_stages_for_deal() to render the 7-stage logistics accordion."
-        )
-
-    def test_finance_page_renders_seven_stage_accordion(self):
-        """Logistics stage rendering must exist in helper functions called from quote detail.
-
-        After the architectural refactor, /finance/{deal_id} redirects to
-        /quotes/{quote_id}. The 7-stage accordion is rendered via:
-        _finance_logistics_tab_content -> _deals_logistics_tab -> get_stages_for_deal.
-        """
-        source = _read_main_source()
-
-        # 1. /finance/{deal_id} must redirect (delegates to quote page)
-        handler = _find_route_handler_body(source, "/finance/{deal_id}", "get")
-        assert handler is not None, "GET /finance/{deal_id} handler not found"
-        assert "RedirectResponse" in handler, (
-            "GET /finance/{deal_id} must redirect to /quotes/{quote_id}"
-        )
-
-        # 2. _finance_logistics_tab_content must call _deals_logistics_tab
-        helper = _find_function_body(source, "_finance_logistics_tab_content")
-        assert helper is not None, (
-            "_finance_logistics_tab_content helper function not found in main.py"
-        )
-        assert "_deals_logistics_tab" in helper, (
-            "_finance_logistics_tab_content must call _deals_logistics_tab "
-            "to render the 7-stage logistics accordion."
-        )
-
-        # 3. _deals_logistics_tab must reference stage rendering
-        tab_body = _find_function_body(source, "_deals_logistics_tab")
-        assert tab_body is not None, "_deals_logistics_tab function not found"
-        has_stages = (
-            "get_stages_for_deal" in tab_body
-            or "STAGE_NAMES" in tab_body
-            or "stage_cards" in tab_body
-        )
-        assert has_stages, (
-            "_deals_logistics_tab must call get_stages_for_deal or reference "
-            "STAGE_NAMES to render the 7-stage accordion."
-        )
 
 
 # ==============================================================================

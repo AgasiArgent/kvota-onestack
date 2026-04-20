@@ -1,24 +1,22 @@
 """
-TDD Tests for ERPS Registry View Fix: spec_sum_usd showing $0.00
+Tests for ERPS Registry View Fix: migrations + calculation save logic.
 
-BUG: The erps_registry view uses qcs.calc_ak16_final_price_total from
-quote_calculation_summaries, but that column is often NULL/missing.
-The correct data source is q.total_amount_usd from the quotes table,
-which is populated by the calculation engine save logic.
+BUG (fixed): The erps_registry view used qcs.calc_ak16_final_price_total,
+which is often NULL/missing. Migration 161 recreates the view using
+q.total_amount_usd from the quotes table instead.
 
-FIX:
-1. Migration 161: Recreate erps_registry view replacing all 4 occurrences
-   of qcs.calc_ak16_final_price_total with q.total_amount_usd
-2. main.py ERPS_VIEWS: Add 'auto' group to finance view so finance users
-   can see payment columns (days_until_advance, remaining_payment_usd, etc.)
-
-These tests are written BEFORE implementation (TDD).
-All tests MUST FAIL until the fix is implemented.
+Note: Python-side ERPS_VIEWS + ERPS_COLUMN_GROUPS constants tests
+(TestERPSViewsFinanceIncludesAuto, TestERPSColumnGroupsAutoExists,
+TestFinanceViewGroupOrdering) plus helpers (_extract_erps_views_source,
+_extract_erps_column_groups_source) were removed during Phase 6C-2B-10c1
+archive of the /finance cluster (2026-04-20). Those constants now live in
+legacy-fasthtml/finance_lifecycle.py and are not imported. Remaining tests
+target SQL migrations (161, 129, 139) and the alive calculation save logic
+in main.py — both still valid.
 """
 
 import pytest
 import os
-import re
 import glob as glob_module
 
 # ============================================================================
@@ -55,40 +53,6 @@ def _read_migration_161():
         return f.read()
 
 
-def _extract_erps_views_source():
-    """Extract ERPS_VIEWS dict definition from main.py."""
-    source = _read_main_source()
-    match = re.search(
-        r'ERPS_VIEWS\s*=\s*\{[^}]+\}',
-        source,
-        re.DOTALL,
-    )
-    if not match:
-        pytest.fail("Could not find ERPS_VIEWS definition in main.py")
-    return match.group(0)
-
-
-def _extract_erps_column_groups_source():
-    """Extract ERPS_COLUMN_GROUPS dict definition from main.py."""
-    source = _read_main_source()
-    match = re.search(
-        r'ERPS_COLUMN_GROUPS\s*=\s*\{',
-        source,
-    )
-    if not match:
-        pytest.fail("Could not find ERPS_COLUMN_GROUPS definition in main.py")
-    # Find the matching closing brace by counting braces
-    start = match.start()
-    brace_count = 0
-    pos = match.end() - 1  # position of the opening brace
-    for i in range(pos, len(source)):
-        if source[i] == '{':
-            brace_count += 1
-        elif source[i] == '}':
-            brace_count -= 1
-            if brace_count == 0:
-                return source[start:i + 1]
-    pytest.fail("Could not parse ERPS_COLUMN_GROUPS - unmatched braces")
 
 
 # ============================================================================
@@ -255,142 +219,6 @@ class TestMigration161AllFieldsCovered:
         )
 
 
-# ============================================================================
-# 5. ERPS_VIEWS Finance Preset Includes 'auto' Group
-# ============================================================================
-
-
-class TestERPSViewsFinanceIncludesAuto:
-    """
-    The finance view must include the 'auto' column group so finance
-    users can see payment-related columns (days_until_advance,
-    remaining_payment_usd, etc.).
-    """
-
-    def test_finance_view_includes_auto_group(self):
-        """
-        ERPS_VIEWS['finance'] must include 'auto' in its group list.
-        Current: ['spec', 'finance', 'management']
-        Expected: ['spec', 'auto', 'finance', 'management']
-        """
-        source = _extract_erps_views_source()
-
-        # Parse the finance view definition
-        finance_match = re.search(
-            r"'finance'\s*:\s*\[([^\]]+)\]",
-            source,
-        )
-        assert finance_match is not None, (
-            "Could not find 'finance' key in ERPS_VIEWS"
-        )
-
-        finance_groups = finance_match.group(1)
-        assert "'auto'" in finance_groups, (
-            f"ERPS_VIEWS['finance'] must include 'auto' group. "
-            f"Current groups: [{finance_groups}]. "
-            f"Expected: ['spec', 'auto', 'finance', 'management']"
-        )
-
-
-# ============================================================================
-# 6. ERPS_COLUMN_GROUPS Has 'auto' Group Defined
-# ============================================================================
-
-
-class TestERPSColumnGroupsAutoExists:
-    """
-    The 'auto' column group must exist in ERPS_COLUMN_GROUPS and contain
-    the payment-related columns that finance users need.
-    """
-
-    def test_auto_group_defined(self):
-        """ERPS_COLUMN_GROUPS must have an 'auto' key."""
-        source = _extract_erps_column_groups_source()
-        assert "'auto'" in source, (
-            "ERPS_COLUMN_GROUPS must have an 'auto' group defined"
-        )
-
-    def test_auto_group_contains_days_until_advance(self):
-        """
-        The 'auto' group must include days_until_advance column.
-        This is the payment countdown that finance users need.
-        """
-        source = _extract_erps_column_groups_source()
-        # Extract the auto group section
-        auto_match = re.search(
-            r"'auto'\s*:\s*\{[^}]*'columns'\s*:\s*\[(.*?)\]",
-            source,
-            re.DOTALL,
-        )
-        assert auto_match is not None, (
-            "Could not find 'auto' group columns in ERPS_COLUMN_GROUPS"
-        )
-        auto_columns = auto_match.group(1)
-        assert "days_until_advance" in auto_columns, (
-            "'auto' column group must contain 'days_until_advance' column"
-        )
-
-    def test_auto_group_contains_remaining_payment_usd(self):
-        """
-        The 'auto' group must include remaining_payment_usd column.
-        This shows how much the client still owes.
-        """
-        source = _extract_erps_column_groups_source()
-        auto_match = re.search(
-            r"'auto'\s*:\s*\{[^}]*'columns'\s*:\s*\[(.*?)\]",
-            source,
-            re.DOTALL,
-        )
-        assert auto_match is not None, (
-            "Could not find 'auto' group columns in ERPS_COLUMN_GROUPS"
-        )
-        auto_columns = auto_match.group(1)
-        assert "remaining_payment_usd" in auto_columns, (
-            "'auto' column group must contain 'remaining_payment_usd' column"
-        )
-
-    def test_auto_group_contains_planned_advance_usd(self):
-        """
-        The 'auto' group must include planned_advance_usd column.
-        """
-        source = _extract_erps_column_groups_source()
-        auto_match = re.search(
-            r"'auto'\s*:\s*\{[^}]*'columns'\s*:\s*\[(.*?)\]",
-            source,
-            re.DOTALL,
-        )
-        assert auto_match is not None, (
-            "Could not find 'auto' group columns in ERPS_COLUMN_GROUPS"
-        )
-        auto_columns = auto_match.group(1)
-        assert "planned_advance_usd" in auto_columns, (
-            "'auto' column group must contain 'planned_advance_usd' column"
-        )
-
-    def test_auto_group_contains_total_paid_usd(self):
-        """
-        The 'auto' group must include total_paid_usd column.
-        """
-        source = _extract_erps_column_groups_source()
-        auto_match = re.search(
-            r"'auto'\s*:\s*\{[^}]*'columns'\s*:\s*\[(.*?)\]",
-            source,
-            re.DOTALL,
-        )
-        assert auto_match is not None, (
-            "Could not find 'auto' group columns in ERPS_COLUMN_GROUPS"
-        )
-        auto_columns = auto_match.group(1)
-        assert "total_paid_usd" in auto_columns, (
-            "'auto' column group must contain 'total_paid_usd' column"
-        )
-
-
-# ============================================================================
-# 7. Data Source Verification: total_amount_usd Saved in Calculation Logic
-# ============================================================================
-
-
 class TestTotalAmountUsdSavedInCalculation:
     """
     The calculation engine save logic in main.py must save total_amount_usd
@@ -478,52 +306,6 @@ class TestOldViewBrokenDataSource:
         assert count >= 4, (
             f"Migration 129 should reference calc_ak16_final_price_total "
             f"at least 4 times (found {count}). These are the 4 fields to fix."
-        )
-
-
-# ============================================================================
-# 9. Consistency: Finance View Groups Are Ordered Correctly
-# ============================================================================
-
-
-class TestFinanceViewGroupOrdering:
-    """
-    The finance view groups should be in a logical order:
-    spec first (base data), then auto (calculated), then finance, then management.
-    """
-
-    def test_finance_view_has_spec_first(self):
-        """Finance view must start with 'spec' group."""
-        source = _extract_erps_views_source()
-        finance_match = re.search(
-            r"'finance'\s*:\s*\[([^\]]+)\]",
-            source,
-        )
-        assert finance_match is not None
-        groups_str = finance_match.group(1)
-        # Extract group names in order
-        groups = re.findall(r"'(\w+)'", groups_str)
-        assert len(groups) > 0, "Finance view must have at least one group"
-        assert groups[0] == "spec", (
-            f"Finance view must start with 'spec' group, got: {groups}"
-        )
-
-    def test_finance_view_has_at_least_4_groups(self):
-        """
-        After fix, finance view should have 4 groups:
-        spec, auto, finance, management.
-        """
-        source = _extract_erps_views_source()
-        finance_match = re.search(
-            r"'finance'\s*:\s*\[([^\]]+)\]",
-            source,
-        )
-        assert finance_match is not None
-        groups_str = finance_match.group(1)
-        groups = re.findall(r"'(\w+)'", groups_str)
-        assert len(groups) >= 4, (
-            f"Finance view must have at least 4 groups "
-            f"(spec, auto, finance, management), got {len(groups)}: {groups}"
         )
 
 

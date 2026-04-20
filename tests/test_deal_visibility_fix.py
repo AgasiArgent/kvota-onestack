@@ -15,7 +15,6 @@ Tests MUST FAIL before the fix is applied (TDD).
 
 import os
 import re
-import sys
 
 import pytest
 
@@ -80,70 +79,6 @@ def _get_deals_join_blocks(content):
             join_blocks.append((line_num, select_str))
     return join_blocks
 
-
-# =============================================================================
-# TEST CLASS: Deal List Query FK Hints
-# =============================================================================
-
-class TestDealListQueryFKHints:
-    """
-    Verify the deal list query (finance_workspace_tab) uses FK hints
-    when joining specifications and quotes tables.
-
-    Bug: Without FK hints, PostgREST cannot resolve which FK to use when
-    deals has both specification_id and quote_id columns, causing ambiguity
-    error and returning empty results.
-    """
-
-    def test_deal_list_specifications_fk_hint(self, main_py_content):
-        """
-        Deal list query must use specifications!deals_specification_id_fkey
-        instead of bare specifications(...) to avoid PostgREST ambiguity.
-        """
-        join_blocks = _get_deals_join_blocks(main_py_content)
-        assert len(join_blocks) >= 1, "Expected at least 1 deals query that joins specifications/quotes"
-
-        # Find the deal list query (first one that joins specifications)
-        deal_list_found = False
-        for line_num, select_str in join_blocks:
-            if "specifications(" in select_str and "specification_number" in select_str:
-                # This is likely the deal list query (contains specification_number in select)
-                # Must have FK hint
-                assert "specifications!" in select_str, (
-                    f"Deal list query at ~line {line_num} joins specifications without FK hint. "
-                    f"Must use specifications!deals_specification_id_fkey(...) syntax. "
-                    f"Got: {select_str[:200]}"
-                )
-                deal_list_found = True
-                break
-
-        assert deal_list_found, (
-            "Could not find deal list query that selects specification_number"
-        )
-
-    def test_deal_list_quotes_fk_hint(self, main_py_content):
-        """
-        Deal list query must use quotes!deals_quote_id_fkey
-        instead of bare quotes(...) to avoid PostgREST ambiguity.
-        """
-        join_blocks = _get_deals_join_blocks(main_py_content)
-
-        # Find the deal list query (has quotes(...) with idn_quote)
-        deal_list_found = False
-        for line_num, select_str in join_blocks:
-            if "quotes(" in select_str and "idn_quote" in select_str and "specification_number" in select_str:
-                # This is the deal list query
-                assert "quotes!" in select_str, (
-                    f"Deal list query at ~line {line_num} joins quotes without FK hint. "
-                    f"Must use quotes!deals_quote_id_fkey(...) syntax. "
-                    f"Got: {select_str[:200]}"
-                )
-                deal_list_found = True
-                break
-
-        assert deal_list_found, (
-            "Could not find deal list query that selects idn_quote + specification_number"
-        )
 
 
 # =============================================================================
